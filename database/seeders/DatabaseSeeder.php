@@ -16,10 +16,15 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Create default admin user
-        User::factory()->create([
-            'name' => 'Administrator',
-            'email' => 'admin@fiber-unms.id',
-        ]);
+        User::firstOrCreate(
+            ['email' => 'admin@fiber-unms.id'],
+            [
+                'name' => 'Administrator',
+                'username' => 'admin',
+                'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+                'role' => 'admin',
+            ]
+        );
 
         // Seed all master data tables
         $this->call([
