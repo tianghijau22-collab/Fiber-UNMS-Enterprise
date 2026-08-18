@@ -1,0 +1,2038 @@
+DOKUMEN ANALISIS PROYEK
+FIBER-UNMS ENTERPRISE
+Sistem Informasi Manajemen Infrastruktur dan Operasional Jaringan Fiber Optik Berbasis Web
+________________________________________
+Nama Proyek
+Fiber-UNMS Enterprise
+________________________________________
+Jenis Dokumen
+Dokumen Analisis Proyek
+________________________________________
+Versi Dokumen
+Versi 1.0
+________________________________________
+Status Dokumen
+Draft Pengembangan
+________________________________________
+Disusun Oleh
+Tim Pengembang Fiber-UNMS Enterprise
+-	Jasen ardian pratama
+________________________________________
+
+
+Teknologi Utama
+•	Laravel Framework
+•	PHP 8.4
+•	PostgreSQL 17
+•	REST API
+•	JavaScript
+•	HTML5
+•	CSS3
+•	Git & GitHub
+________________________________________
+Tanggal Dokumen
+03 Agustus 2026
+________________________________________
+Hak Cipta
+Dokumen ini disusun sebagai dokumen analisis dan perencanaan pengembangan sistem Fiber-UNMS Enterprise. Seluruh isi dokumen digunakan sebagai pedoman dalam proses perancangan, pengembangan, implementasi, dan pemeliharaan sistem. Dilarang memperbanyak, mendistribusikan, atau menggunakan sebagian maupun seluruh isi dokumen ini tanpa persetujuan dari pemilik proyek.
+________________________________________
+FIBER-UNMS Enterprise
+Dokumen Analisis Proyek
+Versi 1.0
+
+
+
+
+
+
+
+BAB I
+PENDAHULUAN
+1.1 Latar Belakang
+Perkembangan teknologi informasi telah memberikan dampak yang signifikan terhadap berbagai sektor industri, termasuk industri penyedia layanan internet (Internet Service Provider atau ISP). Seiring dengan meningkatnya kebutuhan masyarakat akan akses internet berkecepatan tinggi, perusahaan ISP dituntut untuk mampu menyediakan layanan yang cepat, stabil, dan berkualitas. Kondisi tersebut mendorong perusahaan untuk membangun infrastruktur jaringan yang semakin luas dan kompleks.
+Dalam operasional sehari-hari, perusahaan ISP tidak hanya mengelola pelanggan, tetapi juga harus mengelola berbagai komponen infrastruktur jaringan seperti Optical Line Terminal (OLT), Point of Presence (POP), Optical Distribution Cabinet (ODC), Optical Distribution Point (ODP), Fiber Access Terminal (FAT), Joint Closure, Splitter, kabel fiber optik, perangkat aktif, hingga inventaris pendukung lainnya. Seluruh komponen tersebut harus terdokumentasi dengan baik agar proses pemeliharaan, pengembangan jaringan, serta penanganan gangguan dapat dilakukan secara cepat dan tepat.
+Pada banyak perusahaan, proses pengelolaan data masih dilakukan menggunakan beberapa aplikasi yang terpisah, dokumen spreadsheet, maupun pencatatan manual. Kondisi tersebut menyebabkan terjadinya duplikasi data, kesulitan dalam melakukan sinkronisasi informasi, serta memperlambat proses pengambilan keputusan. Selain itu, dokumentasi aset jaringan sering kali tidak diperbarui secara konsisten sehingga menyulitkan teknisi saat melakukan pekerjaan di lapangan.
+Berdasarkan kondisi tersebut, diperlukan sebuah sistem informasi terintegrasi yang mampu mengelola seluruh aktivitas operasional perusahaan dalam satu platform. Sistem ini diharapkan mampu menghubungkan data pelanggan, infrastruktur jaringan, inventaris, monitoring, pelaporan gangguan, serta aktivitas operasional lainnya sehingga seluruh informasi dapat diakses secara cepat, akurat, dan real-time.
+Sebagai solusi atas kebutuhan tersebut, dikembangkan Fiber-UNMS Enterprise, yaitu sebuah sistem informasi berbasis web yang dirancang untuk menjadi pusat pengelolaan seluruh operasional perusahaan ISP. Sistem ini mengintegrasikan berbagai modul penting ke dalam satu aplikasi sehingga proses bisnis menjadi lebih efisien, terdokumentasi, dan mudah dikembangkan sesuai kebutuhan perusahaan di masa mendatang.
+________________________________________
+1.2 Ringkasan Proyek
+Fiber-UNMS Enterprise merupakan aplikasi berbasis web yang dikembangkan untuk mendukung pengelolaan operasional perusahaan penyedia layanan internet berbasis jaringan Fiber To The Home (FTTH). Sistem ini dirancang sebagai platform terpadu yang mengintegrasikan berbagai proses bisnis perusahaan, mulai dari pengelolaan pelanggan, dokumentasi jaringan, inventaris perangkat, monitoring infrastruktur, pelaporan gangguan, hingga penyusunan laporan operasional.
+Pengembangan sistem dilakukan dengan konsep Enterprise Information System, di mana seluruh data tersimpan pada satu basis data terpusat sehingga setiap divisi dapat mengakses informasi yang dibutuhkan sesuai dengan hak akses masing-masing. Dengan pendekatan ini, perusahaan memperoleh data yang konsisten, mudah dikelola, serta dapat dimanfaatkan sebagai dasar dalam pengambilan keputusan.
+Fiber-UNMS Enterprise tidak hanya berfungsi sebagai sistem administrasi pelanggan, tetapi juga sebagai pusat dokumentasi seluruh aset jaringan. Informasi mengenai lokasi perangkat, jalur kabel, kapasitas splitter, koneksi antar perangkat, hingga riwayat pemeliharaan tersimpan secara sistematis sehingga mempermudah proses monitoring dan penelusuran gangguan.
+Sistem juga dirancang menggunakan arsitektur yang modular sehingga memungkinkan penambahan fitur baru tanpa mengganggu modul yang telah berjalan. Dengan demikian, Fiber-UNMS Enterprise diharapkan mampu menjadi fondasi utama dalam proses digitalisasi operasional perusahaan ISP.
+________________________________________
+1.3 Tujuan
+Pengembangan Fiber-UNMS Enterprise bertujuan untuk membangun sebuah sistem informasi yang mampu mengintegrasikan seluruh proses operasional perusahaan ISP ke dalam satu platform yang modern, aman, dan mudah digunakan.
+Secara khusus, tujuan pengembangan sistem ini adalah sebagai berikut:
+•	Mengintegrasikan seluruh data operasional perusahaan ke dalam satu basis data terpusat.
+•	Mempermudah pengelolaan infrastruktur jaringan fiber optik secara terstruktur.
+•	Menyediakan dokumentasi aset jaringan yang lengkap dan mudah diperbarui.
+•	Mempermudah proses pencarian informasi perangkat jaringan beserta hubungan antar perangkat.
+•	Membantu teknisi dalam melakukan instalasi, pemeliharaan, dan perbaikan jaringan.
+•	Menyediakan sistem monitoring jaringan secara real-time.
+•	Mengelola data pelanggan secara terintegrasi.
+•	Mendukung proses penanganan gangguan melalui sistem ticketing.
+•	Mengelola inventaris perangkat dan material perusahaan.
+•	Menyediakan laporan operasional secara cepat dan akurat.
+•	Mendukung proses pengambilan keputusan berdasarkan data yang tersedia.
+________________________________________
+1.4 Manfaat
+Implementasi Fiber-UNMS Enterprise diharapkan memberikan manfaat bagi seluruh pihak yang terlibat dalam operasional perusahaan.
+Bagi Manajemen
+•	Memperoleh informasi operasional secara real-time.
+•	Mempermudah proses evaluasi kinerja perusahaan.
+•	Mendukung pengambilan keputusan berdasarkan data yang akurat.
+•	Menyediakan laporan operasional yang terintegrasi.
+Bagi Divisi Network Operation Center (NOC)
+•	Memantau kondisi perangkat jaringan secara terpusat.
+•	Mengidentifikasi gangguan dengan lebih cepat.
+•	Mengurangi waktu respons terhadap insiden jaringan.
+•	Mempermudah koordinasi dengan teknisi lapangan.
+Bagi Teknisi Lapangan
+•	Mengakses dokumentasi jaringan secara lengkap.
+•	Mengetahui lokasi perangkat dan jalur kabel dengan lebih mudah.
+•	Melihat riwayat instalasi maupun perbaikan pada setiap aset jaringan.
+•	Mempercepat proses identifikasi sumber gangguan.
+Bagi Divisi Administrasi
+•	Mengelola data pelanggan secara lebih efisien.
+•	Mengurangi kesalahan input data.
+•	Mempermudah proses aktivasi dan perubahan layanan pelanggan.
+Bagi Perusahaan
+•	Meningkatkan efisiensi operasional.
+•	Mengurangi risiko kehilangan data.
+•	Mempercepat proses dokumentasi jaringan.
+•	Meningkatkan kualitas layanan kepada pelanggan.
+•	Mendukung proses pengembangan jaringan secara berkelanjutan.
+________________________________________
+1.5 Visi
+Menjadi sistem informasi manajemen jaringan fiber optik yang terintegrasi, modern, aman, dan mampu mendukung seluruh aktivitas operasional perusahaan penyedia layanan internet secara efektif, efisien, serta berkelanjutan.
+________________________________________
+1.6 Misi
+Untuk mewujudkan visi tersebut, Fiber-UNMS Enterprise dikembangkan dengan misi sebagai berikut:
+•	Mengintegrasikan seluruh proses bisnis perusahaan ke dalam satu sistem informasi terpadu.
+•	Menyediakan data operasional yang akurat, konsisten, dan mudah diakses.
+•	Mendukung digitalisasi proses pengelolaan infrastruktur jaringan fiber optik.
+•	Meningkatkan produktivitas seluruh pengguna sistem melalui otomatisasi proses kerja.
+•	Menyediakan dokumentasi jaringan yang lengkap dan mudah diperbarui.
+•	Menerapkan standar keamanan data dan pengelolaan hak akses yang baik.
+•	Mengembangkan sistem yang modular sehingga mudah dipelihara dan dikembangkan sesuai kebutuhan perusahaan.
+•	Mendukung peningkatan kualitas layanan kepada pelanggan melalui informasi yang cepat dan akurat.
+________________________________________
+Kesimpulan BAB I
+Bab ini menjelaskan latar belakang, tujuan, manfaat, serta arah pengembangan Fiber-UNMS Enterprise sebagai sistem informasi terintegrasi untuk mendukung operasional perusahaan ISP. Dokumen ini menjadi dasar bagi pembahasan pada bab-bab berikutnya yang akan menguraikan ruang lingkup sistem, arsitektur aplikasi, modul-modul utama, basis data, teknologi yang digunakan, hingga standar pengembangan yang diterapkan dalam proyek.
+
+
+
+
+
+
+
+
+BAB II
+RUANG LINGKUP SISTEM
+2.1 Lingkup Pengembangan
+Fiber-UNMS Enterprise merupakan sistem informasi berbasis web yang dikembangkan untuk mendukung seluruh aktivitas operasional perusahaan penyedia layanan internet (Internet Service Provider atau ISP). Sistem ini dirancang sebagai platform terintegrasi yang mampu menghubungkan berbagai proses bisnis ke dalam satu aplikasi sehingga pengelolaan data menjadi lebih efektif, efisien, dan terdokumentasi dengan baik.
+Ruang lingkup pengembangan mencakup seluruh aspek utama operasional perusahaan, mulai dari pengelolaan data pelanggan, dokumentasi infrastruktur jaringan, inventaris perangkat, monitoring jaringan, penanganan gangguan, hingga penyajian laporan operasional. Seluruh modul saling terintegrasi menggunakan basis data terpusat sehingga setiap perubahan data dapat diakses secara konsisten oleh seluruh divisi yang memiliki hak akses.
+Adapun ruang lingkup pengembangan Fiber-UNMS Enterprise meliputi:
+2.1.1 Modul Master Data
+Modul Master Data berfungsi sebagai pusat data referensi yang digunakan oleh seluruh modul dalam sistem. Modul ini mencakup pengelolaan data wilayah, kategori perangkat, jenis kabel, tipe splitter, vendor, merek perangkat, jabatan, divisi, status layanan, serta data referensi lainnya yang menjadi dasar operasional sistem.
+2.1.2 Modul Manajemen Pengguna
+Modul ini digunakan untuk mengelola seluruh akun pengguna sistem beserta informasi pegawai, divisi, jabatan, peran (role), dan hak akses. Setiap pengguna hanya dapat mengakses fitur sesuai kewenangan yang diberikan oleh administrator.
+2.1.3 Modul Infrastruktur Jaringan
+Merupakan modul utama yang digunakan untuk mendokumentasikan seluruh aset jaringan fiber optik perusahaan. Modul ini meliputi:
+•	Optical Line Terminal (OLT)
+•	Point of Presence (POP)
+•	Optical Distribution Cabinet (ODC)
+•	Optical Distribution Point (ODP)
+•	Fiber Access Terminal (FAT)
+•	Joint Closure
+•	Splitter
+•	Kabel Fiber Optik
+•	Tiang
+•	Jalur Kabel
+•	Core Fiber
+•	Patch Panel
+•	Rack
+•	Perangkat Aktif
+•	Perangkat Pendukung
+Setiap aset jaringan dilengkapi dengan informasi lokasi, koordinat geografis, kapasitas, status, dokumentasi foto, serta hubungan dengan perangkat lainnya.
+2.1.4 Modul Pelanggan
+Modul pelanggan digunakan untuk mengelola seluruh informasi pelanggan mulai dari proses registrasi, instalasi, aktivasi layanan, perubahan paket, penghentian layanan, hingga riwayat penggunaan layanan.
+2.1.5 Modul Customer Relationship Management (CRM)
+Modul CRM mendukung aktivitas pelayanan pelanggan, termasuk pencatatan komunikasi, keluhan, permintaan layanan, tindak lanjut, dan riwayat interaksi antara perusahaan dengan pelanggan.
+2.1.6 Modul Ticketing
+Modul Ticketing digunakan untuk mencatat setiap laporan gangguan maupun permintaan pekerjaan. Setiap tiket memiliki status pekerjaan, tingkat prioritas, penanggung jawab, waktu penyelesaian, serta dokumentasi hasil pekerjaan.
+2.1.7 Modul Inventory
+Modul Inventory digunakan untuk mengelola seluruh barang dan material perusahaan, baik yang berada di gudang maupun yang telah digunakan di lapangan. Sistem mencatat proses barang masuk, barang keluar, mutasi stok, serta riwayat penggunaan material.
+2.1.8 Modul Monitoring
+Modul Monitoring berfungsi untuk memantau kondisi perangkat jaringan secara berkala. Modul ini dapat dikembangkan untuk menampilkan status perangkat, utilisasi jaringan, alarm, serta indikator kesehatan jaringan secara real-time.
+2.1.9 Modul Geographic Information System (GIS)
+Modul GIS digunakan untuk menampilkan seluruh aset jaringan pada peta digital. Pengguna dapat melihat posisi perangkat, jalur kabel, lokasi pelanggan, dan titik gangguan berdasarkan koordinat geografis.
+2.1.10 Modul Pelaporan
+Modul pelaporan menyediakan berbagai laporan operasional, seperti:
+•	Laporan pelanggan
+•	Laporan instalasi
+•	Laporan gangguan
+•	Laporan inventaris
+•	Laporan penggunaan material
+•	Laporan aset jaringan
+•	Laporan aktivitas pengguna
+•	Laporan performa operasional
+Laporan dapat difilter berdasarkan periode waktu dan diekspor sesuai kebutuhan perusahaan.
+________________________________________
+2.2 Pengguna Sistem
+Fiber-UNMS Enterprise dirancang untuk digunakan oleh berbagai divisi di lingkungan perusahaan ISP. Setiap pengguna memiliki fungsi dan tanggung jawab yang berbeda sehingga sistem menerapkan pembagian hak akses berdasarkan peran (Role Based Access Control).
+Kelompok pengguna sistem meliputi:
+Super Administrator
+Memiliki hak akses penuh terhadap seluruh modul, konfigurasi sistem, pengelolaan pengguna, database, serta pengaturan aplikasi.
+Administrator
+Bertanggung jawab mengelola data operasional, master data, pengguna, dan konfigurasi tertentu sesuai kebijakan perusahaan.
+Network Operation Center (NOC)
+Memantau kondisi jaringan, menerima alarm, membuat tiket gangguan, melakukan analisis awal, serta berkoordinasi dengan teknisi lapangan.
+Teknisi Fiber Optik
+Mengelola proses instalasi, pemeliharaan, dokumentasi jaringan, dan penyelesaian gangguan di lapangan.
+Teknisi Jointer
+Bertanggung jawab terhadap pekerjaan penyambungan kabel fiber optik, joint closure, pengujian core, serta dokumentasi hasil penyambungan.
+Teknisi Maintenance
+Melaksanakan kegiatan perawatan rutin perangkat jaringan serta memastikan seluruh perangkat berfungsi dengan baik.
+Customer Service
+Mengelola data pelanggan, menerima permintaan layanan, membuat tiket gangguan, serta memberikan informasi kepada pelanggan.
+Sales Marketing
+Mengelola data calon pelanggan, proses penawaran layanan, serta perkembangan pemasaran.
+Divisi Inventory
+Mengelola stok barang, proses distribusi material, pencatatan barang masuk dan keluar, serta laporan inventaris.
+Divisi Keuangan
+Mengelola data pembayaran, tagihan, transaksi, serta laporan keuangan yang berkaitan dengan layanan pelanggan.
+Supervisor
+Melakukan pengawasan terhadap aktivitas operasional, memantau kinerja tim, serta melakukan validasi terhadap pekerjaan tertentu.
+Manager Operasional
+Memantau seluruh aktivitas perusahaan melalui dashboard dan laporan sebagai dasar evaluasi serta pengambilan keputusan.
+Direktur
+Mengakses laporan strategis dan informasi operasional secara menyeluruh untuk mendukung pengambilan keputusan di tingkat manajemen.
+________________________________________
+2.3 Hak Akses
+Sistem menerapkan mekanisme Role Based Access Control (RBAC) untuk memastikan setiap pengguna hanya dapat mengakses fitur sesuai dengan tugas dan tanggung jawabnya.
+Hak akses dibedakan menjadi beberapa kategori, antara lain:
+•	Melihat data (View)
+•	Menambah data (Create)
+•	Mengubah data (Update)
+•	Menghapus data (Delete)
+•	Menyetujui data (Approve)
+•	Menolak data (Reject)
+•	Mencetak laporan (Print)
+•	Mengekspor data (Export)
+•	Mengimpor data (Import)
+•	Mengelola pengguna (User Management)
+•	Mengelola konfigurasi sistem (System Configuration)
+Setiap modul dapat memiliki kombinasi hak akses yang berbeda sesuai kebutuhan operasional perusahaan. Dengan pendekatan ini, keamanan data lebih terjaga, risiko kesalahan operasional dapat diminimalkan, dan aktivitas pengguna dapat dicatat melalui sistem audit.
+________________________________________
+2.4 Batasan Sistem
+Untuk menjaga fokus pengembangan pada tahap awal, Fiber-UNMS Enterprise memiliki beberapa batasan sebagai berikut:
+1.	Sistem dikembangkan sebagai aplikasi berbasis web dan diakses melalui peramban (web browser).
+2.	Fokus utama sistem adalah mendukung operasional perusahaan ISP berbasis jaringan Fiber To The Home (FTTH).
+3.	Sistem menggunakan PostgreSQL sebagai basis data utama untuk menyimpan seluruh informasi operasional.
+4.	Seluruh data pengguna, pelanggan, aset jaringan, dan inventaris disimpan dalam basis data terpusat.
+5.	Integrasi dengan perangkat jaringan seperti OLT atau sistem monitoring pihak ketiga dapat dikembangkan pada tahap lanjutan.
+6.	Fitur pemetaan geografis menggunakan koordinat lokasi aset untuk memudahkan visualisasi jaringan.
+7.	Sistem dirancang dengan arsitektur modular sehingga modul baru dapat ditambahkan tanpa mengubah struktur utama aplikasi.
+8.	Hak akses pengguna diatur menggunakan mekanisme Role Based Access Control (RBAC).
+9.	Sistem mendukung pencatatan aktivitas pengguna melalui audit log sebagai bagian dari keamanan dan pengawasan.
+10.	Dokumen ini berfokus pada analisis dan perancangan sistem. Implementasi teknis dapat berkembang mengikuti kebutuhan perusahaan dan perkembangan teknologi.
+________________________________________
+Kesimpulan BAB II
+Bab ini menjelaskan ruang lingkup pengembangan Fiber-UNMS Enterprise, pengguna yang akan memanfaatkan sistem, mekanisme pengaturan hak akses, serta batasan pengembangan yang menjadi acuan selama proses implementasi. Dengan ruang lingkup yang jelas, setiap modul dapat dikembangkan secara terstruktur, terintegrasi, dan sesuai dengan kebutuhan operasional perusahaan ISP.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BAB III
+ARSITEKTUR SISTEM
+3.1 Konsep Client Server
+Fiber-UNMS Enterprise dibangun menggunakan arsitektur Client-Server dengan pendekatan Three-Tier Architecture, yang memisahkan sistem menjadi tiga lapisan utama, yaitu Presentation Layer (Frontend), Application Layer (Backend), dan Data Layer (Database). Pemisahan ini bertujuan agar aplikasi lebih mudah dikembangkan, dipelihara, diamankan, dan ditingkatkan skalabilitasnya.
+Pada arsitektur ini, seluruh pengguna mengakses sistem melalui web browser sebagai client. Browser hanya bertugas menampilkan antarmuka pengguna dan mengirimkan permintaan (request) ke server. Seluruh proses bisnis, validasi data, autentikasi, dan pengolahan informasi dilakukan oleh backend sebelum hasilnya dikirim kembali ke client dalam bentuk halaman web atau data JSON.
+Model ini memberikan beberapa keuntungan, antara lain:
+•	Pemisahan yang jelas antara tampilan, logika bisnis, dan data.
+•	Kemudahan dalam pengembangan dan pemeliharaan aplikasi.
+•	Keamanan data yang lebih baik karena database tidak diakses secara langsung oleh pengguna.
+•	Kemudahan integrasi dengan aplikasi lain melalui API.
+•	Skalabilitas sistem untuk mendukung pertumbuhan jumlah pengguna dan data.
+Secara umum, alur kerja sistem adalah sebagai berikut:
+1.	Pengguna melakukan permintaan melalui browser.
+2.	Permintaan diterima oleh web server.
+3.	Backend memproses permintaan sesuai aturan bisnis.
+4.	Backend mengambil atau menyimpan data pada database.
+5.	Hasil pemrosesan dikirim kembali ke browser.
+6.	Browser menampilkan informasi kepada pengguna.
+________________________________________
+3.2 Backend
+Backend merupakan inti dari Fiber-UNMS Enterprise yang bertanggung jawab menjalankan seluruh logika bisnis, pengolahan data, autentikasi pengguna, validasi, serta komunikasi dengan database.
+Framework yang digunakan adalah Laravel karena memiliki struktur yang rapi, keamanan yang baik, dokumentasi lengkap, serta mendukung pengembangan aplikasi berskala enterprise.
+Backend memiliki tanggung jawab utama sebagai berikut:
+•	Autentikasi dan otorisasi pengguna.
+•	Pengelolaan hak akses berbasis Role Based Access Control (RBAC).
+•	Validasi data yang masuk dari pengguna.
+•	Pengelolaan seluruh proses bisnis aplikasi.
+•	Komunikasi dengan database PostgreSQL.
+•	Penyediaan REST API.
+•	Pengelolaan upload dan penyimpanan dokumen.
+•	Pencatatan aktivitas pengguna melalui Audit Log.
+•	Penanganan kesalahan (Error Handling).
+•	Pembuatan laporan operasional.
+Backend juga menerapkan konsep Model-View-Controller (MVC) untuk memisahkan logika aplikasi menjadi beberapa komponen sehingga kode lebih mudah dipahami dan dipelihara.
+Komponen utama backend meliputi:
+•	Authentication Module
+•	Authorization Module
+•	User Management
+•	Master Data
+•	CRM
+•	Customer Management
+•	Network Management
+•	Inventory
+•	Ticketing
+•	Monitoring
+•	Reporting
+•	Audit Log
+•	Notification Service
+Dengan struktur modular tersebut, penambahan fitur baru dapat dilakukan tanpa mengubah modul lain yang telah berjalan.
+________________________________________
+3.3 Frontend
+Frontend merupakan bagian aplikasi yang berinteraksi langsung dengan pengguna. Seluruh informasi yang diproses oleh backend akan ditampilkan melalui antarmuka yang sederhana, responsif, dan mudah digunakan.
+Frontend dirancang dengan prinsip:
+•	Mudah dipahami oleh seluruh pengguna.
+•	Konsisten pada setiap halaman.
+•	Responsif untuk berbagai ukuran layar.
+•	Cepat diakses.
+•	Mengutamakan pengalaman pengguna (User Experience).
+Komponen utama antarmuka meliputi:
+Dashboard
+Menampilkan ringkasan kondisi operasional perusahaan, statistik pelanggan, kondisi jaringan, tiket gangguan, inventaris, dan informasi penting lainnya.
+Sidebar Navigation
+Menyediakan menu navigasi menuju seluruh modul sistem berdasarkan hak akses pengguna.
+Data Table
+Digunakan untuk menampilkan data dalam jumlah besar dengan fitur pencarian, filter, pengurutan, dan pagination.
+Form Management
+Digunakan untuk proses input, perubahan, dan validasi data.
+GIS Map
+Menampilkan lokasi perangkat jaringan, jalur kabel fiber optik, lokasi pelanggan, serta titik gangguan dalam bentuk peta digital.
+Reporting Dashboard
+Menyediakan grafik dan ringkasan data operasional yang dapat digunakan sebagai dasar analisis oleh manajemen.
+Antarmuka dirancang menggunakan pendekatan modern dengan dukungan Dark Mode, ikon yang konsisten, dan tata letak yang memudahkan navigasi.
+________________________________________
+3.4 Database
+Database merupakan pusat penyimpanan seluruh informasi pada Fiber-UNMS Enterprise. Seluruh data operasional perusahaan disimpan secara terpusat menggunakan PostgreSQL 17, yang dipilih karena memiliki performa tinggi, stabilitas, keamanan, serta kemampuan menangani data dalam jumlah besar.
+Perancangan database menggunakan pendekatan relasional (Relational Database Management System) dengan prinsip normalisasi untuk mengurangi duplikasi data dan menjaga konsistensi informasi.
+Struktur database direncanakan terdiri dari sekitar 120–150 tabel, yang dikelompokkan ke dalam beberapa domain utama, yaitu:
+•	Master Data
+•	User Management
+•	Human Resource
+•	Customer Relationship Management (CRM)
+•	Customer Management
+•	Network Infrastructure
+•	Inventory
+•	Finance
+•	Ticketing
+•	Monitoring
+•	Reporting
+•	Audit Log
+•	System Configuration
+Setiap tabel dirancang memiliki hubungan (relationship) yang jelas melalui penggunaan Primary Key, Foreign Key, serta aturan integritas data untuk menjaga konsistensi informasi.
+Selain itu, database mendukung:
+•	Transaksi (Transaction Management)
+•	Backup dan Restore
+•	Indexing
+•	Constraint
+•	View
+•	Trigger (bila diperlukan)
+•	Stored Procedure (opsional)
+•	Audit Data
+Dengan rancangan tersebut, database mampu mendukung pertumbuhan jumlah pelanggan, perangkat jaringan, maupun aktivitas operasional perusahaan.
+________________________________________
+3.5 API (Application Programming Interface)
+Fiber-UNMS Enterprise menyediakan RESTful API sebagai media komunikasi antara backend dengan frontend maupun aplikasi eksternal.
+API memungkinkan pertukaran data dilakukan secara aman dan terstandarisasi menggunakan format JSON.
+Tujuan penggunaan API antara lain:
+•	Memisahkan frontend dan backend.
+•	Mendukung integrasi dengan aplikasi pihak ketiga.
+•	Mempermudah pengembangan aplikasi mobile di masa depan.
+•	Mendukung integrasi dengan perangkat jaringan.
+•	Menyediakan layanan pertukaran data yang konsisten.
+Fitur utama API meliputi:
+•	Autentikasi menggunakan Token.
+•	Validasi setiap permintaan.
+•	Standarisasi kode respons HTTP.
+•	Dokumentasi endpoint.
+•	Pembatasan akses sesuai hak pengguna.
+•	Logging setiap permintaan API.
+Seluruh endpoint dirancang mengikuti prinsip REST sehingga mudah dipahami, dikembangkan, dan dipelihara.
+________________________________________
+3.6 Sistem Monitoring
+Sistem Monitoring merupakan salah satu komponen utama Fiber-UNMS Enterprise yang bertujuan untuk memantau kondisi infrastruktur jaringan secara berkelanjutan. Modul ini membantu perusahaan dalam mendeteksi gangguan lebih awal, memantau kesehatan perangkat, serta mendukung proses analisis performa jaringan.
+Pada tahap awal, sistem monitoring difokuskan pada penyajian informasi operasional melalui dashboard dan status aset. Pada tahap pengembangan selanjutnya, modul ini dapat diintegrasikan dengan perangkat jaringan dan sistem monitoring eksternal.
+Fitur utama modul monitoring meliputi:
+•	Monitoring status perangkat jaringan.
+•	Monitoring kapasitas dan utilisasi perangkat.
+•	Monitoring kondisi kabel dan jalur distribusi.
+•	Monitoring tiket gangguan yang sedang berlangsung.
+•	Monitoring pekerjaan teknisi.
+•	Monitoring inventaris perangkat.
+•	Monitoring aktivitas pengguna.
+•	Monitoring performa layanan pelanggan.
+Dashboard monitoring menyajikan informasi dalam bentuk indikator, grafik, tabel, dan ringkasan status sehingga memudahkan Network Operation Center (NOC) maupun manajemen dalam melakukan pengawasan operasional secara real-time.
+Ke depan, sistem ini dirancang agar dapat mendukung integrasi dengan protokol seperti SNMP, ICMP (Ping), serta API dari perangkat OLT atau sistem monitoring lain untuk memperoleh data perangkat secara otomatis.
+________________________________________
+Kesimpulan BAB III
+Bab ini menjelaskan arsitektur teknis Fiber-UNMS Enterprise yang menggunakan pendekatan Client-Server dengan tiga lapisan utama, yaitu Frontend, Backend, dan Database. Komunikasi antar komponen dilakukan melalui REST API, sedangkan seluruh data operasional disimpan pada PostgreSQL sebagai basis data terpusat. Dengan arsitektur yang modular, aman, dan mudah dikembangkan, sistem diharapkan mampu mendukung kebutuhan operasional perusahaan ISP dalam jangka panjang serta mempermudah integrasi dengan teknologi lain di masa mendatang.
+
+
+
+
+
+
+
+
+
+
+
+
+BAB IV
+MODUL SISTEM
+4.1 Gambaran Umum Modul Sistem
+Fiber-UNMS Enterprise dikembangkan menggunakan pendekatan modular (Modular System Architecture), di mana setiap fungsi utama dipisahkan ke dalam modul-modul yang saling terintegrasi namun tetap dapat dikembangkan secara independen. Pendekatan ini memberikan kemudahan dalam pemeliharaan sistem, penambahan fitur baru, serta peningkatan performa aplikasi tanpa mengganggu modul lainnya.
+Seluruh modul menggunakan basis data yang sama sehingga setiap perubahan data dapat langsung digunakan oleh modul lain sesuai dengan hak akses pengguna.
+Berikut adalah modul-modul utama yang terdapat pada Fiber-UNMS Enterprise.
+________________________________________
+4.2 Dashboard
+Dashboard merupakan halaman utama yang ditampilkan setelah pengguna berhasil melakukan proses autentikasi. Modul ini menyajikan informasi operasional perusahaan secara ringkas melalui indikator, grafik, tabel, dan notifikasi.
+Informasi yang ditampilkan meliputi:
+•	Total pelanggan aktif.
+•	Total perangkat jaringan.
+•	Status jaringan.
+•	Jumlah tiket gangguan.
+•	Jumlah pekerjaan teknisi.
+•	Stok inventaris.
+•	Statistik instalasi.
+•	Ringkasan aktivitas harian.
+•	Grafik performa operasional.
+Dashboard disesuaikan dengan peran masing-masing pengguna sehingga informasi yang ditampilkan bersifat relevan.
+________________________________________
+4.3 User Management
+Modul User Management digunakan untuk mengelola seluruh akun pengguna aplikasi.
+Fitur utama meliputi:
+•	Manajemen pengguna.
+•	Manajemen role.
+•	Manajemen permission.
+•	Pengelolaan divisi.
+•	Pengelolaan jabatan.
+•	Reset password.
+•	Aktivasi dan nonaktif akun.
+•	Riwayat login pengguna.
+•	Manajemen profil pengguna.
+Modul ini menggunakan konsep Role Based Access Control (RBAC).
+________________________________________
+4.4 Customer Relationship Management (CRM)
+CRM digunakan untuk mengelola hubungan antara perusahaan dengan pelanggan.
+Fitur utama:
+•	Data prospek pelanggan.
+•	Riwayat komunikasi.
+•	Follow up pelanggan.
+•	Keluhan pelanggan.
+•	Permintaan layanan.
+•	Riwayat pelayanan.
+•	Status prospek.
+•	Jadwal kunjungan.
+Modul ini membantu meningkatkan kualitas pelayanan kepada pelanggan.
+________________________________________
+4.5 Modul Pelanggan
+Merupakan pusat pengelolaan seluruh data pelanggan.
+Informasi yang dikelola antara lain:
+•	Identitas pelanggan.
+•	Alamat.
+•	Koordinat lokasi.
+•	Paket internet.
+•	Status layanan.
+•	Nomor pelanggan.
+•	Nomor ONT.
+•	Nomor ODP.
+•	Riwayat instalasi.
+•	Riwayat gangguan.
+•	Riwayat pembayaran.
+•	Riwayat perubahan paket.
+Modul ini menjadi pusat integrasi dengan modul CRM, Ticketing, Keuangan, dan Monitoring.
+________________________________________
+4.6 Modul OLT (Optical Line Terminal)
+Digunakan untuk mendokumentasikan seluruh perangkat OLT.
+Informasi yang dikelola:
+•	Nama OLT.
+•	Vendor.
+•	Model perangkat.
+•	Lokasi.
+•	Rack.
+•	Slot.
+•	Port PON.
+•	Kapasitas.
+•	Status perangkat.
+•	IP Address.
+•	Dokumentasi.
+Modul ini menjadi titik awal seluruh jalur distribusi jaringan FTTH.
+________________________________________
+4.7 Modul POP (Point of Presence)
+Modul POP digunakan untuk mengelola lokasi utama distribusi jaringan.
+Data yang dikelola:
+•	Nama POP.
+•	Lokasi.
+•	Koordinat.
+•	Rack.
+•	Perangkat aktif.
+•	Kapasitas.
+•	Dokumentasi.
+•	Status operasional.
+POP menjadi pusat distribusi menuju ODC atau perangkat lainnya.
+________________________________________
+4.8 Modul ODC (Optical Distribution Cabinet)
+Modul ini mendokumentasikan seluruh kabinet distribusi jaringan.
+Informasi yang disimpan:
+•	Nama ODC.
+•	Lokasi.
+•	Koordinat.
+•	Kapasitas.
+•	Jumlah splitter.
+•	Status.
+•	Dokumentasi.
+•	Hubungan dengan POP.
+ODC berfungsi sebagai titik distribusi utama menuju ODP.
+________________________________________
+4.9 Modul ODP (Optical Distribution Point)
+Modul ODP merupakan salah satu modul terpenting dalam dokumentasi jaringan.
+Informasi yang dikelola:
+•	Nomor ODP.
+•	Nama ODP.
+•	Lokasi.
+•	Koordinat.
+•	Tiang.
+•	Kapasitas port.
+•	Port terpakai.
+•	Port tersedia.
+•	Status.
+•	Foto.
+•	Hubungan dengan ODC.
+Data ini menjadi referensi utama pada proses instalasi pelanggan.
+________________________________________
+4.10 Modul FAT (Fiber Access Terminal)
+FAT digunakan sebagai titik terminasi distribusi pelanggan.
+Data yang dikelola:
+•	Nama FAT.
+•	Lokasi.
+•	Kapasitas.
+•	Jumlah port.
+•	Status.
+•	Dokumentasi.
+•	Koneksi ke ODP.
+________________________________________
+4.11 Modul Joint Closure
+Modul ini digunakan untuk mendokumentasikan seluruh titik sambungan kabel fiber optik.
+Data meliputi:
+•	Nomor Joint Closure.
+•	Lokasi.
+•	Koordinat.
+•	Kabel masuk.
+•	Kabel keluar.
+•	Core yang digunakan.
+•	Dokumentasi foto.
+•	Riwayat penyambungan.
+Dokumentasi ini mempermudah proses penelusuran jalur fiber.
+________________________________________
+4.12 Modul Kabel Fiber Optik
+Modul Kabel FO digunakan untuk mencatat seluruh jalur kabel yang dimiliki perusahaan.
+Informasi meliputi:
+•	Nama kabel.
+•	Jenis kabel.
+•	Kapasitas core.
+•	Panjang kabel.
+•	Vendor.
+•	Jalur kabel.
+•	Status.
+•	Dokumentasi.
+•	Riwayat pemeliharaan.
+Setiap kabel dapat dihubungkan dengan Joint Closure, ODC, ODP, maupun POP.
+________________________________________
+4.13 Modul Splitter
+Digunakan untuk mendokumentasikan seluruh splitter optik.
+Informasi meliputi:
+•	Tipe splitter.
+•	Rasio splitter.
+•	Lokasi.
+•	Port input.
+•	Port output.
+•	Status.
+•	Dokumentasi.
+Splitter menjadi bagian penting dalam distribusi jaringan FTTH.
+________________________________________
+4.14 Modul Inventory
+Modul Inventory mengelola seluruh aset dan material perusahaan.
+Fitur utama:
+•	Data barang.
+•	Kategori barang.
+•	Supplier.
+•	Gudang.
+•	Barang masuk.
+•	Barang keluar.
+•	Mutasi barang.
+•	Stock opname.
+•	Minimum stok.
+•	Riwayat penggunaan.
+Seluruh material yang digunakan teknisi tercatat secara otomatis.
+________________________________________
+4.15 Modul GIS Map
+GIS Map menampilkan seluruh aset jaringan dalam bentuk peta digital.
+Objek yang dapat ditampilkan antara lain:
+•	POP.
+•	ODC.
+•	ODP.
+•	FAT.
+•	Joint Closure.
+•	Kabel FO.
+•	Tiang.
+•	Pelanggan.
+•	Area gangguan.
+Pengguna dapat melakukan pencarian lokasi serta melihat hubungan antar perangkat.
+________________________________________
+4.16 Modul Ticketing
+Modul Ticketing digunakan untuk mengelola seluruh pekerjaan dan gangguan.
+Jenis tiket meliputi:
+•	Gangguan pelanggan.
+•	Gangguan jaringan.
+•	Instalasi baru.
+•	Maintenance.
+•	Relokasi.
+•	Upgrade layanan.
+Setiap tiket memiliki:
+•	Nomor tiket.
+•	Prioritas.
+•	Teknisi.
+•	Status.
+•	SLA.
+•	Dokumentasi.
+•	Riwayat pekerjaan.
+________________________________________
+4.17 Modul Maintenance
+Digunakan untuk menjadwalkan dan mencatat kegiatan pemeliharaan jaringan.
+Fitur:
+•	Jadwal maintenance.
+•	Pemeriksaan perangkat.
+•	Penggantian material.
+•	Hasil inspeksi.
+•	Dokumentasi pekerjaan.
+•	Riwayat maintenance.
+Dengan modul ini, perusahaan dapat melakukan pemeliharaan secara terjadwal.
+________________________________________
+4.18 Modul Monitoring
+Modul Monitoring digunakan untuk mengawasi kondisi operasional jaringan.
+Informasi yang dipantau:
+•	Status perangkat.
+•	Status jaringan.
+•	Alarm perangkat.
+•	Trafik jaringan.
+•	Status OLT.
+•	Status pelanggan.
+•	Aktivitas teknisi.
+•	Aktivitas sistem.
+Pada tahap selanjutnya modul ini dapat diintegrasikan dengan protokol SNMP, ICMP, atau API perangkat jaringan.
+________________________________________
+4.19 Modul Keuangan
+Modul Keuangan mendukung pengelolaan transaksi yang berkaitan dengan layanan pelanggan.
+Fitur utama:
+•	Tagihan pelanggan.
+•	Pembayaran.
+•	Riwayat transaksi.
+•	Pengeluaran operasional.
+•	Pendapatan.
+•	Laporan keuangan sederhana.
+Modul ini dapat dikembangkan lebih lanjut untuk mendukung integrasi dengan sistem akuntansi.
+________________________________________
+4.20 Modul Audit Log
+Audit Log mencatat seluruh aktivitas pengguna dalam sistem.
+Data yang dicatat meliputi:
+•	Login dan logout.
+•	Penambahan data.
+•	Perubahan data.
+•	Penghapusan data.
+•	Persetujuan transaksi.
+•	Aktivitas administrator.
+•	Kesalahan sistem.
+Audit Log berfungsi sebagai mekanisme keamanan dan jejak aktivitas (audit trail).
+________________________________________
+4.21 Modul Reporting
+Modul Reporting menyediakan berbagai laporan operasional yang dapat digunakan sebagai bahan evaluasi dan pengambilan keputusan.
+Laporan yang tersedia antara lain:
+•	Laporan pelanggan.
+•	Laporan instalasi.
+•	Laporan gangguan.
+•	Laporan pekerjaan teknisi.
+•	Laporan inventaris.
+•	Laporan penggunaan material.
+•	Laporan perangkat jaringan.
+•	Laporan aktivitas pengguna.
+•	Laporan keuangan.
+•	Laporan performa operasional.
+Setiap laporan dapat difilter berdasarkan periode, wilayah, jenis layanan, maupun parameter lainnya serta dapat diekspor ke format PDF atau Microsoft Excel.
+________________________________________
+Kesimpulan BAB IV
+Bab ini menjelaskan seluruh modul utama yang akan dikembangkan pada Fiber-UNMS Enterprise. Setiap modul memiliki fungsi dan tanggung jawab yang saling terintegrasi sehingga mampu mendukung proses operasional perusahaan ISP secara menyeluruh. Dengan pendekatan modular, sistem dapat dikembangkan secara bertahap sesuai kebutuhan bisnis tanpa mengganggu modul yang telah berjalan.
+
+
+
+
+BAB V
+FLOW SISTEM
+5.1 Gambaran Umum Flow Sistem
+Flow Sistem menjelaskan alur proses bisnis yang terjadi di dalam Fiber-UNMS Enterprise. Setiap aktivitas pengguna akan mengikuti tahapan yang telah ditentukan sehingga seluruh proses operasional perusahaan dapat berjalan secara terstruktur, terdokumentasi, dan saling terintegrasi.
+Seluruh modul di dalam Fiber-UNMS Enterprise saling terhubung melalui basis data terpusat. Oleh karena itu, setiap perubahan data pada satu modul akan berdampak pada modul lain yang memiliki keterkaitan. Pendekatan ini memastikan bahwa seluruh informasi yang ditampilkan dalam sistem selalu konsisten dan mutakhir.
+Flow sistem yang dibahas dalam dokumen ini meliputi proses registrasi pelanggan, aktivasi layanan, penanganan gangguan, kegiatan pemeliharaan, monitoring jaringan, serta penyusunan laporan operasional.
+________________________________________
+5.2 Alur Registrasi Pelanggan
+Proses registrasi pelanggan merupakan tahapan awal sebelum pelanggan memperoleh layanan internet. Seluruh proses dilakukan secara terstruktur untuk memastikan data pelanggan tersimpan dengan benar dan dapat digunakan pada proses berikutnya.
+Tahapan registrasi pelanggan adalah sebagai berikut:
+1.	Calon pelanggan mengajukan permohonan pemasangan layanan internet kepada perusahaan melalui Customer Service atau Sales.
+2.	Petugas melakukan pencatatan identitas pelanggan yang meliputi nama, alamat, nomor telepon, alamat email, koordinat lokasi, serta dokumen pendukung yang diperlukan.
+3.	Sistem melakukan validasi terhadap data pelanggan untuk memastikan tidak terdapat data ganda maupun informasi yang tidak lengkap.
+4.	Setelah data dinyatakan valid, sistem membuat nomor registrasi pelanggan secara otomatis.
+5.	Petugas melakukan pengecekan ketersediaan jaringan berdasarkan lokasi pelanggan dengan melihat data POP, ODC, ODP, FAT, serta kapasitas port yang masih tersedia.
+6.	Apabila jaringan tersedia, sistem akan membuat permintaan survei lapangan.
+7.	Teknisi melakukan survei lokasi untuk memastikan jalur instalasi, kondisi lapangan, estimasi kebutuhan material, dan kelayakan pemasangan.
+8.	Hasil survei dicatat ke dalam sistem sebagai dasar proses instalasi.
+9.	Jika hasil survei disetujui, pelanggan masuk ke tahap aktivasi layanan.
+________________________________________
+5.3 Alur Aktivasi Layanan
+Setelah proses registrasi selesai dan hasil survei dinyatakan layak, pelanggan dapat memasuki proses aktivasi layanan.
+Tahapan aktivasi meliputi:
+1.	Administrator atau Customer Service membuat perintah kerja instalasi.
+2.	Sistem menerbitkan Work Order kepada teknisi.
+3.	Teknisi melakukan instalasi kabel drop, pemasangan ONT, penyambungan ke ODP atau FAT, serta konfigurasi perangkat pelanggan.
+4.	Teknisi mendokumentasikan hasil pekerjaan berupa foto instalasi, nomor perangkat, jalur kabel, serta material yang digunakan.
+5.	Seluruh data instalasi diinput ke dalam sistem.
+6.	Administrator melakukan verifikasi hasil instalasi.
+7.	Apabila seluruh persyaratan telah terpenuhi, status pelanggan diubah menjadi Aktif.
+8.	Sistem secara otomatis menghubungkan data pelanggan dengan modul Monitoring, CRM, Ticketing, dan Keuangan.
+9.	Pelanggan mulai dapat menggunakan layanan internet sesuai paket yang dipilih.
+________________________________________
+5.4 Alur Penanganan Gangguan
+Modul Ticketing menjadi pusat pengelolaan seluruh gangguan pelanggan maupun gangguan jaringan.
+Proses penanganan gangguan dilakukan melalui tahapan berikut:
+1.	Pelanggan melaporkan gangguan kepada Customer Service.
+2.	Customer Service membuat tiket gangguan pada sistem.
+3.	Sistem memberikan nomor tiket secara otomatis.
+4.	NOC melakukan analisis awal terhadap laporan gangguan.
+5.	Apabila gangguan dapat diselesaikan dari sisi pusat, tiket langsung diproses oleh NOC.
+6.	Jika memerlukan penanganan lapangan, sistem menerbitkan Work Order kepada teknisi.
+7.	Teknisi melakukan pemeriksaan jaringan, perangkat pelanggan, jalur kabel, ODP, Joint Closure, maupun perangkat lainnya sesuai hasil analisis.
+8.	Setelah pekerjaan selesai, teknisi mengunggah dokumentasi dan laporan hasil pekerjaan.
+9.	Supervisor atau NOC melakukan verifikasi penyelesaian gangguan.
+10.	Tiket diubah menjadi Closed apabila gangguan telah berhasil diselesaikan.
+11.	Riwayat gangguan secara otomatis tersimpan pada data pelanggan dan data aset jaringan terkait.
+________________________________________
+5.5 Alur Maintenance
+Maintenance dilakukan sebagai upaya menjaga kualitas layanan dan mencegah terjadinya gangguan pada jaringan.
+Tahapan maintenance meliputi:
+1.	Supervisor atau NOC membuat jadwal maintenance berkala.
+2.	Sistem menerbitkan daftar pekerjaan kepada teknisi.
+3.	Teknisi melakukan pemeriksaan perangkat jaringan sesuai jadwal.
+4.	Kondisi perangkat dicatat ke dalam sistem.
+5.	Apabila ditemukan kerusakan, teknisi dapat langsung membuat tiket perbaikan atau mengganti material yang diperlukan.
+6.	Seluruh aktivitas maintenance didokumentasikan melalui foto dan laporan pekerjaan.
+7.	Setelah pekerjaan selesai, supervisor melakukan verifikasi.
+8.	Riwayat maintenance disimpan sebagai bagian dari histori aset jaringan.
+________________________________________
+5.6 Alur Monitoring
+Monitoring dilakukan secara terus-menerus untuk mengetahui kondisi operasional jaringan dan mendeteksi potensi gangguan lebih awal.
+Proses monitoring meliputi:
+1.	Sistem memantau kondisi perangkat jaringan secara berkala.
+2.	Data status perangkat ditampilkan pada Dashboard Monitoring.
+3.	NOC memantau perubahan status jaringan.
+4.	Apabila terdapat perangkat yang mengalami gangguan atau tidak merespons, sistem memberikan notifikasi kepada petugas.
+5.	NOC melakukan analisis awal berdasarkan informasi yang tersedia.
+6.	Jika diperlukan penanganan lapangan, sistem membuat tiket pekerjaan.
+7.	Seluruh aktivitas monitoring tercatat dalam log sistem sehingga dapat digunakan sebagai bahan evaluasi.
+Pada tahap pengembangan berikutnya, monitoring dapat diintegrasikan dengan perangkat jaringan menggunakan protokol SNMP, ICMP (Ping), maupun API dari vendor perangkat.
+________________________________________
+5.7 Alur Pelaporan
+Pelaporan merupakan proses penyusunan informasi operasional perusahaan berdasarkan data yang tersimpan pada sistem.
+Tahapan pelaporan adalah sebagai berikut:
+1.	Pengguna memilih jenis laporan yang akan ditampilkan.
+2.	Pengguna menentukan parameter laporan, seperti periode, wilayah, jenis layanan, atau kategori data.
+3.	Sistem mengambil data dari database sesuai parameter yang dipilih.
+4.	Data diproses menjadi laporan dalam bentuk tabel, grafik, maupun ringkasan statistik.
+5.	Pengguna dapat meninjau hasil laporan melalui dashboard.
+6.	Laporan dapat diekspor ke format PDF atau Microsoft Excel sesuai kebutuhan.
+7.	Laporan digunakan sebagai bahan evaluasi operasional, pengambilan keputusan, serta dokumentasi perusahaan.
+________________________________________
+5.8 Integrasi Antar Modul
+Setiap alur proses di atas saling terhubung melalui modul-modul utama Fiber-UNMS Enterprise.
+Sebagai contoh:
+•	Registrasi pelanggan menghasilkan data yang digunakan oleh modul Pelanggan, CRM, dan Aktivasi.
+•	Aktivasi layanan menghubungkan pelanggan dengan infrastruktur jaringan seperti ODP, FAT, dan OLT.
+•	Gangguan pelanggan diproses melalui modul Ticketing dan dapat memanfaatkan data Monitoring serta GIS Map.
+•	Maintenance memperbarui status aset jaringan dan riwayat perangkat.
+•	Monitoring menghasilkan informasi yang dapat memicu pembuatan tiket gangguan.
+•	Seluruh aktivitas operasional akan direkam oleh Audit Log dan digunakan sebagai sumber data pada modul Reporting.
+Dengan integrasi tersebut, seluruh proses bisnis perusahaan dapat berjalan secara otomatis dan saling mendukung tanpa perlu melakukan pencatatan data berulang.
+________________________________________
+Kesimpulan BAB V
+Bab ini menjelaskan alur proses bisnis utama yang diterapkan dalam Fiber-UNMS Enterprise, mulai dari registrasi pelanggan hingga pelaporan operasional. Setiap proses dirancang agar saling terintegrasi melalui basis data terpusat sehingga informasi dapat mengalir secara konsisten antar modul. Dengan alur kerja yang jelas, sistem diharapkan mampu meningkatkan efisiensi operasional, mempercepat penanganan layanan, serta menyediakan informasi yang akurat bagi seluruh pengguna sesuai dengan perannya.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BAB VI
+DATABASE
+6.1 Konsep Database
+Database merupakan komponen utama dalam Fiber-UNMS Enterprise yang berfungsi sebagai pusat penyimpanan seluruh data operasional perusahaan. Seluruh informasi yang dihasilkan oleh setiap modul disimpan dalam satu basis data terpusat sehingga dapat diakses secara konsisten oleh seluruh bagian sistem sesuai dengan hak akses masing-masing pengguna.
+Fiber-UNMS Enterprise menggunakan PostgreSQL 17 sebagai Relational Database Management System (RDBMS). PostgreSQL dipilih karena memiliki performa tinggi, stabilitas yang baik, dukungan terhadap transaksi kompleks, keamanan yang kuat, serta kemampuan menangani data dalam jumlah besar yang sesuai untuk kebutuhan sistem berskala enterprise.
+Perancangan database mengikuti prinsip-prinsip berikut:
+•	Normalisasi data untuk mengurangi redundansi.
+•	Konsistensi dan integritas data melalui Primary Key dan Foreign Key.
+•	Skalabilitas agar mampu menampung pertumbuhan data.
+•	Modularitas sehingga setiap domain memiliki kelompok tabel yang jelas.
+•	Keamanan melalui pembatasan hak akses dan audit aktivitas.
+•	Kemudahan pengembangan untuk penambahan modul di masa depan.
+Seluruh transaksi penting menggunakan mekanisme database transaction sehingga perubahan data dilakukan secara atomik dan tetap konsisten apabila terjadi kegagalan proses.
+________________________________________
+6.2 Domain Database
+Untuk mempermudah pengelolaan dan pengembangan, struktur database dibagi ke dalam beberapa domain sesuai fungsi bisnis. Setiap domain memiliki sekumpulan tabel yang saling berkaitan namun tetap dapat berinteraksi dengan domain lainnya.
+Domain utama yang digunakan adalah:
+•	Master Data
+•	User & HR
+•	Customer Relationship Management (CRM)
+•	Customer Management
+•	Network Infrastructure
+•	Inventory
+•	Finance
+•	Ticketing
+•	Monitoring
+•	Reporting
+•	Audit
+•	System Configuration
+Pendekatan domain ini memberikan beberapa keuntungan:
+•	Struktur database lebih mudah dipahami.
+•	Pengembangan modul menjadi lebih terarah.
+•	Risiko perubahan pada satu modul terhadap modul lain dapat diminimalkan.
+•	Memudahkan proses dokumentasi dan pemeliharaan database.
+________________________________________
+6.3 Domain Master Data
+Domain Master Data berisi data referensi yang digunakan oleh hampir seluruh modul dalam aplikasi. Data pada domain ini relatif jarang berubah namun menjadi dasar bagi proses bisnis.
+Contoh data yang termasuk dalam domain Master Data antara lain:
+•	Wilayah
+•	Provinsi
+•	Kabupaten/Kota
+•	Kecamatan
+•	Desa/Kelurahan
+•	Vendor
+•	Merek Perangkat
+•	Jenis Perangkat
+•	Jenis Kabel
+•	Tipe Splitter
+•	Kategori Barang
+•	Satuan Barang
+•	Divisi
+•	Jabatan
+•	Role Pengguna
+•	Permission
+•	Status Pelanggan
+•	Status Tiket
+•	Status Perangkat
+•	Jenis Maintenance
+•	Jenis Gangguan
+•	Paket Internet
+Domain ini menjadi acuan utama agar seluruh modul menggunakan data yang konsisten.
+________________________________________
+6.4 Domain Customer Relationship Management (CRM)
+Domain CRM digunakan untuk mengelola hubungan antara perusahaan dengan pelanggan, mulai dari calon pelanggan hingga pelanggan aktif.
+Data yang dikelola meliputi:
+•	Prospek pelanggan.
+•	Riwayat komunikasi.
+•	Jadwal kunjungan.
+•	Follow-up pemasaran.
+•	Permintaan layanan.
+•	Keluhan pelanggan.
+•	Riwayat interaksi.
+•	Status prospek.
+•	Aktivitas Customer Service.
+Seluruh data CRM dapat diintegrasikan dengan modul Pelanggan, Ticketing, dan Reporting.
+________________________________________
+6.5 Domain Inventory
+Domain Inventory digunakan untuk mengelola seluruh aset dan material perusahaan.
+Data utama meliputi:
+•	Data barang.
+•	Gudang.
+•	Supplier.
+•	Pembelian barang.
+•	Barang masuk.
+•	Barang keluar.
+•	Mutasi barang.
+•	Penggunaan material.
+•	Stok minimum.
+•	Stock opname.
+•	Riwayat transaksi inventaris.
+•	Riwayat distribusi barang.
+Setiap penggunaan material oleh teknisi akan tercatat secara otomatis sehingga stok dapat dipantau secara akurat.
+________________________________________
+6.6 Domain Network Infrastructure
+Domain Network merupakan domain terbesar dalam Fiber-UNMS Enterprise karena berisi dokumentasi seluruh infrastruktur jaringan fiber optik.
+Data yang dikelola meliputi:
+•	POP
+•	OLT
+•	Rack
+•	Shelf
+•	Slot
+•	PON Port
+•	ODC
+•	ODP
+•	FAT
+•	Joint Closure
+•	Splitter
+•	Kabel Fiber Optik
+•	Core Fiber
+•	Patch Panel
+•	Distribusi Jalur
+•	Tiang
+•	Manhole
+•	Handhole
+•	Area Jaringan
+•	Segment Kabel
+•	Dokumentasi Perangkat
+•	Riwayat Perubahan Infrastruktur
+Domain ini menjadi pusat dokumentasi seluruh jaringan perusahaan.
+________________________________________
+6.7 Domain Human Resource (HR)
+Domain HR digunakan untuk mengelola data sumber daya manusia yang menggunakan sistem.
+Informasi yang disimpan meliputi:
+•	Data pegawai.
+•	Divisi.
+•	Jabatan.
+•	Tim teknisi.
+•	Penugasan.
+•	Riwayat pekerjaan.
+•	Jadwal kerja.
+•	Hak akses pengguna.
+•	Riwayat login.
+•	Status pegawai.
+Domain ini mendukung pengelolaan pengguna serta distribusi pekerjaan kepada teknisi.
+________________________________________
+6.8 Domain Finance
+Domain Finance digunakan untuk mengelola transaksi yang berkaitan dengan layanan pelanggan dan operasional perusahaan.
+Data utama meliputi:
+•	Tagihan pelanggan.
+•	Pembayaran.
+•	Metode pembayaran.
+•	Riwayat transaksi.
+•	Pendapatan.
+•	Pengeluaran.
+•	Biaya instalasi.
+•	Denda.
+•	Potongan harga.
+•	Rekapitulasi transaksi.
+Pada tahap awal, modul ini difokuskan pada pencatatan transaksi operasional. Integrasi dengan sistem akuntansi dapat dilakukan pada tahap pengembangan berikutnya.
+________________________________________
+6.9 Domain Ticketing
+Domain Ticketing digunakan untuk mengelola seluruh pekerjaan yang berkaitan dengan pelanggan maupun infrastruktur jaringan.
+Data yang disimpan antara lain:
+•	Tiket gangguan.
+•	Work Order.
+•	Prioritas pekerjaan.
+•	Teknisi.
+•	Status pekerjaan.
+•	SLA.
+•	Dokumentasi pekerjaan.
+•	Riwayat penyelesaian.
+•	Evaluasi pekerjaan.
+Domain ini terhubung langsung dengan modul Pelanggan, Monitoring, dan Audit.
+________________________________________
+6.10 Domain Monitoring
+Domain Monitoring digunakan untuk menyimpan data yang berkaitan dengan kondisi operasional jaringan.
+Data yang dapat dikelola meliputi:
+•	Status perangkat.
+•	Status jaringan.
+•	Alarm.
+•	Log monitoring.
+•	Statistik performa.
+•	Riwayat monitoring.
+•	Utilisasi perangkat.
+•	Riwayat konektivitas.
+•	Hasil pemeriksaan berkala.
+Domain ini mendukung penyajian dashboard monitoring serta analisis performa jaringan.
+________________________________________
+6.11 Domain Audit
+Domain Audit berfungsi untuk mencatat seluruh aktivitas yang dilakukan pengguna selama menggunakan aplikasi.
+Informasi yang dicatat meliputi:
+•	Login.
+•	Logout.
+•	Penambahan data.
+•	Perubahan data.
+•	Penghapusan data.
+•	Aktivitas administrator.
+•	Perubahan konfigurasi.
+•	Kesalahan sistem.
+•	Riwayat akses.
+•	Aktivitas API.
+Pencatatan audit dilakukan secara otomatis sebagai bagian dari keamanan sistem serta memudahkan proses investigasi apabila terjadi kesalahan maupun penyalahgunaan sistem.
+________________________________________
+6.12 Estimasi Struktur Database
+Fiber-UNMS Enterprise dirancang sebagai sistem enterprise yang memiliki cakupan operasional luas. Oleh karena itu, jumlah tabel yang digunakan diperkirakan mencapai 120 hingga 150 tabel, bergantung pada kebutuhan implementasi dan pengembangan lanjutan.
+Estimasi distribusi tabel pada setiap domain adalah sebagai berikut:
+Domain	Estimasi Jumlah Tabel
+Master Data	25–30
+User & HR	10–15
+CRM	10–15
+Customer Management	10–15
+Network Infrastructure	35–45
+Inventory	12–15
+Finance	8–12
+Ticketing	8–12
+Monitoring	6–10
+Audit	4–6
+Reporting & Konfigurasi	8–10
+Dengan estimasi tersebut, jumlah keseluruhan tabel diperkirakan berada pada kisaran ±150 tabel, yang sudah mencakup tabel master, transaksi, relasi, konfigurasi, serta log sistem.
+________________________________________
+6.13 Strategi Pengembangan Database
+Pengembangan database akan dilakukan secara bertahap mengikuti pengembangan modul aplikasi. Setiap perubahan struktur database harus melalui proses analisis, dokumentasi, dan migrasi agar kompatibilitas data tetap terjaga.
+Strategi yang diterapkan meliputi:
+•	Penggunaan migration untuk setiap perubahan struktur tabel.
+•	Penamaan tabel dan kolom yang konsisten.
+•	Penggunaan indeks pada kolom yang sering digunakan dalam pencarian.
+•	Penerapan foreign key untuk menjaga integritas data.
+•	Pemanfaatan soft delete pada data yang memerlukan riwayat.
+•	Pencadangan (backup) database secara berkala.
+•	Pengujian migrasi pada lingkungan pengembangan sebelum diterapkan pada produksi.
+•	Dokumentasi perubahan skema database untuk memudahkan pemeliharaan.
+________________________________________
+Kesimpulan BAB VI
+Database Fiber-UNMS Enterprise dirancang sebagai fondasi utama yang mendukung seluruh proses operasional perusahaan ISP. Dengan menggunakan PostgreSQL dan pendekatan berbasis domain, struktur database menjadi lebih terorganisasi, mudah dikembangkan, dan mampu menangani pertumbuhan data dalam jangka panjang. Estimasi sekitar 150 tabel memberikan fleksibilitas untuk mengakomodasi seluruh modul utama, mulai dari pengelolaan pelanggan, infrastruktur jaringan, inventaris, keuangan, hingga audit aktivitas pengguna.
+
+
+
+
+
+
+
+
+
+
+BAB VII
+USER INTERFACE (UI) DAN USER EXPERIENCE (UX)
+7.1 Gambaran Umum UI/UX
+User Interface (UI) dan User Experience (UX) merupakan aspek penting dalam pengembangan Fiber-UNMS Enterprise. Sistem ini dirancang agar mudah digunakan oleh berbagai jenis pengguna, mulai dari administrator, Network Operation Center (NOC), teknisi lapangan, Customer Service, hingga manajemen perusahaan.
+Desain antarmuka mengutamakan kesederhanaan, konsistensi, kecepatan akses, serta kemudahan navigasi. Seluruh komponen dirancang agar pengguna dapat menyelesaikan pekerjaannya dengan langkah yang lebih sedikit, tampilan yang mudah dipahami, dan informasi yang tersaji secara jelas.
+Prinsip utama yang digunakan dalam perancangan UI/UX meliputi:
+•	Konsisten pada seluruh halaman aplikasi.
+•	Mudah dipelajari oleh pengguna baru.
+•	Responsif pada berbagai ukuran layar.
+•	Mengutamakan efisiensi alur kerja.
+•	Menampilkan informasi yang relevan sesuai hak akses pengguna.
+•	Mengurangi jumlah klik untuk menyelesaikan tugas.
+•	Memberikan umpan balik (feedback) yang jelas terhadap setiap aksi pengguna.
+•	Menjaga keterbacaan melalui pemilihan warna, tipografi, dan tata letak yang seimbang.
+________________________________________
+7.2 Dashboard
+Dashboard merupakan halaman pertama yang ditampilkan setelah pengguna berhasil masuk ke dalam sistem. Dashboard berfungsi sebagai pusat informasi yang menyajikan ringkasan kondisi operasional perusahaan secara real-time.
+Informasi yang ditampilkan pada dashboard disesuaikan dengan peran pengguna (role), sehingga setiap pengguna memperoleh informasi yang relevan dengan tanggung jawabnya.
+Komponen utama dashboard meliputi:
+•	Ringkasan jumlah pelanggan aktif.
+•	Statistik pelanggan baru.
+•	Jumlah perangkat jaringan.
+•	Status OLT, POP, ODC, ODP, dan perangkat lainnya.
+•	Jumlah tiket gangguan.
+•	Daftar pekerjaan teknisi.
+•	Kondisi inventaris.
+•	Statistik penggunaan material.
+•	Grafik performa operasional.
+•	Aktivitas terbaru pada sistem.
+•	Notifikasi pekerjaan yang memerlukan tindak lanjut.
+Dashboard dirancang menggunakan konsep information at a glance, yaitu menampilkan informasi penting dalam satu halaman tanpa mengharuskan pengguna berpindah ke banyak menu.
+________________________________________
+7.3 Monitoring Map
+Monitoring Map merupakan salah satu fitur utama yang membedakan Fiber-UNMS Enterprise dengan aplikasi administrasi biasa. Modul ini menampilkan seluruh infrastruktur jaringan dalam bentuk peta digital sehingga memudahkan pengguna dalam memahami kondisi jaringan secara geografis.
+Objek yang dapat ditampilkan pada peta meliputi:
+•	POP.
+•	OLT.
+•	ODC.
+•	ODP.
+•	FAT.
+•	Joint Closure.
+•	Tiang.
+•	Jalur kabel fiber optik.
+•	Lokasi pelanggan.
+•	Area gangguan.
+•	Lokasi teknisi (jika diimplementasikan pada tahap lanjutan).
+Fitur Monitoring Map meliputi:
+•	Zoom dan navigasi peta.
+•	Pencarian lokasi perangkat.
+•	Filter berdasarkan jenis aset.
+•	Informasi detail setiap objek.
+•	Penampilan status perangkat menggunakan warna atau ikon yang berbeda.
+•	Visualisasi jalur distribusi jaringan.
+•	Penanda lokasi gangguan.
+•	Riwayat perubahan lokasi aset.
+Dengan adanya Monitoring Map, proses identifikasi lokasi perangkat maupun penelusuran gangguan dapat dilakukan dengan lebih cepat dan akurat.
+________________________________________
+7.4 Dark Mode
+Fiber-UNMS Enterprise menyediakan dukungan Dark Mode sebagai salah satu pilihan tampilan antarmuka. Fitur ini bertujuan meningkatkan kenyamanan pengguna, terutama bagi teknisi dan operator yang bekerja dalam waktu lama atau pada kondisi pencahayaan rendah.
+Keunggulan Dark Mode antara lain:
+•	Mengurangi kelelahan mata.
+•	Meningkatkan kenyamanan penggunaan pada malam hari.
+•	Menampilkan informasi dengan kontras yang tetap jelas.
+•	Menjaga konsistensi tampilan pada seluruh modul.
+•	Memberikan pengalaman pengguna yang lebih modern.
+Pengguna dapat memilih antara Light Mode, Dark Mode, atau mengikuti pengaturan tema sistem operasi apabila fitur tersebut diimplementasikan.
+________________________________________
+7.5 Responsive Design
+Fiber-UNMS Enterprise dirancang menggunakan konsep Responsive Web Design, sehingga tampilan aplikasi dapat menyesuaikan berbagai ukuran layar tanpa mengurangi fungsi utama sistem.
+Perangkat yang didukung meliputi:
+•	Komputer desktop.
+•	Laptop.
+•	Tablet.
+•	Smartphone.
+Prinsip utama desain responsif meliputi:
+•	Tata letak fleksibel.
+•	Navigasi yang menyesuaikan ukuran layar.
+•	Komponen tabel yang dapat digulir (scroll) pada layar kecil.
+•	Formulir yang mudah digunakan melalui perangkat sentuh.
+•	Ukuran tombol yang nyaman untuk interaksi.
+Dengan pendekatan ini, teknisi lapangan tetap dapat mengakses sistem langsung dari perangkat seluler ketika berada di lokasi pekerjaan.
+________________________________________
+7.6 Sidebar Navigation
+Sidebar merupakan komponen navigasi utama yang digunakan untuk mengakses seluruh modul aplikasi.
+Struktur sidebar disusun berdasarkan kelompok modul sehingga memudahkan pengguna menemukan menu yang dibutuhkan.
+Kategori menu meliputi:
+•	Dashboard.
+•	Master Data.
+•	CRM.
+•	Pelanggan.
+•	Infrastruktur Jaringan.
+•	Inventory.
+•	Ticketing.
+•	Maintenance.
+•	Monitoring.
+•	Keuangan.
+•	Reporting.
+•	Pengaturan Sistem.
+Sidebar memiliki beberapa karakteristik:
+•	Dapat diperluas (expand) atau diperkecil (collapse).
+•	Menampilkan ikon pada setiap menu.
+•	Menampilkan submenu secara hierarkis.
+•	Menyoroti menu yang sedang aktif.
+•	Menyesuaikan menu berdasarkan hak akses pengguna.
+Pendekatan ini membantu menjaga tampilan tetap rapi meskipun jumlah modul dalam aplikasi cukup banyak.
+________________________________________
+7.7 Data Table
+Sebagian besar informasi operasional pada Fiber-UNMS Enterprise ditampilkan menggunakan komponen Data Table. Komponen ini dirancang untuk mengelola data dalam jumlah besar secara efisien.
+Fitur Data Table meliputi:
+•	Pencarian data (search).
+•	Penyaringan (filter).
+•	Pengurutan (sorting).
+•	Pagination.
+•	Pemilihan kolom yang ditampilkan.
+•	Ekspor data ke PDF dan Excel.
+•	Cetak data.
+•	Impor data.
+•	Tampilan responsif.
+•	Aksi cepat (quick action) seperti lihat, ubah, dan hapus.
+Penggunaan Data Table mempermudah pengguna dalam mengelola ribuan data pelanggan, perangkat jaringan, inventaris, maupun tiket gangguan.
+________________________________________
+7.8 Form
+Komponen Form digunakan sebagai media utama untuk memasukkan dan memperbarui data pada seluruh modul aplikasi.
+Prinsip desain formulir meliputi:
+•	Tata letak yang sederhana.
+•	Pengelompokan informasi berdasarkan kategori.
+•	Validasi data secara langsung (real-time validation).
+•	Penanda kolom wajib diisi.
+•	Pesan kesalahan yang mudah dipahami.
+•	Dukungan unggah dokumen dan foto.
+•	Pilihan otomatis (autocomplete) untuk data yang sering digunakan.
+•	Komponen tanggal, waktu, dan koordinat yang mudah dioperasikan.
+Form juga dirancang untuk meminimalkan kesalahan input dengan memanfaatkan daftar pilihan (dropdown), pencarian dinamis, dan pemeriksaan format data secara otomatis.
+________________________________________
+7.9 Grafik
+Grafik digunakan sebagai media visualisasi data sehingga pengguna dapat memahami kondisi operasional perusahaan dengan lebih cepat.
+Jenis grafik yang digunakan antara lain:
+•	Grafik batang (Bar Chart).
+•	Grafik garis (Line Chart).
+•	Grafik lingkaran (Pie Chart).
+•	Grafik area (Area Chart).
+•	Statistik kartu (Summary Card).
+•	Indikator performa (KPI Widget).
+Grafik digunakan untuk menampilkan informasi seperti:
+•	Pertumbuhan pelanggan.
+•	Statistik instalasi.
+•	Gangguan per periode.
+•	Kinerja teknisi.
+•	Penggunaan material.
+•	Kapasitas jaringan.
+•	Pendapatan perusahaan.
+•	Tren penyelesaian tiket.
+•	Performa layanan.
+Visualisasi ini membantu manajemen dalam melakukan analisis operasional dan mendukung pengambilan keputusan berbasis data.
+________________________________________
+7.10 Standar Desain Antarmuka
+Untuk menjaga konsistensi pada seluruh modul, Fiber-UNMS Enterprise menerapkan beberapa standar desain antarmuka sebagai berikut:
+•	Penggunaan sistem grid yang konsisten.
+•	Ikon dengan gaya visual yang seragam.
+•	Tipografi yang mudah dibaca.
+•	Warna utama dan warna status yang konsisten.
+•	Spasi antar elemen yang proporsional.
+•	Komponen antarmuka yang dapat digunakan kembali (reusable components).
+•	Respons visual terhadap aksi pengguna, seperti indikator proses, notifikasi, dan konfirmasi.
+Penerapan standar ini bertujuan agar pengalaman pengguna tetap konsisten meskipun aplikasi terus berkembang dan memiliki banyak modul.
+________________________________________
+Kesimpulan BAB VII
+Bab ini menjelaskan konsep UI/UX yang menjadi dasar perancangan antarmuka Fiber-UNMS Enterprise. Dengan menerapkan desain yang konsisten, responsif, dan berorientasi pada pengalaman pengguna, sistem diharapkan mampu meningkatkan produktivitas seluruh pengguna, mengurangi kesalahan operasional, serta memberikan pengalaman penggunaan yang nyaman baik di lingkungan kantor maupun di lapangan.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BAB VIII
+TOOLS DAN TEKNOLOGI
+8.1 Gambaran Umum
+Pengembangan Fiber-UNMS Enterprise menggunakan kombinasi teknologi modern yang telah banyak digunakan dalam pengembangan aplikasi enterprise. Pemilihan teknologi dilakukan dengan mempertimbangkan aspek performa, keamanan, stabilitas, skalabilitas, kemudahan pemeliharaan, serta dukungan komunitas yang luas.
+Seluruh teknologi yang digunakan saling melengkapi untuk membangun sistem yang terstruktur, mudah dikembangkan, dan siap mendukung kebutuhan operasional perusahaan dalam jangka panjang.
+Teknologi utama yang digunakan meliputi:
+•	PostgreSQL 17
+•	Laravel Framework
+•	PHP 8.4
+•	Node.js
+•	Composer
+•	NPM
+•	Git
+•	GitHub
+•	Visual Studio Code
+•	Postman
+•	Docker (Opsional)
+________________________________________
+8.2 PostgreSQL 17
+PostgreSQL 17 digunakan sebagai Database Management System (DBMS) utama dalam Fiber-UNMS Enterprise. PostgreSQL dipilih karena merupakan sistem basis data relasional yang stabil, memiliki performa tinggi, dan mampu menangani transaksi dalam jumlah besar.
+Fungsi
+•	Menyimpan seluruh data operasional sistem.
+•	Menjaga integritas data.
+•	Mendukung transaksi kompleks.
+•	Menyediakan mekanisme backup dan restore.
+•	Mendukung relasi data yang kompleks.
+Keunggulan
+•	Open Source.
+•	Performa tinggi.
+•	Stabil untuk sistem enterprise.
+•	Mendukung ACID Transaction.
+•	Memiliki fitur indexing yang lengkap.
+•	Mendukung JSON dan JSONB.
+•	Skalabilitas tinggi.
+•	Keamanan yang baik.
+•	Kompatibel dengan Laravel.
+Pada proyek Fiber-UNMS Enterprise, PostgreSQL menjadi pusat penyimpanan seluruh data pelanggan, jaringan, inventaris, monitoring, keuangan, serta audit sistem.
+________________________________________
+8.3 Laravel Framework
+Laravel merupakan framework utama yang digunakan untuk membangun backend aplikasi.
+Framework ini menerapkan pola Model-View-Controller (MVC) sehingga struktur kode menjadi lebih terorganisasi dan mudah dipelihara.
+Fungsi
+•	Backend Application.
+•	Routing.
+•	Authentication.
+•	Authorization.
+•	ORM (Eloquent).
+•	Validation.
+•	API Development.
+•	Queue.
+•	Scheduler.
+•	Notification.
+Keunggulan
+•	Struktur proyek yang rapi.
+•	Dokumentasi lengkap.
+•	Keamanan tinggi.
+•	Mendukung REST API.
+•	Mendukung Migration dan Seeder.
+•	Memiliki ORM yang kuat.
+•	Mudah dikembangkan.
+•	Komunitas besar.
+Laravel menjadi fondasi utama seluruh proses bisnis pada Fiber-UNMS Enterprise.
+________________________________________
+8.4 PHP 8.4
+PHP merupakan bahasa pemrograman utama yang digunakan dalam pengembangan backend aplikasi.
+Versi PHP 8.4 dipilih karena menawarkan peningkatan performa, efisiensi memori, serta fitur-fitur bahasa yang lebih modern dibandingkan versi sebelumnya.
+Fungsi
+•	Menjalankan logika bisnis.
+•	Memproses permintaan pengguna.
+•	Berkomunikasi dengan database.
+•	Menghasilkan respons aplikasi.
+Keunggulan
+•	Performa yang lebih baik.
+•	Dukungan terhadap Laravel.
+•	Stabil.
+•	Dokumentasi luas.
+•	Mudah dipelajari.
+•	Kompatibilitas tinggi.
+________________________________________
+8.5 Node.js
+Node.js digunakan sebagai lingkungan (runtime environment) untuk mendukung proses pengembangan frontend.
+Node.js tidak digunakan sebagai backend utama, tetapi sebagai alat bantu dalam proses pembangunan aset antarmuka.
+Fungsi
+•	Menjalankan proses build frontend.
+•	Mengelola asset JavaScript.
+•	Mengelola asset CSS.
+•	Mendukung Vite sebagai bundler.
+Keunggulan
+•	Cepat.
+•	Ringan.
+•	Ekosistem paket yang luas.
+•	Terintegrasi dengan Laravel.
+________________________________________
+8.6 Composer
+Composer merupakan dependency manager untuk PHP yang digunakan dalam pengembangan aplikasi Laravel.
+Fungsi
+•	Menginstal library PHP.
+•	Mengelola dependency proyek.
+•	Memperbarui package.
+•	Mengelola autoloading.
+Manfaat
+•	Instalasi package lebih mudah.
+•	Konsistensi versi library.
+•	Mempermudah deployment.
+•	Mempercepat pengembangan aplikasi.
+Seluruh library backend pada Fiber-UNMS Enterprise dikelola menggunakan Composer.
+________________________________________
+8.7 NPM (Node Package Manager)
+NPM digunakan sebagai pengelola dependency JavaScript.
+Fungsi
+•	Menginstal library frontend.
+•	Mengelola package JavaScript.
+•	Mengelola Vite.
+•	Mendukung proses build asset.
+Manfaat
+•	Instalasi library lebih mudah.
+•	Manajemen versi package.
+•	Mendukung proses otomatisasi frontend.
+________________________________________
+8.8 Git
+Git digunakan sebagai sistem Version Control selama proses pengembangan.
+Seluruh perubahan kode sumber dicatat sehingga riwayat pengembangan dapat ditelusuri dengan mudah.
+Fungsi
+•	Version Control.
+•	Branch Management.
+•	Merge.
+•	Rollback.
+•	History Tracking.
+Manfaat
+•	Menghindari kehilangan kode.
+•	Memudahkan kolaborasi tim.
+•	Mendukung pengembangan paralel.
+•	Memudahkan audit perubahan.
+Penggunaan Git menjadi standar dalam seluruh proses pengembangan Fiber-UNMS Enterprise.
+________________________________________
+8.9 GitHub
+GitHub digunakan sebagai repositori utama proyek.
+Selain menyimpan kode sumber, GitHub juga dimanfaatkan sebagai media kolaborasi antar pengembang.
+Fungsi
+•	Penyimpanan repository.
+•	Kolaborasi tim.
+•	Pull Request.
+•	Issue Tracking.
+•	Wiki.
+•	Release Management.
+•	Backup Repository.
+Manfaat
+•	Dokumentasi pengembangan.
+•	Riwayat perubahan.
+•	Kolaborasi yang lebih terstruktur.
+•	Integrasi dengan CI/CD di masa mendatang.
+________________________________________
+8.10 Visual Studio Code
+Visual Studio Code digunakan sebagai editor kode utama selama proses pengembangan.
+Editor ini dipilih karena ringan, cepat, dan memiliki dukungan ekstensi yang sangat lengkap.
+Fungsi
+•	Penulisan kode.
+•	Debugging.
+•	Git Integration.
+•	Terminal.
+•	Code Navigation.
+•	Refactoring.
+Ekstensi yang Direkomendasikan
+•	PHP Intelephense.
+•	Laravel Extension Pack.
+•	Laravel Blade Formatter.
+•	DotENV.
+•	GitLens.
+•	Prettier.
+•	EditorConfig.
+•	Path Intellisense.
+Penggunaan ekstensi yang seragam membantu menjaga konsistensi gaya penulisan kode dalam tim.
+________________________________________
+8.11 Postman
+Postman digunakan sebagai alat untuk melakukan pengujian REST API selama proses pengembangan.
+Fungsi
+•	Pengujian endpoint API.
+•	Pengujian autentikasi.
+•	Pengujian parameter.
+•	Pengujian respons JSON.
+•	Dokumentasi API.
+Manfaat
+•	Mempermudah debugging.
+•	Memastikan API berjalan sesuai spesifikasi.
+•	Mempercepat proses integrasi antara frontend dan backend.
+Postman menjadi alat utama dalam proses pengujian komunikasi antar modul.
+________________________________________
+8.12 Docker (Opsional)
+Docker merupakan platform virtualisasi berbasis container yang dapat digunakan untuk menyamakan lingkungan pengembangan, pengujian, dan produksi.
+Penggunaan Docker pada proyek ini bersifat opsional, namun sangat disarankan apabila aplikasi dikembangkan oleh beberapa programmer atau akan diterapkan pada beberapa server dengan konfigurasi yang berbeda.
+Fungsi
+•	Menyediakan lingkungan pengembangan yang konsisten.
+•	Menjalankan aplikasi dalam container terisolasi.
+•	Mempermudah proses deployment.
+•	Mengurangi perbedaan konfigurasi antar lingkungan.
+Komponen yang Dapat Dijalankan Menggunakan Docker
+•	Laravel Application.
+•	PHP Runtime.
+•	PostgreSQL.
+•	Nginx atau Apache.
+•	Node.js.
+•	Redis (opsional).
+•	Queue Worker.
+Manfaat
+•	Instalasi lebih cepat.
+•	Konsistensi lingkungan kerja.
+•	Skalabilitas lebih baik.
+•	Mendukung implementasi CI/CD.
+Pada tahap awal pengembangan, proyek dapat dijalankan secara lokal tanpa Docker. Seiring bertambahnya anggota tim atau kebutuhan deployment, Docker dapat diadopsi untuk meningkatkan efisiensi pengelolaan lingkungan aplikasi.
+________________________________________
+8.13 Ringkasan Teknologi
+Teknologi	Fungsi Utama
+PostgreSQL 17	Basis data utama
+Laravel	Framework backend
+PHP 8.4	Bahasa pemrograman backend
+Node.js	Runtime untuk build frontend
+Composer	Manajemen dependency PHP
+NPM	Manajemen dependency JavaScript
+Git	Version control
+GitHub	Repository dan kolaborasi
+Visual Studio Code	Editor kode
+Postman	Pengujian REST API
+Docker (Opsional)	Containerisasi lingkungan aplikasi
+________________________________________
+
+Kesimpulan BAB VIII
+Fiber-UNMS Enterprise dibangun menggunakan kombinasi teknologi yang modern, stabil, dan telah terbukti pada berbagai proyek enterprise. PostgreSQL berperan sebagai basis data utama, Laravel dan PHP sebagai fondasi backend, Node.js mendukung proses pembangunan aset frontend, sedangkan Git, GitHub, Visual Studio Code, Composer, NPM, dan Postman menjadi alat utama dalam proses pengembangan dan pengujian aplikasi. Docker disiapkan sebagai opsi untuk menyederhanakan pengelolaan lingkungan pengembangan dan deployment di masa mendatang. Kombinasi teknologi ini memberikan fondasi yang kuat agar sistem mudah dipelihara, aman, dan siap berkembang mengikuti kebutuhan perusahaan.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BAB IX
+STRUKTUR FOLDER PROYEK
+9.1 Gambaran Umum
+Struktur folder merupakan salah satu aspek penting dalam pengembangan perangkat lunak berskala enterprise. Organisasi direktori yang baik akan mempermudah proses pengembangan, pemeliharaan, debugging, kolaborasi tim, serta penambahan fitur di masa mendatang.
+Fiber-UNMS Enterprise dibangun menggunakan struktur dasar Laravel yang telah disesuaikan dengan kebutuhan proyek. Beberapa direktori tambahan disiapkan untuk mendukung pengembangan modular sehingga setiap bagian sistem memiliki lokasi penyimpanan yang jelas.
+Prinsip utama penyusunan struktur folder adalah:
+•	Pemisahan tanggung jawab setiap direktori.
+•	Konsistensi penamaan file dan folder.
+•	Kemudahan navigasi proyek.
+•	Mendukung pengembangan modular.
+•	Mudah dipelihara dan dikembangkan.
+•	Siap digunakan dalam lingkungan kolaborasi tim.
+________________________________________
+9.2 Struktur Direktori Utama
+Secara umum, struktur direktori proyek Fiber-UNMS Enterprise dirancang sebagai berikut:
+fiber-unms-enterprise/
+├── app/
+├── bootstrap/
+├── config/
+├── database/
+├── docs/
+├── modules/
+├── public/
+├── resources/
+├── routes/
+├── storage/
+├── tests/
+├── vendor/
+├── composer.json
+├── package.json
+├── artisan
+└── README.md
+Struktur tersebut mengikuti standar Laravel dengan penambahan direktori modules dan docs untuk mendukung pengembangan berskala enterprise.
+________________________________________
+9.3 Backend
+Direktori backend berisi seluruh logika bisnis aplikasi yang berjalan pada sisi server.
+Folder utama meliputi:
+app/
+├── Console/
+├── Exceptions/
+├── Helpers/
+├── Http/
+│   ├── Controllers/
+│   ├── Middleware/
+│   ├── Requests/
+│   └── Resources/
+├── Models/
+├── Policies/
+├── Providers/
+├── Repositories/
+├── Services/
+├── Traits/
+├── Jobs/
+├── Events/
+├── Listeners/
+├── Notifications/
+└── Enums/
+Penjelasan
+Controllers
+Mengelola permintaan dari pengguna dan meneruskan proses ke lapisan layanan.
+Models
+Merepresentasikan tabel-tabel pada basis data menggunakan Eloquent ORM.
+Services
+Menyimpan logika bisnis agar controller tetap sederhana dan mudah dipelihara.
+Repositories
+Menjadi lapisan akses data sehingga logika query tidak tersebar di berbagai bagian aplikasi.
+Requests
+Menangani validasi data sebelum diproses oleh sistem.
+Middleware
+Mengatur autentikasi, otorisasi, serta pemeriksaan permintaan.
+Events & Listeners
+Mengelola proses yang berjalan berdasarkan suatu peristiwa (event-driven).
+Jobs
+Menjalankan proses di latar belakang seperti pengiriman email, sinkronisasi data, atau pekerjaan yang memerlukan waktu lebih lama.
+________________________________________
+9.4 Frontend
+Seluruh aset antarmuka pengguna disimpan dalam direktori resources.
+Struktur yang direncanakan:
+resources/
+├── css/
+├── js/
+├── images/
+├── icons/
+├── fonts/
+├── views/
+├── layouts/
+├── components/
+├── pages/
+└── lang/
+Penjelasan
+CSS
+Berisi stylesheet utama aplikasi.
+JavaScript
+Berisi logika antarmuka pengguna.
+Views
+Template halaman yang dirender oleh Laravel Blade.
+Layouts
+Template dasar yang digunakan bersama oleh seluruh halaman.
+Components
+Komponen antarmuka yang dapat digunakan kembali, seperti tombol, kartu informasi, tabel, dan formulir.
+Pages
+Kumpulan halaman utama berdasarkan modul aplikasi.
+Images, Icons, dan Fonts
+Menyimpan aset visual yang digunakan pada antarmuka.
+Lang
+Berkas bahasa apabila aplikasi mendukung lebih dari satu bahasa.
+________________________________________
+9.5 Database
+Seluruh komponen yang berkaitan dengan basis data disimpan pada direktori database.
+Struktur direktori:
+database/
+├── migrations/
+├── seeders/
+├── factories/
+└── sql/
+Penjelasan
+Migrations
+Berisi definisi perubahan struktur tabel sehingga skema database dapat dikelola melalui kode.
+Seeders
+Digunakan untuk mengisi data awal seperti role, permission, wilayah, atau data referensi lainnya.
+Factories
+Membuat data contoh untuk kebutuhan pengujian.
+SQL
+Menyimpan skrip SQL khusus yang tidak tercakup dalam migration, seperti fungsi, view, atau prosedur tertentu bila diperlukan.
+________________________________________
+9.6 Public
+Direktori public merupakan titik masuk (entry point) aplikasi yang dapat diakses oleh pengguna melalui web server.
+Struktur utama:
+public/
+├── css/
+├── js/
+├── images/
+├── uploads/
+├── favicon.ico
+└── index.php
+Fungsi
+•	Menyimpan aset publik.
+•	Menyimpan hasil kompilasi frontend.
+•	Menyimpan berkas yang dapat diakses secara langsung.
+•	Menjadi lokasi utama eksekusi aplikasi melalui index.php.
+________________________________________
+9.7 Storage
+Direktori storage digunakan untuk menyimpan data yang dihasilkan selama aplikasi berjalan.
+Struktur yang direncanakan:
+storage/
+├── app/
+├── logs/
+├── framework/
+├── cache/
+├── exports/
+├── imports/
+└── backups/
+Penjelasan
+Logs
+Menyimpan catatan kesalahan dan aktivitas sistem.
+Cache
+Menyimpan data sementara untuk meningkatkan performa.
+Exports
+Lokasi penyimpanan laporan yang diekspor.
+Imports
+Menyimpan berkas impor sebelum diproses.
+Backups
+Digunakan untuk penyimpanan cadangan data apabila mekanisme backup dijalankan melalui aplikasi.
+________________________________________
+9.8 Modules
+Untuk menjaga skalabilitas aplikasi, Fiber-UNMS Enterprise dirancang menggunakan pendekatan modular. Seluruh modul utama dapat dipisahkan ke dalam direktori modules.
+Contoh struktur:
+modules/
+├── Dashboard/
+├── User/
+├── CRM/
+├── Customer/
+├── Network/
+├── Inventory/
+├── Ticketing/
+├── Maintenance/
+├── Monitoring/
+├── Finance/
+├── Reporting/
+└── Audit/
+Setiap modul dapat memiliki struktur internal seperti:
+Module/
+├── Controllers/
+├── Models/
+├── Services/
+├── Repositories/
+├── Requests/
+├── Routes/
+├── Views/
+├── Policies/
+└── Tests/
+Pendekatan modular memberikan keuntungan berupa:
+•	Pengembangan yang lebih terstruktur.
+•	Pemisahan tanggung jawab setiap modul.
+•	Kemudahan pengujian.
+•	Memudahkan pembagian pekerjaan antar programmer.
+•	Penambahan fitur tanpa mengganggu modul lain.
+________________________________________
+9.9 Routes
+Direktori routes menyimpan seluruh definisi jalur akses (routing) aplikasi.
+Struktur yang direncanakan:
+routes/
+├── web.php
+├── api.php
+├── auth.php
+├── console.php
+├── channels.php
+└── modules/
+Apabila jumlah modul semakin besar, setiap modul dapat memiliki berkas route tersendiri agar lebih mudah dikelola.
+Contoh:
+routes/modules/
+├── dashboard.php
+├── customer.php
+├── network.php
+├── inventory.php
+├── ticketing.php
+├── monitoring.php
+└── finance.php
+Dengan pendekatan ini, konfigurasi route tetap rapi meskipun jumlah endpoint bertambah.
+________________________________________
+9.10 Resources
+Direktori resources menjadi pusat penyimpanan seluruh aset yang digunakan untuk membangun tampilan aplikasi.
+Selain komponen frontend, direktori ini juga dapat menyimpan:
+•	Template email.
+•	Komponen Blade.
+•	Berkas bahasa.
+•	Template PDF.
+•	Ikon.
+•	Gambar.
+•	Konfigurasi tema.
+Pendekatan ini menjaga seluruh aset antarmuka berada dalam satu lokasi yang terorganisasi.
+________________________________________
+9.11 Documentation
+Dokumentasi merupakan bagian penting dari proyek enterprise. Seluruh dokumen teknis disimpan dalam direktori docs agar mudah diakses oleh seluruh anggota tim.
+Contoh struktur:
+docs/
+├── Project/
+├── Database/
+├── API/
+├── Deployment/
+├── User Guide/
+├── Change Log/
+├── Architecture/
+├── UI-UX/
+└── Meeting Notes/
+Dokumen yang disimpan meliputi:
+•	Dokumen analisis proyek.
+•	Dokumentasi API.
+•	Struktur database.
+•	Panduan instalasi.
+•	Panduan deployment.
+•	Panduan pengguna.
+•	Catatan perubahan (Change Log).
+•	Dokumentasi arsitektur sistem.
+•	Standar pengembangan.
+Penyimpanan dokumentasi secara terpusat membantu menjaga konsistensi informasi dan memudahkan proses transfer pengetahuan kepada anggota tim baru.
+________________________________________
+9.12 Standar Organisasi Proyek
+Untuk menjaga kualitas proyek, diterapkan beberapa standar organisasi sebagai berikut:
+•	Setiap modul memiliki struktur direktori yang seragam.
+•	Penamaan file dan folder menggunakan format yang konsisten.
+•	Logika bisnis ditempatkan pada lapisan Service.
+•	Akses basis data dipusatkan melalui Repository.
+•	Komponen antarmuka yang dapat digunakan kembali ditempatkan pada Components.
+•	Dokumentasi diperbarui setiap terjadi perubahan penting pada sistem.
+•	Berkas konfigurasi dipisahkan dari logika aplikasi.
+•	Tidak menyimpan data sensitif di dalam repositori Git.
+Dengan penerapan standar tersebut, proyek akan lebih mudah dipelihara, diuji, dan dikembangkan oleh banyak programmer secara bersamaan.
+________________________________________
+Kesimpulan BAB IX
+Struktur folder Fiber-UNMS Enterprise dirancang mengikuti praktik terbaik pengembangan aplikasi Laravel dengan pendekatan modular. Pembagian direktori berdasarkan fungsi masing-masing membuat proyek lebih mudah dipahami, meningkatkan kualitas kolaborasi tim, serta mempermudah pengembangan fitur baru tanpa mengganggu komponen yang telah ada. Dokumentasi yang tersusun rapi dan organisasi direktori yang konsisten menjadi fondasi penting bagi keberlangsungan proyek dalam jangka panjang.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BAB X
+STANDAR CODING
+10.1 Gambaran Umum
+Standar coding merupakan seperangkat aturan dan pedoman yang digunakan selama proses pengembangan Fiber-UNMS Enterprise. Tujuan utama dari penerapan standar ini adalah menjaga konsistensi struktur kode, meningkatkan kualitas aplikasi, mempermudah proses pemeliharaan, mengurangi potensi kesalahan, serta mempercepat proses kolaborasi antar pengembang.
+Seluruh anggota tim diharapkan mengikuti standar yang telah ditetapkan agar setiap bagian aplikasi memiliki pola penulisan yang seragam dan mudah dipahami.
+Prinsip dasar yang diterapkan meliputi:
+•	Konsisten.
+•	Mudah dibaca.
+•	Mudah diuji.
+•	Mudah dikembangkan.
+•	Aman.
+•	Modular.
+•	Dapat digunakan kembali (Reusable).
+•	Mengikuti praktik terbaik Laravel dan PHP.
+________________________________________
+10.2 Naming Convention
+Penamaan yang konsisten akan mempermudah pengembang memahami struktur proyek dan fungsi setiap komponen.
+Penamaan Class
+•	Menggunakan PascalCase.
+•	Nama class harus bersifat deskriptif.
+•	Contoh:
+o	CustomerController
+o	TicketService
+o	InventoryRepository
+o	NetworkMonitoringJob
+Penamaan Method
+•	Menggunakan camelCase.
+•	Menggunakan kata kerja yang menggambarkan aksi.
+•	Contoh:
+o	createCustomer()
+o	updateProfile()
+o	generateReport()
+o	assignTechnician()
+Penamaan Variabel
+•	Menggunakan camelCase.
+•	Nama harus jelas dan mudah dipahami.
+•	Contoh:
+o	$customerName
+o	$ticketStatus
+o	$networkDevice
+o	$installationDate
+Penamaan Konstanta
+•	Menggunakan huruf kapital penuh dengan pemisah garis bawah.
+•	Contoh:
+o	MAX_UPLOAD_SIZE
+o	DEFAULT_ROLE
+o	ACTIVE_STATUS
+Penamaan Folder
+•	Menggunakan PascalCase untuk modul.
+•	Menggunakan lowercase untuk folder bawaan Laravel.
+•	Contoh:
+o	Modules/Customer
+o	Modules/Inventory
+o	resources/views
+o	storage/logs
+Penamaan File
+•	Nama file mengikuti nama class yang dikandungnya.
+•	Satu class untuk satu file.
+•	Hindari singkatan yang tidak umum.
+________________________________________
+10.3 Database Convention
+Untuk menjaga konsistensi struktur basis data, diterapkan standar penamaan sebagai berikut.
+Nama Tabel
+•	Menggunakan huruf kecil (lowercase).
+•	Menggunakan bentuk jamak (plural).
+•	Memisahkan kata dengan garis bawah (snake_case).
+Contoh:
+•	customers
+•	network_devices
+•	inventory_items
+•	ticket_histories
+Nama Kolom
+Menggunakan format snake_case.
+Contoh:
+•	customer_name
+•	created_at
+•	updated_at
+•	deleted_at
+•	installation_date
+Primary Key
+Setiap tabel menggunakan kolom:
+id
+Foreign Key
+Format penamaan:
+nama_tabel_singular_id
+Contoh:
+•	customer_id
+•	ticket_id
+•	device_id
+•	inventory_id
+Timestamp
+Seluruh tabel transaksi menggunakan:
+•	created_at
+•	updated_at
+Apabila diperlukan penghapusan logis (soft delete), digunakan:
+•	deleted_at
+Audit Kolom
+Untuk kebutuhan pelacakan aktivitas, tabel transaksi dapat menambahkan:
+•	created_by
+•	updated_by
+•	deleted_by
+Standar ini memudahkan identifikasi perubahan data serta mendukung proses audit.
+________________________________________
+10.4 API Standard
+Seluruh layanan API pada Fiber-UNMS Enterprise mengikuti prinsip RESTful API.
+Endpoint
+Gunakan bentuk jamak untuk nama sumber daya.
+Contoh:
+/api/customers
+/api/tickets
+/api/inventory
+/api/network
+HTTP Method
+Method	Fungsi
+GET	Mengambil data
+POST	Menambahkan data
+PUT	Memperbarui seluruh data
+PATCH	Memperbarui sebagian data
+DELETE	Menghapus data
+Format Respons
+Seluruh respons API menggunakan format JSON yang konsisten, mencakup:
+•	Status permintaan.
+•	Kode respons.
+•	Pesan.
+•	Data.
+•	Informasi kesalahan (jika ada).
+Status HTTP
+Contoh kode yang digunakan:
+•	200 OK
+•	201 Created
+•	400 Bad Request
+•	401 Unauthorized
+•	403 Forbidden
+•	404 Not Found
+•	422 Validation Error
+•	500 Internal Server Error
+Versioning
+API menggunakan versi pada URL, misalnya:
+/api/v1/
+Pendekatan ini memudahkan pengembangan tanpa memutus kompatibilitas dengan integrasi yang sudah berjalan.
+________________________________________
+10.5 Git Workflow
+Seluruh pengembangan kode menggunakan Git sebagai sistem Version Control.
+Branch Utama
+•	main untuk kode produksi.
+•	develop untuk integrasi pengembangan.
+•	feature/* untuk pengembangan fitur baru.
+•	hotfix/* untuk perbaikan mendesak.
+•	release/* untuk persiapan rilis.
+Aturan Commit
+Pesan commit harus singkat, jelas, dan menggambarkan perubahan yang dilakukan.
+Contoh:
+•	feat: add customer management
+•	fix: resolve login validation
+•	refactor: simplify ticket service
+•	docs: update API documentation
+•	test: add inventory unit test
+Pull Request
+Sebelum digabungkan ke branch utama, setiap perubahan harus:
+•	Lulus pengujian.
+•	Ditinjau oleh anggota tim lain.
+•	Tidak menimbulkan konflik.
+•	Memenuhi standar coding.
+________________________________________
+10.6 Logging
+Logging digunakan untuk mencatat aktivitas penting dan membantu proses analisis apabila terjadi kesalahan.
+Aktivitas yang perlu dicatat antara lain:
+•	Login dan logout.
+•	Kesalahan sistem.
+•	Kegagalan autentikasi.
+•	Perubahan data penting.
+•	Aktivitas administrator.
+•	Proses impor dan ekspor data.
+•	Aktivitas API.
+•	Proses sinkronisasi.
+Prinsip logging:
+•	Jangan mencatat kata sandi, token, atau data sensitif.
+•	Gunakan tingkat log sesuai kebutuhan, seperti debug, info, warning, error, dan critical.
+•	Pastikan log mudah ditelusuri dan memiliki informasi waktu yang akurat.
+________________________________________
+10.7 Error Handling
+Setiap kesalahan harus ditangani secara sistematis agar tidak menyebabkan aplikasi berhenti secara tidak terduga.
+Prinsip yang diterapkan:
+•	Validasi seluruh masukan pengguna.
+•	Tangani setiap kemungkinan kegagalan.
+•	Gunakan exception handling untuk proses yang berisiko.
+•	Berikan pesan yang jelas kepada pengguna tanpa mengungkap detail internal sistem.
+•	Catat kesalahan penting pada log.
+Pendekatan ini meningkatkan stabilitas aplikasi sekaligus menjaga keamanan informasi.
+________________________________________
+10.8 Security
+Keamanan merupakan aspek yang tidak dapat dipisahkan dari pengembangan Fiber-UNMS Enterprise.
+Standar keamanan yang diterapkan meliputi:
+•	Autentikasi menggunakan mekanisme yang aman.
+•	Otorisasi berbasis Role Based Access Control (RBAC).
+•	Hash kata sandi menggunakan algoritma yang direkomendasikan.
+•	Validasi seluruh data masukan.
+•	Perlindungan terhadap SQL Injection.
+•	Perlindungan terhadap Cross-Site Scripting (XSS).
+•	Perlindungan terhadap Cross-Site Request Forgery (CSRF).
+•	Pembatasan akses berdasarkan hak pengguna.
+•	Penggunaan koneksi HTTPS pada lingkungan produksi.
+•	Pengelolaan konfigurasi melalui berkas lingkungan (environment) tanpa menyimpan data sensitif di repositori.
+Keamanan harus dipertimbangkan sejak tahap perancangan hingga implementasi dan pemeliharaan aplikasi.
+________________________________________
+10.9 Clean Code
+Seluruh kode yang ditulis harus mengikuti prinsip Clean Code agar mudah dibaca, dipahami, dan dipelihara.
+Prinsip yang digunakan meliputi:
+•	Satu fungsi memiliki satu tanggung jawab (Single Responsibility).
+•	Hindari fungsi yang terlalu panjang.
+•	Gunakan nama yang deskriptif.
+•	Hindari duplikasi kode (Don't Repeat Yourself / DRY).
+•	Pisahkan logika bisnis dari lapisan presentasi.
+•	Gunakan komentar hanya bila benar-benar diperlukan.
+•	Hindari angka atau nilai yang tidak memiliki penjelasan (magic numbers).
+•	Gunakan konfigurasi untuk nilai yang dapat berubah.
+•	Lakukan refactoring secara berkala.
+•	Tulis kode yang mudah diuji.
+Selain itu, pengembang dianjurkan menerapkan prinsip-prinsip SOLID, memanfaatkan dependency injection, serta membuat pengujian otomatis untuk fungsi-fungsi penting agar kualitas perangkat lunak tetap terjaga.
+________________________________________
+10.10 Proses Review Kode
+Sebelum kode digabungkan ke branch utama, setiap perubahan harus melalui proses code review. Tujuan proses ini adalah:
+•	Memastikan kesesuaian dengan standar coding.
+•	Mengurangi potensi bug.
+•	Menjaga kualitas dan konsistensi kode.
+•	Berbagi pengetahuan antar anggota tim.
+•	Memastikan perubahan tidak berdampak negatif terhadap modul lain.
+Setiap temuan dari proses review harus diselesaikan sebelum perubahan dinyatakan siap untuk digabungkan.
+________________________________________
+Kesimpulan BAB X
+Standar coding menjadi pedoman utama dalam pengembangan Fiber-UNMS Enterprise agar seluruh anggota tim menghasilkan kode yang konsisten, aman, mudah dipelihara, dan berkualitas tinggi. Dengan menerapkan konvensi penamaan, standar database, RESTful API, alur kerja Git, mekanisme logging, penanganan kesalahan, praktik keamanan, serta prinsip Clean Code, proyek akan lebih siap menghadapi pengembangan jangka panjang dan kolaborasi dalam skala enterprise.
+BAB XI
+PENUTUP
+11.1 Kesimpulan
+Fiber-UNMS Enterprise merupakan sebuah sistem informasi terintegrasi yang dirancang untuk mendukung seluruh proses operasional perusahaan penyedia layanan internet (Internet Service Provider / ISP), khususnya yang menggunakan teknologi Fiber To The Home (FTTH). Pengembangan sistem ini bertujuan untuk menggantikan proses administrasi yang masih terpisah atau dilakukan secara manual dengan sebuah platform yang terpusat, terstruktur, dan mudah dikelola.
+Dokumen ini telah menjelaskan garis besar perancangan sistem, mulai dari tujuan pengembangan, ruang lingkup, arsitektur aplikasi, modul-modul utama, alur proses bisnis, konsep database, rancangan antarmuka, teknologi yang digunakan, struktur proyek, hingga standar pengembangan perangkat lunak. Seluruh pembahasan tersebut menjadi landasan dalam proses implementasi sehingga pengembangan dapat dilakukan secara terarah, konsisten, dan sesuai dengan kebutuhan perusahaan.
+Pendekatan modular yang diterapkan pada Fiber-UNMS Enterprise memberikan fleksibilitas untuk menambah fitur baru tanpa mengganggu modul yang telah ada. Dengan memanfaatkan arsitektur Client-Server, Laravel sebagai framework backend, PostgreSQL sebagai basis data, serta RESTful API sebagai media komunikasi antar komponen, sistem memiliki fondasi yang kuat untuk mendukung kebutuhan operasional saat ini maupun pengembangan di masa mendatang.
+Selain berfungsi sebagai aplikasi administrasi, Fiber-UNMS Enterprise juga dirancang sebagai pusat informasi perusahaan yang mengintegrasikan data pelanggan, infrastruktur jaringan, inventaris, pekerjaan teknisi, monitoring, keuangan, serta pelaporan ke dalam satu sistem. Integrasi tersebut memungkinkan setiap divisi bekerja menggunakan sumber data yang sama sehingga mengurangi duplikasi data, mempercepat proses kerja, dan meningkatkan akurasi informasi.
+Penerapan standar coding, pengelolaan basis data yang terstruktur, penggunaan kontrol versi, serta dokumentasi proyek yang lengkap diharapkan mampu menjaga kualitas perangkat lunak selama siklus pengembangan. Dengan demikian, sistem tidak hanya memenuhi kebutuhan saat implementasi awal, tetapi juga siap untuk dikembangkan secara berkelanjutan sesuai perkembangan bisnis dan teknologi.
+Secara keseluruhan, Fiber-UNMS Enterprise diharapkan menjadi fondasi utama transformasi digital perusahaan ISP, membantu meningkatkan efisiensi operasional, kualitas layanan kepada pelanggan, pengelolaan aset jaringan, serta kemampuan manajemen dalam mengambil keputusan berdasarkan data yang akurat dan terintegrasi.
+________________________________________
+11.2 Target Akhir Proyek
+Target akhir pengembangan Fiber-UNMS Enterprise adalah menghasilkan sebuah aplikasi enterprise berbasis web yang mampu mengintegrasikan seluruh aktivitas operasional perusahaan ISP ke dalam satu platform yang aman, stabil, mudah digunakan, dan mudah dikembangkan.
+Target utama yang ingin dicapai meliputi:
+1. Integrasi Seluruh Data Operasional
+Seluruh data pelanggan, jaringan, inventaris, pekerjaan teknisi, monitoring, keuangan, dan pelaporan berada dalam satu basis data terpusat sehingga tidak terjadi duplikasi informasi dan setiap divisi bekerja menggunakan data yang sama.
+2. Digitalisasi Proses Bisnis
+Mengubah proses administrasi yang sebelumnya dilakukan secara manual menjadi proses digital yang terdokumentasi, terukur, dan dapat ditelusuri kembali melalui sistem.
+3. Dokumentasi Infrastruktur Jaringan
+Menyediakan dokumentasi lengkap mengenai seluruh aset jaringan, seperti OLT, POP, ODC, ODP, FAT, Joint Closure, kabel fiber optik, splitter, serta perangkat pendukung lainnya, sehingga memudahkan proses pemeliharaan, pengembangan jaringan, dan penanganan gangguan.
+4. Peningkatan Efisiensi Operasional
+Mengurangi waktu yang dibutuhkan untuk proses registrasi pelanggan, aktivasi layanan, penanganan gangguan, distribusi pekerjaan teknisi, pengelolaan inventaris, serta penyusunan laporan melalui otomatisasi proses bisnis.
+5. Monitoring dan Pengawasan Terpadu
+Menyediakan dashboard dan modul monitoring yang mampu menampilkan kondisi operasional perusahaan secara real-time sehingga Network Operation Center (NOC) dan manajemen dapat melakukan pengawasan dengan lebih cepat dan efektif.
+6. Penguatan Keamanan dan Audit
+Menerapkan autentikasi yang aman, pengaturan hak akses berbasis peran (Role Based Access Control), serta pencatatan audit aktivitas pengguna untuk menjaga keamanan data dan mendukung proses evaluasi apabila terjadi permasalahan.
+7. Kemudahan Pengembangan
+Membangun aplikasi menggunakan arsitektur modular dan standar pengembangan yang jelas sehingga penambahan fitur baru maupun integrasi dengan sistem lain dapat dilakukan tanpa memengaruhi modul yang telah berjalan.
+8. Dukungan Pengambilan Keputusan
+Menyediakan laporan operasional dan visualisasi data yang akurat sebagai dasar pengambilan keputusan oleh supervisor, manajer operasional, dan pimpinan perusahaan.
+9. Skalabilitas Sistem
+Merancang aplikasi agar mampu menangani pertumbuhan jumlah pelanggan, peningkatan jumlah perangkat jaringan, penambahan wilayah layanan, serta peningkatan jumlah pengguna tanpa memerlukan perubahan besar pada arsitektur sistem.
+10. Menjadi Platform Enterprise Terintegrasi
+Target jangka panjang dari Fiber-UNMS Enterprise adalah menjadi platform operasional terpadu yang dapat terus berkembang dengan penambahan modul-modul baru, seperti integrasi dengan perangkat jaringan, aplikasi mobile, sistem pembayaran, notifikasi otomatis, analitik data, kecerdasan buatan (AI), maupun integrasi dengan layanan pihak ketiga sesuai kebutuhan perusahaan.
+________________________________________
+Pernyataan Penutup
+Dokumen ini disusun sebagai acuan utama dalam proses analisis, perancangan, dan implementasi Fiber-UNMS Enterprise. Seluruh isi dokumen menjadi pedoman bagi tim pengembang, administrator sistem, serta pihak manajemen agar pengembangan aplikasi berjalan secara terarah, terdokumentasi, dan sesuai dengan tujuan yang telah ditetapkan.
+Seiring berkembangnya kebutuhan bisnis dan teknologi, dokumen ini dapat diperbarui melalui proses evaluasi dan pengendalian perubahan (change management) sehingga tetap relevan dengan kondisi operasional perusahaan. Dengan komitmen terhadap kualitas pengembangan, standar teknis, dan dokumentasi yang baik, Fiber-UNMS Enterprise diharapkan menjadi solusi yang mampu mendukung pertumbuhan perusahaan secara berkelanjutan serta memberikan nilai tambah bagi seluruh pengguna sistem.

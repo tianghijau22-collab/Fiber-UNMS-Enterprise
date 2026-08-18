@@ -1,0 +1,631 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\NetworkNode;
+use App\Models\NetworkPort;
+use App\Models\AuditLog;
+use App\Http\Requests\StoreNetworkNodeRequest;
+use App\Http\Requests\UpdateNetworkNodeRequest;
+use App\Http\Resources\NetworkNodeResource;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
+
+class NetworkNodeController extends Controller
+{
+    private function checkCrudPermission()
+    {
+        $user = auth()->user();
+        if ($user && in_array($user->role, ['Teknisi Jointer', 'Customer Service', 'Finance & Billing'])) {
+            abort(response()->json([
+                'message' => "Akses Ditolak: Peran {$user->role} hanya diizinkan melihat data infrastruktur (Read-Only) dan tidak dapat menambah, mengubah, atau menghapus node."
+            ], 403));
+        }
+    }
+
+    /**
+     * Daftar node dengan filter tipe, status, dan pencarian.
+     * Untuk topologi, gunakan endpoint /hierarchy.
+     */
+    public function index(Request $request)
+    {
+        $query = NetworkNode::with(['splitterType', 'children', 'parent.oltDevice', 'oltDevice']);
+
+        $type = $request->input('node_type', $request->input('type'));
+        if ($type && $type !== 'ALL') {
+            $query->where('node_type', $type);
+        }
+        if ($request->filled('status') && $request->status !== 'ALL') {
+            $query->where('status', $request->status);
+        }
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('name', 'ilike', "%{$s}%")
+                  ->orWhere('code', 'ilike', "%{$s}%")
+                  ->orWhere('address', 'ilike', "%{$s}%");
+            });
+        }
+        if ($request->filled('parent_id')) {
+            $query->where('parent_node_id', $request->parent_id);
+        }
+
+        $nodes = $query->orderBy('name')->paginate(100);
+        return NetworkNodeResource::collection($nodes);
+    }
+
+    /**
+     * Hirarki lengkap: POP → ODC → ODP (dengan children ter-embed)
+     * Hanya node tipe POP, ODC, ODP.
+     */
+    public function hierarchy()
+    {
+        // Level 1: POP (root — tidak punya parent)
+        $pops = NetworkNode::with([
+            'splitterType',
+            'children' => function ($q) {
+                $q->with([
+                    'splitterType',
+                    'children' => function ($q2) {
+                        $q2->with(['splitterType', 'ports.customerService.customer'])
+                           ->where('node_type', 'ODP')
+                           ->orderBy('name');
+                    }
+                ])->where('node_type', 'ODC')->orderBy('name');
+            }
+        ])
+        ->whereIn('node_type', ['POP'])
+        ->whereNull('parent_node_id')
+        ->orderBy('name')
+        ->get();
+
+        return response()->json([
+            'data' => $pops->map(fn($pop) => $this->formatNode($pop, true))
+        ]);
+    }
+
+    /**
+     * ODC anak dari suatu POP (panel tengah ketika klik POP)
+     */
+    public function childrenOf(NetworkNode $networkNode)
+    {
+        $children = NetworkNode::with(['splitterType', 'oltDevice', 'ports'])
+            ->where('parent_node_id', $networkNode->id)
+            ->orderBy('name')
+            ->get();
+
+        return NetworkNodeResource::collection($children);
+    }
+
+    /**
+     * Daftar ODC — bisa difilter by olt_device_id, parent_node_id (POP), dan search
+     * GET /api/network-nodes/odc-list?olt_id=1&pop_id=2&search=ODC-01
+     */
+    public function odcList(Request $request)
+    {
+        $query = NetworkNode::with(['splitterType', 'oltDevice', 'parent'])
+            ->where('node_type', 'ODC');
+
+        if ($request->filled('olt_id')) {
+            $query->where('olt_device_id', $request->olt_id);
+        }
+        if ($request->filled('pop_id')) {
+            $query->where('parent_node_id', $request->pop_id);
+        }
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('name', 'ilike', "%{$s}%")
+                  ->orWhere('code', 'ilike', "%{$s}%")
+                  ->orWhere('address', 'ilike', "%{$s}%")
+                  ->orWhere('olt_port_ref', 'ilike', "%{$s}%");
+            });
+        }
+
+        $odcs = $query->orderBy('code')->get();
+
+        return response()->json([
+            'data' => $odcs->map(fn($odc) => [
+                'id'                     => $odc->id,
+                'name'                   => $odc->name,
+                'code'                   => $odc->code,
+                'model'                  => $odc->model,
+                'status'                 => $odc->status,
+                'address'                => $odc->address,
+                'latitude'               => $odc->latitude,
+                'longitude'              => $odc->longitude,
+                'province_id'            => $odc->province_id,
+                'regency_id'             => $odc->regency_id,
+                'district_id'            => $odc->district_id,
+                'village_id'             => $odc->village_id,
+                'total_ports'            => $odc->total_ports,
+                'used_ports'             => $odc->used_ports,
+                'core_power'             => $odc->core_power,
+                'core_color'             => $odc->core_color,
+                'splitter_config'        => $odc->splitter_config,
+                'tube_count'             => $odc->tube_count,
+                'tube_info'              => $odc->tube_info,
+                'splitter_count'         => $odc->splitter_count,
+                'odc_topology_type'      => $odc->odc_topology_type,
+                'olt_device_id'          => $odc->olt_device_id,
+                'olt_port_ref'           => $odc->olt_port_ref,
+                'parent_node_id'         => $odc->parent_node_id,
+                'splitter_type_id'       => $odc->splitter_type_id,
+                'splitter_cascade_level' => $odc->splitter_cascade_level,
+                'splitter_type'          => $odc->splitterType ? [
+                    'id'           => $odc->splitterType->id,
+                    'name'         => $odc->splitterType->name,
+                    'ratio'        => $odc->splitterType->ratio,
+                    'output_ports' => $odc->splitterType->output_ports,
+                ] : null,
+                'olt_device' => $odc->oltDevice ? [
+                    'id'   => $odc->oltDevice->id,
+                    'name' => $odc->oltDevice->name,
+                    'code' => $odc->oltDevice->code,
+                ] : null,
+                'parent_node' => $odc->parent ? [
+                    'id'   => $odc->parent->id,
+                    'name' => $odc->parent->name,
+                    'code' => $odc->parent->code,
+                ] : null,
+                'odp_count' => NetworkNode::where('node_type', 'ODP')
+                    ->where('parent_node_id', $odc->id)->count(),
+            ])
+        ]);
+    }
+
+    /**
+     * Port detail untuk ODC node (visual grid port)
+     * GET /api/network-nodes/{id}/odc-ports
+     */
+    public function odcPortDetail(NetworkNode $networkNode)
+    {
+        $ports = DB::table('network_ports')
+            ->leftJoin('network_nodes as target', 'network_ports.connected_to_port_id', '=', 'target.id')
+            ->where('network_ports.node_id', $networkNode->id)
+            ->orderByRaw('CAST(network_ports.port_number AS integer) ASC NULLS LAST')
+            ->select(
+                'network_ports.id',
+                'network_ports.port_number',
+                'network_ports.port_type',
+                'network_ports.status',
+                'network_ports.notes',
+                'network_ports.destination_label',
+                'network_ports.customer_name_cache',
+            )
+            ->get();
+
+        // Count children ODPs
+        $odps = NetworkNode::with('splitterType')
+            ->where('parent_node_id', $networkNode->id)
+            ->where('node_type', 'ODP')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'node'  => new NetworkNodeResource($networkNode->load(['splitterType', 'oltDevice', 'parent'])),
+            'ports' => $ports,
+            'odps'  => $odps->map(fn($o) => [
+                'id'          => $o->id,
+                'name'        => $o->name,
+                'code'        => $o->code,
+                'status'      => $o->status,
+                'address'     => $o->address,
+                'total_ports' => $o->total_ports,
+                'used_ports'  => $o->used_ports,
+                'splitter_type' => $o->splitterType ? ['ratio' => $o->splitterType->ratio] : null,
+            ]),
+        ]);
+    }
+
+    /**
+     * Topologi lengkap untuk OLT: list ODC + ODP yang terhubung ke OLT tertentu
+     * GET /api/network-nodes/olt-topology?olt_id=1&olt_port_ref=gpon-olt_1/1/1
+     */
+    public function oltTopology(Request $request)
+    {
+        $query = NetworkNode::with(['splitterType', 'parent'])
+            ->where('node_type', 'ODC');
+
+        if ($request->filled('olt_id')) {
+            $query->where('olt_device_id', $request->olt_id);
+        }
+        if ($request->filled('olt_port_ref')) {
+            $pref = str_replace('gpon-olt_', '', $request->olt_port_ref);
+            $query->where(function ($q) use ($request, $pref) {
+                $q->where('olt_port_ref', 'ilike', "%{$request->olt_port_ref}%")
+                  ->orWhere('olt_port_ref', 'ilike', "%{$pref}%");
+            });
+        }
+
+        $odcs = $query->orderBy('code')->get();
+
+        $result = $odcs->map(function ($odc) {
+            $odps = NetworkNode::with('splitterType')
+                ->where('parent_node_id', $odc->id)
+                ->where('node_type', 'ODP')
+                ->orderBy('code')
+                ->get();
+
+            return [
+                'id'          => $odc->id,
+                'name'        => $odc->name,
+                'code'        => $odc->code,
+                'status'      => $odc->status,
+                'address'     => $odc->address,
+                'latitude'    => $odc->latitude,
+                'longitude'   => $odc->longitude,
+                'olt_port_ref'=> $odc->olt_port_ref,
+                'total_ports' => $odc->total_ports,
+                'used_ports'  => $odc->used_ports,
+                'parent_node' => $odc->parent ? ['name' => $odc->parent->name, 'code' => $odc->parent->code] : null,
+                'odps'        => $odps->map(fn($o) => [
+                    'id'          => $o->id,
+                    'name'        => $o->name,
+                    'code'        => $o->code,
+                    'status'      => $o->status,
+                    'address'     => $o->address,
+                    'latitude'    => $o->latitude,
+                    'longitude'   => $o->longitude,
+                    'total_ports' => $o->total_ports,
+                    'used_ports'  => $o->used_ports,
+                    'splitter'    => $o->splitterType?->ratio,
+                ]),
+            ];
+        });
+
+        return response()->json(['data' => $result]);
+    }
+
+    /**
+     * Detail ODP: port grid + data pelanggan per port + auto-detect interface OLT + stats redaman (optical power)
+     */
+    public function portDetail(NetworkNode $networkNode)
+    {
+        $this->syncPhysicalPorts($networkNode);
+        NetworkPort::recalculateNodeUsedPorts($networkNode->id);
+        $node = $networkNode->load(['splitterType', 'oltDevice', 'parent']);
+
+        // Ambil semua port pada ODP ini, join ke customer_services, customers, service_packages, dan ont_registrations
+        $ports = DB::table('network_ports')
+            ->leftJoin('customer_services', 'network_ports.customer_service_id', '=', 'customer_services.id')
+            ->leftJoin('customers', 'customer_services.customer_id', '=', 'customers.id')
+            ->leftJoin('service_packages', 'customer_services.service_package_id', '=', 'service_packages.id')
+            ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
+            ->leftJoin('network_ports as olt_ports', 'ont_registrations.olt_port_id', '=', 'olt_ports.id')
+            ->where('network_ports.node_id', $networkNode->id)
+            ->orderByRaw('CAST(network_ports.port_number AS integer) ASC NULLS LAST')
+            ->select(
+                'network_ports.id',
+                'network_ports.port_number',
+                'network_ports.port_type',
+                'network_ports.status',
+                'network_ports.customer_service_id',
+                'network_ports.customer_name_cache',
+                'network_ports.notes',
+                'customers.id as customer_id',
+                'customers.customer_number',
+                'customers.name as customer_name',
+                'customers.phone as customer_phone',
+                'customer_services.id as service_id',
+                'customer_services.service_number',
+                'customer_services.status as service_status',
+                'service_packages.name as package_name',
+                'ont_registrations.onu_serial',
+                'ont_registrations.onu_mac',
+                'ont_registrations.onu_type',
+                'ont_registrations.rx_power',
+                'ont_registrations.tx_power',
+                'ont_registrations.status as ont_status',
+                'ont_registrations.last_online_at',
+                'olt_ports.port_number as olt_port_name'
+            )
+            ->get();
+
+        // 1. Auto-detect Interface OLT
+        $autoOltPortRef = $networkNode->olt_port_ref;
+
+        if (empty($autoOltPortRef) && $networkNode->parent) {
+            $autoOltPortRef = $networkNode->parent->olt_port_ref;
+        }
+
+        $detectedOltPorts = $ports->pluck('olt_port_name')->filter()->unique()->values();
+        if ($detectedOltPorts->isNotEmpty()) {
+            $formattedDetected = $detectedOltPorts->map(function ($p) {
+                if (preg_match('/^\d+\/\d+\/\d+$/', $p)) return "gpon-olt_$p";
+                return $p;
+            })->join(', ');
+            if (empty($autoOltPortRef)) {
+                $autoOltPortRef = $formattedDetected;
+            }
+        }
+
+        $displayOltRef = $autoOltPortRef ? collect(explode(',', $autoOltPortRef))->map(function ($s) {
+            $trimmed = trim($s);
+            if (!$trimmed) return '';
+            $clean = preg_replace('/^(gpon[-_]olt_)/i', '', $trimmed);
+            return "gpon_olt_$clean";
+        })->filter()->join(', ') : '—';
+
+        // 2. Hitung statistik redaman (optical power) dari pelanggan yang terkoneksi
+        $connectedPorts = $ports->filter(fn($p) => !empty($p->customer_id) || !empty($p->customer_service_id) || $p->status === 'used' || !empty($p->customer_name_cache) || !empty($p->destination_label));
+        $validRxPowers = $ports->pluck('rx_power')->filter(fn($val) => $val !== null && is_numeric($val))->map(fn($v) => (float) $v);
+
+        $avgRx = $validRxPowers->isNotEmpty() ? round($validRxPowers->avg(), 2) : null;
+        $minRx = $validRxPowers->isNotEmpty() ? round($validRxPowers->min(), 2) : null;
+        $maxRx = $validRxPowers->isNotEmpty() ? round($validRxPowers->max(), 2) : null;
+
+        // Tentukan status kesehatan optik ODP
+        // Good: -8 dBm s/d -25 dBm
+        // Warning: -25.01 dBm s/d -28 dBm (Redaman tinggi)
+        // Critical: < -28 dBm atau ada ONT Offline/LOS
+        $signalStatus = 'no_customer';
+        if ($validRxPowers->isNotEmpty()) {
+            if ($minRx !== null && $minRx < -28.0) {
+                $signalStatus = 'critical';
+            } elseif ($minRx !== null && $minRx < -25.0) {
+                $signalStatus = 'warning';
+            } else {
+                $signalStatus = 'good';
+            }
+        } elseif ($connectedPorts->isNotEmpty()) {
+            $signalStatus = 'unknown';
+        }
+
+        return response()->json([
+            'node'              => new NetworkNodeResource($node),
+            'ports'             => $ports,
+            'auto_olt_port_ref' => $autoOltPortRef ?: null,
+            'display_olt_ref'   => $displayOltRef,
+            'attenuation'       => [
+                'connected_count' => $connectedPorts->count(),
+                'avg_rx_power'    => $avgRx,
+                'min_rx_power'    => $minRx,
+                'max_rx_power'    => $maxRx,
+                'signal_status'   => $signalStatus,
+            ]
+        ]);
+    }
+
+    /**
+     * Daftar tipe splitter pasif (PLC 1:2, 1:4, 1:8, dll)
+     */
+    public function splitterTypes()
+    {
+        return response()->json(DB::table('splitter_types')->orderBy('output_ports')->get());
+    }
+
+    /**
+     * Statistik ringkasan (untuk summary cards atas)
+     */
+    public function stats()
+    {
+        $all = NetworkNode::whereIn('node_type', ['POP', 'ODC', 'ODP'])->get();
+        return response()->json([
+            'total'       => $all->count(),
+            'by_type'     => $all->groupBy('node_type')->map->count(),
+            'by_status'   => $all->groupBy('status')->map->count(),
+            'total_ports' => $all->sum('total_ports'),
+            'used_ports'  => $all->sum('used_ports'),
+        ]);
+    }
+
+    public function store(StoreNetworkNodeRequest $request)
+    {
+        $this->checkCrudPermission();
+
+        $node = NetworkNode::create($request->validated());
+        $node->load('splitterType');
+
+        // Auto-inherit OLT device & interface from parent if omitted
+        if ($node->parent_node_id && (!$node->olt_device_id || !$node->olt_port_ref)) {
+            $parent = NetworkNode::find($node->parent_node_id);
+            if ($parent) {
+                if (!$node->olt_device_id && $parent->olt_device_id) {
+                    $node->olt_device_id = $parent->olt_device_id;
+                }
+                if (!$node->olt_port_ref && $parent->olt_port_ref) {
+                    $node->olt_port_ref = $parent->olt_port_ref;
+                }
+                $node->save();
+            }
+        }
+
+        // Auto-generate ports jika total_ports > 0
+        if ($node->total_ports > 0) {
+            $ports = [];
+            for ($i = 1; $i <= $node->total_ports; $i++) {
+                $ports[] = [
+                    'node_id'     => $node->id,
+                    'port_number' => (string) $i,
+                    'port_type'   => $node->node_type === 'ODP' ? 'SC_APC' : 'PON',
+                    'status'      => 'available',
+                    'created_at'  => now(),
+                    'updated_at'  => now(),
+                ];
+            }
+            DB::table('network_ports')->insert($ports);
+        }
+
+        AuditLog::record(
+            'CREATE',
+            'Infrastruktur Jaringan',
+            "Membuat node {$node->node_type} baru: {$node->name} ({$node->code})",
+            null,
+            $node->toArray()
+        );
+
+        return new NetworkNodeResource($node);
+    }
+
+    public function show(NetworkNode $networkNode)
+    {
+        return new NetworkNodeResource($networkNode->load('splitterType'));
+    }
+
+    public function update(UpdateNetworkNodeRequest $request, NetworkNode $networkNode)
+    {
+        $this->checkCrudPermission();
+
+        $oldData = $networkNode->only(array_keys($request->validated()));
+
+        $networkNode->update($request->validated());
+
+        // Auto-inherit OLT device & interface from parent if omitted
+        if ($networkNode->parent_node_id && (!$networkNode->olt_device_id || !$networkNode->olt_port_ref)) {
+            $parent = NetworkNode::find($networkNode->parent_node_id);
+            if ($parent) {
+                if (!$networkNode->olt_device_id && $parent->olt_device_id) {
+                    $networkNode->olt_device_id = $parent->olt_device_id;
+                }
+                if (!$networkNode->olt_port_ref && $parent->olt_port_ref) {
+                    $networkNode->olt_port_ref = $parent->olt_port_ref;
+                }
+                $networkNode->save();
+            }
+        }
+
+        $this->syncPhysicalPorts($networkNode);
+        NetworkPort::recalculateNodeUsedPorts($networkNode->id);
+
+        AuditLog::record(
+            'UPDATE',
+            'Infrastruktur Jaringan',
+            "Perbarui node {$networkNode->node_type}: {$networkNode->name} ({$networkNode->code})",
+            $oldData,
+            $request->validated()
+        );
+
+        return new NetworkNodeResource($networkNode->load('splitterType'));
+    }
+
+    private function syncPhysicalPorts(NetworkNode $node)
+    {
+        if ($node->total_ports <= 0) return;
+
+        $existingPorts = DB::table('network_ports')
+            ->where('node_id', $node->id)
+            ->get();
+
+        $existingPortNumbers = $existingPorts->pluck('port_number')->map(fn($v) => (int)$v)->toArray();
+
+        $newPorts = [];
+        for ($i = 1; $i <= $node->total_ports; $i++) {
+            if (!in_array($i, $existingPortNumbers)) {
+                $newPorts[] = [
+                    'node_id'     => $node->id,
+                    'port_number' => (string) $i,
+                    'port_type'   => $node->node_type === 'ODP' ? 'SC_APC' : 'PON',
+                    'status'      => 'available',
+                    'created_at'  => now(),
+                    'updated_at'  => now(),
+                ];
+            }
+        }
+
+        if (!empty($newPorts)) {
+            DB::table('network_ports')->insert($newPorts);
+        }
+
+        // Hapus port berlebih jika total_ports dikurangi dan port tersebut masih available/kosong
+        $excessIds = $existingPorts->filter(function ($p) use ($node) {
+            $num = (int) $p->port_number;
+            return $num > $node->total_ports
+                && $p->status === 'available'
+                && empty($p->customer_service_id)
+                && empty($p->customer_name_cache);
+        })->pluck('id');
+
+        if ($excessIds->isNotEmpty()) {
+            DB::table('network_ports')->whereIn('id', $excessIds)->delete();
+        }
+    }
+
+    public function destroy(NetworkNode $networkNode)
+    {
+        $this->checkCrudPermission();
+        $type = $networkNode->node_type;
+        $name = $networkNode->name;
+        $code = $networkNode->code;
+
+        // Bebaskan kode unik agar bisa digunakan kembali setelah data dihapus.
+        // Tambahkan suffix timestamp pada kode agar tidak memblokir pembuatan node baru
+        // dengan kode yang sama (walau row ini masih tersimpan sebagai soft-delete).
+        $networkNode->code = $networkNode->code . '_deleted_' . $networkNode->id . '_' . time();
+        $networkNode->save();
+
+        $networkNode->delete();
+
+        AuditLog::record(
+            'DELETE',
+            'Infrastruktur Jaringan',
+            "Menghapus node {$type}: {$name} ({$code})",
+            ['name' => $name, 'code' => $code, 'type' => $type]
+        );
+
+        return response(null, Response::HTTP_NO_CONTENT);
+    }
+
+    private function formatNode($node, bool $includeChildren = false): array
+    {
+        $data = [
+            'id'                    => $node->id,
+            'name'                  => $node->name,
+            'code'                  => $node->code,
+            'node_type'             => $node->node_type,
+            'status'                => $node->status,
+            'model'                 => $node->model,
+            'address'               => $node->address,
+            'latitude'              => $node->latitude,
+            'longitude'             => $node->longitude,
+            'province_id'           => $node->province_id,
+            'regency_id'            => $node->regency_id,
+            'district_id'           => $node->district_id,
+            'village_id'            => $node->village_id,
+            'total_ports'           => $node->total_ports,
+            'used_ports'            => $node->used_ports,
+            'splitter_cascade_level'=> $node->splitter_cascade_level,
+            'olt_port_ref'          => $node->olt_port_ref,
+            'parent_node_id'        => $node->parent_node_id,
+            'core_power'            => $node->core_power,
+            'core_color'            => $node->core_color,
+            'tube_info'             => $node->tube_info,
+            'tube_count'            => $node->tube_count,
+            'splitter_count'        => $node->splitter_count,
+            'splitter_config'       => $node->splitter_config,
+            'odc_topology_type'     => $node->odc_topology_type,
+            'parent_node'           => $node->parent ? [
+                'id'   => $node->parent->id,
+                'name' => $node->parent->name,
+                'code' => $node->parent->code,
+                'olt_device' => $node->parent->oltDevice ? [
+                    'id'   => $node->parent->oltDevice->id,
+                    'name' => $node->parent->oltDevice->name,
+                    'code' => $node->parent->oltDevice->code,
+                ] : null,
+            ] : null,
+            'olt_device'            => $node->oltDevice ? [
+                'id'   => $node->oltDevice->id,
+                'name' => $node->oltDevice->name,
+                'code' => $node->oltDevice->code,
+            ] : null,
+            'splitter_type'         => $node->splitterType ? [
+                'id'           => $node->splitterType->id,
+                'name'         => $node->splitterType->name,
+                'ratio'        => $node->splitterType->ratio,
+                'output_ports' => $node->splitterType->output_ports,
+                'loss_db'      => $node->splitterType->loss_db,
+            ] : null,
+            'children_count' => $node->children?->count() ?? 0,
+        ];
+
+        if ($includeChildren && $node->children) {
+            $data['children'] = $node->children->map(
+                fn($child) => $this->formatNode($child, true)
+            )->values();
+        }
+
+        return $data;
+    }
+}
