@@ -133,11 +133,12 @@ class TelegramService
             $appUrl = env('APP_URL', 'http://127.0.0.1:8000');
             $targetUrl = $url ? (str_starts_with($url, 'http') ? $url : rtrim($appUrl, '/') . '/' . ltrim($url, '/')) : null;
 
-            $message = "<b>" . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . "</b>\n\n";
-            $message .= "<b>Detail Notifikasi:</b>\n";
-            $message .= htmlspecialchars($body, ENT_QUOTES, 'UTF-8') . "\n\n";
-            $message .= "<b>Waktu:</b> {$timeStr}\n\n";
-            $message .= "📢 <b>Pemberitahuan Sistem Fiber-UNMS Enterprise</b>";
+            $message = "<b>" . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . "</b>\n";
+            $message .= "────────────────────────────\n\n";
+            $message .= $body . "\n\n";
+            $message .= "────────────────────────────\n";
+            $message .= "<b>Waktu:</b> {$timeStr}\n";
+            $message .= "<b>Sistem:</b> Fiber-UNMS Enterprise";
 
             $payload = [
                 'text'                     => $message,
@@ -150,7 +151,7 @@ class TelegramService
                     'inline_keyboard' => [
                         [
                             [
-                                'text' => 'Buka di System UNMS',
+                                'text' => 'Buka Detail di Sistem UNMS',
                                 'url'  => $targetUrl,
                             ]
                         ]
@@ -345,14 +346,14 @@ class TelegramService
 
             // 4. Catatan Kaki Status
             $statusFootnote = match ($actionUpper) {
-                'CREATE'       => "✅ <b>Data berhasil disimpan ke sistem</b>",
-                'UPDATE'       => "✅ <b>Perubahan berhasil disimpan ke sistem</b>",
-                'DELETE'       => "🗑️ <b>Data telah dihapus dari sistem</b>",
-                'PROVISIONING' => "⚡ <b>Konfigurasi provisioning berhasil diterapkan</b>",
-                'LOGIN'        => "🔑 <b>Sesi pengguna aktif</b>",
-                'LOGOUT'       => "🔒 <b>Sesi pengguna telah diakhiri</b>",
-                'LOGIN_FAILED', 'LOGIN_BLOCKED' => "⚠️ <b>Percobaan akses ditolak oleh sistem keamanan</b>",
-                default        => "✅ <b>Aktivitas berhasil dicatat di sistem</b>",
+                'CREATE'       => "<b>Status:</b> Data berhasil disimpan ke sistem",
+                'UPDATE'       => "<b>Status:</b> Perubahan berhasil disimpan ke sistem",
+                'DELETE'       => "<b>Status:</b> Data telah dihapus dari sistem",
+                'PROVISIONING' => "<b>Status:</b> Konfigurasi provisioning berhasil diterapkan",
+                'LOGIN'        => "<b>Status:</b> Sesi pengguna aktif",
+                'LOGOUT'       => "<b>Status:</b> Sesi pengguna telah diakhiri",
+                'LOGIN_FAILED', 'LOGIN_BLOCKED' => "<b>Status:</b> Percobaan akses ditolak oleh sistem keamanan",
+                default        => "<b>Status:</b> Aktivitas berhasil dicatat di sistem",
             };
 
             // Susun Pesan
@@ -558,7 +559,7 @@ class TelegramService
         $message .= "• <b>Chat ID:</b> <code>" . htmlspecialchars($channel->chat_id, ENT_QUOTES, 'UTF-8') . "</code>\n";
         $message .= "• <b>Topik Berlangganan:</b> " . htmlspecialchars($topicsText, ENT_QUOTES, 'UTF-8') . "\n\n";
         $message .= "<b>Waktu:</b> {$timeStr}\n\n";
-        $message .= "✅ <b>Bot berhasil terhubung dan siap menerima notifikasi</b>";
+        $message .= "<b>Status:</b> Bot berhasil terhubung dan siap menerima notifikasi";
 
         return static::sendMessageRaw($botToken, $channel->chat_id, $message);
     }
@@ -575,7 +576,7 @@ class TelegramService
         $message .= "• <b>Status:</b> Bot Telegram Berhasil Terhubung\n";
         $message .= "• <b>Sistem:</b> Fiber-UNMS Enterprise\n\n";
         $message .= "<b>Waktu:</b> {$timeStr}\n\n";
-        $message .= "✅ <b>Bot siap mendistribusikan notifikasi ke seluruh grup</b>";
+        $message .= "<b>Status:</b> Bot siap mendistribusikan notifikasi ke seluruh grup";
 
         return static::sendMessageRaw($botToken, $chatId, $message);
     }

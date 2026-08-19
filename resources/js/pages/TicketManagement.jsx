@@ -5,18 +5,38 @@ import { useAuth } from '../components/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 /* ══════════════════════════════════════════════════════════════════
-   BADGES & HELPERS
+   BADGES & HELPERS (Clean Enterprise Styling)
 ══════════════════════════════════════════════════════════════════ */
 const getStatusBadge = (status) => {
   switch (status) {
     case 'Open':
-      return <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-bold rounded-xl flex items-center gap-1.5 w-fit"><span>🟡</span> Open</span>;
+      return (
+        <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-bold rounded-xl inline-flex items-center gap-1.5 w-fit">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+          <span>Open</span>
+        </span>
+      );
     case 'In Progress':
-      return <span className="px-2.5 py-1 bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold rounded-xl flex items-center gap-1.5 w-fit"><span>🔵</span> In Progress</span>;
+      return (
+        <span className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold rounded-xl inline-flex items-center gap-1.5 w-fit">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+          <span>In Progress</span>
+        </span>
+      );
     case 'Resolved':
-      return <span className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold rounded-xl flex items-center gap-1.5 w-fit"><span>🟢</span> Resolved</span>;
+      return (
+        <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold rounded-xl inline-flex items-center gap-1.5 w-fit">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <span>Resolved</span>
+        </span>
+      );
     case 'Closed':
-      return <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 text-[11px] font-bold rounded-xl flex items-center gap-1.5 w-fit"><span>⚪</span> Closed</span>;
+      return (
+        <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[11px] font-bold rounded-xl inline-flex items-center gap-1.5 w-fit">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+          <span>Closed</span>
+        </span>
+      );
     default:
       return <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-bold rounded-xl">{status}</span>;
   }
@@ -25,15 +45,15 @@ const getStatusBadge = (status) => {
 const getCategoryBadge = (cat) => {
   switch (cat) {
     case 'Gangguan ODP':
-      return <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 text-[10px] font-bold rounded-md">🟡 Gangguan ODP</span>;
+      return <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/60 text-[10px] font-bold rounded-md">Gangguan ODP</span>;
     case 'Pemasangan ODP Baru':
-      return <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60 text-[10px] font-bold rounded-md">📦 Pemasangan ODP Baru</span>;
+      return <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60 text-[10px] font-bold rounded-md">Pemasangan ODP Baru</span>;
     case 'Gangguan INTERFACE':
-      return <span className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900/60 text-[10px] font-bold rounded-md">⚡ Gangguan INTERFACE</span>;
+      return <span className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900/60 text-[10px] font-bold rounded-md">Gangguan INTERFACE</span>;
     case 'Gangguan BTS / CORPORATE':
-      return <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900/60 text-[10px] font-bold rounded-md">🏢 BTS / CORPORATE</span>;
+      return <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900/60 text-[10px] font-bold rounded-md">BTS / CORPORATE</span>;
     case 'Fiber Cut':
-      return <span className="px-2 py-0.5 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 text-[10px] font-bold rounded-md">🔴 Fiber Cut (Putus)</span>;
+      return <span className="px-2 py-0.5 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 text-[10px] font-bold rounded-md">Fiber Cut (Putus)</span>;
     default:
       return <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[10px] font-bold rounded-md">{cat}</span>;
   }
@@ -47,13 +67,395 @@ const JOINTER_CATEGORIES = [
   'Fiber Cut',
 ];
 
-const QUICK_PRESETS = [
-  { label: '🟡 Gangguan ODP', title: 'Perbaikan Redaman / Port ODP Bermasalah', category: 'Gangguan ODP', desc: 'Indikasi redaman tinggi pada port splitter ODP, perlu pengecekan adaptor & pembersihan pigtail.' },
-  { label: '📦 Pasang ODP Baru', title: 'Pemasangan & Terminasi ODP Baru', category: 'Pemasangan ODP Baru', desc: 'Penarikan kabel feeder, pemasangan enclosure ODP di tiang, dan splicing core distribusi.' },
-  { label: '⚡ Gangguan INTERFACE', title: 'Interface Port SFP / OLT Down', category: 'Gangguan INTERFACE', desc: 'Port uplink / PON interface mengalami loss optical signal atau status down, perlu cek transceiver SFP.' },
-  { label: '🏢 BTS / CORPORATE', title: 'Gangguan Link Fiber Optik BTS / Pelanggan Dedicated', category: 'Gangguan BTS / CORPORATE', desc: 'Link transmisi BTS / pelanggan corporate terganggu, perlu penanganan tim jointer prioritas.' },
-  { label: '🔴 Fiber Cut (Putus)', title: 'Kabel Fiber Optik Terputus (Fiber Cut)', category: 'Fiber Cut', desc: 'Kabel optik terputus terkena kendaraan / pohon tumbang, perlu penyambungan core dengan fusion splicer.' },
-];
+/* ══════════════════════════════════════════════════════════════════
+   COMPONENT: SEARCHABLE MULTI-SELECT DROPDOWN TEKNISI
+══════════════════════════════════════════════════════════════════ */
+function TechnicianMultiSelectDropdown({ technicians = [], selectedNames = [], onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredTechnicians = useMemo(() => {
+    if (!searchTerm.trim()) return technicians;
+    const s = searchTerm.toLowerCase();
+    return technicians.filter(
+      u => (u.name && u.name.toLowerCase().includes(s)) ||
+           (u.role && u.role.toLowerCase().includes(s)) ||
+           (u.division && u.division.toLowerCase().includes(s))
+    );
+  }, [technicians, searchTerm]);
+
+  const toggle = (name) => {
+    if (selectedNames.includes(name)) {
+      onChange(selectedNames.filter(n => n !== name));
+    } else {
+      onChange([...selectedNames, name]);
+    }
+  };
+
+  const removeTag = (e, name) => {
+    e.stopPropagation();
+    onChange(selectedNames.filter(n => n !== name));
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1 flex items-center justify-between">
+        <span>Tag Tim Teknis Penanggung Jawab *</span>
+        <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold lowercase tracking-normal">
+          {selectedNames.length > 0 ? `${selectedNames.length} dipilih` : 'bisa multi-pilih'}
+        </span>
+      </label>
+
+      {/* Trigger Box */}
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full min-h-[42px] px-3.5 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs flex flex-wrap items-center gap-1.5 cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-600 transition-all focus-within:ring-2 focus-within:ring-indigo-500"
+      >
+        {selectedNames.length === 0 ? (
+          <span className="text-slate-400 dark:text-slate-500 font-medium select-none py-0.5">
+            Pilih tim teknis jointer...
+          </span>
+        ) : (
+          selectedNames.map(name => (
+            <span
+              key={name}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-xs font-semibold shadow-2xs animate-in zoom-in-95 duration-100"
+            >
+              <span>{name}</span>
+              <button
+                type="button"
+                onClick={(e) => removeTag(e, name)}
+                className="hover:text-red-200 ml-0.5 font-bold leading-none cursor-pointer"
+                title="Hapus"
+              >
+                ✕
+              </button>
+            </span>
+          ))
+        )}
+
+        <div className="ml-auto flex items-center gap-1.5 text-slate-400 pl-2">
+          {selectedNames.length > 0 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onChange([]); }}
+              className="text-[10px] text-slate-400 hover:text-red-500 font-bold mr-1"
+              title="Hapus semua pilihan"
+            >
+              Clear
+            </button>
+          )}
+          <span className="text-[10px] text-slate-400">{isOpen ? '▲' : '▼'}</span>
+        </div>
+      </div>
+
+      {/* Dropdown Menu Popover */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-[999999] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+          {/* Search Header */}
+          <div className="p-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80">
+            <input
+              type="text"
+              autoFocus
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Cari nama teknisi, divisi, atau role..."
+              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            />
+          </div>
+
+          {/* Options List */}
+          <div className="max-h-56 overflow-y-auto p-1.5 divide-y divide-slate-100/60 dark:divide-slate-800/60 text-xs">
+            {filteredTechnicians.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 text-xs italic">
+                Tidak ada teknisi dengan kata kunci "{searchTerm}"
+              </div>
+            ) : (
+              filteredTechnicians.map(u => {
+                const isSelected = selectedNames.includes(u.name);
+                return (
+                  <div
+                    key={u.id}
+                    onClick={() => toggle(u.name)}
+                    className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-900 dark:text-indigo-200'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer pointer-events-none"
+                      />
+                      <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-xs shrink-0">
+                        {u.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-bold text-xs leading-tight text-slate-900 dark:text-slate-100">{u.name}</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                          {u.role} {u.division ? `· ${u.division}` : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold pr-1">✓</span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Popover Footer */}
+          <div className="p-2.5 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">
+              {selectedNames.length} teknisi dipilih
+            </span>
+            {selectedNames.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-red-600 dark:text-red-400 hover:underline font-bold cursor-pointer"
+              >
+                Reset Pilihan
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   COMPONENT: SEARCHABLE NODE DROPDOWN (ODP / POP / BTS / Tiang)
+══════════════════════════════════════════════════════════════════ */
+function NodeSelectDropdown({ nodes = [], selectedNodeId, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedNode = useMemo(() => {
+    return nodes.find(n => String(n.id) === String(selectedNodeId));
+  }, [nodes, selectedNodeId]);
+
+  const nodeTypes = useMemo(() => {
+    const types = new Set(nodes.map(n => n.node_type || n.type || 'NODE'));
+    return Array.from(types);
+  }, [nodes]);
+
+  const filteredNodes = useMemo(() => {
+    let list = nodes;
+    if (typeFilter !== 'ALL') {
+      list = list.filter(n => (n.node_type || n.type || 'NODE') === typeFilter);
+    }
+    if (searchTerm.trim()) {
+      const s = searchTerm.toLowerCase();
+      list = list.filter(
+        n => (n.name && n.name.toLowerCase().includes(s)) ||
+             (n.code && n.code.toLowerCase().includes(s)) ||
+             (n.address && n.address.toLowerCase().includes(s)) ||
+             ((n.node_type || n.type) && (n.node_type || n.type).toLowerCase().includes(s))
+      );
+    }
+    return list;
+  }, [nodes, searchTerm, typeFilter]);
+
+  const getNodeTypeBadge = (type) => {
+    const t = (type || 'NODE').toUpperCase();
+    if (t.includes('ODP')) return <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 font-bold text-[10px]">ODP</span>;
+    if (t.includes('POP') || t.includes('DC') || t.includes('SERVER')) return <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 font-bold text-[10px]">POP</span>;
+    if (t.includes('BTS') || t.includes('TOWER')) return <span className="px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/70 text-indigo-800 dark:text-indigo-300 font-bold text-[10px]">BTS</span>;
+    if (t.includes('CLOSURE') || t.includes('JB')) return <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 font-bold text-[10px]">CLOSURE</span>;
+    if (t.includes('OTB') || t.includes('ODC')) return <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-bold text-[10px]">ODC/OTB</span>;
+    return <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[10px]">{t}</span>;
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1 flex items-center justify-between">
+        <span>Titik Lokasi / ODP / POP / BTS (Opsional)</span>
+        {selectedNode && (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="text-[10px] text-red-500 hover:underline font-bold lowercase"
+          >
+            Hapus pilihan
+          </button>
+        )}
+      </label>
+
+      {/* Trigger Box */}
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full min-h-[42px] px-3.5 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs flex items-center justify-between cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-600 transition-all focus-within:ring-2 focus-within:ring-indigo-500"
+      >
+        {!selectedNode ? (
+          <span className="text-slate-400 dark:text-slate-500 font-medium select-none">
+            Pilih ODP, POP, BTS, atau Closure...
+          </span>
+        ) : (
+          <div className="flex items-center gap-2 truncate">
+            {getNodeTypeBadge(selectedNode.node_type || selectedNode.type)}
+            <span className="font-bold text-slate-900 dark:text-slate-100 text-xs truncate">
+              {selectedNode.name}
+            </span>
+            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+              ({selectedNode.code})
+            </span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-1.5 text-slate-400 pl-2 shrink-0">
+          {selectedNode && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onChange(''); }}
+              className="hover:text-red-500 font-bold text-xs px-1"
+              title="Reset pilihan"
+            >
+              ✕
+            </button>
+          )}
+          <span className="text-[10px]">{isOpen ? '▲' : '▼'}</span>
+        </div>
+      </div>
+
+      {/* Popover Dropdown */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-[999999] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+          {/* Search Bar & Type Filters */}
+          <div className="p-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/80 space-y-2">
+            <input
+              type="text"
+              autoFocus
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Cari nama ODP, kode (misal: ODP-01), atau alamat..."
+              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            />
+
+            {/* Type Filter Chips */}
+            <div className="flex flex-wrap gap-1 items-center">
+              <button
+                type="button"
+                onClick={() => setTypeFilter('ALL')}
+                className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                  typeFilter === 'ALL'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300'
+                }`}
+              >
+                Semua ({nodes.length})
+              </button>
+              {nodeTypes.map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTypeFilter(t)}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                    typeFilter === t
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* List of Nodes */}
+          <div className="max-h-60 overflow-y-auto p-1.5 divide-y divide-slate-100/60 dark:divide-slate-800/60 text-xs">
+            {/* Clear / No Node Option */}
+            <div
+              onClick={() => { onChange(''); setIsOpen(false); }}
+              className={`p-2 rounded-xl cursor-pointer transition-colors flex items-center justify-between ${
+                !selectedNodeId ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-900 dark:text-indigo-200 font-bold' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500'
+              }`}
+            >
+              <span>-- Tanpa Node Jaringan Khusus (Umum) --</span>
+              {!selectedNodeId && <span className="text-indigo-600 dark:text-indigo-400 font-bold">✓</span>}
+            </div>
+
+            {filteredNodes.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 text-xs italic">
+                Tidak ada titik node jaringan dengan kata kunci "{searchTerm}"
+              </div>
+            ) : (
+              filteredNodes.map(n => {
+                const isSelected = String(n.id) === String(selectedNodeId);
+                return (
+                  <div
+                    key={n.id}
+                    onClick={() => { onChange(n.id); setIsOpen(false); }}
+                    className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-900 dark:text-indigo-200 font-semibold'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {getNodeTypeBadge(n.node_type || n.type)}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-bold text-xs truncate text-slate-900 dark:text-slate-100">{n.name}</p>
+                          <span className="font-mono text-[10px] text-slate-400 dark:text-slate-500">[{n.code}]</span>
+                        </div>
+                        {n.address && (
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate font-normal">
+                            {n.address}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold pr-1 shrink-0">✓</span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer Info */}
+          <div className="p-2 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Ditemukan {filteredNodes.length} titik node</span>
+            <span>Klik untuk memilih</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════════════════════════════
    MODAL: BUAT TIKET JOINTER BARU (Hanya Superadmin & Operator)
@@ -64,32 +466,12 @@ function CreateTicketModal({ nodes = [], technicians = [], onSave, onClose, load
     category: 'Gangguan ODP',
     status: 'Open',
     network_node_id: '',
-    technician_name: '',
-    dispatch_team: '',
+    technician_names: [],
     description: '',
     dispatch_telegram: true,
   });
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const applyPreset = (p) => {
-    setForm(prev => ({
-      ...prev,
-      title: p.title,
-      category: p.category,
-      description: p.desc,
-    }));
-  };
-
-  const handleTechnicianSelect = (e) => {
-    const techName = e.target.value;
-    set('technician_name', techName);
-    if (!techName) return;
-    const user = technicians.find(u => u.name === techName);
-    if (user && user.division) {
-      set('dispatch_team', user.division);
-    }
-  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -106,10 +488,10 @@ function CreateTicketModal({ nodes = [], technicians = [], onSave, onClose, load
         {/* Pinned Header */}
         <div className="bg-slate-900 dark:bg-slate-950 text-white px-6 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-800">
           <div>
-            <h3 className="text-base font-bold flex items-center gap-2">
-              <span>🛠️ Buat Tiket Penugasan Tim Jointer</span>
+            <h3 className="text-base font-bold text-slate-100">
+              Buat Tiket Penugasan Tim Jointer
             </h3>
-            <p className="text-xs text-slate-300">Penerbitan work order teknis pemeliharaan &amp; penarikan fiber optik</p>
+            <p className="text-xs text-slate-400">Penerbitan work order teknis pemeliharaan &amp; penarikan fiber optik</p>
           </div>
           <button
             type="button"
@@ -128,23 +510,6 @@ function CreateTicketModal({ nodes = [], technicians = [], onSave, onClose, load
                 {typeof error === 'object' ? Object.values(error).flat().join(' · ') : error}
               </div>
             )}
-
-            {/* Quick Presets */}
-            <div>
-              <label className={lc}>Template Cepat Kasus Jointer</label>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {QUICK_PRESETS.map((p, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => applyPreset(p)}
-                    className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-slate-200 dark:border-slate-700 rounded-lg text-[11px] font-semibold transition-all cursor-pointer"
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Title */}
             <div>
@@ -172,80 +537,43 @@ function CreateTicketModal({ nodes = [], technicians = [], onSave, onClose, load
               <div>
                 <label className={lc}>Status Awal *</label>
                 <select value={form.status} onChange={e => set('status', e.target.value)} className={fc}>
-                  <option value="Open">🟡 Open (Baru)</option>
-                  <option value="In Progress">🔵 Dalam Penanganan</option>
+                  <option value="Open">Open (Baru)</option>
+                  <option value="In Progress">In Progress (Dalam Penanganan)</option>
                 </select>
               </div>
             </div>
 
-            {/* Node Selection */}
+            {/* Searchable Single-Select Dropdown Node */}
+            <NodeSelectDropdown
+              nodes={nodes}
+              selectedNodeId={form.network_node_id}
+              onChange={(nodeId) => set('network_node_id', nodeId)}
+            />
+
+            {/* Searchable Multi-Select Dropdown Teknisi */}
+            <TechnicianMultiSelectDropdown
+              technicians={technicians}
+              selectedNames={form.technician_names}
+              onChange={(names) => set('technician_names', names)}
+            />
+
+            {/* Kendala atau Permasalahan */}
             <div>
-              <label className={lc}>Titik Lokasi / ODP / POP / BTS (Opsional)</label>
-              <select value={form.network_node_id} onChange={e => set('network_node_id', e.target.value)} className={fc}>
-                <option value="">-- Pilih Node Jaringan / Titik Lokasi --</option>
-                {nodes.map(n => (
-                  <option key={n.id} value={n.id}>
-                    [{n.node_type || n.type || 'NODE'}] {n.name} ({n.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Technician Tagging (From Users Table) */}
-            <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-2xl border border-indigo-200 dark:border-indigo-800 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wide mb-1">
-                    👷 Tag Teknisi Penanggung Jawab *
-                  </label>
-                  <select
-                    value={form.technician_name}
-                    onChange={handleTechnicianSelect}
-                    className={`${fc} font-semibold`}
-                  >
-                    <option value="">-- Pilih User Teknisi / Jointer --</option>
-                    {technicians.map(u => (
-                      <option key={u.id} value={u.name}>
-                        {u.name} — {u.role} ({u.division || 'Divisi Lapangan'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wide mb-1">
-                    👥 Tim Lapangan (Dispatch Team)
-                  </label>
-                  <input
-                    value={form.dispatch_team}
-                    onChange={e => set('dispatch_team', e.target.value)}
-                    placeholder="misal: Tim Jointer 1"
-                    className={fc}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className={lc}>Instruksi / Catatan Awal Pekerjaan</label>
+              <label className={lc}>Kendala atau Permasalahan</label>
               <textarea
                 rows={3}
                 value={form.description}
                 onChange={e => set('description', e.target.value)}
-                placeholder="Rincian kendala, instruksi rute tiang, atau perlengkapan yang perlu dibawa..."
+                placeholder="Jelaskan rincian kendala, permasalahan di lapangan, atau titik tiang yang bermasalah..."
                 className={fc}
               />
             </div>
 
             {/* Dispatch to Telegram checkbox */}
             <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl">
-              <div className="flex items-center gap-2">
-                <span className="text-base">📢</span>
-                <div>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">Siarkan Tugas ke Telegram Teknisi</span>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Kirim link pelacakan langsung ke grup Telegram NOC/Teknisi</p>
-                </div>
+              <div>
+                <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">Siarkan Tugas ke Telegram Teknisi</span>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">Kirim link pelacakan langsung ke grup Telegram NOC/Teknisi</p>
               </div>
               <input
                 type="checkbox"
@@ -285,7 +613,6 @@ function CreateTicketModal({ nodes = [], technicians = [], onSave, onClose, load
 /* ══════════════════════════════════════════════════════════════════
    MODAL: DETAIL TIKET, KRONOLOGI TINDAKAN & UPLOAD BUKTI FOTO (createPortal)
 ══════════════════════════════════════════════════════════════════ */
-// Client-side smart image compressor (Resizes 10MB phone photo to ~150KB instant upload)
 const compressImage = (file, maxWidth = 1280, quality = 0.8) => {
   return new Promise((resolve) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -372,7 +699,6 @@ function TicketDetailModal({ ticket, currentUser, technicians = [], onAddProgres
   };
 
   const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium';
-  const lc = 'block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1';
 
   return createPortal(
     <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/75 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
@@ -393,22 +719,20 @@ function TicketDetailModal({ ticket, currentUser, technicians = [], onAddProgres
               to={`/track-ticket/${ticket.ticket_number}`}
               target="_blank"
               rel="noreferrer"
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all"
               title="Buka Halaman Pelacakan Publik"
             >
-              <span>🔗</span>
-              <span>Link Publik</span>
+              Link Publik
             </Link>
 
             <button
               type="button"
               onClick={handleDispatch}
               disabled={sendingTelegram}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer disabled:opacity-60"
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer disabled:opacity-60"
               title="Kirim notifikasi tugas ke Telegram"
             >
-              <span>📢</span>
-              <span>{sendingTelegram ? 'Mengirim...' : 'Telegram'}</span>
+              {sendingTelegram ? 'Mengirim...' : 'Kirim Telegram'}
             </button>
 
             <button
@@ -427,17 +751,24 @@ function TicketDetailModal({ ticket, currentUser, technicians = [], onAddProgres
           {/* Summary Details Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase">Teknisi Bertugas</span>
-              <p className="font-bold text-slate-800 dark:text-slate-100 text-sm mt-0.5">
-                👷 {ticket.technician_name || 'Belum Ditentukan'}
-              </p>
-              <p className="text-[10px] text-slate-500">{ticket.dispatch_team || 'Tim Lapangan'}</p>
+              <span className="text-[10px] text-slate-400 font-semibold uppercase">Tim Teknis Bertugas</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {ticket.technician_name ? (
+                  ticket.technician_name.split(',').map((name, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-bold text-xs border border-indigo-200 dark:border-indigo-800">
+                      {name.trim()}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-amber-600 text-xs italic font-semibold">Belum Ditugaskan</span>
+                )}
+              </div>
             </div>
 
             <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
               <span className="text-[10px] text-slate-400 font-semibold uppercase">Titik Lokasi / ODP</span>
               <p className="font-bold text-slate-800 dark:text-slate-100 text-sm mt-0.5">
-                📍 {ticket.network_node?.name || 'Infrastruktur Jaringan'}
+                {ticket.network_node?.name || 'Infrastruktur Jaringan'}
               </p>
               <p className="text-[10px] text-slate-500 font-mono">{ticket.network_node?.code || '—'}</p>
             </div>
@@ -445,22 +776,22 @@ function TicketDetailModal({ ticket, currentUser, technicians = [], onAddProgres
             <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
               <span className="text-[10px] text-slate-400 font-semibold uppercase">Waktu Terbit</span>
               <p className="font-bold text-slate-800 dark:text-slate-100 text-sm mt-0.5 font-mono">
-                🕒 {ticket.created_at ? new Date(ticket.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                {ticket.created_at ? new Date(ticket.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
               </p>
             </div>
           </div>
 
           {ticket.description && (
             <div className="p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-              <span className="font-bold text-slate-700 dark:text-slate-300 block mb-0.5">Instruksi Awal:</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300 block mb-0.5">Kendala atau Permasalahan:</span>
               <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{ticket.description}</p>
             </div>
           )}
 
           {/* Form Kirim Progres & Upload Foto (Bisa diisi oleh Teknisi) */}
           <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-2xl border border-indigo-200 dark:border-indigo-800 space-y-3">
-            <h4 className="font-bold text-indigo-950 dark:text-indigo-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
-              <span>✍️</span> Kirim Laporan Progres &amp; Bukti Foto Lapangan
+            <h4 className="font-bold text-indigo-950 dark:text-indigo-200 text-xs uppercase tracking-wider">
+              Kirim Laporan Progres &amp; Bukti Foto Lapangan
             </h4>
 
             <form onSubmit={handleSendProgress} className="space-y-3">
@@ -478,7 +809,7 @@ function TicketDetailModal({ ticket, currentUser, technicians = [], onAddProgres
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                    📸 Lampirkan Foto Bukti Pengerjaan (Opsional)
+                    Lampirkan Foto Bukti Pengerjaan (Opsional)
                   </label>
                   <input
                     type="file"
@@ -497,10 +828,12 @@ function TicketDetailModal({ ticket, currentUser, technicians = [], onAddProgres
                     onChange={e => setProgressStatus(e.target.value)}
                     className={fc}
                   >
-                    <option value="Open">🟡 Open (Baru)</option>
-                    <option value="In Progress">🔵 Sedang Dikerjakan (In Progress)</option>
-                    <option value="Resolved">🟢 Selesai Diperbaiki (Resolved)</option>
-                    <option value="Closed">⚪ Ditutup (Closed)</option>
+                    <option value="Open">Open (Baru)</option>
+                    <option value="In Progress">In Progress (Sedang Dikerjakan)</option>
+                    <option value="Resolved">Resolved (Selesai Diperbaiki)</option>
+                    {isOperatorOrAdmin && (
+                      <option value="Closed">Closed (Ditutup)</option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -520,8 +853,8 @@ function TicketDetailModal({ ticket, currentUser, technicians = [], onAddProgres
 
           {/* Timeline Kronologi & Foto */}
           <div className="space-y-3">
-            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider flex items-center gap-1.5">
-              <span>🕒</span> Riwayat Kronologi &amp; Bukti Foto Pengerjaan ({ticket.timeline_logs?.length ?? 0})
+            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs uppercase tracking-wider">
+              Riwayat Kronologi &amp; Bukti Foto Pengerjaan ({ticket.timeline_logs?.length ?? 0})
             </h4>
 
             {(!ticket.timeline_logs || ticket.timeline_logs.length === 0) ? (
@@ -536,12 +869,7 @@ function TicketDetailModal({ ticket, currentUser, technicians = [], onAddProgres
                     
                     <div className="p-3.5 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900 dark:text-slate-100">{log.user}</span>
-                          <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded text-[10px] font-semibold">
-                            {log.role || 'Teknisi'}
-                          </span>
-                        </div>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">{log.user}</span>
                         <span className="font-mono text-[10px] text-slate-400">{log.time}</span>
                       </div>
 
@@ -555,7 +883,7 @@ function TicketDetailModal({ ticket, currentUser, technicians = [], onAddProgres
 
                       {log.photo_url && (
                         <div className="pt-1">
-                          <span className="text-[10px] font-bold text-slate-500 block mb-1">📸 Foto Bukti:</span>
+                          <span className="text-[10px] font-bold text-slate-500 block mb-1">Foto Bukti:</span>
                           <img
                             src={log.photo_url}
                             alt="Bukti"
@@ -684,10 +1012,14 @@ export default function TicketManagement() {
     setModalLoading(true);
     setModalError(null);
     try {
+      const payload = {
+        ...formData,
+        created_by_name: currentUser?.name || 'Administrator',
+      };
       const res = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (res.ok && json.status === 'success') {
@@ -795,10 +1127,10 @@ export default function TicketManagement() {
   };
 
   const kanbanColumns = [
-    { id: 'Open', label: '🟡 Baru (Open)', bg: 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40' },
-    { id: 'In Progress', label: '🔵 Sedang Dikerjakan', bg: 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/40' },
-    { id: 'Resolved', label: '🟢 Selesai (Resolved)', bg: 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40' },
-    { id: 'Closed', label: '⚪ Ditutup (Closed)', bg: 'bg-slate-50/50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800' },
+    { id: 'Open', label: 'Baru (Open)', dot: 'bg-amber-500', bg: 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40' },
+    { id: 'In Progress', label: 'Sedang Dikerjakan', dot: 'bg-blue-500', bg: 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/40' },
+    { id: 'Resolved', label: 'Selesai (Resolved)', dot: 'bg-emerald-500', bg: 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40' },
+    { id: 'Closed', label: 'Ditutup (Closed)', dot: 'bg-slate-400', bg: 'bg-slate-50/50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800' },
   ];
 
   return (
@@ -814,8 +1146,8 @@ export default function TicketManagement() {
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-black p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div>
-          <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-sans flex items-center gap-2">
-            <span>🛠️</span> Manajemen Tiket Tim Jointer
+          <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
+            Manajemen Tiket Tim Jointer
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Penugasan teknis fiber optik, monitoring progres tindakan lapangan, dan pelacakan tiket publik
@@ -830,8 +1162,7 @@ export default function TicketManagement() {
             rel="noreferrer"
             className="px-3.5 py-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-semibold text-xs hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all flex items-center gap-1.5"
           >
-            <span>🔗</span>
-            <span>Portal Lacak Publik</span>
+            Portal Lacak Publik
           </Link>
 
           {/* View Mode Switcher */}
@@ -842,7 +1173,7 @@ export default function TicketManagement() {
                 viewMode === 'table' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
               }`}
             >
-              📋 Tabel
+              Tabel
             </button>
             <button
               onClick={() => setViewMode('kanban')}
@@ -850,7 +1181,7 @@ export default function TicketManagement() {
                 viewMode === 'kanban' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
               }`}
             >
-              📊 Kanban
+              Kanban
             </button>
           </div>
 
@@ -858,8 +1189,7 @@ export default function TicketManagement() {
             onClick={() => { fetchTickets(); loadReferenceData(); }}
             className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <span>🔄</span>
-            <span>Refresh</span>
+            Refresh
           </button>
 
           {isOperatorOrAdmin && (
@@ -892,7 +1222,10 @@ export default function TicketManagement() {
             statusFilter === 'Open' ? 'ring-2 ring-amber-500 bg-amber-50/50 dark:bg-amber-950/40 border-amber-300' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
           }`}
         >
-          <div className="text-[10px] font-semibold text-amber-600 uppercase">Baru (Open)</div>
+          <div className="text-[10px] font-semibold text-amber-600 uppercase flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span>Baru (Open)</span>
+          </div>
           <div className="text-xl font-bold text-amber-600 mt-0.5">{summary?.open ?? 0}</div>
         </div>
 
@@ -902,7 +1235,10 @@ export default function TicketManagement() {
             statusFilter === 'In Progress' ? 'ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-950/40 border-blue-300' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
           }`}
         >
-          <div className="text-[10px] font-semibold text-blue-600 uppercase">Sedang Dikerjakan</div>
+          <div className="text-[10px] font-semibold text-blue-600 uppercase flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            <span>Sedang Dikerjakan</span>
+          </div>
           <div className="text-xl font-bold text-blue-600 mt-0.5">{summary?.in_progress ?? 0}</div>
         </div>
 
@@ -912,7 +1248,10 @@ export default function TicketManagement() {
             statusFilter === 'Resolved' ? 'ring-2 ring-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/40 border-emerald-300' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300'
           }`}
         >
-          <div className="text-[10px] font-semibold text-emerald-600 uppercase">Selesai Diperbaiki</div>
+          <div className="text-[10px] font-semibold text-emerald-600 uppercase flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>Selesai Diperbaiki</span>
+          </div>
           <div className="text-xl font-bold text-emerald-600 mt-0.5">{summary?.resolved ?? 0}</div>
         </div>
       </div>
@@ -922,7 +1261,7 @@ export default function TicketManagement() {
         <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto flex-1">
           <input
             type="text"
-            placeholder="🔍 Cari nomor tiket, judul, teknisi, ODP..."
+            placeholder="Cari nomor tiket, judul, teknisi, ODP..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full sm:w-72 px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -934,10 +1273,10 @@ export default function TicketManagement() {
             className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="ALL">Semua Status</option>
-            <option value="Open">🟡 Open (Baru)</option>
-            <option value="In Progress">🔵 Sedang Dikerjakan</option>
-            <option value="Resolved">🟢 Selesai</option>
-            <option value="Closed">⚪ Ditutup</option>
+            <option value="Open">Open (Baru)</option>
+            <option value="In Progress">In Progress (Sedang Dikerjakan)</option>
+            <option value="Resolved">Resolved (Selesai)</option>
+            <option value="Closed">Closed (Ditutup)</option>
           </select>
 
           <select
@@ -958,7 +1297,7 @@ export default function TicketManagement() {
           >
             <option value="ALL">Semua Teknisi</option>
             {technicians.map(u => (
-              <option key={u.id} value={u.name}>👷 {u.name}</option>
+              <option key={u.id} value={u.name}>{u.name}</option>
             ))}
           </select>
         </div>
@@ -971,7 +1310,7 @@ export default function TicketManagement() {
       {/* Main Content */}
       {loading ? (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-16 text-center text-slate-400 text-xs animate-pulse">
-          <span>⚡</span> Memuat data tiket...
+          Memuat data tiket...
         </div>
       ) : tickets.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-16 text-center text-slate-500 text-xs space-y-2">
@@ -990,7 +1329,7 @@ export default function TicketManagement() {
                   <th className="px-5 py-3.5">No. Tiket &amp; Kategori</th>
                   <th className="px-5 py-3.5">Judul Pekerjaan</th>
                   <th className="px-5 py-3.5">Titik Lokasi / ODP</th>
-                  <th className="px-5 py-3.5">Teknisi Ditugaskan</th>
+                  <th className="px-5 py-3.5">Tim Teknis Bertugas</th>
                   <th className="px-5 py-3.5">Status</th>
                   <th className="px-5 py-3.5 text-right">Aksi</th>
                 </tr>
@@ -1008,7 +1347,7 @@ export default function TicketManagement() {
                     <td className="px-5 py-3.5">
                       <p className="font-bold text-slate-900 dark:text-slate-100 text-xs leading-snug line-clamp-1">{ticket.title}</p>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        🕒 {ticket.created_at ? new Date(ticket.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        {ticket.created_at ? new Date(ticket.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                       </p>
                     </td>
 
@@ -1016,7 +1355,7 @@ export default function TicketManagement() {
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       {ticket.network_node ? (
                         <div>
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">📍 {ticket.network_node.name}</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{ticket.network_node.name}</span>
                           <p className="text-[10px] text-slate-400 font-mono">[{ticket.network_node.node_type || 'NODE'}] {ticket.network_node.code}</p>
                         </div>
                       ) : (
@@ -1024,20 +1363,18 @@ export default function TicketManagement() {
                       )}
                     </td>
 
-                    {/* Teknisi Tagged */}
-                    <td className="px-5 py-3.5 whitespace-nowrap">
+                    {/* Multi-Teknisi Tagged */}
+                    <td className="px-5 py-3.5">
                       {ticket.technician_name ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-[10px]">
-                            {ticket.technician_name.charAt(0).toUpperCase()}
-                          </span>
-                          <div>
-                            <p className="font-bold text-slate-800 dark:text-slate-200 text-xs">{ticket.technician_name}</p>
-                            <p className="text-[10px] text-slate-400">{ticket.dispatch_team || 'Tim Lapangan'}</p>
-                          </div>
+                        <div className="flex flex-wrap items-center gap-1 max-w-xs">
+                          {ticket.technician_name.split(',').map((name, idx) => (
+                            <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold text-[11px] border border-indigo-200/60 dark:border-indigo-900/60">
+                              {name.trim()}
+                            </span>
+                          ))}
                         </div>
                       ) : (
-                        <span className="text-amber-600 dark:text-amber-400 font-semibold italic text-[11px]">⚠️ Belum Ditugaskan</span>
+                        <span className="text-amber-600 dark:text-amber-400 font-semibold italic text-[11px]">Belum Ditugaskan</span>
                       )}
                     </td>
 
@@ -1060,10 +1397,10 @@ export default function TicketManagement() {
                         {isOperatorOrAdmin && (
                           <button
                             onClick={() => setTicketToDelete(ticket)}
-                            className="px-2 py-1.5 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 text-xs font-bold transition-all cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 text-xs font-bold transition-all cursor-pointer"
                             title="Hapus Tiket"
                           >
-                            <span>🗑️</span>
+                            Hapus
                           </button>
                         )}
                       </div>
@@ -1085,7 +1422,10 @@ export default function TicketManagement() {
               <div key={col.id} className={`rounded-2xl border p-3 flex flex-col gap-3 min-h-[500px] ${col.bg}`}>
                 {/* Column Header */}
                 <div className="flex items-center justify-between px-2 py-1">
-                  <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{col.label}</span>
+                  <span className="font-bold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${col.dot}`} />
+                    <span>{col.label}</span>
+                  </span>
                   <span className="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
                     {colTickets.length}
                   </span>
@@ -1107,18 +1447,23 @@ export default function TicketManagement() {
                         <h4 className="font-bold text-slate-900 dark:text-slate-100 text-xs line-clamp-2">{ticket.title}</h4>
                         {ticket.network_node && (
                           <p className="text-[10px] text-slate-400 font-mono mt-1 truncate">
-                            📍 [{ticket.network_node.node_type || 'NODE'}] {ticket.network_node.name}
+                            [{ticket.network_node.node_type || 'NODE'}] {ticket.network_node.name}
                           </p>
                         )}
                       </div>
 
-                      {/* Tagged Technician */}
+                      {/* Tagged Technicians */}
                       <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="text-slate-400">👷</span>
-                          <span className="font-semibold text-slate-700 dark:text-slate-300 truncate text-[11px]">
-                            {ticket.technician_name || 'Belum ditag'}
-                          </span>
+                        <div className="flex flex-wrap items-center gap-1 max-w-[150px] truncate">
+                          {ticket.technician_name ? (
+                            ticket.technician_name.split(',').map((name, idx) => (
+                              <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold">
+                                {name.trim()}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Belum ditag</span>
+                          )}
                         </div>
 
                         {/* Quick Status Select */}
@@ -1130,7 +1475,9 @@ export default function TicketManagement() {
                           <option value="Open">Open</option>
                           <option value="In Progress">Progress</option>
                           <option value="Resolved">Resolved</option>
-                          <option value="Closed">Closed</option>
+                          {isOperatorOrAdmin && (
+                            <option value="Closed">Closed</option>
+                          )}
                         </select>
                       </div>
 

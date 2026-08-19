@@ -72,7 +72,7 @@ class TicketController extends Controller
         }
 
         if ($request->filled('technician') && $request->technician !== 'ALL') {
-            $query->where('technician_name', $request->technician);
+            $query->where('technician_name', 'like', "%{$request->technician}%");
         }
 
         if ($request->filled('search')) {
@@ -81,7 +81,6 @@ class TicketController extends Controller
                 $q->where('ticket_number', 'like', "%{$s}%")
                   ->orWhere('title', 'like', "%{$s}%")
                   ->orWhere('technician_name', 'like', "%{$s}%")
-                  ->orWhere('dispatch_team', 'like', "%{$s}%")
                   ->orWhereHas('networkNode', function ($nq) use ($s) {
                       $nq->where('name', 'like', "%{$s}%")
                         ->orWhere('code', 'like', "%{$s}%");
@@ -109,7 +108,7 @@ class TicketController extends Controller
 
     public function store(Request $request)
     {
-        $currentUser = auth()->user();
+        $currentUser = auth()->user() ?? auth('sanctum')->user() ?? $request->user();
         $isOperatorOrAdmin = $currentUser && in_array($currentUser->role, ['Super Administrator', 'Operator Jaringan', 'NOC Operator']);
 
         $validated = $request->validate([
@@ -118,10 +117,17 @@ class TicketController extends Controller
             'category'          => 'required|string',
             'status'            => 'required|string|in:Open,In Progress,Resolved,Closed',
             'network_node_id'   => 'nullable|exists:network_nodes,id',
-            'technician_name'   => 'nullable|string|max:255',
-            'dispatch_team'     => 'nullable|string|max:255',
+            'technician_name'   => 'nullable|string|max:500',
+            'technician_names'  => 'nullable|array',
+            'created_by_name'   => 'nullable|string|max:255',
             'dispatch_telegram' => 'nullable|boolean',
         ]);
+
+        // Support multi-tag technicians array
+        if ($request->has('technician_names') && is_array($request->technician_names)) {
+            $validated['technician_name'] = implode(', ', array_filter($request->technician_names));
+        }
+        unset($validated['technician_names']);
 
         // Default prioritas sistem
         $validated['priority'] = 'Normal';
@@ -131,14 +137,15 @@ class TicketController extends Controller
         $count = Ticket::whereYear('created_at', $year)->count() + 1;
         $validated['ticket_number'] = sprintf('TICK-%s-%04d', $year, $count);
 
-        $creatorName = $currentUser?->name ?? 'Helpdesk / Operator';
+        $creatorName = $currentUser?->name ?? $request->input('created_by_name') ?? 'Super Administrator';
+        unset($validated['created_by_name']);
+
         $techTag = !empty($validated['technician_name']) ? " (Teknisi: {$validated['technician_name']})" : "";
 
         $validated['timeline_logs'] = [
             [
                 'time'      => Carbon::now()->format('H:i (d M Y)'),
                 'user'      => $creatorName,
-                'role'      => $currentUser?->role ?? 'Operator',
                 'action'    => "Tiket dibuat dengan status '{$validated['status']}'{$techTag}.",
                 'comment'   => $validated['description'] ?? null,
                 'photo_url' => null,
@@ -192,14 +199,20 @@ class TicketController extends Controller
             'status'            => 'sometimes|required|string|in:Open,In Progress,Resolved,Closed',
             'network_node_id'   => 'nullable|exists:network_nodes,id',
             'technician_name'   => 'nullable|string|max:255',
-            'dispatch_team'     => 'nullable|string|max:255',
             'log_note'          => 'nullable|string',
         ]);
 
-        // Jika bukan superadmin / operator, cegah perubahan teknisi/title
+        // Pembatasan RBAC: Hanya Super Administrator dan Operator yang berhak menutup (Closed) tiket
+        if (isset($validated['status']) && $validated['status'] === 'Closed' && !$isOperatorOrAdmin) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Hanya Super Administrator dan Operator yang memiliki wewenang untuk menutup (Closed) tiket.',
+            ], 403);
+        }
+
+        // Jika bukan superadmin / operator, cegah perubahan teknisi/title/kategori
         if (!$isOperatorOrAdmin) {
             unset($validated['technician_name']);
-            unset($validated['dispatch_team']);
             unset($validated['title']);
             unset($validated['category']);
         }
@@ -207,6 +220,7 @@ class TicketController extends Controller
         $logs = $ticket->timeline_logs ?? [];
         $userName = $currentUser?->name ?? 'Tim Teknis';
         $userRole = $currentUser?->role ?? 'Teknisi';
+        $previousStatus = $ticket->status;
 
         if (!empty($request->log_note)) {
             $logs[] = [
@@ -236,6 +250,17 @@ class TicketController extends Controller
 
         $ticket->update($validated);
 
+        // Notifikasi Telegram otomatis saat tiket berstatus Resolved
+        if (isset($validated['status']) && $validated['status'] === 'Resolved' && $previousStatus !== 'Resolved') {
+            $this->sendResolvedTelegramNotification($ticket, $request->log_note, $userName);
+            AppNotification::notifyAll(
+                "Tiket #{$ticket->ticket_number} Telah Selesai (Resolved)",
+                "{$ticket->category}: {$ticket->title} telah diselesaikan oleh {$userName}",
+                'NOC',
+                '/tickets'
+            );
+        }
+
         return response()->json([
             'status'  => 'success',
             'message' => 'Data tiket berhasil diperbarui!',
@@ -252,12 +277,21 @@ class TicketController extends Controller
         try {
             $ticket = Ticket::findOrFail($id);
             $currentUser = auth()->user();
+            $isOperatorOrAdmin = $currentUser && in_array($currentUser->role, ['Super Administrator', 'Operator Jaringan', 'NOC Operator']);
 
             $request->validate([
                 'comment'      => 'required|string|max:2000',
                 'status'       => 'nullable|string|in:Open,In Progress,Resolved,Closed',
                 'photo_base64' => 'nullable|string',
             ]);
+
+            // Pembatasan RBAC: Hanya Super Administrator dan Operator yang berhak menutup (Closed) tiket
+            if ($request->input('status') === 'Closed' && !$isOperatorOrAdmin) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Hanya Super Administrator dan Operator yang memiliki wewenang untuk menutup (Closed) tiket.',
+                ], 403);
+            }
 
             $photoUrl = null;
 
@@ -299,6 +333,7 @@ class TicketController extends Controller
 
             $userName = $currentUser?->name ?? $request->input('technician_name', $ticket->technician_name ?: 'Teknisi Jointer');
             $userRole = $currentUser?->role ?? $request->input('technician_role', 'Teknisi Jointer');
+            $previousStatus = $ticket->status;
 
             $logs = $ticket->timeline_logs ?? [];
             $actionTitle = $request->filled('status') && $request->status !== $ticket->status
@@ -323,6 +358,17 @@ class TicketController extends Controller
             }
 
             $ticket->update($updateData);
+
+            // Notifikasi Telegram otomatis saat tiket diubah ke Resolved oleh teknisi
+            if ($request->input('status') === 'Resolved' && $previousStatus !== 'Resolved') {
+                $this->sendResolvedTelegramNotification($ticket, $request->input('comment'), $userName);
+                AppNotification::notifyAll(
+                    "Tiket #{$ticket->ticket_number} Telah Selesai (Resolved)",
+                    "{$ticket->category}: {$ticket->title} telah diselesaikan oleh {$userName}",
+                    'NOC',
+                    '/tickets'
+                );
+            }
 
             return response()->json([
                 'status'  => 'success',
@@ -371,12 +417,13 @@ class TicketController extends Controller
                 'category'        => $ticket->category,
                 'status'          => $ticket->status,
                 'technician_name' => $ticket->technician_name ?: 'Tim Jointer / Dalam Penugasan',
-                'dispatch_team'   => $ticket->dispatch_team ?: 'Operasional Lapangan',
                 'location'        => $ticket->networkNode ? [
                     'name'      => $ticket->networkNode->name,
                     'code'      => $ticket->networkNode->code,
                     'node_type' => $ticket->networkNode->node_type,
                     'address'   => $ticket->networkNode->address,
+                    'latitude'  => $ticket->networkNode->latitude,
+                    'longitude' => $ticket->networkNode->longitude,
                 ] : null,
                 'created_at'      => $ticket->created_at->format('d M Y H:i'),
                 'created_human'   => $ticket->created_at->diffForHumans(),
@@ -423,29 +470,62 @@ class TicketController extends Controller
     private function sendTelegramNotification(Ticket $ticket): bool
     {
         try {
-            $nodeInfo = $ticket->networkNode ? "{$ticket->networkNode->name} ({$ticket->networkNode->code})" : '—';
-            $techName = $ticket->technician_name ?: 'Belum Ditentukan';
-            $teamName = $ticket->dispatch_team ?: 'Tim Lapangan';
+            $nodeInfo = $ticket->networkNode ? "{$ticket->networkNode->name} ({$ticket->networkNode->code})" : 'Infrastruktur Jaringan / Umum';
+            $techName = $ticket->technician_name ?: 'Belum Ditugaskan';
+            $desc = $ticket->description ?: 'Tidak ada rincian kendala tambahan.';
+            $trackUrl = "http://127.0.0.1:8000/track-ticket/{$ticket->ticket_number}";
 
-            $title = "🚨 WORK ORDER JOINTER #{$ticket->ticket_number}";
-            $message = "🛠 *GANGGUAN FIBER OPTIC*\n"
-                . "📌 *Judul:* {$ticket->title}\n"
-                . "📂 *Kategori:* {$ticket->category}\n"
-                . "━━━━━━━━━━━━━━━━━━━━\n"
-                . "📍 *Titik Lokasi/ODP:* {$nodeInfo}\n"
-                . "👷 *Teknisi Ditugaskan:* {$techName}\n"
-                . "👥 *Tim Lapangan:* {$teamName}\n"
-                . "━━━━━━━━━━━━━━━━━━━━\n"
-                . "🔗 *Lacak Online:* http://127.0.0.1:8000/track-ticket/{$ticket->ticket_number}\n\n"
-                . "📝 *Deskripsi:* " . ($ticket->description ?: 'Tidak ada instruksi tambahan') . "\n";
+            $title = "WORK ORDER JOINTER #{$ticket->ticket_number}";
+            
+            $body = "<b>INFORMASI PEKERJAAN</b>\n"
+                . "• <b>Judul:</b> " . htmlspecialchars($ticket->title) . "\n"
+                . "• <b>Kategori:</b> " . htmlspecialchars($ticket->category) . "\n"
+                . "• <b>Titik Lokasi / Node:</b> " . htmlspecialchars($nodeInfo) . "\n"
+                . "• <b>Tim Teknis Ditugaskan:</b> " . htmlspecialchars($techName) . "\n\n"
+                . "<b>KENDALA / PERMASALAHAN</b>\n"
+                . htmlspecialchars($desc) . "\n\n"
+                . "<b>LINK PELACAKAN PUBLIK</b>\n"
+                . "<code>{$trackUrl}</code>";
 
             $mapUrl = ($ticket->networkNode && $ticket->networkNode->latitude && $ticket->networkNode->longitude)
                 ? "https://maps.google.com/?q={$ticket->networkNode->latitude},{$ticket->networkNode->longitude}"
-                : "http://127.0.0.1:8000/track-ticket/{$ticket->ticket_number}";
+                : $trackUrl;
 
-            return TelegramService::send($title, $message, 'NOC', $mapUrl);
+            return TelegramService::send($title, $body, 'NOC', $mapUrl);
         } catch (\Throwable $e) {
             \Log::error('Dispatch telegram ticket failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function sendResolvedTelegramNotification(Ticket $ticket, ?string $resolutionComment = null, ?string $userName = null): bool
+    {
+        try {
+            $nodeInfo = $ticket->networkNode ? "{$ticket->networkNode->name} ({$ticket->networkNode->code})" : 'Infrastruktur Jaringan / Umum';
+            $techName = $ticket->technician_name ?: ($userName ?: 'Tim Teknis');
+            $actionNotes = !empty($resolutionComment) ? $resolutionComment : ($ticket->description ?: 'Pekerjaan perbaikan telah diselesaikan oleh tim teknis lapangan.');
+            $trackUrl = "http://127.0.0.1:8000/track-ticket/{$ticket->ticket_number}";
+
+            $title = "LAPORAN PEKERJAAN SELESAI (RESOLVED) #{$ticket->ticket_number}";
+            
+            $body = "<b>INFORMASI TIKET SELESAI</b>\n"
+                . "• <b>Judul:</b> " . htmlspecialchars($ticket->title) . "\n"
+                . "• <b>Kategori:</b> " . htmlspecialchars($ticket->category) . "\n"
+                . "• <b>Titik Lokasi / Node:</b> " . htmlspecialchars($nodeInfo) . "\n"
+                . "• <b>Status:</b> Selesai Diperbaiki (Resolved)\n"
+                . "• <b>Tim Teknis / Pelapor:</b> " . htmlspecialchars($techName) . "\n\n"
+                . "<b>TINDAKAN PENYELESAIAN</b>\n"
+                . htmlspecialchars($actionNotes) . "\n\n"
+                . "<b>LINK PELACAKAN PUBLIK</b>\n"
+                . "<code>{$trackUrl}</code>";
+
+            $mapUrl = ($ticket->networkNode && $ticket->networkNode->latitude && $ticket->networkNode->longitude)
+                ? "https://maps.google.com/?q={$ticket->networkNode->latitude},{$ticket->networkNode->longitude}"
+                : $trackUrl;
+
+            return TelegramService::send($title, $body, 'NOC', $mapUrl);
+        } catch (\Throwable $e) {
+            \Log::error('Dispatch telegram resolved ticket failed: ' . $e->getMessage());
             return false;
         }
     }

@@ -4,6 +4,7 @@ import { useAuth } from '../components/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
+import VpnMikrotikBridgeModal from '../components/VpnMikrotikBridgeModal';
 
 // ─── Icon Components ──────────────────────────────────────────────────────────
 const IconSettings = () => (
@@ -44,6 +45,11 @@ const IconEdit = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
   </svg>
 );
+const IconNetwork = () => (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+  </svg>
+);
 const Spinner = () => (
   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />
 );
@@ -51,23 +57,23 @@ const Spinner = () => (
 // ─── Deployment Mode Options ──────────────────────────────────────────────────
 const DEPLOYMENT_MODES = [
   {
+    value: 'vpn',
+    label: 'VPN Tunnel / L2TP Perusahaan (Rekomendasi)',
+    desc: 'VPS terhubung ke jaringan kantor via VPN L2TP Perusahaan atau Tunnel MikroTik. SNMP & Telnet langsung menjangkau IP lokal OLT.',
+    icon: '',
+    color: 'emerald',
+  },
+  {
     value: 'direct',
-    label: 'Direct (Internal ISP)',
-    desc: 'Server UNMS berada dalam jaringan yang sama dengan OLT. SNMP/CLI langsung berjalan.',
+    label: 'Direct LAN (Satu Jaringan)',
+    desc: 'Server UNMS berada dalam satu jaringan lokal yang sama persis dengan OLT.',
     icon: '',
     color: 'indigo',
   },
   {
-    value: 'vpn',
-    label: 'Via VPN',
-    desc: 'Server terhubung ke jaringan ISP melalui VPN. Setara dengan direct — SNMP langsung berjalan.',
-    icon: '',
-    color: 'violet',
-  },
-  {
     value: 'probe',
-    label: 'Probe Agent (Cloud)',
-    desc: 'Server di luar ISP tanpa VPN. Memerlukan NMS Probe Agent yang diinstal di dalam jaringan ISP.',
+    label: 'Local Probe Agent (Cloud External)',
+    desc: 'Server di luar ISP tanpa VPN. Memerlukan NMS Probe Agent yang diinstal di dalam jaringan lokal kantor.',
     icon: '',
     color: 'amber',
   },
@@ -84,6 +90,7 @@ export default function OltManagement() {
   const [notification, setNotification] = useState(null);
   const [notifType, setNotifType] = useState('success');
   const [systemCapabilities, setSystemCapabilities] = useState(null);
+  const [showVpnModal, setShowVpnModal] = useState(false);
 
   const [selectedSlotFilter, setSelectedSlotFilter] = useState(null);
   const [selectedPortFilter, setSelectedPortFilter] = useState(null);
@@ -564,6 +571,14 @@ export default function OltManagement() {
             lastUpdatedText={timeAgoText}
             label="Segarkan OLT"
           />
+          <button
+            onClick={() => setShowVpnModal(true)}
+            className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-black dark:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 font-bold text-xs transition-all flex items-center space-x-1.5 cursor-pointer shadow-xs"
+            title="Panduan VPN L2TP Perusahaan, Script MikroTik & Server Lokal On-Premise"
+          >
+            <IconNetwork />
+            <span>Panduan Integrasi Jaringan (VPN / Local LAN)</span>
+          </button>
           {canCrud && (
             <button onClick={() => setShowAddOltModal(true)}
               className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 border border-slate-700 dark:border-slate-300">
@@ -581,7 +596,7 @@ export default function OltManagement() {
               onClick={() => handleDisconnectOlt(activeOlt)}
               disabled={disconnectingId === activeOlt.id}
               className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg transition-all flex items-center space-x-1.5 disabled:opacity-50">
-              {disconnectingId === activeOlt.id ? <Spinner /> : <span>⏹️ Hentikan Koneksi</span>}
+              {disconnectingId === activeOlt.id ? <Spinner /> : <span>Hentikan Koneksi</span>}
             </button>
           )}
         </div>
@@ -1602,19 +1617,20 @@ export default function OltManagement() {
                     placeholder="Kota Solok (POP Solok Central)" required className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>IP Address Manajemen OLT</label>
+                  <label className={labelCls}>IP Address Manajemen OLT (IP Lokal / VPN)</label>
                   <input type="text" value={newOltForm.ip_address}
                     onChange={e => setNewOltForm({ ...newOltForm, ip_address: e.target.value })}
-                    placeholder="10.10.20.1" required className={inputCls + ' font-mono'} />
+                    placeholder="192.168.1.100 atau 10.10.20.1" required className={inputCls + ' font-mono'} />
+                  <p className="text-[10px] text-neutral-500 mt-1">Masukkan IP lokal OLT (didukung via VPN L2TP/MikroTik).</p>
                 </div>
                 <div>
-                  <label className={labelCls}>Mode Deployment Awal</label>
+                  <label className={labelCls}>Mode Deployment</label>
                   <select value={newOltForm.deployment_mode}
                     onChange={e => setNewOltForm({ ...newOltForm, deployment_mode: e.target.value })}
                     className={inputCls}>
-                    <option value="direct"> Direct — Internal ISP</option>
-                    <option value="vpn"> Via VPN</option>
-                    <option value="probe"> Probe Agent (Cloud External)</option>
+                    <option value="vpn">VPN Tunnel / L2TP Perusahaan (Rekomendasi)</option>
+                    <option value="direct">Direct LAN (Satu Jaringan)</option>
+                    <option value="probe">Local Probe Agent (Cloud External)</option>
                   </select>
                 </div>
                 <div>
@@ -1636,7 +1652,7 @@ export default function OltManagement() {
                           ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
                           : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}>
-                        {ct === 'public' ? ' public' : ' Custom'}
+                        {ct === 'public' ? 'public' : 'Custom'}
                       </button>
                     ))}
                   </div>
@@ -1658,7 +1674,7 @@ export default function OltManagement() {
                 </button>
                 <button type="submit" disabled={submittingOlt}
                   className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center space-x-2 disabled:opacity-50">
-                  {submittingOlt ? <><Spinner /><span>Mendaftarkan OLT...</span></> : <><IconCheck /><span>Simpan & Daftarkan OLT</span></>}
+                  {submittingOlt ? <><Spinner /><span>Mendaftarkan OLT...</span></> : <><IconCheck /><span>Simpan &amp; Daftarkan OLT</span></>}
                 </button>
               </div>
             </form>
@@ -1698,7 +1714,7 @@ export default function OltManagement() {
 
               {/* Info banner */}
               <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-900/30 rounded-xl px-4 py-3 text-xs text-indigo-700 dark:text-indigo-400 font-medium">
-                ℹ️ Perubahan informasi dasar tidak akan mempengaruhi konfigurasi koneksi SNMP/CLI. Gunakan tombol <strong>"Koneksikan Perangkat"</strong> untuk mengubah konfigurasi koneksi.
+                Perubahan informasi dasar tidak akan mempengaruhi konfigurasi koneksi SNMP/CLI. Gunakan tombol <strong>"Koneksikan Perangkat"</strong> untuk mengubah konfigurasi koneksi.
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1731,15 +1747,16 @@ export default function OltManagement() {
 
                 {/* IP Address */}
                 <div>
-                  <label className={labelCls}>IP Address Manajemen OLT</label>
+                  <label className={labelCls}>IP Address Manajemen OLT (IP Lokal / VPN)</label>
                   <input
                     type="text"
                     value={editOltForm.ip_address}
                     onChange={e => setEditOltForm({ ...editOltForm, ip_address: e.target.value })}
-                    placeholder="10.10.20.1"
+                    placeholder="192.168.1.100 atau 10.10.20.1"
                     required
                     className={inputCls + ' font-mono'}
                   />
+                  <p className="text-[10px] text-neutral-500 mt-1">Masukkan IP lokal OLT jika terhubung via VPN.</p>
                 </div>
 
                 {/* Vendor */}
@@ -1809,9 +1826,9 @@ export default function OltManagement() {
                     value={editOltForm.deployment_mode}
                     onChange={e => setEditOltForm({ ...editOltForm, deployment_mode: e.target.value })}
                     className={inputCls}>
-                    <option value="direct"> Direct — Internal ISP</option>
-                    <option value="vpn"> Via VPN</option>
-                    <option value="probe"> Probe Agent (Cloud External)</option>
+                    <option value="vpn">VPN Tunnel / L2TP Perusahaan (Rekomendasi)</option>
+                    <option value="direct">Direct LAN (Satu Jaringan)</option>
+                    <option value="probe">Local Probe Agent (Cloud External)</option>
                   </select>
                 </div>
 
@@ -1871,6 +1888,14 @@ export default function OltManagement() {
         </div>,
         document.body
       )}
+      {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: Panduan VPN & Generator Script MikroTik
+      ══════════════════════════════════════════════════════════════════════ */}
+      <VpnMikrotikBridgeModal
+        isOpen={showVpnModal}
+        onClose={() => setShowVpnModal(false)}
+      />
+
       {/* ══════════════════════════════════════════════════════════════════════
           MODAL: Custom Confirm Dialog (Ganti window.confirm)
       ══════════════════════════════════════════════════════════════════════ */}

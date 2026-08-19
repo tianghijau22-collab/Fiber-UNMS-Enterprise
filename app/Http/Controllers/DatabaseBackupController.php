@@ -187,6 +187,9 @@ class DatabaseBackupController extends Controller
         }
 
         try {
+            @set_time_limit(600);
+            @ini_set('memory_limit', '512M');
+
             // Jika file terkompresi .gz, ekstrak dulu sementara
             $isGz = str_ends_with(strtolower($filename), '.gz');
             $sqlContent = '';
@@ -208,9 +211,32 @@ class DatabaseBackupController extends Controller
                 ], 422);
             }
 
-            // Eksekusi SQL restore ke PostgreSQL
-            DB::unprepared("SET CONSTRAINTS ALL DEFERRED;");
-            DB::unprepared($sqlContent);
+            // Eksekusi SQL restore ke PostgreSQL dalam transaksi atomic dengan session_replication_role
+            DB::transaction(function () use ($sqlContent) {
+                DB::statement("SET session_replication_role = 'replica';");
+                DB::unprepared($sqlContent);
+                DB::statement("SET session_replication_role = 'origin';");
+            });
+
+            // Bersihkan cache aplikasi agar data langsung sinkron
+            try {
+                \Illuminate\Support\Facades\Artisan::call('cache:clear');
+            } catch (\Throwable $ce) {
+                // Silent
+            }
+
+            // Catat audit log pemulihan
+            try {
+                \App\Models\AuditLog::record(
+                    'UPDATE',
+                    'Database Backup & Restore',
+                    "Memulihkan database sistem secara penuh dari cadangan '{$filename}'",
+                    null,
+                    ['filename' => $filename, 'restored_at' => Carbon::now()->toIso8601String()]
+                );
+            } catch (\Throwable $ae) {
+                // Silent
+            }
 
             return response()->json([
                 'success' => true,
@@ -331,7 +357,8 @@ class DatabaseBackupController extends Controller
         fwrite($handle, "SET standard_conforming_strings = on;\n");
         fwrite($handle, "SET check_function_bodies = false;\n");
         fwrite($handle, "SET client_min_messages = warning;\n");
-        fwrite($handle, "SET row_security = off;\n\n");
+        fwrite($handle, "SET row_security = off;\n");
+        fwrite($handle, "SET session_replication_role = 'replica';\n\n");
 
         // Dapatkan seluruh tabel di schema public
         $tablesRaw = DB::select("
@@ -344,17 +371,17 @@ class DatabaseBackupController extends Controller
         $tableNames = array_column($tablesRaw, 'table_name');
         $totalRecords = 0;
 
-        // Nonaktifkan trigger referensial sementara saat restore
-        fwrite($handle, "-- Nonaktifkan Foreign Key Check\n");
-        fwrite($handle, "SET CONSTRAINTS ALL DEFERRED;\n\n");
+        // Kosongkan seluruh tabel sekaligus di awal dengan TRUNCATE CASCADE
+        if (!empty($tableNames)) {
+            $quotedTables = implode(', ', array_map(fn($t) => "\"{$t}\"", $tableNames));
+            fwrite($handle, "-- Kosongkan seluruh data tabel sebelum pemulihan\n");
+            fwrite($handle, "TRUNCATE TABLE {$quotedTables} CASCADE;\n\n");
+        }
 
         foreach ($tableNames as $tableName) {
             fwrite($handle, "-- ----------------------------------------------------------\n");
-            fwrite($handle, "-- Struktur & Data Tabel: \"{$tableName}\"\n");
+            fwrite($handle, "-- Data Tabel: \"{$tableName}\"\n");
             fwrite($handle, "-- ----------------------------------------------------------\n\n");
-
-            // Kosongkan tabel saat restore (TRUNCATE CASCADE)
-            fwrite($handle, "TRUNCATE TABLE \"{$tableName}\" CASCADE;\n\n");
 
             // Dump Data Baris (chunk 200 baris per query)
             $count = DB::table($tableName)->count();
@@ -407,6 +434,10 @@ class DatabaseBackupController extends Controller
 
             fwrite($handle, "\n");
         }
+
+        // Kembalikan session_replication_role ke default origin
+        fwrite($handle, "-- Aktifkan kembali Foreign Key & Trigger\n");
+        fwrite($handle, "SET session_replication_role = 'origin';\n\n");
 
         fclose($handle);
 

@@ -254,7 +254,7 @@ export default function NotificationCenter() {
   const getTypeStyle = (type) => {
     switch (type) {
       case 'NOC':
-        return { bg: 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800', label: 'NOC Alert' };
+        return { bg: 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800', label: 'ALERT' };
       case 'SECURITY':
         return { bg: 'bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-800', label: 'Keamanan' };
       case 'BILLING':
