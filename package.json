@@ -20,5 +20,8 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.23.1",
     "tailwindcss": "^4.0.0"
+  },
+  "dependencies": {
+    "tesseract.js": "^7.0.0"
   }
 }

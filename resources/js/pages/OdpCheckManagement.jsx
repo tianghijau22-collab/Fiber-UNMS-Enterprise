@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../components/AuthContext';
 import OdpWatermarkCamera from '../components/OdpWatermarkCamera';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { scanOpmPowerReading } from '../utils/opmOcrScanner';
 
 /* ── Minimalist Clean SVG Icons ── */
 const IconCamera = () => (
@@ -49,9 +50,9 @@ const IconEye = () => (
   </svg>
 );
 
-const IconPlus = () => (
-  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+const IconSparkles = () => (
+  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
   </svg>
 );
 
@@ -67,10 +68,11 @@ export default function OdpCheckManagement() {
     warning_count: 0,
     critical_count: 0,
   });
-  const [odpOptions, setOdpOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [forwardingId, setForwardingId] = useState(null);
+  const [isScanningOcr, setIsScanningOcr] = useState(false);
+  const [ocrMessage, setOcrMessage] = useState(null);
 
   // Filter state
   const [search, setSearch] = useState('');
@@ -80,28 +82,21 @@ export default function OdpCheckManagement() {
   const [totalPages, setTotalPages] = useState(1);
   const [activeTab, setActiveTab] = useState('input'); // 'input' | 'history'
 
-  // Form State Pengukuran Lapangan
+  // ── Form State Ringkas (Hanya 5 Elemen Utama) ──
   const [formData, setFormData] = useState({
-    odp_code: '',
     odp_name: '',
-    odp_node_id: null,
-    port_number: 'Port 1',
     power_measurement_dbm: '',
-    odp_condition: 'Normal & Bersih',
     latitude: '',
     longitude: '',
-    address_location: '',
-    notes: '',
-    odp_photo: null, // Base64 Data URL
-    opm_photo: null, // Base64 Data URL
-    forward_telegram: false,
     technician_name: currentUser?.name || '',
+    odp_photo: null, // Base64 Data URL (Foto Fisik)
+    opm_photo: null, // Base64 Data URL (Foto OPM)
   });
 
   // Modal Camera State
   const [cameraModal, setCameraModal] = useState({
     isOpen: false,
-    targetField: 'odp_photo', // 'odp_photo' | 'opm_photo'
+    targetField: 'odp_photo',
     title: '',
     subtitle: '',
   });
@@ -125,14 +120,20 @@ export default function OdpCheckManagement() {
     setTimeout(() => setAlert(null), 4500);
   };
 
-  // ── Fetch ODP Autocomplete Options ──
-  const fetchOdpOptions = useCallback(async () => {
-    try {
-      const res = await fetch('/api/odp-checks/odp-options');
-      const json = await res.json();
-      if (json.success) setOdpOptions(json.data || []);
-    } catch (e) {
-      console.error('Error fetching ODP options:', e);
+  // ── Auto-Detect Geolocation on Mount ──
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setFormData((prev) => ({
+            ...prev,
+            latitude: pos.coords.latitude.toFixed(6),
+            longitude: pos.coords.longitude.toFixed(6),
+          }));
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
     }
   }, []);
 
@@ -170,14 +171,10 @@ export default function OdpCheckManagement() {
   }, [search, statusFilter, periodFilter, currentPage]);
 
   useEffect(() => {
-    fetchOdpOptions();
-  }, [fetchOdpOptions]);
-
-  useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // ── Geolocation Auto-Detect ──
+  // ── Refresh Geolocation Manually ──
   const handleGetLocation = () => {
     if (!navigator.geolocation) {
       showAlert('Geolocation tidak didukung pada browser ini.', 'error');
@@ -191,7 +188,7 @@ export default function OdpCheckManagement() {
           latitude: pos.coords.latitude.toFixed(6),
           longitude: pos.coords.longitude.toFixed(6),
         }));
-        showAlert('Koordinat GPS berhasil didapatkan!');
+        showAlert('Koordinat GPS berhasil diperbarui!');
       },
       (err) => {
         showAlert(`Gagal mengambil GPS: ${err.message}`, 'error');
@@ -203,29 +200,13 @@ export default function OdpCheckManagement() {
   // ── Auto Calculate Power Status Preview ──
   const getPowerStatusPreview = (val) => {
     const num = parseFloat(val);
-    if (isNaN(num)) return { label: 'Belum Diukur', color: 'neutral' };
-    if (num < -27.0 || num > -10.0) return { label: 'Kritis / LOS', color: 'rose' };
+    if (isNaN(num)) return { label: 'Belum Terbaca', color: 'neutral' };
+    if (num < -27.0 || num > -10.0) return { label: 'Kritis / Redaman Tinggi', color: 'rose' };
     if (num < -24.0) return { label: 'Peringatan / Sedang', color: 'amber' };
     return { label: 'Baik / Ideal', color: 'emerald' };
   };
 
   const powerPreview = getPowerStatusPreview(formData.power_measurement_dbm);
-
-  // ── Handle ODP Select ──
-  const handleSelectOdp = (odpId) => {
-    const selected = odpOptions.find((o) => String(o.id) === String(odpId));
-    if (selected) {
-      setFormData((prev) => ({
-        ...prev,
-        odp_node_id: selected.id,
-        odp_code: selected.code,
-        odp_name: selected.name || '',
-        latitude: selected.latitude ? String(selected.latitude) : prev.latitude,
-        longitude: selected.longitude ? String(selected.longitude) : prev.longitude,
-        address_location: selected.address || prev.address_location,
-      }));
-    }
-  };
 
   // ── Open Camera Modal ──
   const openCamera = (field, title, subtitle) => {
@@ -237,30 +218,66 @@ export default function OdpCheckManagement() {
     });
   };
 
-  // ── On Capture from Camera ──
-  const handleCameraCapture = (base64Img) => {
+  // ── On Capture from Camera & Trigger Auto-OCR Scanner ──
+  const handleCameraCapture = async (base64Img) => {
+    const field = cameraModal.targetField;
     setFormData((prev) => ({
       ...prev,
-      [cameraModal.targetField]: base64Img,
+      [field]: base64Img,
     }));
-    showAlert('Foto berhasil diambil & watermark diterapkan!');
+
+    // Jika foto yang diambil adalah Foto OPM, jalankan OCR Otomatis!
+    if (field === 'opm_photo') {
+      setIsScanningOcr(true);
+      setOcrMessage('Sedang memindai angka redaman dari foto OPM...');
+      
+      try {
+        const ocrResult = await scanOpmPowerReading(base64Img);
+        if (ocrResult.success && ocrResult.dbmValue !== null) {
+          setFormData((prev) => ({
+            ...prev,
+            power_measurement_dbm: String(ocrResult.dbmValue),
+          }));
+          setOcrMessage(`Terdeteksi otomatis dari foto: ${ocrResult.dbmValue} dBm`);
+          showAlert(`Nilai redaman ${ocrResult.dbmValue} dBm berhasil terbaca otomatis dari foto OPM!`);
+        } else {
+          setOcrMessage('Angka tidak terbaca otomatis. Silakan masukkan nilai redaman secara manual.');
+        }
+      } catch (err) {
+        console.warn('OCR error:', err);
+        setOcrMessage('Gagal memindai otomatis. Masukkan nilai redaman manual.');
+      } finally {
+        setIsScanningOcr(false);
+      }
+    } else {
+      showAlert('Foto fisik ODP berhasil diambil & watermark diterapkan!');
+    }
   };
 
   // ── Submit Measurement ──
   const handleSubmit = async (forwardToTg = false) => {
-    if (!formData.odp_code) {
-      showAlert('Kode ODP wajib diisi.', 'error');
+    if (!formData.odp_name) {
+      showAlert('Nama / Label ODP wajib diisi.', 'error');
       return;
     }
     if (!formData.power_measurement_dbm) {
-      showAlert('Nilai redaman OPM (dBm) wajib diisi.', 'error');
+      showAlert('Nilai redaman OPM (dBm) belum terisi.', 'error');
       return;
     }
 
     setSubmitting(true);
     try {
       const payload = {
-        ...formData,
+        odp_code: formData.odp_name,
+        odp_name: formData.odp_name,
+        power_measurement_dbm: formData.power_measurement_dbm,
+        port_number: 'Port Distribusi',
+        odp_condition: 'Normal',
+        latitude: formData.latitude || null,
+        longitude: formData.longitude || null,
+        technician_name: formData.technician_name || currentUser?.name || 'Teknisi Lapangan',
+        odp_photo: formData.odp_photo,
+        opm_photo: formData.opm_photo,
         forward_telegram: forwardToTg,
       };
 
@@ -282,22 +299,16 @@ export default function OdpCheckManagement() {
       showAlert(json.message);
       
       // Reset form
-      setFormData({
-        odp_code: '',
+      setFormData((prev) => ({
         odp_name: '',
-        odp_node_id: null,
-        port_number: 'Port 1',
         power_measurement_dbm: '',
-        odp_condition: 'Normal & Bersih',
-        latitude: '',
-        longitude: '',
-        address_location: '',
-        notes: '',
+        latitude: prev.latitude,
+        longitude: prev.longitude,
+        technician_name: currentUser?.name || '',
         odp_photo: null,
         opm_photo: null,
-        forward_telegram: false,
-        technician_name: currentUser?.name || '',
-      });
+      }));
+      setOcrMessage(null);
 
       fetchData();
       setActiveTab('history');
@@ -326,7 +337,7 @@ export default function OdpCheckManagement() {
         throw new Error(json.message || 'Gagal meneruskan ke Telegram.');
       }
 
-      showAlert(`Laporan ODP '${odpCode}' berhasil dikirimkan ke Telegram!`);
+      showAlert(`Laporan ODP '${odpCode}' berhasil diteruskan ke Telegram!`);
       fetchData();
     } catch (e) {
       showAlert(e.message, 'error');
@@ -367,17 +378,17 @@ export default function OdpCheckManagement() {
   const lc = "block text-[11px] font-bold text-black dark:text-white uppercase tracking-wider mb-1.5";
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-150">
+    <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-in fade-in duration-150">
       
       {/* ── Page Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-neutral-800 pb-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-black dark:text-white tracking-tight flex items-center gap-2">
             <IconCamera />
-            <span>Pengecekan Redaman ODP &amp; OPM</span>
+            <span>Pengecekan Redaman ODP Lapangan</span>
           </h1>
           <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">
-            Pendataan redaman ODP lapangan, pengambilan foto bukti ber-watermark timestamp &amp; forward laporan ke Telegram NOC
+            Pendataan cepat redaman ODP, auto-scan nilai dBm dari foto OPM &amp; kirim laporan ke Telegram
           </p>
         </div>
 
@@ -391,7 +402,7 @@ export default function OdpCheckManagement() {
                 : 'border border-slate-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-slate-100 dark:hover:bg-neutral-900'
             }`}
           >
-            <IconPlus />
+            <IconCamera />
             <span>Form Input Lapangan</span>
           </button>
 
@@ -405,7 +416,7 @@ export default function OdpCheckManagement() {
             }`}
           >
             <IconRefresh />
-            <span>Riwayat Pengukuran</span>
+            <span>Riwayat ({stats.total_all || 0})</span>
           </button>
         </div>
       </div>
@@ -423,240 +434,43 @@ export default function OdpCheckManagement() {
         </div>
       )}
 
-      {/* ── Metric Cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <div className="p-4 rounded-2xl bg-white dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 space-y-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Total Dicek</div>
-          <div className="text-xl font-bold text-black dark:text-white font-mono">{stats.total_all || 0}</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 space-y-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-blue-500">Cek Hari Ini</div>
-          <div className="text-xl font-bold text-blue-600 dark:text-blue-400 font-mono">{stats.total_today || 0}</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 space-y-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-500">Baik (-14 s.d -24)</div>
-          <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">{stats.good_count || 0}</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 space-y-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-amber-500">Peringatan (-24.1 s.d -27)</div>
-          <div className="text-xl font-bold text-amber-600 dark:text-amber-400 font-mono">{stats.warning_count || 0}</div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 space-y-1 col-span-2 sm:col-span-1">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-rose-500">Kritis (&gt; -27 dBm)</div>
-          <div className="text-xl font-bold text-rose-600 dark:text-rose-400 font-mono">{stats.critical_count || 0}</div>
-        </div>
-      </div>
-
-      {/* ── TAB 1: FORM INPUT PENGUKURAN LAPANGAN ── */}
+      {/* ── TAB 1: FORM INPUT SUPER RINGKAS ── */}
       {activeTab === 'input' && (
         <div className="bg-white dark:bg-black rounded-3xl border border-slate-200 dark:border-neutral-800 p-6 space-y-6 shadow-xs">
           
-          <div className="border-b border-slate-200 dark:border-neutral-800 pb-4">
-            <h2 className="text-base font-bold text-black dark:text-white">Formulir Verifikasi Redaman Lapangan</h2>
-            <p className="text-xs text-neutral-500 mt-0.5">
-              Isi parameter ODP, port, hasil ukur OPM, dan lampirkan foto fisik &amp; display OPM dengan watermark otomatis
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            
-            {/* ODP Autocomplete Dropdown */}
-            <div className="space-y-1">
-              <label className={lc}>Pilih ODP dari Database</label>
-              <select
-                value={formData.odp_node_id || ''}
-                onChange={(e) => handleSelectOdp(e.target.value)}
-                className={fc}
-              >
-                <option value="">-- Pilih ODP Terdaftar atau Ketik Manual --</option>
-                {odpOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.code} {o.name ? `- ${o.name}` : ''} ({o.total_ports || 8} Port)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Kode ODP Manual */}
-            <div className="space-y-1">
-              <label className={lc}>Kode ODP *</label>
-              <input
-                type="text"
-                value={formData.odp_code}
-                onChange={(e) => setFormData({ ...formData, odp_code: e.target.value.toUpperCase() })}
-                placeholder="ODP-SLK-01/04"
-                className={fc + ' font-mono uppercase font-bold'}
-                required
-              />
-            </div>
-
-            {/* Nama / Wilayah ODP */}
-            <div className="space-y-1">
-              <label className={lc}>Nama / Label ODP</label>
-              <input
-                type="text"
-                value={formData.odp_name}
-                onChange={(e) => setFormData({ ...formData, odp_name: e.target.value })}
-                placeholder="ODP Simpang Rumbio"
-                className={fc}
-              />
-            </div>
-
-            {/* Port ODP */}
-            <div className="space-y-1">
-              <label className={lc}>Port yang Diukur *</label>
-              <select
-                value={formData.port_number}
-                onChange={(e) => setFormData({ ...formData, port_number: e.target.value })}
-                className={fc}
-              >
-                <option value="Port In / Uplink">Port In / Uplink Splitter</option>
-                {[...Array(16)].map((_, i) => (
-                  <option key={i + 1} value={`Port ${i + 1}`}>Port {i + 1} (Distribusi)</option>
-                ))}
-                <option value="Port Backbone">Port Backbone</option>
-              </select>
-            </div>
-
-            {/* Nilai Redaman OPM */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className={lc}>Nilai Redaman OPM (dBm) *</label>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    powerPreview.color === 'emerald'
-                      ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400'
-                      : powerPreview.color === 'amber'
-                      ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400'
-                      : powerPreview.color === 'rose'
-                      ? 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400'
-                      : 'bg-neutral-100 text-neutral-600'
-                  }`}
-                >
-                  {powerPreview.label}
-                </span>
-              </div>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.power_measurement_dbm}
-                  onChange={(e) => setFormData({ ...formData, power_measurement_dbm: e.target.value })}
-                  placeholder="-18.50"
-                  className={fc + ' font-mono text-sm font-bold'}
-                  required
-                />
-                <span className="absolute right-3.5 top-2.5 text-xs text-neutral-500 font-bold">dBm</span>
-              </div>
-            </div>
-
-            {/* Kondisi Fisik ODP */}
-            <div className="space-y-1">
-              <label className={lc}>Kondisi Fisik ODP *</label>
-              <select
-                value={formData.odp_condition}
-                onChange={(e) => setFormData({ ...formData, odp_condition: e.target.value })}
-                className={fc}
-              >
-                <option value="Normal & Bersih">Normal &amp; Bersih</option>
-                <option value="Kotor / Perlu Cleaning Adaptor">Kotor / Perlu Cleaning Adaptor</option>
-                <option value="Kunci / Box Pecah / Rusak">Kunci / Box Pecah / Rusak</option>
-                <option value="Kabel Tertekuk / Terjepit">Kabel Tertekuk / Terjepit</option>
-                <option value="Pigtail / Tray Patah">Pigtail / Tray Patah</option>
-                <option value="Sarang Serangga / Air Masuk">Sarang Serangga / Air Masuk</option>
-              </select>
-            </div>
-
-            {/* Geolocation GPS */}
-            <div className="space-y-1 lg:col-span-2">
-              <div className="flex items-center justify-between">
-                <label className={lc}>Koordinat GPS Geotagging</label>
-                <button
-                  type="button"
-                  onClick={handleGetLocation}
-                  className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <IconLocation />
-                  <span>Ambil GPS Saat Ini</span>
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={formData.latitude}
-                  onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                  placeholder="Latitude (misal: -0.793214)"
-                  className={fc + ' font-mono'}
-                />
-                <input
-                  type="text"
-                  value={formData.longitude}
-                  onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                  placeholder="Longitude (misal: 100.654321)"
-                  className={fc + ' font-mono'}
-                />
-              </div>
-            </div>
-
-            {/* Nama Teknisi */}
-            <div className="space-y-1">
-              <label className={lc}>Nama Teknisi / Petugas</label>
-              <input
-                type="text"
-                value={formData.technician_name}
-                onChange={(e) => setFormData({ ...formData, technician_name: e.target.value })}
-                placeholder="Nama Teknisi"
-                className={fc}
-              />
-            </div>
-
-            {/* Catatan Lapangan */}
-            <div className="space-y-1 lg:col-span-3">
-              <label className={lc}>Catatan Teknis / Rekomendasi</label>
-              <textarea
-                rows={2}
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Catatan kondisi redaman, port kosong, atau perbaikan yang dilakukan..."
-                className={fc}
-              />
-            </div>
-
-          </div>
-
-          {/* ── DUAL WATERMARKED PHOTO SECTION ── */}
-          <div className="border-t border-slate-200 dark:border-neutral-800 pt-6 space-y-4">
+          <div className="border-b border-slate-200 dark:border-neutral-800 pb-4 flex items-center justify-between">
             <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-black dark:text-white flex items-center gap-2">
-                <IconCamera />
-                <span>Dokumentasi Foto Bukti Lapangan (Watermarked)</span>
-              </h3>
+              <h2 className="text-base font-bold text-black dark:text-white">Verifikasi Redaman Cepat</h2>
               <p className="text-xs text-neutral-500 mt-0.5">
-                Ambil foto fisik ODP dan foto display alat OPM. Timestamp &amp; geotagging akan otomatis tertempel di foto.
+                Ambil foto layar OPM untuk membaca angka redaman otomatis tanpa ketik manual
               </p>
             </div>
+            <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-neutral-900 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-neutral-700 flex items-center gap-1">
+              <IconSparkles /> Auto-Scan OCR Aktif
+            </span>
+          </div>
 
+          {/* ── DUAL WATERMARKED PHOTO SECTION (BAGIAN UTAMA) ── */}
+          <div className="space-y-3">
+            <label className={lc}>Dokumentasi Foto Bukti Lapangan (Watermarked) *</label>
+            
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               
-              {/* Card Foto 1: Fisik Box ODP */}
+              {/* Foto 1: Fisik ODP */}
               <div className="p-4 rounded-2xl border border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-neutral-950 flex flex-col items-center justify-center space-y-3 min-h-[220px]">
                 <div className="text-center">
                   <div className="font-bold text-xs text-black dark:text-white">1. Foto Fisik Box ODP</div>
-                  <div className="text-[11px] text-neutral-500">Kondisi box, kerapian kabel &amp; adaptor</div>
+                  <div className="text-[11px] text-neutral-500">Kondisi fisik luar/dalam box ODP</div>
                 </div>
 
                 {formData.odp_photo ? (
-                  <div className="relative group">
+                  <div className="relative group w-full flex flex-col items-center">
                     <img
                       src={formData.odp_photo}
                       alt="Foto Fisik ODP"
-                      className="w-full max-h-48 object-cover rounded-xl border border-neutral-700 shadow-md"
+                      className="w-full max-h-44 object-cover rounded-xl border border-neutral-700 shadow-sm"
                     />
-                    <div className="flex items-center gap-2 mt-2 justify-center">
+                    <div className="flex items-center gap-2 mt-2">
                       <button
                         type="button"
                         onClick={() => openCamera('odp_photo', 'Foto Fisik Box ODP', 'Foto ulang kondisi box ODP')}
@@ -676,30 +490,33 @@ export default function OdpCheckManagement() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => openCamera('odp_photo', 'Foto Fisik Box ODP', 'Arahkan kamera ke box ODP dan splitter')}
+                    onClick={() => openCamera('odp_photo', 'Foto Fisik Box ODP', 'Arahkan kamera ke box ODP')}
                     className="px-5 py-3 rounded-2xl bg-white dark:bg-neutral-900 border border-slate-300 dark:border-neutral-700 text-black dark:text-white font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 transition-all flex items-center gap-2 cursor-pointer shadow-xs"
                   >
                     <IconCamera />
-                    <span>Buka Kamera Fisik ODP</span>
+                    <span>Ambil Foto Fisik ODP</span>
                   </button>
                 )}
               </div>
 
-              {/* Card Foto 2: Display Hasil OPM */}
+              {/* Foto 2: Layar OPM (Memicu OCR) */}
               <div className="p-4 rounded-2xl border border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-neutral-950 flex flex-col items-center justify-center space-y-3 min-h-[220px]">
                 <div className="text-center">
-                  <div className="font-bold text-xs text-black dark:text-white">2. Foto Display Alat Ukur OPM</div>
-                  <div className="text-[11px] text-neutral-500">Angka redaman (dBm) &amp; panjang gelombang (1310/1490/1550nm)</div>
+                  <div className="font-bold text-xs text-black dark:text-white flex items-center justify-center gap-1.5">
+                    <span>2. Foto Display Alat Ukur OPM</span>
+                    <IconSparkles />
+                  </div>
+                  <div className="text-[11px] text-neutral-500">Angka redaman akan terbaca otomatis dari foto</div>
                 </div>
 
                 {formData.opm_photo ? (
-                  <div className="relative group">
+                  <div className="relative group w-full flex flex-col items-center">
                     <img
                       src={formData.opm_photo}
                       alt="Foto Display OPM"
-                      className="w-full max-h-48 object-cover rounded-xl border border-neutral-700 shadow-md"
+                      className="w-full max-h-44 object-cover rounded-xl border border-neutral-700 shadow-sm"
                     />
-                    <div className="flex items-center gap-2 mt-2 justify-center">
+                    <div className="flex items-center gap-2 mt-2">
                       <button
                         type="button"
                         onClick={() => openCamera('opm_photo', 'Foto Display OPM', 'Foto ulang layar alat ukur OPM')}
@@ -709,7 +526,10 @@ export default function OdpCheckManagement() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, opm_photo: null })}
+                        onClick={() => {
+                          setFormData({ ...formData, opm_photo: null, power_measurement_dbm: '' });
+                          setOcrMessage(null);
+                        }}
                         className="px-3 py-1.5 rounded-lg border border-rose-300 dark:border-rose-800 text-rose-600 text-[11px] font-bold hover:bg-rose-50 dark:hover:bg-rose-950 cursor-pointer"
                       >
                         Hapus
@@ -719,16 +539,131 @@ export default function OdpCheckManagement() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => openCamera('opm_photo', 'Foto Display OPM', 'Arahkan kamera ke layar alat ukur OPM')}
-                    className="px-5 py-3 rounded-2xl bg-white dark:bg-neutral-900 border border-slate-300 dark:border-neutral-700 text-black dark:text-white font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 transition-all flex items-center gap-2 cursor-pointer shadow-xs"
+                    onClick={() => openCamera('opm_photo', 'Foto Display OPM', 'Arahkan kamera tegak lurus ke layar LCD alat OPM')}
+                    className="px-5 py-3 rounded-2xl bg-black dark:bg-white text-white dark:text-black font-bold text-xs hover:bg-neutral-800 dark:hover:bg-neutral-200 transition-all flex items-center gap-2 cursor-pointer shadow-xs"
                   >
                     <IconCamera />
-                    <span>Buka Kamera Layar OPM</span>
+                    <span>Ambil Foto Layar OPM (Scan dBm)</span>
                   </button>
                 )}
               </div>
 
             </div>
+
+            {/* OCR Banner Status */}
+            {isScanningOcr && (
+              <div className="p-3 rounded-xl bg-blue-50 dark:bg-neutral-900 border border-blue-200 dark:border-neutral-700 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center gap-2 animate-pulse">
+                <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                <span>Memindai angka redaman dari layar OPM...</span>
+              </div>
+            )}
+
+            {ocrMessage && !isScanningOcr && (
+              <div className="p-3 rounded-xl bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 text-xs font-bold text-black dark:text-white flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <IconSparkles />
+                  <span>{ocrMessage}</span>
+                </div>
+                {formData.power_measurement_dbm && (
+                  <span className="font-mono text-sm px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                    {formData.power_measurement_dbm} dBm
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── 4 ELEMEN INPUT LAINNYA ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-200 dark:border-neutral-800 pt-5">
+            
+            {/* 1. Nama / Label ODP */}
+            <div className="space-y-1 sm:col-span-2">
+              <label className={lc}>1. Nama / Label ODP *</label>
+              <input
+                type="text"
+                value={formData.odp_name}
+                onChange={(e) => setFormData({ ...formData, odp_name: e.target.value })}
+                placeholder="Contoh: ODP-01 / ODP Simpang Rumbio / ODP Belakang Kantor"
+                className={fc + ' text-sm font-bold'}
+                required
+              />
+            </div>
+
+            {/* 2. Nilai Redaman OPM (dBm) */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className={lc}>2. Nilai Redaman OPM (dBm) *</label>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    powerPreview.color === 'emerald'
+                      ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400'
+                      : powerPreview.color === 'amber'
+                      ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400'
+                      : powerPreview.color === 'rose'
+                      ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400'
+                      : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-500'
+                  }`}
+                >
+                  {powerPreview.label}
+                </span>
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.power_measurement_dbm}
+                  onChange={(e) => setFormData({ ...formData, power_measurement_dbm: e.target.value })}
+                  placeholder="-23.54 (Terisi otomatis via scan foto OPM)"
+                  className={fc + ' font-mono text-sm font-bold'}
+                  required
+                />
+                <span className="absolute right-3.5 top-2.5 text-xs text-neutral-500 font-bold">dBm</span>
+              </div>
+            </div>
+
+            {/* 3. Nama Teknisi */}
+            <div className="space-y-1">
+              <label className={lc}>3. Nama Teknisi / Petugas</label>
+              <input
+                type="text"
+                value={formData.technician_name}
+                onChange={(e) => setFormData({ ...formData, technician_name: e.target.value })}
+                placeholder="Nama Teknisi"
+                className={fc}
+              />
+            </div>
+
+            {/* 4. Koordinat GPS Geotagging */}
+            <div className="space-y-1 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className={lc}>4. Koordinat GPS Geotagging</label>
+                <button
+                  type="button"
+                  onClick={handleGetLocation}
+                  className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <IconLocation />
+                  <span>Ambil / Refresh GPS</span>
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={formData.latitude}
+                  onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                  placeholder="Latitude (GPS Otomatis)"
+                  className={fc + ' font-mono text-xs'}
+                />
+                <input
+                  type="text"
+                  value={formData.longitude}
+                  onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                  placeholder="Longitude (GPS Otomatis)"
+                  className={fc + ' font-mono text-xs'}
+                />
+              </div>
+            </div>
+
           </div>
 
           {/* ── Submit Action Buttons ── */}
@@ -768,7 +703,7 @@ export default function OdpCheckManagement() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari ODP, teknisi, lokasi..."
+                placeholder="Cari ODP, teknisi, tanggal..."
                 className={fc}
               />
             </div>
@@ -814,11 +749,10 @@ export default function OdpCheckManagement() {
               <thead className="bg-slate-50 dark:bg-neutral-950 border-b border-slate-200 dark:border-neutral-800 uppercase tracking-wider text-[11px] font-bold">
                 <tr>
                   <th className="py-3 px-4">Waktu</th>
-                  <th className="py-3 px-4">ODP &amp; Port</th>
+                  <th className="py-3 px-4">Nama / Label ODP</th>
                   <th className="py-3 px-4">Redaman OPM</th>
-                  <th className="py-3 px-4">Kondisi Fisik</th>
                   <th className="py-3 px-4">Foto Watermark</th>
-                  <th className="py-3 px-4">Teknisi Lapangan</th>
+                  <th className="py-3 px-4">Teknisi</th>
                   <th className="py-3 px-4">Telegram</th>
                   <th className="py-3 px-4 text-right">Aksi</th>
                 </tr>
@@ -826,14 +760,14 @@ export default function OdpCheckManagement() {
               <tbody className="divide-y divide-slate-100 dark:divide-neutral-900">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-neutral-500 italic">
+                    <td colSpan={7} className="py-8 text-center text-neutral-500 italic">
                       Memuat data histori pengukuran...
                     </td>
                   </tr>
                 ) : measurements.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-neutral-500 italic">
-                      Belum ada data pengukuran redaman ODP yang tersimpan.
+                    <td colSpan={7} className="py-8 text-center text-neutral-500 italic">
+                      Belum ada data pengukuran redaman ODP.
                     </td>
                   </tr>
                 ) : (
@@ -849,12 +783,16 @@ export default function OdpCheckManagement() {
                         })}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="font-bold font-mono">{m.odp_code}</div>
-                        <div className="text-[11px] text-neutral-500">{m.port_number}</div>
+                        <div className="font-bold">{m.odp_name || m.odp_code}</div>
+                        {m.latitude && m.longitude && (
+                          <div className="text-[10px] text-neutral-500 font-mono">
+                            GPS: {Number(m.latitude).toFixed(4)}, {Number(m.longitude).toFixed(4)}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono font-bold ${
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-mono font-bold ${
                             m.power_status === 'good'
                               ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400'
                               : m.power_status === 'warning'
@@ -865,15 +803,12 @@ export default function OdpCheckManagement() {
                           {m.power_measurement_dbm} dBm
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-[11px]">
-                        {m.odp_condition}
-                      </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           {m.odp_photo_url && (
                             <button
                               type="button"
-                              onClick={() => setViewingPhoto({ url: m.odp_photo_url, title: `Foto ODP - ${m.odp_code}` })}
+                              onClick={() => setViewingPhoto({ url: m.odp_photo_url, title: `Foto Fisik ODP - ${m.odp_name || m.odp_code}` })}
                               className="px-2 py-1 rounded bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 text-[10px] font-bold hover:bg-slate-200 dark:hover:bg-neutral-800 cursor-pointer flex items-center gap-1"
                             >
                               <IconEye /> ODP
@@ -882,7 +817,7 @@ export default function OdpCheckManagement() {
                           {m.opm_photo_url && (
                             <button
                               type="button"
-                              onClick={() => setViewingPhoto({ url: m.opm_photo_url, title: `Foto OPM - ${m.odp_code}` })}
+                              onClick={() => setViewingPhoto({ url: m.opm_photo_url, title: `Foto Display OPM - ${m.odp_name || m.odp_code}` })}
                               className="px-2 py-1 rounded bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 text-[10px] font-bold hover:bg-slate-200 dark:hover:bg-neutral-800 cursor-pointer flex items-center gap-1"
                             >
                               <IconEye /> OPM
@@ -905,7 +840,7 @@ export default function OdpCheckManagement() {
                           <button
                             type="button"
                             disabled={forwardingId === m.id}
-                            onClick={() => handleForwardTelegram(m.id, m.odp_code)}
+                            onClick={() => handleForwardTelegram(m.id, m.odp_name || m.odp_code)}
                             className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 text-[11px] font-bold hover:bg-slate-100 dark:hover:bg-neutral-900 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
                             title="Forward Laporan ke Telegram"
                           >
@@ -917,7 +852,7 @@ export default function OdpCheckManagement() {
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         <button
                           type="button"
-                          onClick={() => handleDelete(m.id, m.odp_code)}
+                          onClick={() => handleDelete(m.id, m.odp_name || m.odp_code)}
                           className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors cursor-pointer"
                           title="Hapus Data"
                         >
@@ -967,8 +902,8 @@ export default function OdpCheckManagement() {
         title={cameraModal.title}
         subtitle={cameraModal.subtitle}
         metaData={{
-          odp_code: formData.odp_code,
-          port_number: formData.port_number,
+          odp_code: formData.odp_name || 'ODP-LAPANGAN',
+          port_number: 'Distribusi',
           power_measurement_dbm: formData.power_measurement_dbm,
           power_status: powerPreview.label,
           technician_name: formData.technician_name,

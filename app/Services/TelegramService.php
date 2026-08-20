@@ -606,19 +606,11 @@ class TelegramService
 
             $caption = "<b>LAPORAN PENGUKURAN REDAMAN ODP</b>\n";
             $caption .= "━━━━━━━━━━━━━━━━━━━━\n";
-            $caption .= "• <b>Kode ODP:</b> <code>" . e($measurement->odp_code) . "</code>\n";
-            if (!empty($measurement->odp_name)) {
-                $caption .= "• <b>Nama ODP:</b> " . e($measurement->odp_name) . "\n";
-            }
-            $caption .= "• <b>Port Terukur:</b> " . e($measurement->port_number) . "\n";
+            $caption .= "• <b>Nama / Label ODP:</b> <b>" . e($measurement->odp_name ?: $measurement->odp_code) . "</b>\n";
             $caption .= "• <b>Hasil Ukur OPM:</b> <b>" . e($measurement->power_measurement_dbm) . " dBm</b> [{$statusText}]\n";
-            $caption .= "• <b>Kondisi Fisik:</b> " . e($measurement->odp_condition) . "\n";
             $caption .= "• <b>Koordinat GPS:</b> <code>{$coords}</code>\n";
             $caption .= "• <b>Petugas / Teknisi:</b> " . e($measurement->technician_name ?? 'Teknisi Lapangan') . "\n";
             $caption .= "• <b>Waktu Cek:</b> {$timeStr}\n";
-            if (!empty($measurement->notes)) {
-                $caption .= "• <b>Catatan:</b> " . e($measurement->notes) . "\n";
-            }
             $caption .= "━━━━━━━━━━━━━━━━━━━━\n";
             $caption .= "<i>Verifikasi Lapangan Fiber-UNMS Enterprise</i>";
 
