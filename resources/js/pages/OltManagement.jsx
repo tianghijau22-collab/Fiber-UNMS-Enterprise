@@ -59,22 +59,22 @@ const DEPLOYMENT_MODES = [
   {
     value: 'vpn',
     label: 'VPN Tunnel / L2TP Perusahaan (Rekomendasi)',
-    desc: 'VPS terhubung ke jaringan kantor via VPN L2TP Perusahaan atau Tunnel MikroTik. SNMP & Telnet langsung menjangkau IP lokal OLT.',
-    icon: '',
+    desc: 'VPS terhubung ke jaringan ISP via VPN L2TP / Tunnel MikroTik. SNMP langsung menjangkau IP lokal OLT.',
+    icon: '🛡️',
     color: 'emerald',
   },
   {
     value: 'direct',
     label: 'Direct LAN (Satu Jaringan)',
     desc: 'Server UNMS berada dalam satu jaringan lokal yang sama persis dengan OLT.',
-    icon: '',
+    icon: '🏢',
     color: 'indigo',
   },
   {
     value: 'probe',
     label: 'Local Probe Agent (Cloud External)',
     desc: 'Server di luar ISP tanpa VPN. Memerlukan NMS Probe Agent yang diinstal di dalam jaringan lokal kantor.',
-    icon: '',
+    icon: '📡',
     color: 'amber',
   },
 ];
@@ -95,6 +95,19 @@ export default function OltManagement() {
   const [selectedSlotFilter, setSelectedSlotFilter] = useState(null);
   const [selectedPortFilter, setSelectedPortFilter] = useState(null);
   const [oltTopology, setOltTopology] = useState([]);
+
+  // ONU Search & Filter
+  const [onuSearchQuery, setOnuSearchQuery] = useState('');
+  const [onuStatusFilter, setOnuStatusFilter] = useState('all'); // all, online, los, high_loss
+
+  // Optical Power Modal
+  const [selectedOnuForOptical, setSelectedOnuForOptical] = useState(null);
+
+  // SNMP Diagnostics Modal
+  const [showSnmpDiagModal, setShowSnmpDiagModal] = useState(false);
+
+  // Live Polling Interval (0 = Manual, 5 = 5s, 10 = 10s, 30 = 30s)
+  const [pollingInterval, setPollingInterval] = useState(0);
 
   // Fetch OLT Topology (ODCs & ODPs connected to this OLT)
   const fetchOltTopology = (oltId) => {
@@ -162,26 +175,21 @@ export default function OltManagement() {
     return '***.***.***.***';
   };
 
-  // ── Config Form State (per device) ──────────────────────────────────────────
+  // ── Pure SNMP Config Form State (per device) ────────────────────────────────
   const defaultConfigForm = {
-    deployment_mode: 'direct',
+    deployment_mode: 'vpn',
     // SNMP
     snmp_version: 'v2c',
     snmp_community_type: 'public',
     snmp_community: '',
     snmp_port: 161,
-    snmp_timeout: 5,
+    snmp_timeout: 3,
     // SNMPv3
     snmp_v3_username: '',
     snmp_v3_auth_protocol: 'SHA',
     snmp_v3_auth_password: '',
     snmp_v3_priv_protocol: 'AES',
     snmp_v3_priv_password: '',
-    // CLI
-    cli_protocol: 'telnet',
-    cli_username: 'admin',
-    cli_password: '',
-    cli_port: 23,
     // Probe Agent
     probe_agent_url: '',
     probe_agent_token: '',
@@ -192,7 +200,7 @@ export default function OltManagement() {
   const defaultNewOltForm = {
     name: '', code: '', vendor: 'ZTE', model: 'ZXAN C300',
     location: '', ip_address: '', total_ports: 16,
-    deployment_mode: 'direct', snmp_version: 'v2c',
+    deployment_mode: 'vpn', snmp_version: 'v2c',
     snmp_community_type: 'public', snmp_community: '',
   };
   const [newOltForm, setNewOltForm] = useState(defaultNewOltForm);
@@ -201,7 +209,7 @@ export default function OltManagement() {
   const [editOltForm, setEditOltForm] = useState({
     name: '', code: '', vendor: 'ZTE', model: 'ZXAN C300',
     location: '', ip_address: '', total_ports: 16,
-    deployment_mode: 'direct', snmp_version: 'v2c',
+    deployment_mode: 'vpn', snmp_version: 'v2c',
     snmp_community_type: 'public',
   });
 
@@ -232,10 +240,21 @@ export default function OltManagement() {
   useEffect(() => { fetchOlts(false); }, [fetchOlts]);
 
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchOlts);
-
   const activeOlt = olts.find(o => o.id === selectedOltId);
 
-  // ─── Fetch OLT Hardware Telemetry ────────────────────────────────────────────
+  // Live Polling Interval Effect
+  useEffect(() => {
+    if (!pollingInterval || pollingInterval <= 0) return;
+    const timer = setInterval(() => {
+      if (activeOlt) {
+        const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
+        fetchOltHardware(vk, activeOlt.id);
+      }
+    }, pollingInterval * 1000);
+    return () => clearInterval(timer);
+  }, [pollingInterval, activeOlt]);
+
+  // ─── Fetch OLT Hardware Telemetry via SNMP ──────────────────────────────────
   const fetchOltHardware = (vendorKey, deviceId) => {
     setLoading(true);
     const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}`;
@@ -245,31 +264,24 @@ export default function OltManagement() {
       .catch(() => setLoading(false));
   };
 
-  // Jalankan saat OLT yang dipilih berubah — reset slot, port, dan test result
   useEffect(() => {
     setTestResult(null);
     setSelectedSlotFilter(null);
     setSelectedPortFilter(null);
   }, [selectedOltId]);
 
-  // Jalankan saat data activeOlt berubah (termasuk setelah fetchOlts refresh)
-  // TIDAK mereset testResult agar hasil tes koneksi tetap tampil
   useEffect(() => {
     if (activeOlt) {
       const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
       fetchOltHardware(vk, activeOlt.id);
       fetchOltTopology(activeOlt.id);
-      // Pre-fill config form from device data
       setConfigForm({
         ...defaultConfigForm,
-        deployment_mode: activeOlt.deployment_mode || 'direct',
+        deployment_mode: activeOlt.deployment_mode || 'vpn',
         snmp_version: activeOlt.snmp_version || 'v2c',
         snmp_community_type: activeOlt.snmp_community_type || 'public',
         snmp_port: activeOlt.snmp_port || 161,
-        snmp_timeout: activeOlt.snmp_timeout || 5,
-        cli_protocol: activeOlt.cli_protocol || 'telnet',
-        cli_username: activeOlt.cli_username || 'admin',
-        cli_port: activeOlt.cli_port || 23,
+        snmp_timeout: activeOlt.snmp_timeout || 3,
         probe_agent_url: activeOlt.probe_agent_url || '',
       });
     } else {
@@ -278,13 +290,12 @@ export default function OltManagement() {
     }
   }, [activeOlt?.id, activeOlt?.connection_mode, activeOlt?.ip_address]);
 
-  // ─── Test Real Connection ────────────────────────────────────────────────────
+  // ─── Test SNMP Connection ────────────────────────────────────────────────────
   const handleTestConnection = () => {
     if (!activeOlt) return;
     setTestingConnection(true);
     setTestResult(null);
 
-    // First save config, then test
     fetch(`/api/olts/${activeOlt.id}/connection-config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -300,10 +311,6 @@ export default function OltManagement() {
         snmp_v3_priv_password: configForm.snmp_v3_priv_password || undefined,
         snmp_port: configForm.snmp_port,
         snmp_timeout: configForm.snmp_timeout,
-        cli_protocol: configForm.cli_protocol,
-        cli_username: configForm.cli_username || undefined,
-        cli_password: configForm.cli_password || undefined,
-        cli_port: configForm.cli_port,
         probe_agent_url: configForm.probe_agent_url || undefined,
         probe_agent_token: configForm.probe_agent_token || undefined,
       }),
@@ -316,16 +323,15 @@ export default function OltManagement() {
       .then(res => {
         setTestResult(res.data);
         setTestingConnection(false);
-        // Refresh OLT list to get updated connection_mode
         fetchOlts();
       })
       .catch(() => {
-        setTestResult({ message: ' Gagal menghubungi server. Pastikan php artisan serve berjalan.', connection_mode: 'simulation' });
+        setTestResult({ message: '⚠️ Gagal menghubungi server.', connection_mode: 'simulation' });
         setTestingConnection(false);
       });
   };
 
-  // ─── Save Config Only ────────────────────────────────────────────────────────
+  // ─── Save SNMP Config Only ──────────────────────────────────────────────────
   const handleSaveConfig = () => {
     if (!activeOlt) return;
     setSavingConfig(true);
@@ -344,10 +350,6 @@ export default function OltManagement() {
         snmp_v3_priv_password: configForm.snmp_v3_priv_password || undefined,
         snmp_port: configForm.snmp_port,
         snmp_timeout: configForm.snmp_timeout,
-        cli_protocol: configForm.cli_protocol,
-        cli_username: configForm.cli_username || undefined,
-        cli_password: configForm.cli_password || undefined,
-        cli_port: configForm.cli_port,
         probe_agent_url: configForm.probe_agent_url || undefined,
         probe_agent_token: configForm.probe_agent_token || undefined,
       }),
@@ -355,13 +357,13 @@ export default function OltManagement() {
       .then(r => r.json())
       .then(() => {
         setSavingConfig(false);
-        showNotif(' Konfigurasi koneksi berhasil disimpan.', 'success');
+        showNotif('✅ Konfigurasi SNMP berhasil disimpan.', 'success');
         setShowConfigModal(false);
         fetchOlts();
       })
       .catch(() => {
         setSavingConfig(false);
-        showNotif(' Gagal menyimpan konfigurasi.', 'error');
+        showNotif('❌ Gagal menyimpan konfigurasi.', 'error');
       });
   };
 
@@ -404,7 +406,7 @@ export default function OltManagement() {
       location: olt.location || '',
       ip_address: olt.ip_address || '',
       total_ports: olt.total_ports || 16,
-      deployment_mode: olt.deployment_mode || 'direct',
+      deployment_mode: olt.deployment_mode || 'vpn',
       snmp_version: olt.snmp_version || 'v2c',
       snmp_community_type: olt.snmp_community_type || 'public',
     });
@@ -427,55 +429,50 @@ export default function OltManagement() {
         if (res.data) {
           setShowEditOltModal(false);
           setOlts(prev => prev.map(o => o.id === editingOlt.id ? res.data : o));
-          // If editing active OLT, refresh hardware too
           if (selectedOltId === editingOlt.id) {
             const vk = res.data.vendor_key || res.data.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
             fetchOltHardware(vk, res.data.id);
           }
-          showNotif(res.message || ' Perangkat OLT berhasil diperbarui!', 'success');
+          showNotif(res.message || '✅ Perangkat OLT berhasil diperbarui!', 'success');
           setEditingOlt(null);
         } else {
           const errors = res.errors ? Object.values(res.errors).flat().join(' ') : '';
-          showNotif(res.message || ` Gagal memperbarui OLT. ${errors}`, 'error');
+          showNotif(res.message || `❌ Gagal memperbarui OLT. ${errors}`, 'error');
         }
       })
-      .catch(() => { setSubmittingEditOlt(false); showNotif(' Gagal menghubungi server.', 'error'); });
+      .catch(() => { setSubmittingEditOlt(false); showNotif('❌ Gagal menghubungi server.', 'error'); });
   };
 
   // ─── Disconnect OLT ──────────────────────────────────────────────────────────
   const handleDisconnectOlt = (olt) => {
     if (!olt) return;
     openConfirm({
-      title: 'Hentikan Koneksi OLT?',
+      title: 'Hentikan Koneksi SNMP OLT?',
       message: (
         <span>
-          Apakah Anda yakin ingin menghentikan koneksi SNMP ke OLT <strong className="text-slate-700 dark:text-slate-200">"{olt.name}"</strong> ({olt.ip_address})? Perangkat akan beralih ke mode simulasi.
+          Apakah Anda yakin ingin memutuskan sinkronisasi live SNMP ke perangkat <strong>{olt.name}</strong> ({olt.ip_address})? Sistem akan kembali ke mode database.
         </span>
       ),
-      confirmText: 'Ya, Hentikan Koneksi',
+      confirmText: 'Ya, Hentikan SNMP',
       type: 'warning',
       onConfirm: () => {
         setDisconnectingId(olt.id);
         fetch(`/api/olts/${olt.id}/disconnect`, { method: 'POST' })
           .then(r => r.json())
           .then(res => {
-            setDisconnectingId(null);
             closeConfirm();
-            if (res.data) {
-              setOlts(prev => prev.map(o => o.id === olt.id ? res.data : o));
-              if (selectedOltId === olt.id) {
-                const vk = res.data.vendor_key || res.data.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
-                fetchOltHardware(vk, res.data.id);
-              }
-              showNotif(`⏹️ Koneksi ke ${olt.name} berhasil dihentikan.`, 'success');
-            } else {
-              showNotif(' Gagal menghentikan koneksi.', 'error');
+            setDisconnectingId(null);
+            showNotif(res.message || 'Koneksi SNMP dihentikan.', 'success');
+            setOlts(prev => prev.map(o => o.id === olt.id ? { ...o, connection_mode: 'simulation' } : o));
+            if (selectedOltId === olt.id) {
+              const vk = olt.vendor_key || olt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
+              fetchOltHardware(vk, olt.id);
             }
           })
           .catch(() => {
-            setDisconnectingId(null);
             closeConfirm();
-            showNotif(' Gagal menghubungi server.', 'error');
+            setDisconnectingId(null);
+            showNotif('Gagal menghentikan koneksi SNMP.', 'error');
           });
       },
     });
@@ -483,27 +480,21 @@ export default function OltManagement() {
 
   // ─── Delete OLT ─────────────────────────────────────────────────────────────
   const handleDeleteOlt = (olt) => {
-    if (!olt) return;
-    const oltId = typeof olt === 'object' ? olt.id : olt;
-    const oltObj = typeof olt === 'object' ? olt : olts.find(o => o.id === oltId);
-    const oltName = oltObj ? oltObj.name : 'perangkat OLT ini';
-
+    const oltId = olt.id;
     openConfirm({
       title: 'Hapus Perangkat OLT?',
       message: (
         <span>
-          Apakah Anda yakin ingin menghapus <strong className="text-slate-700 dark:text-slate-200">"{oltName}"</strong> dari registry? Data konfigurasi perangkat ini akan dihapus permanen. <br />
-          <span className="text-rose-600 dark:text-rose-400 font-bold mt-1 block">️ Tindakan ini tidak dapat dibatalkan!</span>
+          Apakah Anda yakin ingin menghapus <strong>{olt.name}</strong> ({olt.code})? Data konfigurasi SNMP perangkat ini akan dihapus dari sistem.
         </span>
       ),
-      confirmText: 'Ya, Hapus Perangkat',
+      confirmText: 'Ya, Hapus OLT',
       type: 'danger',
       onConfirm: () => {
         setDeletingId(oltId);
         fetch(`/api/olts/${oltId}`, { method: 'DELETE' })
           .then(r => r.json())
           .then(res => {
-            setDeletingId(oltId);
             closeConfirm();
             setDeletingId(null);
             showNotif(res.message || 'Perangkat OLT berhasil dihapus.', 'success');
@@ -529,13 +520,33 @@ export default function OltManagement() {
   const getConnectionBadge = (olt) => {
     const mode = olt?.connection_mode || 'simulation';
     if (mode === 'live') return { label: '● Live SNMP', cls: 'bg-emerald-400 text-emerald-950 font-bold' };
-    return { label: ' Realtime Database UNMS', cls: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold' };
+    return { label: '💾 Realtime Database UNMS', cls: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold' };
   };
 
   const badge = getConnectionBadge(activeOlt);
 
   const inputCls = "w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium";
   const labelCls = "block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1";
+
+  // ─── Filtered ONU List ───────────────────────────────────────────────────────
+  const filteredOnus = (oltData?.onu_list || []).filter(onu => {
+    if (selectedPortFilter && onu.port !== selectedPortFilter && !onu.port.startsWith(selectedPortFilter)) {
+      return false;
+    }
+    if (onuStatusFilter === 'online' && onu.status !== 'Online') return false;
+    if (onuStatusFilter === 'los' && onu.status === 'Online') return false;
+    if (onuStatusFilter === 'high_loss' && onu.rx_power >= -27) return false;
+
+    if (onuSearchQuery) {
+      const q = onuSearchQuery.toLowerCase();
+      const matchName = onu.customer_name?.toLowerCase().includes(q);
+      const matchSn = onu.serial_number?.toLowerCase().includes(q);
+      const matchPort = onu.port?.toLowerCase().includes(q);
+      const matchIp = onu.ip_address?.toLowerCase().includes(q);
+      return matchName || matchSn || matchPort || matchIp;
+    }
+    return true;
+  });
 
   // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
@@ -549,7 +560,7 @@ export default function OltManagement() {
           </h1>
           <div className="flex items-center flex-wrap gap-2 mt-0.5">
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Monitoring &amp; konfigurasi koneksi OLT —
+              Akuisisi Data &amp; Monitoring Telemetri via SNMP —
             </p>
             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${badge.cls}`}>
               {badge.label}
@@ -565,30 +576,55 @@ export default function OltManagement() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {/* Live Polling Interval Selector */}
+          <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-bold shadow-xs">
+            <span className={`w-2 h-2 rounded-full ${pollingInterval > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+            <span className="text-slate-600 dark:text-slate-400">Polling:</span>
+            <select
+              value={pollingInterval}
+              onChange={(e) => setPollingInterval(Number(e.target.value))}
+              className="bg-transparent border-none text-xs font-bold text-indigo-600 dark:text-indigo-400 focus:outline-none cursor-pointer pr-1"
+            >
+              <option value={0}>Manual</option>
+              <option value={5}>Setiap 5 Detik</option>
+              <option value={10}>Setiap 10 Detik</option>
+              <option value={30}>Setiap 30 Detik</option>
+            </select>
+          </div>
+
           <RefreshButton
             isRefreshing={isRefreshing}
             onRefresh={triggerRefresh}
             lastUpdatedText={timeAgoText}
             label="Segarkan OLT"
           />
+          {activeOlt && (
+            <button
+              onClick={() => setShowSnmpDiagModal(true)}
+              className="px-4 py-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 font-bold text-xs transition-all flex items-center space-x-1.5 cursor-pointer shadow-xs"
+              title="Uji OID MIB SNMP Live langsung dari browser"
+            >
+              <span>📡 Diagnostic SNMP &amp; MIB</span>
+            </button>
+          )}
           <button
             onClick={() => setShowVpnModal(true)}
             className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-black dark:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 font-bold text-xs transition-all flex items-center space-x-1.5 cursor-pointer shadow-xs"
             title="Panduan VPN L2TP Perusahaan, Script MikroTik & Server Lokal On-Premise"
           >
             <IconNetwork />
-            <span>Panduan Integrasi Jaringan (VPN / Local LAN)</span>
+            <span>Panduan Jaringan (VPN / MikroTik)</span>
           </button>
           {canCrud && (
             <button onClick={() => setShowAddOltModal(true)}
               className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 border border-slate-700 dark:border-slate-300">
-              <IconPlus /><span>Tambah Perangkat OLT Baru</span>
+              <IconPlus /><span>Tambah OLT Baru</span>
             </button>
           )}
           {canCrud && (
             <button onClick={() => { setTestResult(null); setShowConfigModal(true); }}
               className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 font-semibold text-xs transition-all flex items-center space-x-1.5">
-              <IconWifi /><span>Koneksikan Perangkat</span>
+              <IconWifi /><span>Konfigurasi SNMP</span>
             </button>
           )}
           {activeOlt && activeOlt.connection_mode === 'live' && (
@@ -596,7 +632,7 @@ export default function OltManagement() {
               onClick={() => handleDisconnectOlt(activeOlt)}
               disabled={disconnectingId === activeOlt.id}
               className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg transition-all flex items-center space-x-1.5 disabled:opacity-50">
-              {disconnectingId === activeOlt.id ? <Spinner /> : <span>Hentikan Koneksi</span>}
+              {disconnectingId === activeOlt.id ? <Spinner /> : <span>Hentikan SNMP</span>}
             </button>
           )}
         </div>
@@ -612,6 +648,52 @@ export default function OltManagement() {
           <button onClick={() => setNotification(null)} className="font-semibold text-lg leading-none opacity-60 hover:opacity-100">&times;</button>
         </div>
       )}
+
+      {/* ── Architecture Pipeline Banner ───────────────────────────────── */}
+      <div className="bg-slate-50/80 dark:bg-neutral-950 border border-slate-200 dark:border-[#222222] p-4 sm:p-5 rounded-lg shadow-2xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                Alur Koneksi
+              </span>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                Arsitektur Telemetri OLT via VPN &amp; SNMP
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Sistem UNMS mengambil data redaman &amp; status port OLT murni via query SNMP (UDP 161) melalui terowongan VPN router kantor Anda.
+            </p>
+          </div>
+
+          {/* 3-Hop Pipeline Map */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
+            <div className="p-2.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-[#222222] flex items-center gap-2">
+              <span className="text-base">🏢</span>
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">1. OLT Fisik</div>
+                <div className="font-bold text-slate-800 dark:text-slate-200">Port SNMP 161 (public)</div>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-[#222222] flex items-center gap-2">
+              <span className="text-base">🛡️</span>
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">2. VPN Gateway</div>
+                <div className="font-bold text-emerald-600 dark:text-emerald-400">MikroTik (10.254.0.2)</div>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-[#222222] flex items-center gap-2">
+              <span className="text-base">☁️</span>
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">3. UNMS Cloud</div>
+                <div className="font-bold text-indigo-600 dark:text-indigo-400">Live Polling (103.89.6.125)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ── OLT Selector ────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs space-y-4">
@@ -653,13 +735,13 @@ export default function OltManagement() {
                 <button onClick={() => setSelectedOltId(o.id)} className="w-full text-left">
                   <div className="flex items-center justify-between">
                     <span className={`text-[10px] font-extrabold uppercase ${isActive ? 'text-indigo-200' : 'text-indigo-600 dark:text-indigo-400'}`}>{o.vendor}</span>
-                    <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-emerald-400' : 'bg-amber-400'}`} title={isLive ? 'Live' : 'Simulation'} />
+                    <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-emerald-400' : 'bg-amber-400'}`} title={isLive ? 'Live SNMP' : 'Database UNMS'} />
                   </div>
                   <div className="font-bold text-xs mt-1 truncate">{o.name}</div>
                   <div className={`text-[11px] font-mono mt-0.5 ${isActive ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'}`}>{maskIpAddress(o.ip_address)}</div>
                   <div className={`text-[10px] mt-0.5 truncate ${isActive ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>{o.location}</div>
                 </button>
-                {/* Action buttons: Disconnect + Edit + Delete */}
+                {/* Action buttons */}
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                   {isLive && (
                     <button
@@ -675,14 +757,14 @@ export default function OltManagement() {
                       <button
                         onClick={(e) => { e.stopPropagation(); handleOpenEditModal(o); }}
                         className={`p-1 rounded-lg ${isActive ? 'text-indigo-200 hover:bg-white/20' : 'text-slate-400 dark:text-slate-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
-                        title="Edit perangkat">
+                        title="Edit OLT">
                         <IconEdit />
                       </button>
                       <button
                         onClick={() => handleDeleteOlt(o)}
                         disabled={deletingId === o.id}
                         className={`p-1 rounded-lg ${isActive ? 'text-indigo-200 hover:bg-white/20' : 'text-slate-400 dark:text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-600 dark:hover:text-rose-400'}`}
-                        title="Hapus perangkat">
+                        title="Hapus OLT">
                         {deletingId === o.id ? <Spinner /> : <IconTrash />}
                       </button>
                     </>
@@ -697,10 +779,10 @@ export default function OltManagement() {
       {/* ── Empty State ── */}
       {!loadingOltList && olts.length === 0 && (
         <div className="bg-white dark:bg-slate-900 p-12 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs text-center space-y-4">
-          <div className="text-4xl"></div>
+          <div className="text-4xl">🏢</div>
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Belum Ada Perangkat OLT Terdaftar</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            Database OLT saat ini kosong. Silakan tambahkan perangkat OLT aktif Anda (ZTE, Hioso, HSGQ, Tarmoc, dll.) untuk mulai pemantauan telemetri.
+            Database OLT saat ini kosong. Silakan tambahkan perangkat OLT aktif Anda (ZTE, Huawei, VSOL, HSGQ, Hioso, Tarmoc, BDCOM, FiberHome) untuk mulai pemantauan telemetri via SNMP.
           </p>
           <button
             onClick={() => setShowAddOltModal(true)}
@@ -711,11 +793,11 @@ export default function OltManagement() {
         </div>
       )}
 
-      {/* ── Hardware Telemetry ───────────────────────────────────────────────── */}
+      {/* ── Hardware Telemetry via SNMP ───────────────────────────────────────── */}
       {loading ? (
         <div className="bg-white dark:bg-slate-900 p-12 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs text-center text-slate-500 dark:text-slate-400 flex flex-col items-center space-y-3">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-medium">Menghubungkan ke telemetri {activeOlt?.name}...</span>
+          <span className="text-sm font-medium">Melakukan polling SNMP ke telemetri {activeOlt?.name}...</span>
         </div>
       ) : oltData && (
         <div className="space-y-6">
@@ -727,11 +809,11 @@ export default function OltManagement() {
               : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
               }`}>
               <div className="flex items-center space-x-2">
-                <span>{oltData.device_info._source === 'live_snmp' ? '' : ''}</span>
+                <span>{oltData.device_info._source === 'live_snmp' ? '🟢' : '💾'}</span>
                 <span>
                   {oltData.device_info._source === 'live_snmp'
-                    ? `Data real dari OLT via SNMP — ${maskIpAddress(activeOlt?.ip_address)}`
-                    : 'Data Realtime Database UNMS (OLT belum terhubung Live SNMP). Klik "Koneksikan Perangkat" untuk mengaktifkan sinkronisasi live.'}
+                    ? `Data real dari OLT via SNMP — IP: ${maskIpAddress(activeOlt?.ip_address)} (Port UDP 161)`
+                    : 'Data Realtime Database UNMS (OLT belum terhubung Live SNMP). Klik "Konfigurasi SNMP" untuk menguji query live.'}
                 </span>
               </div>
               {oltData.device_info._source === 'live_snmp' && activeOlt && (
@@ -739,7 +821,7 @@ export default function OltManagement() {
                   onClick={() => handleDisconnectOlt(activeOlt)}
                   disabled={disconnectingId === activeOlt.id}
                   className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-colors flex items-center space-x-1 disabled:opacity-50">
-                  {disconnectingId === activeOlt.id ? <Spinner /> : <span>⏹️ Hentikan Koneksi</span>}
+                  {disconnectingId === activeOlt.id ? <Spinner /> : <span>⏹️ Hentikan SNMP</span>}
                 </button>
               )}
             </div>
@@ -753,12 +835,12 @@ export default function OltManagement() {
               <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mt-1">{activeOlt?.location}</div>
             </div>
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
-              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">IP Address & Firmware</div>
+              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">IP SNMP & Firmware</div>
               <div className="text-lg font-mono font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">{maskIpAddress(activeOlt?.ip_address)}</div>
               <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Firmware: {oltData.device_info?.firmware}</div>
             </div>
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
-              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">CPU & Suhu Chassis</div>
+              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">CPU & Suhu Chassis (SNMP)</div>
               <div className="flex items-center space-x-3 mt-2">
                 <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{oltData.device_info?.cpu_usage ?? '--'}%</span>
                 <div className="flex-1 bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
@@ -774,7 +856,7 @@ export default function OltManagement() {
               <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-2">
                 {oltData.unconfigured_onus?.length ?? 0} Perangkat
               </div>
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Menunggu validasi & aktivasi manual</div>
+              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Menunggu otorisasi via Database</div>
             </div>
           </div>
 
@@ -831,34 +913,6 @@ export default function OltManagement() {
               })}
             </div>
           </div>
-
-          {/* Auto-Discovery */}
-          {oltData.unconfigured_onus?.length > 0 && (
-            <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 p-6 rounded-2xl shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="w-3 h-3 rounded-full bg-amber-500 animate-ping" />
-                  <h3 className="font-bold text-amber-900 dark:text-amber-400 text-base">ONU Baru Terdeteksi — {activeOlt?.name}</h3>
-                </div>
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-900/50">Auto-Discovery Active</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {oltData.unconfigured_onus.map(onu => (
-                  <div key={onu.serial_number} className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/30 p-4 rounded-xl flex items-center justify-between shadow-xs">
-                    <div>
-                      <div className="text-sm font-bold text-slate-800 dark:text-slate-100 font-mono">{onu.serial_number}</div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Port: <span className="font-semibold text-indigo-600 dark:text-indigo-400">{onu.port}</span> | {onu.vendor} ({onu.model})</div>
-                      <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Terdeteksi: {onu.discovered_at}</div>
-                    </div>
-                    <span className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold text-xs flex items-center space-x-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-400" />
-                      <span>Terdeteksi (Registrasi via CLI/App Terpisah)</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* PON Ports */}
           {(() => {
@@ -1019,7 +1073,6 @@ export default function OltManagement() {
                           <p className="text-xs text-slate-500 dark:text-slate-400"> POP Induk: <strong className="text-slate-700 dark:text-slate-200">{odc.parent_node.name}</strong></p>
                         )}
 
-                        {/* ODP List inside ODC */}
                         {odc.odps && odc.odps.length > 0 ? (
                           <div>
                             <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
@@ -1045,94 +1098,132 @@ export default function OltManagement() {
             </div>
           )}
 
-          {/* ONU Table */}
-          {(() => {
-            const displayOnus = selectedPortFilter
-              ? oltData.onu_list?.filter(onu => onu.port === selectedPortFilter || onu.port.startsWith(selectedPortFilter))
-              : oltData.onu_list;
-
-            return (
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">
-                      {selectedPortFilter
-                        ? `Daftar ONU Filtered Port [ ${selectedPortFilter} ]`
-                        : `Daftar Semua ONU Terdaftar — ${activeOlt?.name}`}
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      {selectedPortFilter
-                        ? `Menampilkan ${displayOnus?.length ?? 0} ONU yang terhubung pada port ${selectedPortFilter}`
-                        : `Menampilkan total ${displayOnus?.length ?? 0} ONU terdaftar di seluruh port`}
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    {selectedPortFilter && (
-                      <button
-                        onClick={() => setSelectedPortFilter(null)}
-                        className="px-3 py-1.5 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center space-x-1"
-                      >
-                        <IconX />
-                        <span>Tampilkan Semua Port ({oltData.onu_list?.length ?? 0})</span>
-                      </button>
-                    )}
-                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                      {oltData.device_info?._source === 'live_snmp' ? ' Live SNMP Telemetry' : ' Realtime Database UNMS'}
-                    </span>
-                  </div>
+          {/* ONU Table with Search, Filter & Live Optical Power Inspection */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">
+                    {selectedPortFilter
+                      ? `Daftar ONU Filtered Port [ ${selectedPortFilter} ]`
+                      : `Daftar Semua ONU Terdaftar — ${activeOlt?.name}`}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Menampilkan {filteredOnus.length} dari total {oltData.onu_list?.length ?? 0} ONU terdaftar
+                  </p>
                 </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
-                      <tr>
-                        <th className="px-6 py-4">Nama Pelanggan</th>
-                        <th className="px-6 py-4">Port & ONU ID</th>
-                        <th className="px-6 py-4">Serial Number</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Redaman Rx Power</th>
-                        <th className="px-6 py-4">Jarak Fiber</th>
-                        <th className="px-6 py-4">IP Address</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {displayOnus && displayOnus.length > 0 ? (
-                        displayOnus.map(onu => (
-                          <tr key={onu.serial_number} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                            <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-100">{onu.customer_name}</td>
-                            <td className="px-6 py-4 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{onu.port} ({onu.onu_id})</td>
-                            <td className="px-6 py-4 font-mono text-xs text-slate-700 dark:text-slate-400">{onu.serial_number}</td>
-                            <td className="px-6 py-4">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${onu.status === 'Online'
-                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 animate-pulse'
-                                }`}>{onu.status}</span>
-                            </td>
-                            <td className="px-6 py-4 font-mono text-xs font-bold">
-                              <span className={onu.rx_power < -27 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>{onu.rx_power} dBm</span>
-                            </td>
-                            <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">{onu.distance_meters} m</td>
-                            <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-500">{maskIpAddress(onu.ip_address)}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={7} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
-                            Tidak ada ONU terdaftar pada port {selectedPortFilter}.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                <div className="flex items-center space-x-3">
+                  {selectedPortFilter && (
+                    <button
+                      onClick={() => setSelectedPortFilter(null)}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center space-x-1"
+                    >
+                      <IconX />
+                      <span>Tampilkan Semua Port ({oltData.onu_list?.length ?? 0})</span>
+                    </button>
+                  )}
+                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                    {oltData.device_info?._source === 'live_snmp' ? '🟢 Live SNMP Telemetry' : '💾 Realtime Database UNMS'}
+                  </span>
                 </div>
               </div>
-            );
-          })()}
+
+              {/* Search Bar & Filters */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <div className="relative flex-1 max-w-md">
+                  <input
+                    type="text"
+                    value={onuSearchQuery}
+                    onChange={e => setOnuSearchQuery(e.target.value)}
+                    placeholder="🔍 Cari Pelanggan, Serial Number (SN), Port, atau IP..."
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  />
+                  {onuSearchQuery && (
+                    <button onClick={() => setOnuSearchQuery('')} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600">✕</button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 overflow-x-auto">
+                  {[
+                    { id: 'all', label: 'Semua Status' },
+                    { id: 'online', label: '🟢 Online' },
+                    { id: 'los', label: '🔴 LOS / Offline' },
+                    { id: 'high_loss', label: '⚠️ Redaman Drop (< -27 dBm)' },
+                  ].map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setOnuStatusFilter(f.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${onuStatusFilter === f.id
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
+                  <tr>
+                    <th className="px-6 py-4">Nama Pelanggan</th>
+                    <th className="px-6 py-4">Port & ONU ID</th>
+                    <th className="px-6 py-4">Serial Number</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Redaman Rx Power</th>
+                    <th className="px-6 py-4">Jarak Fiber</th>
+                    <th className="px-6 py-4">IP Address</th>
+                    <th className="px-6 py-4 text-right">Aksi Telemetri</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredOnus.length > 0 ? (
+                    filteredOnus.map(onu => (
+                      <tr key={onu.serial_number} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-100">{onu.customer_name}</td>
+                        <td className="px-6 py-4 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{onu.port} ({onu.onu_id})</td>
+                        <td className="px-6 py-4 font-mono text-xs text-slate-700 dark:text-slate-400">{onu.serial_number}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${onu.status === 'Online'
+                            ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                            : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 animate-pulse'
+                            }`}>{onu.status}</span>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs font-bold">
+                          <span className={onu.rx_power < -27 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>{onu.rx_power} dBm</span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">{onu.distance_meters} m</td>
+                        <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-500">{maskIpAddress(onu.ip_address)}</td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => setSelectedOnuForOptical(onu)}
+                            className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
+                            title="Query live optical diagnostic data via SNMP"
+                          >
+                            <span>📶 Cek Power (SNMP)</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
+                        Tidak ada ONU yang cocok dengan kriteria pencarian/filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          MODAL: Konfigurasi Koneksi OLT (Lengkap — Dual Mode)
+          MODAL: Konfigurasi Koneksi SNMP OLT (Pure SNMP — No CLI)
       ══════════════════════════════════════════════════════════════════════ */}
       {showConfigModal && createPortal(
         <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
@@ -1141,7 +1232,7 @@ export default function OltManagement() {
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Konfigurasi Koneksi OLT</h3>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Konfigurasi Koneksi SNMP OLT</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-semibold text-indigo-600 dark:text-indigo-400">{activeOlt?.name} — {maskIpAddress(activeOlt?.ip_address)}</p>
               </div>
               <button onClick={() => { setShowConfigModal(false); setTestResult(null); }}
@@ -1156,7 +1247,7 @@ export default function OltManagement() {
               <div>
                 <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 flex items-center space-x-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">1</span>
-                  <span>Mode Deployment Server</span>
+                  <span>Mode Deployment Server UNMS</span>
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {DEPLOYMENT_MODES.map(mode => {
@@ -1183,7 +1274,7 @@ export default function OltManagement() {
                 <div className="space-y-4">
                   <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center space-x-2">
                     <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">2</span>
-                    <span>Konfigurasi SNMP</span>
+                    <span>Kredensial &amp; Protokol SNMP (Pure Data Polling)</span>
                   </h4>
 
                   {/* SNMP Version: v2c / v3 */}
@@ -1199,7 +1290,7 @@ export default function OltManagement() {
                             }`}>
                           SNMP {v.toUpperCase()}
                           <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500 mt-0.5">
-                            {v === 'v2c' ? 'Community String' : 'Username + Auth/Priv'}
+                            {v === 'v2c' ? 'Community String (Standar)' : 'Username + Auth/Priv (Enkripsi)'}
                           </div>
                         </button>
                       ))}
@@ -1229,7 +1320,7 @@ export default function OltManagement() {
                           <label className={labelCls}>Custom Community String</label>
                           <input type="text" value={configForm.snmp_community}
                             onChange={e => setConfigForm({ ...configForm, snmp_community: e.target.value })}
-                            placeholder="Masukkan community string..."
+                            placeholder="Masukkan community string (misal: noc_fiber_unms)..."
                             className={inputCls} />
                         </div>
                       )}
@@ -1281,70 +1372,31 @@ export default function OltManagement() {
                     </div>
                   )}
 
-                  {/* Advanced SNMP options */}
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Tuning SNMP Port & Timeout */}
+                  <div className="grid grid-cols-2 gap-3 pt-2">
                     <div>
-                      <label className={labelCls}>Port SNMP</label>
+                      <label className={labelCls}>Port UDP SNMP</label>
                       <input type="number" value={configForm.snmp_port}
                         onChange={e => setConfigForm({ ...configForm, snmp_port: parseInt(e.target.value) })}
                         className={inputCls} />
                     </div>
                     <div>
-                      <label className={labelCls}>Timeout (detik)</label>
+                      <label className={labelCls}>Timeout Polling (detik)</label>
                       <input type="number" value={configForm.snmp_timeout}
                         onChange={e => setConfigForm({ ...configForm, snmp_timeout: parseInt(e.target.value) })}
                         className={inputCls} />
                     </div>
                   </div>
+
+                  {/* Quick Copy Scripts for OLT SNMP */}
+                  <QuickCopyScripts
+                    vendor={activeOlt?.vendor}
+                    community={configForm.snmp_community_type === 'custom' ? configForm.snmp_community : 'public'}
+                  />
                 </div>
               )}
 
-              {/* ── Section 3: CLI (Telnet/SSH) ─────────────────────────────── */}
-              {configForm.deployment_mode !== 'probe' && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center space-x-2">
-                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">3</span>
-                    <span>Konfigurasi CLI (Telnet/SSH) — Opsional</span>
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelCls}>Protokol CLI</label>
-                      <div className="flex space-x-2">
-                        {['telnet', 'ssh'].map(p => (
-                          <button key={p} type="button"
-                            onClick={() => setConfigForm({ ...configForm, cli_protocol: p, cli_port: p === 'ssh' ? 22 : 23 })}
-                            className={`flex-1 py-2 rounded-xl border-2 text-xs font-bold transition-all ${configForm.cli_protocol === p
-                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
-                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300 dark:hover:border-indigo-500'
-                              }`}>
-                            {p === 'telnet' ? ' Telnet (23)' : ' SSH (22)'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Port CLI</label>
-                      <input type="number" value={configForm.cli_port}
-                        onChange={e => setConfigForm({ ...configForm, cli_port: parseInt(e.target.value) })}
-                        className={inputCls} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Username CLI</label>
-                      <input type="text" value={configForm.cli_username}
-                        onChange={e => setConfigForm({ ...configForm, cli_username: e.target.value })}
-                        placeholder="admin" className={inputCls} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Password CLI</label>
-                      <input type="password" value={configForm.cli_password}
-                        onChange={e => setConfigForm({ ...configForm, cli_password: e.target.value })}
-                        placeholder="••••••••" className={inputCls} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Section 4: Probe Agent ─────────────────────────────────── */}
+              {/* ── Section 3: Probe Agent ─────────────────────────────────── */}
               {configForm.deployment_mode === 'probe' && (
                 <div className="space-y-3">
                   <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center space-x-2">
@@ -1352,11 +1404,10 @@ export default function OltManagement() {
                     <span>Konfigurasi NMS Probe Agent</span>
                   </h4>
                   <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 rounded-xl p-4 text-xs text-amber-800 dark:text-amber-400 font-medium space-y-1">
-                    <div className="font-bold"> Cara kerja Probe Agent:</div>
+                    <div className="font-bold">Cara kerja Probe Agent:</div>
                     <div>1. Install NMS Probe Agent di server dalam jaringan ISP (akses ke OLT)</div>
                     <div>2. Probe Agent akan menjembatani query SNMP dari cloud UNMS ke OLT</div>
                     <div>3. Masukkan URL dan token API Probe Agent di bawah</div>
-                    <div className="text-amber-600 dark:text-amber-500 italic mt-1">️ Probe Agent adalah fitur Phase 4 — saat ini dalam pengembangan</div>
                   </div>
                   <div>
                     <label className={labelCls}>URL Probe Agent</label>
@@ -1373,21 +1424,19 @@ export default function OltManagement() {
                 </div>
               )}
 
-              {/* ── Testing In Progress Indicator ─────────────────────────── */}
+              {/* ── Testing Indicator ──────────────────────────────────────── */}
               {testingConnection && (
                 <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-4 space-y-3">
                   <div className="flex items-center space-x-3">
                     <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
                     <div>
-                      <div className="text-sm font-bold text-indigo-700 dark:text-indigo-300">Sedang Menguji Koneksi...</div>
-                      <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">Menyimpan konfigurasi → Ping ke OLT → Uji SNMP</div>
+                      <div className="text-sm font-bold text-indigo-700 dark:text-indigo-300">Sedang Menguji Koneksi SNMP...</div>
+                      <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">Ping ICMP → Query SNMP sysDescr MIB</div>
                     </div>
                   </div>
                   <div className="flex items-center space-x-2 text-xs text-indigo-600 dark:text-indigo-400">
                     <span className="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
                     <span>Target: <span className="font-mono font-bold">{activeOlt?.ip_address}</span></span>
-                    <span className="text-indigo-300 dark:text-indigo-600">|</span>
-                    <span>Mode: <span className="font-bold">{configForm.deployment_mode}</span></span>
                     <span className="text-indigo-300 dark:text-indigo-600">|</span>
                     <span>SNMP: <span className="font-bold">{configForm.snmp_version?.toUpperCase()}</span></span>
                   </div>
@@ -1398,18 +1447,15 @@ export default function OltManagement() {
               {!testingConnection && testResult && (() => {
                 const isSuccess = testResult.ready_for_live;
                 const isPartial = !isSuccess && testResult.ping?.success;
-                const isFailed = !isSuccess && !testResult.ping?.success;
 
                 const statusConfig = isSuccess
-                  ? { bg: 'bg-emerald-50 dark:bg-emerald-900/15', border: 'border-emerald-300 dark:border-emerald-700', badge: 'bg-emerald-500', badgeText: 'KONEKSI BERHASIL', icon: '', headerText: 'text-emerald-800 dark:text-emerald-200', subText: 'text-emerald-700 dark:text-emerald-300' }
+                  ? { bg: 'bg-emerald-50 dark:bg-emerald-900/15', border: 'border-emerald-300 dark:border-emerald-700', badge: 'bg-emerald-500', badgeText: 'KONEKSI SNMP BERHASIL', icon: '✅', headerText: 'text-emerald-800 dark:text-emerald-200', subText: 'text-emerald-700 dark:text-emerald-300' }
                   : isPartial
-                    ? { bg: 'bg-amber-50 dark:bg-amber-900/15', border: 'border-amber-300 dark:border-amber-700', badge: 'bg-amber-500', badgeText: 'TERHUBUNG SEBAGIAN', icon: '️', headerText: 'text-amber-800 dark:text-amber-200', subText: 'text-amber-700 dark:text-amber-300' }
-                    : { bg: 'bg-rose-50 dark:bg-rose-900/15', border: 'border-rose-300 dark:border-rose-700', badge: 'bg-rose-500', badgeText: 'KONEKSI GAGAL', icon: '', headerText: 'text-rose-800 dark:text-rose-200', subText: 'text-rose-700 dark:text-rose-300' };
+                    ? { bg: 'bg-amber-50 dark:bg-amber-900/15', border: 'border-amber-300 dark:border-amber-700', badge: 'bg-amber-500', badgeText: 'PING OK · SNMP TIDAK MERESPON', icon: '⚠️', headerText: 'text-amber-800 dark:text-amber-200', subText: 'text-amber-700 dark:text-amber-300' }
+                    : { bg: 'bg-rose-50 dark:bg-rose-900/15', border: 'border-rose-300 dark:border-rose-700', badge: 'bg-rose-500', badgeText: 'KONEKSI GAGAL', icon: '❌', headerText: 'text-rose-800 dark:text-rose-200', subText: 'text-rose-700 dark:text-rose-300' };
 
                 return (
                   <div className={`rounded-xl border-2 ${statusConfig.bg} ${statusConfig.border} overflow-hidden`}>
-
-                    {/* Result Header Banner */}
                     <div className={`px-4 py-3 flex items-center justify-between ${isSuccess ? 'bg-emerald-100 dark:bg-emerald-900/30' : isPartial ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-rose-100 dark:bg-rose-900/30'}`}>
                       <div className="flex items-center space-x-2.5">
                         <span className="text-xl leading-none">{statusConfig.icon}</span>
@@ -1423,113 +1469,46 @@ export default function OltManagement() {
                       </span>
                     </div>
 
-                    {/* Test Detail Cards */}
                     <div className="p-4 space-y-3">
-
-                      {/* Ping & SNMP grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-
-                        {/* Ping Result */}
                         {testResult.ping && (
-                          <div className={`rounded-lg p-3 border flex items-start space-x-2.5 ${testResult.ping.success
-                            ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800'
-                            : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800'
-                            }`}>
+                          <div className={`rounded-lg p-3 border flex items-start space-x-2.5 ${testResult.ping.success ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800'}`}>
                             <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold ${testResult.ping.success ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                              {testResult.ping.success ? '' : ''}
+                              {testResult.ping.success ? '✓' : '✕'}
                             </div>
                             <div>
-                              <div className={`text-xs font-bold ${testResult.ping.success ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
-                                Ping / ICMP
-                              </div>
+                              <div className={`text-xs font-bold ${testResult.ping.success ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>Ping / ICMP</div>
                               <div className={`text-xs mt-0.5 font-mono ${testResult.ping.success ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                {testResult.ping.success
-                                  ? ` Merespon dalam ${testResult.ping.latency_ms} ms`
-                                  : ` ${testResult.ping.error || 'Host tidak merespon'}`}
+                                {testResult.ping.success ? `Merespon dalam ${testResult.ping.latency_ms} ms` : (testResult.ping.error || 'Host tidak merespon')}
                               </div>
                             </div>
                           </div>
                         )}
 
-                        {/* SNMP Result */}
                         {testResult.snmp && (
-                          <div className={`rounded-lg p-3 border flex items-start space-x-2.5 ${testResult.snmp.success
-                            ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800'
-                            : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800'
-                            }`}>
+                          <div className={`rounded-lg p-3 border flex items-start space-x-2.5 ${testResult.snmp.success ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800'}`}>
                             <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold ${testResult.snmp.success ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                              {testResult.snmp.success ? '' : ''}
+                              {testResult.snmp.success ? '✓' : '✕'}
                             </div>
                             <div>
-                              <div className={`text-xs font-bold ${testResult.snmp.success ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
-                                SNMP {testResult.snmp.snmp_version ? testResult.snmp.snmp_version.toUpperCase() : ''}
-                              </div>
-                              <div className={`text-xs mt-0.5 font-mono ${testResult.snmp.success ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                {testResult.snmp.success
-                                  ? ' Autentikasi berhasil'
-                                  : ` ${testResult.snmp.error || 'Tidak merespon'}`}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Probe Result */}
-                        {testResult.probe && (
-                          <div className={`rounded-lg p-3 border flex items-start space-x-2.5 sm:col-span-2 ${testResult.probe.success
-                            ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800'
-                            : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800'
-                            }`}>
-                            <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold ${testResult.probe.success ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                              {testResult.probe.success ? '' : ''}
-                            </div>
-                            <div>
-                              <div className={`text-xs font-bold ${testResult.probe.success ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
-                                Probe Agent
-                              </div>
-                              <div className={`text-xs mt-0.5 ${testResult.probe.success ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                {testResult.probe.success
-                                  ? ` Terhubung — versi ${testResult.probe.agent_version || 'unknown'}`
-                                  : ` ${testResult.probe.error || 'Probe Agent tidak merespon'}`}
+                              <div className={`text-xs font-bold ${testResult.snmp.success ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>Query SNMP (sysDescr)</div>
+                              <div className={`text-xs mt-0.5 ${testResult.snmp.success ? 'text-emerald-600 dark:text-emerald-400 font-mono truncate max-w-[200px]' : 'text-rose-600 dark:text-rose-400'}`}>
+                                {testResult.snmp.success ? (testResult.snmp.sys_descr || 'OK') : (testResult.snmp.error || 'SNMP tidak merespon')}
                               </div>
                             </div>
                           </div>
                         )}
                       </div>
 
-                      {/* PHP SNMP Extension Warning */}
-                      {testResult.snmp?.extension_missing && (
-                        <div className="rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 p-3 flex items-start space-x-2.5">
-                          <span className="text-amber-500 text-base flex-shrink-0">️</span>
-                          <div className="text-xs text-amber-800 dark:text-amber-300 font-medium">
-                            <span className="font-bold">PHP SNMP extension tidak aktif.</span> Aktifkan dengan menambahkan{' '}
-                            <code className="bg-amber-200 dark:bg-amber-800/60 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded font-mono">extension=snmp</code>{' '}
-                            pada file <code className="bg-amber-200 dark:bg-amber-800/60 px-1 py-0.5 rounded font-mono">php.ini</code>.
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Recommendations */}
-                      {testResult.recommendations?.length > 0 && (
-                        <div className="rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 p-3 space-y-2">
-                          <div className="text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
-                            <span></span><span>Langkah Perbaikan</span>
-                          </div>
-                          <ul className="space-y-1.5">
-                            {testResult.recommendations.map((r, i) => (
-                              <li key={i} className="text-xs text-slate-700 dark:text-slate-300 flex items-start space-x-2">
-                                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[10px] font-black mt-0.5">{i + 1}</span>
-                                <span>{r}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Success message */}
-                      {isSuccess && (
-                        <div className="rounded-lg bg-emerald-100 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-3 py-2.5 text-xs text-emerald-700 dark:text-emerald-300 font-medium flex items-center space-x-2">
-                          <span className="text-base"></span>
-                          <span>Perangkat OLT siap digunakan dalam mode <strong>Live SNMP</strong>. Data telemetri real akan segera tersedia.</span>
+                      {testResult.recommendations && testResult.recommendations.length > 0 && (
+                        <div className="bg-white dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-800 text-xs space-y-1">
+                          <div className="font-bold text-slate-700 dark:text-slate-300">Rekomendasi:</div>
+                          {testResult.recommendations.map((r, i) => (
+                            <div key={i} className="text-slate-600 dark:text-slate-400 flex items-start space-x-1.5">
+                              <span className="text-indigo-500 font-bold">•</span>
+                              <span>{r}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -1540,22 +1519,33 @@ export default function OltManagement() {
             </div>
 
             {/* Modal Footer */}
-            <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex items-center justify-between">
-              <button onClick={() => { setShowConfigModal(false); setTestResult(null); }}
+            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-900/50">
+              <button
+                type="button"
+                onClick={() => { setShowConfigModal(false); setTestResult(null); }}
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                 Tutup
               </button>
+
               <div className="flex items-center space-x-2">
-                <button onClick={handleTestConnection} disabled={testingConnection || savingConfig}
-                  className="px-4 py-2.5 rounded-xl bg-slate-700 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs shadow-sm transition-all flex items-center space-x-2 disabled:opacity-50">
-                  {testingConnection ? <><Spinner /><span>Menguji Koneksi...</span></> : <><IconWifi /><span>Tes Koneksi</span></>}
+                <button
+                  type="button"
+                  onClick={handleSaveConfig}
+                  disabled={savingConfig}
+                  className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50">
+                  {savingConfig ? 'Menyimpan...' : 'Simpan Saja'}
                 </button>
-                <button onClick={handleSaveConfig} disabled={savingConfig || testingConnection}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 disabled:opacity-50">
-                  {savingConfig ? <><Spinner /><span>Menyimpan...</span></> : <><IconCheck /><span>Simpan Konfigurasi</span></>}
+
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testingConnection}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 disabled:opacity-50">
+                  {testingConnection ? <><Spinner /><span>Menguji SNMP...</span></> : <><span>⚡ Uji &amp; Terapkan SNMP</span></>}
                 </button>
               </div>
             </div>
+
           </div>
         </div>,
         document.body
@@ -1566,11 +1556,12 @@ export default function OltManagement() {
       ══════════════════════════════════════════════════════════════════════ */}
       {showAddOltModal && createPortal(
         <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
-          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
               <div>
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Tambah Perangkat OLT Baru</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Daftarkan OLT baru di wilayah / POP site yang berbeda</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Dukungan Multi-Vendor via SNMP (ZTE, Huawei, VSOL, HSGQ, Hioso, Tarmoc, BDCOM, FiberHome)</p>
               </div>
               <button onClick={() => setShowAddOltModal(false)}
                 className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
@@ -1578,106 +1569,167 @@ export default function OltManagement() {
               </button>
             </div>
 
-            <form onSubmit={handleAddOlt} className="p-6 space-y-4 overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelCls}>Nama OLT (Label Identifikasi)</label>
-                  <input type="text" value={newOltForm.name}
-                    onChange={e => setNewOltForm({ ...newOltForm, name: e.target.value })}
-                    placeholder="OLT ZTE C300 Kota Solok" required className={inputCls} />
+            <form onSubmit={handleAddOlt} className="p-6 space-y-5 overflow-y-auto flex-1">
+              
+              {/* ── Section 1: Identitas & Model OLT ──────────────────────────── */}
+              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-3">
+                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-neutral-800 pb-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">1</span>
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                    Identitas &amp; Spesifikasi Perangkat OLT
+                  </h4>
                 </div>
-                <div>
-                  <label className={labelCls}>Kode Node Unik</label>
-                  <input type="text" value={newOltForm.code}
-                    onChange={e => setNewOltForm({ ...newOltForm, code: e.target.value.toUpperCase() })}
-                    placeholder="OLT-SLK-01" required
-                    className={inputCls + ' uppercase font-mono'} />
-                </div>
-                <div>
-                  <label className={labelCls}>Vendor & Tipe Perangkat</label>
-                  <select value={newOltForm.vendor}
-                    onChange={e => {
-                      const v = e.target.value;
-                      const map = { 'ZTE': ['ZXAN C300', 16], 'ZTE C320': ['ZXAN C320', 8], 'Hioso': ['HA7302CS', 2], 'HSGQ': ['G004 4-Port', 4], 'Tarmoc': ['TMC-EP8', 8] };
-                      const [model, ports] = map[v] || ['Unknown', 4];
-                      setNewOltForm({ ...newOltForm, vendor: v, model, total_ports: ports });
-                    }}
-                    className={inputCls}>
-                    <option value="ZTE">ZTE C300 (Modular 16-Port)</option>
-                    <option value="ZTE C320">ZTE C320 (Compact 8-Port)</option>
-                    <option value="Hioso">Hioso HA7302CS (2-Port EPON)</option>
-                    <option value="HSGQ">HSGQ G004 (4-Port GPON)</option>
-                    <option value="Tarmoc">Tarmoc TMC-EP8 (8-Port EPON)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Lokasi / Wilayah / POP Site</label>
-                  <input type="text" value={newOltForm.location}
-                    onChange={e => setNewOltForm({ ...newOltForm, location: e.target.value })}
-                    placeholder="Kota Solok (POP Solok Central)" required className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>IP Address Manajemen OLT (IP Lokal / VPN)</label>
-                  <input type="text" value={newOltForm.ip_address}
-                    onChange={e => setNewOltForm({ ...newOltForm, ip_address: e.target.value })}
-                    placeholder="192.168.1.100 atau 10.10.20.1" required className={inputCls + ' font-mono'} />
-                  <p className="text-[10px] text-neutral-500 mt-1">Masukkan IP lokal OLT (didukung via VPN L2TP/MikroTik).</p>
-                </div>
-                <div>
-                  <label className={labelCls}>Mode Deployment</label>
-                  <select value={newOltForm.deployment_mode}
-                    onChange={e => setNewOltForm({ ...newOltForm, deployment_mode: e.target.value })}
-                    className={inputCls}>
-                    <option value="vpn">VPN Tunnel / L2TP Perusahaan (Rekomendasi)</option>
-                    <option value="direct">Direct LAN (Satu Jaringan)</option>
-                    <option value="probe">Local Probe Agent (Cloud External)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Versi SNMP</label>
-                  <select value={newOltForm.snmp_version}
-                    onChange={e => setNewOltForm({ ...newOltForm, snmp_version: e.target.value })}
-                    className={inputCls}>
-                    <option value="v2c">SNMPv2c (Community String)</option>
-                    <option value="v3">SNMPv3 (Username + Auth/Priv)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>SNMP Community</label>
-                  <div className="flex space-x-2">
-                    {['public', 'custom'].map(ct => (
-                      <button key={ct} type="button"
-                        onClick={() => setNewOltForm({ ...newOltForm, snmp_community_type: ct })}
-                        className={`flex-1 py-1.5 rounded-xl border-2 text-xs font-bold transition-all ${newOltForm.snmp_community_type === ct
-                          ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
-                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}>
-                        {ct === 'public' ? 'public' : 'Custom'}
-                      </button>
-                    ))}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className={labelCls}>Nama OLT (Label Identifikasi)</label>
+                    <input type="text" value={newOltForm.name}
+                      onChange={e => setNewOltForm({ ...newOltForm, name: e.target.value })}
+                      placeholder="OLT HSGQ-E04 Kantor Solok" required className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Kode Node Unik</label>
+                    <input type="text" value={newOltForm.code}
+                      onChange={e => setNewOltForm({ ...newOltForm, code: e.target.value.toUpperCase() })}
+                      placeholder="OLT-SLK-01" required
+                      className={inputCls + ' uppercase font-mono'} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Vendor &amp; Model Perangkat</label>
+                    <select value={newOltForm.vendor}
+                      onChange={e => {
+                        const v = e.target.value;
+                        const map = {
+                          'ZTE': ['ZXAN C300', 16],
+                          'ZTE C320': ['ZXAN C320', 8],
+                          'Huawei MA5608T': ['SmartAX MA5608T', 8],
+                          'Huawei MA5683T': ['SmartAX MA5683T', 16],
+                          'VSOL': ['V1600G2-B', 8],
+                          'HSGQ': ['G004 4-Port', 4],
+                          'Hioso': ['HA7302CS', 2],
+                          'Tarmoc': ['TMC-EP8', 8],
+                          'FiberHome': ['AN5516-04', 16],
+                          'BDCOM': ['GP3600-08', 8],
+                        };
+                        const [model, ports] = map[v] || ['Generic OLT', 8];
+                        setNewOltForm({ ...newOltForm, vendor: v, model, total_ports: ports });
+                      }}
+                      className={inputCls}>
+                      <option value="HSGQ">HSGQ G004 / E04 (4-Port EPON/GPON)</option>
+                      <option value="ZTE">ZTE C300 (Modular 16-Port GPON)</option>
+                      <option value="ZTE C320">ZTE C320 (Compact 8-Port GPON)</option>
+                      <option value="Huawei MA5608T">Huawei SmartAX MA5608T (8-Port GPON)</option>
+                      <option value="Huawei MA5683T">Huawei SmartAX MA5683T (16-Port GPON)</option>
+                      <option value="VSOL">VSOL V1600G2-B (8-Port GPON)</option>
+                      <option value="Hioso">Hioso HA7302CS (2-Port EPON)</option>
+                      <option value="Tarmoc">Tarmoc TMC-EP8 (8-Port EPON)</option>
+                      <option value="FiberHome">FiberHome AN5516 (16-Port GPON)</option>
+                      <option value="BDCOM">BDCOM GP3600 (8-Port GPON)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Lokasi / Wilayah / POP Site</label>
+                    <input type="text" value={newOltForm.location}
+                      onChange={e => setNewOltForm({ ...newOltForm, location: e.target.value })}
+                      placeholder="Kantor Solok (POP Solok Central)" required className={inputCls} />
                   </div>
                 </div>
+              </div>
+
+              {/* ── Section 2: Jaringan & Terowongan VPN ───────────────────────── */}
+              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-3">
+                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-neutral-800 pb-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center font-bold">2</span>
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                    Jaringan &amp; Terowongan VPN
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className={labelCls}>IP Address Manajemen OLT (Lokal)</label>
+                    <input type="text" value={newOltForm.ip_address}
+                      onChange={e => setNewOltForm({ ...newOltForm, ip_address: e.target.value })}
+                      placeholder="192.168.100.1" required className={inputCls + ' font-mono'} />
+                    <p className="text-[10px] text-slate-400 mt-1">Default HSGQ: <code>192.168.100.1</code> (dijangkau via VPN MikroTik).</p>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Mode Deployment</label>
+                    <select value={newOltForm.deployment_mode}
+                      onChange={e => setNewOltForm({ ...newOltForm, deployment_mode: e.target.value })}
+                      className={inputCls}>
+                      <option value="vpn">VPN Tunnel / L2TP MikroTik (Rekomendasi)</option>
+                      <option value="direct">Direct LAN (Satu Jaringan Lokal)</option>
+                      <option value="probe">Local Probe Agent (Cloud External)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Section 3: Kredensial SNMP & Quick Copy Scripts ────────────── */}
+              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-3">
+                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-neutral-800 pb-2">
+                  <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">3</span>
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                    Kredensial SNMP Telemetri
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className={labelCls}>Versi SNMP</label>
+                    <select value={newOltForm.snmp_version}
+                      onChange={e => setNewOltForm({ ...newOltForm, snmp_version: e.target.value })}
+                      className={inputCls}>
+                      <option value="v2c">SNMPv2c (Community String - Rekomendasi)</option>
+                      <option value="v3">SNMPv3 (Username + Auth/Priv)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>SNMP Read Community String</label>
+                    <div className="flex space-x-2">
+                      {['public', 'custom'].map(ct => (
+                        <button key={ct} type="button"
+                          onClick={() => setNewOltForm({ ...newOltForm, snmp_community_type: ct })}
+                          className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all ${newOltForm.snmp_community_type === ct
+                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                            : 'border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300'
+                            }`}>
+                          {ct === 'public' ? 'public (Standar)' : 'Custom'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {newOltForm.snmp_community_type === 'custom' && (
-                  <div className="md:col-span-2">
+                  <div>
                     <label className={labelCls}>Custom Community String</label>
                     <input type="text" value={newOltForm.snmp_community}
                       onChange={e => setNewOltForm({ ...newOltForm, snmp_community: e.target.value })}
-                      placeholder="Masukkan community string..." className={inputCls} />
+                      placeholder="Masukkan custom community string..." className={inputCls} />
                   </div>
                 )}
+
+                {/* Quick Copy Scripts for OLT SNMP & MikroTik VPN */}
+                <QuickCopyScripts
+                  vendor={newOltForm.vendor}
+                  community={newOltForm.snmp_community_type === 'custom' ? newOltForm.snmp_community : 'public'}
+                />
               </div>
 
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-3">
+              <div className="pt-3 border-t border-slate-100 dark:border-neutral-800 flex items-center justify-between">
                 <button type="button" onClick={() => setShowAddOltModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700">
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-200 dark:hover:bg-neutral-700 transition-colors">
                   Batal
                 </button>
                 <button type="submit" disabled={submittingOlt}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center space-x-2 disabled:opacity-50">
-                  {submittingOlt ? <><Spinner /><span>Mendaftarkan OLT...</span></> : <><IconCheck /><span>Simpan &amp; Daftarkan OLT</span></>}
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 disabled:opacity-50">
+                  {submittingOlt ? <><Spinner /><span>Menyimpan...</span></> : <><IconPlus /><span>Simpan Perangkat OLT</span></>}
                 </button>
               </div>
             </form>
+
           </div>
         </div>,
         document.body
@@ -1688,206 +1740,136 @@ export default function OltManagement() {
       ══════════════════════════════════════════════════════════════════════ */}
       {showEditOltModal && editingOlt && createPortal(
         <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
-          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
 
-            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
-                    <IconEdit />
-                  </span>
-                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Edit Perangkat OLT</h3>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Memperbarui informasi dasar — <span className="font-semibold text-indigo-600 dark:text-indigo-400">{editingOlt.name}</span>
-                </p>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Edit Perangkat OLT</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{editingOlt.name} ({editingOlt.code})</p>
               </div>
-              <button
-                onClick={() => { setShowEditOltModal(false); setEditingOlt(null); }}
+              <button onClick={() => { setShowEditOltModal(false); setEditingOlt(null); }}
                 className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                 <IconX />
               </button>
             </div>
 
             <form onSubmit={handleEditOlt} className="p-6 space-y-4 overflow-y-auto flex-1">
-
-              {/* Info banner */}
-              <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-900/30 rounded-xl px-4 py-3 text-xs text-indigo-700 dark:text-indigo-400 font-medium">
-                Perubahan informasi dasar tidak akan mempengaruhi konfigurasi koneksi SNMP/CLI. Gunakan tombol <strong>"Koneksikan Perangkat"</strong> untuk mengubah konfigurasi koneksi.
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                {/* Nama OLT */}
-                <div className="md:col-span-2">
-                  <label className={labelCls}>Nama OLT (Label Identifikasi)</label>
-                  <input
-                    type="text"
-                    value={editOltForm.name}
+                <div>
+                  <label className={labelCls}>Nama OLT</label>
+                  <input type="text" value={editOltForm.name}
                     onChange={e => setEditOltForm({ ...editOltForm, name: e.target.value })}
-                    placeholder="OLT ZTE C300 Kota Solok"
-                    required
-                    className={inputCls}
-                  />
+                    required className={inputCls} />
                 </div>
-
-                {/* Kode Node */}
                 <div>
-                  <label className={labelCls}>Kode Node Unik</label>
-                  <input
-                    type="text"
-                    value={editOltForm.code}
+                  <label className={labelCls}>Kode Node</label>
+                  <input type="text" value={editOltForm.code}
                     onChange={e => setEditOltForm({ ...editOltForm, code: e.target.value.toUpperCase() })}
-                    placeholder="OLT-SLK-01"
-                    required
-                    className={inputCls + ' uppercase font-mono'}
-                  />
+                    required className={inputCls + ' uppercase font-mono'} />
                 </div>
-
-                {/* IP Address */}
                 <div>
-                  <label className={labelCls}>IP Address Manajemen OLT (IP Lokal / VPN)</label>
-                  <input
-                    type="text"
-                    value={editOltForm.ip_address}
+                  <label className={labelCls}>IP Address Manajemen OLT</label>
+                  <input type="text" value={editOltForm.ip_address}
                     onChange={e => setEditOltForm({ ...editOltForm, ip_address: e.target.value })}
-                    placeholder="192.168.1.100 atau 10.10.20.1"
-                    required
-                    className={inputCls + ' font-mono'}
-                  />
-                  <p className="text-[10px] text-neutral-500 mt-1">Masukkan IP lokal OLT jika terhubung via VPN.</p>
+                    required className={inputCls + ' font-mono'} />
                 </div>
-
-                {/* Vendor */}
                 <div>
-                  <label className={labelCls}>Vendor & Tipe Perangkat</label>
-                  <select
-                    value={editOltForm.vendor}
+                  <label className={labelCls}>Vendor &amp; Tipe Perangkat</label>
+                  <select value={editOltForm.vendor}
                     onChange={e => {
                       const v = e.target.value;
-                      const map = { 'ZTE': ['ZXAN C300', 16], 'ZTE C320': ['ZXAN C320', 8], 'Hioso': ['HA7302CS', 2], 'HSGQ': ['G004 4-Port', 4], 'Tarmoc': ['TMC-EP8', 8] };
+                      const map = {
+                        'ZTE': ['ZXAN C300', 16],
+                        'ZTE C320': ['ZXAN C320', 8],
+                        'Huawei MA5608T': ['SmartAX MA5608T', 8],
+                        'Huawei MA5683T': ['SmartAX MA5683T', 16],
+                        'VSOL': ['V1600G2-B', 8],
+                        'HSGQ': ['G004 4-Port', 4],
+                        'Hioso': ['HA7302CS', 2],
+                        'Tarmoc': ['TMC-EP8', 8],
+                        'FiberHome': ['AN5516-04', 16],
+                        'BDCOM': ['GP3600-08', 8],
+                      };
                       const [model, ports] = map[v] || [editOltForm.model, editOltForm.total_ports];
                       setEditOltForm({ ...editOltForm, vendor: v, model, total_ports: ports });
                     }}
                     className={inputCls}>
-                    <option value="ZTE">ZTE C300 (Modular 16-Port)</option>
-                    <option value="ZTE C320">ZTE C320 (Compact 8-Port)</option>
-                    <option value="Hioso">Hioso HA7302CS (2-Port EPON)</option>
+                    <option value="ZTE">ZTE C300 (Modular 16-Port GPON)</option>
+                    <option value="ZTE C320">ZTE C320 (Compact 8-Port GPON)</option>
+                    <option value="Huawei MA5608T">Huawei SmartAX MA5608T (8-Port GPON)</option>
+                    <option value="Huawei MA5683T">Huawei SmartAX MA5683T (16-Port GPON)</option>
+                    <option value="VSOL">VSOL V1600G2-B (8-Port GPON)</option>
                     <option value="HSGQ">HSGQ G004 (4-Port GPON)</option>
+                    <option value="Hioso">Hioso HA7302CS (2-Port EPON)</option>
                     <option value="Tarmoc">Tarmoc TMC-EP8 (8-Port EPON)</option>
+                    <option value="FiberHome">FiberHome AN5516 (16-Port GPON)</option>
+                    <option value="BDCOM">BDCOM GP3600 (8-Port GPON)</option>
                   </select>
                 </div>
-
-                {/* Model */}
                 <div>
                   <label className={labelCls}>Model Perangkat</label>
-                  <input
-                    type="text"
-                    value={editOltForm.model}
+                  <input type="text" value={editOltForm.model}
                     onChange={e => setEditOltForm({ ...editOltForm, model: e.target.value })}
-                    placeholder="ZXAN C300"
-                    required
-                    className={inputCls}
-                  />
+                    required className={inputCls} />
                 </div>
-
-                {/* Lokasi */}
-                <div className="md:col-span-2">
-                  <label className={labelCls}>Lokasi / Wilayah / POP Site</label>
-                  <input
-                    type="text"
-                    value={editOltForm.location}
-                    onChange={e => setEditOltForm({ ...editOltForm, location: e.target.value })}
-                    placeholder="Kota Solok (POP Solok Central)"
-                    required
-                    className={inputCls}
-                  />
-                </div>
-
-                {/* Total Ports */}
                 <div>
                   <label className={labelCls}>Total Port PON</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="128"
-                    value={editOltForm.total_ports}
+                  <input type="number" min="1" max="128" value={editOltForm.total_ports}
                     onChange={e => setEditOltForm({ ...editOltForm, total_ports: Number(e.target.value) })}
-                    required
-                    className={inputCls}
-                  />
+                    required className={inputCls} />
                 </div>
-
-                {/* Deployment Mode */}
-                <div>
-                  <label className={labelCls}>Mode Deployment</label>
-                  <select
-                    value={editOltForm.deployment_mode}
-                    onChange={e => setEditOltForm({ ...editOltForm, deployment_mode: e.target.value })}
-                    className={inputCls}>
-                    <option value="vpn">VPN Tunnel / L2TP Perusahaan (Rekomendasi)</option>
-                    <option value="direct">Direct LAN (Satu Jaringan)</option>
-                    <option value="probe">Local Probe Agent (Cloud External)</option>
-                  </select>
+                <div className="md:col-span-2">
+                  <label className={labelCls}>Lokasi / Wilayah / POP Site</label>
+                  <input type="text" value={editOltForm.location}
+                    onChange={e => setEditOltForm({ ...editOltForm, location: e.target.value })}
+                    required className={inputCls} />
                 </div>
-
-                {/* SNMP Version */}
-                <div>
-                  <label className={labelCls}>Versi SNMP</label>
-                  <select
-                    value={editOltForm.snmp_version}
-                    onChange={e => setEditOltForm({ ...editOltForm, snmp_version: e.target.value })}
-                    className={inputCls}>
-                    <option value="v2c">SNMPv2c (Community String)</option>
-                    <option value="v3">SNMPv3 (Username + Auth/Priv)</option>
-                  </select>
-                </div>
-
-                {/* SNMP Community Type */}
-                <div>
-                  <label className={labelCls}>SNMP Community</label>
-                  <div className="flex space-x-2">
-                    {['public', 'custom'].map(ct => (
-                      <button
-                        key={ct}
-                        type="button"
-                        onClick={() => setEditOltForm({ ...editOltForm, snmp_community_type: ct })}
-                        className={`flex-1 py-1.5 rounded-xl border-2 text-xs font-bold transition-all ${editOltForm.snmp_community_type === ct
-                          ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300'
-                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300'
-                          }`}>
-                        {ct === 'public' ? ' public' : ' Custom'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
               </div>
 
-              {/* Footer */}
+              {/* Quick Copy Scripts for OLT SNMP */}
+              <QuickCopyScripts
+                vendor={editOltForm.vendor}
+                community="public"
+              />
+
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => { setShowEditOltModal(false); setEditingOlt(null); }}
+                <button type="button" onClick={() => { setShowEditOltModal(false); setEditingOlt(null); }}
                   className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                   Batal
                 </button>
-                <button
-                  type="submit"
-                  disabled={submittingEditOlt}
+                <button type="submit" disabled={submittingEditOlt}
                   className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 disabled:opacity-50">
-                  {submittingEditOlt
-                    ? <><Spinner /><span>Menyimpan...</span></>
-                    : <><IconCheck /><span>Simpan Perubahan</span></>}
+                  {submittingEditOlt ? <><Spinner /><span>Menyimpan...</span></> : <><IconCheck /><span>Simpan Perubahan</span></>}
                 </button>
               </div>
-
             </form>
+
           </div>
         </div>,
         document.body
       )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: Live Optical Power Inspector via SNMP
+      ══════════════════════════════════════════════════════════════════════ */}
+      {selectedOnuForOptical && (
+        <OpticalPowerModal
+          onu={selectedOnuForOptical}
+          activeOlt={activeOlt}
+          onClose={() => setSelectedOnuForOptical(null)}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: SNMP Diagnostic & MIB OID Explorer
+      ══════════════════════════════════════════════════════════════════════ */}
+      {showSnmpDiagModal && activeOlt && (
+        <SnmpDiagnosticModal
+          activeOlt={activeOlt}
+          onClose={() => setShowSnmpDiagModal(false)}
+        />
+      )}
+
       {/* ══════════════════════════════════════════════════════════════════════
           MODAL: Panduan VPN & Generator Script MikroTik
       ══════════════════════════════════════════════════════════════════════ */}
@@ -1897,7 +1879,7 @@ export default function OltManagement() {
       />
 
       {/* ══════════════════════════════════════════════════════════════════════
-          MODAL: Custom Confirm Dialog (Ganti window.confirm)
+          MODAL: Custom Confirm Dialog
       ══════════════════════════════════════════════════════════════════════ */}
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
@@ -1913,3 +1895,538 @@ export default function OltManagement() {
     </div>
   );
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   MODAL: LIVE OPTICAL POWER INSPECTOR (SNMP)
+══════════════════════════════════════════════════════════════════ */
+function OpticalPowerModal({ onu, activeOlt, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [opticalData, setOpticalData] = useState(null);
+  const [error, setError] = useState(null);
+
+  const fetchOptical = () => {
+    setLoading(true);
+    setError(null);
+    const vk = activeOlt?.vendor_key || activeOlt?.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
+    fetch(`/api/olt/optical-power/${onu.serial_number}?vendor=${vk}&device_id=${activeOlt?.id || ''}`)
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(data => {
+        setOpticalData(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError('Gagal membaca optical telemetry dari OLT via SNMP: ' + err.message);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchOptical();
+  }, [onu.serial_number, activeOlt?.id]);
+
+  const rx = opticalData?.rx_power_dbm ?? onu.rx_power ?? -20.0;
+  const isLoss = rx < -27;
+  const isWarning = rx >= -27 && rx < -24;
+  const isGood = rx >= -24;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
+      <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl my-auto overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-900 text-white">
+          <div>
+            <h3 className="text-base font-bold flex items-center gap-2">
+              <span>📶 Telemetri Redaman Optik (SNMP)</span>
+            </h3>
+            <p className="text-xs text-slate-300 font-mono mt-0.5">{onu.customer_name} · {onu.serial_number}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {loading ? (
+            <div className="py-12 text-center space-y-3">
+              <Spinner />
+              <p className="text-xs text-slate-500 font-medium">Melakukan polling SNMP OID Transceiver...</p>
+            </div>
+          ) : error ? (
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              {error}
+            </div>
+          ) : opticalData ? (
+            <div className="space-y-4">
+              {/* Primary Gauge Card */}
+              <div className={`p-4 rounded-2xl border text-center space-y-2 ${isGood
+                ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+                : isWarning
+                  ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+                  : 'bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+                }`}>
+                <div className="text-xs font-bold uppercase tracking-wider">Rx Optical Power (ONU)</div>
+                <div className="text-3xl font-black font-mono">{rx} dBm</div>
+                <div className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-white/80 dark:bg-black/40 shadow-2xs">
+                  {isGood ? '🟢 Kualitas Redaman Baik' : isWarning ? '🟡 Redaman Waspada' : '🔴 Redaman Buruk / Kritis'}
+                </div>
+              </div>
+
+              {/* Detail Metrics */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-center">
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Tx Power (ONU)</div>
+                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                    {opticalData.tx_power_dbm ? `+${opticalData.tx_power_dbm} dBm` : '—'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">OLT Rx Power</div>
+                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                    {opticalData.olt_rx_power_dbm ? `${opticalData.olt_rx_power_dbm} dBm` : '—'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Tegangan (V)</div>
+                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                    {opticalData.voltage_v ? `${opticalData.voltage_v} V` : '3.30 V'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Bias Current</div>
+                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                    {opticalData.bias_current_ma ? `${opticalData.bias_current_ma} mA` : '14.0 mA'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Suhu Transceiver</div>
+                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                    {opticalData.temperature_c ? `${opticalData.temperature_c} °C` : '40 °C'}
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Port PON</div>
+                  <div className="text-xs font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-1 truncate">
+                    {onu.port}
+                  </div>
+                </div>
+              </div>
+
+              {/* Diagnosis Advice */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+                <div className="font-bold text-slate-800 dark:text-slate-200">💡 Analisa &amp; Rekomendasi Jaringan:</div>
+                <p className="text-slate-600 dark:text-slate-400">
+                  {isGood
+                    ? 'Redaman optik sangat baik (antara -15 hingga -24 dBm). Layanan internet berjalan optimal tanpa packet loss optik.'
+                    : isWarning
+                      ? 'Redaman berada di batas wajar (-24 hingga -27 dBm). Periksa kemungkinan kotoran pada patchcord atau bending ringan kabel dropcore.'
+                      : 'Redaman melewati batas ambang toleransi (< -27 dBm). Disarankan melakukan tracing fisik sambungan fusion splice atau ODP.'}
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-between bg-slate-50 dark:bg-slate-900/50">
+          <button
+            onClick={fetchOptical}
+            disabled={loading}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-xs"
+          >
+            {loading ? <Spinner /> : <span>🔄 Polling Ulang SNMP</span>}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MODAL: SNMP DIAGNOSTIC & MIB OID EXPLORER
+══════════════════════════════════════════════════════════════════ */
+function SnmpDiagnosticModal({ activeOlt, onClose }) {
+  const [oid, setOid] = useState('1.3.6.1.2.1.1.1.0');
+  const [operation, setOperation] = useState('get'); // 'get' | 'walk'
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const PRESETS = [
+    { label: 'sysDescr (Identitas & Versi OLT)', oid: '1.3.6.1.2.1.1.1.0', op: 'get' },
+    { label: 'sysUpTime (Uptime OLT)', oid: '1.3.6.1.2.1.1.3.0', op: 'get' },
+    { label: 'ifDescr (Daftar Interface & Port)', oid: '1.3.6.1.2.1.2.2.1.2', op: 'walk' },
+    { label: 'ifOperStatus (Status Up/Down Port)', oid: '1.3.6.1.2.1.2.2.1.8', op: 'walk' },
+    { label: 'ZTE ONU Serial Numbers Table', oid: '1.3.6.1.4.1.3902.1012.3.50.11.1.1.2', op: 'walk' },
+    { label: 'Huawei ONU Serial Numbers Table', oid: '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9', op: 'walk' },
+  ];
+
+  const handleRunQuery = (e) => {
+    e?.preventDefault();
+    setLoading(true);
+    setResult(null);
+
+    fetch(`/api/olts/${activeOlt.id}/snmp-diagnostic`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oid, operation }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        setResult(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        setResult({ status: 'error', message: 'Gagal menjalankan query: ' + err.message });
+        setLoading(false);
+      });
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
+      <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl my-auto overflow-hidden animate-in fade-in zoom-in duration-150 flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-900 text-white">
+          <div>
+            <h3 className="text-base font-bold flex items-center gap-2">
+              <span>📡 Diagnostic SNMP &amp; MIB OID Explorer</span>
+            </h3>
+            <p className="text-xs text-slate-300 font-mono mt-0.5">{activeOlt.name} ({activeOlt.ip_address})</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+        </div>
+
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+          {/* Preset Buttons */}
+          <div>
+            <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">
+              Pilihan Preset OID Populer:
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {PRESETS.map((p, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => { setOid(p.oid); setOperation(p.op); }}
+                  className={`p-2 rounded-xl text-left border text-xs transition-all ${oid === p.oid && operation === p.op
+                    ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 font-bold text-indigo-700 dark:text-indigo-300'
+                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                    }`}
+                >
+                  <div>{p.label}</div>
+                  <div className="font-mono text-[10px] text-slate-400 mt-0.5">{p.oid} [{p.op.toUpperCase()}]</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <form onSubmit={handleRunQuery} className="space-y-3 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <div className="sm:col-span-3">
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Target OID</label>
+                <input
+                  type="text"
+                  value={oid}
+                  onChange={e => setOid(e.target.value)}
+                  placeholder="1.3.6.1.2.1.1.1.0"
+                  required
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">Operasi</label>
+                <select
+                  value={operation}
+                  onChange={e => setOperation(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="get">SNMP GET</option>
+                  <option value="walk">SNMP WALK</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <><Spinner /><span>Sedang Menjalankan Query SNMP...</span></> : <span>⚡ Jalankan Query SNMP ke {activeOlt.ip_address}</span>}
+            </button>
+          </form>
+
+          {/* Query Result Viewer */}
+          {result && (
+            <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-950 text-emerald-400 p-4 font-mono text-xs overflow-x-auto space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-2">
+                <span>STATUS: {result.status?.toUpperCase()}</span>
+                {result.data?.latency_ms && <span>LATENCY: {result.data.latency_ms} ms</span>}
+              </div>
+              <pre className="text-xs whitespace-pre-wrap leading-relaxed">
+                {JSON.stringify(result.data?.results || result.data?.raw_value || result, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end bg-slate-50 dark:bg-slate-900/50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   COMPONENT: QUICK COPY SCRIPTS (SNMP & VPN CONFIGURATION)
+══════════════════════════════════════════════════════════════════ */
+function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.89.6.125' }) {
+  const [openSnmp, setOpenSnmp] = useState(true);
+  const [openVpn, setOpenVpn] = useState(true);
+  const [copiedSnmp, setCopiedSnmp] = useState(false);
+  const [copiedVpn, setCopiedVpn] = useState(false);
+  const [routerOsVersion, setRouterOsVersion] = useState('v7'); // 'v7' or 'v6'
+  const [activeVendor, setActiveVendor] = useState(vendor);
+
+  useEffect(() => {
+    if (vendor) setActiveVendor(vendor);
+  }, [vendor]);
+
+  const effectiveCommunity = community?.trim() || 'public';
+
+  // Vendor OLT SNMP Script Generator
+  const getSnmpScript = (v, comm) => {
+    const norm = (v || '').toLowerCase();
+    if (norm.includes('zte')) {
+      return `conf t\nmib-compatibility iftable v2\nsnmp-server community ${comm} view AllView rw\nexit\nwrite`;
+    }
+    if (norm.includes('huawei')) {
+      return `enable\nconfig\nsnmp-agent\nsnmp-agent sys-info version v2c\nsnmp-agent community read ${comm}\nsave`;
+    }
+    if (norm.includes('hsgq')) {
+      return `# Web GUI OLT HSGQ (http://192.168.100.1)\n# Menu: System Management -> SNMP Configuration\n# SNMP Enable: ON\n# SNMP Version: v2c\n# Read Community: ${comm}\n# SNMP Port: 161\n# Klik 'Apply' lalu 'Save Configuration'`;
+    }
+    if (norm.includes('vsol')) {
+      return `enable\nconfig\nsnmp-server enable\nsnmp-server community ${comm} ro\nwrite`;
+    }
+    if (norm.includes('bdcom')) {
+      return `enable\nconfig\nsnmp-server community ${comm} ro\nsnmp-server enable\nwrite`;
+    }
+    if (norm.includes('fiberhome')) {
+      return `enable\nconfig\nset snmp enable\nset snmp community ${comm} ro\nsave`;
+    }
+    if (norm.includes('hioso') || norm.includes('tarmoc')) {
+      return `# Web GUI: System Management -> SNMP Service -> Enable\n# SNMP Version: v2c\n# Read Community: ${comm}\n# Port: 161`;
+    }
+    return `conf t\nsnmp-server community ${comm} ro\nexit\nwrite`;
+  };
+
+  // MikroTik VPN Script Generator
+  const getVpnScript = (rosVer) => {
+    if (rosVer === 'v7') {
+      return `/interface l2tp-client remove [find name="L2TP-UNMS-VPS"]\n/ip ipsec profile remove [find name="unms-ipsec-profile"]\n\n/ip ipsec profile add name="unms-ipsec-profile" enc-algorithm=aes-256,aes-128,3des hash-algorithm=sha1 dh-group=modp1024 lifetime=1h\n/ip ipsec proposal set [find default=yes] enc-algorithms=aes-256-cbc,aes-128-cbc,3des-cbc auth-algorithms=sha1 lifetime=20m\n\n/interface l2tp-client add connect-to=${vpsIp} name="L2TP-UNMS-VPS" user="unms_client" password="unmspassword2026" use-ipsec=yes ipsec-secret="unmssecret2026" profile="unms-ipsec-profile" add-default-route=no allow=mschap2 disabled=no comment="Bridge ke UNMS Cloud VPS"\n\n/ip address add address=192.168.100.2/24 interface=ether2 comment="IP Gateway untuk OLT HSGQ" 2>/dev/null || true`;
+    }
+    return `/interface l2tp-client remove [find comment="added by UNMS"]\n/interface l2tp-client add connect-to=${vpsIp} name="L2TP-UNMS-VPS" user="unms_client" password="unmspassword2026" use-ipsec=yes ipsec-secret="unmssecret2026" add-default-route=no allow=mschap2 disabled=no comment="added by UNMS"\n\n/ip address add address=192.168.100.2/24 interface=ether2 comment="IP Gateway OLT"`;
+  };
+
+  const snmpScriptText = getSnmpScript(activeVendor, effectiveCommunity);
+  const vpnScriptText = getVpnScript(routerOsVersion);
+
+  const handleCopySnmp = () => {
+    navigator.clipboard.writeText(snmpScriptText);
+    setCopiedSnmp(true);
+    setTimeout(() => setCopiedSnmp(false), 2000);
+  };
+
+  const handleCopyVpn = () => {
+    navigator.clipboard.writeText(vpnScriptText);
+    setCopiedVpn(true);
+    setTimeout(() => setCopiedVpn(false), 2000);
+  };
+
+  return (
+    <div className="mt-5 space-y-3 pt-3 border-t border-slate-200 dark:border-neutral-800">
+      <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200">
+        <span className="flex items-center gap-1.5 font-mono">
+          <span className="text-indigo-500 font-black">&gt;_</span> Quick Copy Scripts
+        </span>
+        <span className="text-[10px] text-slate-400 font-normal">Salin konfigurasi 1-klik untuk OLT &amp; Router</span>
+      </div>
+
+      {/* ── Accordion 1: SNMP Configuration ───────────────────────────────── */}
+      <div className="rounded-xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-black overflow-hidden shadow-2xs">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-neutral-900 border-b border-slate-200 dark:border-neutral-800">
+          <div className="flex items-center space-x-2">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono flex items-center gap-1.5">
+              <span className="text-indigo-500">&gt;_</span> SNMP Configuration
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+              {activeVendor}
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-1.5">
+            <button
+              type="button"
+              onClick={handleCopySnmp}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-neutral-800 border border-slate-300 dark:border-neutral-700 text-slate-800 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-neutral-700 hover:text-indigo-600 transition-all flex items-center space-x-1 cursor-pointer shadow-2xs"
+              title="Salin script SNMP"
+            >
+              {copiedSnmp ? (
+                <>
+                  <span className="text-emerald-500 font-bold">✓</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Tersalin!</span>
+                </>
+              ) : (
+                <>
+                  <span>📋</span>
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpenSnmp(!openSnmp)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-neutral-800"
+            >
+              <span className="text-xs">{openSnmp ? '▲' : '▼'}</span>
+            </button>
+          </div>
+        </div>
+
+        {openSnmp && (
+          <div className="p-3.5 space-y-2">
+            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+              <span>Community: <strong className="font-mono text-indigo-600 dark:text-indigo-400">{effectiveCommunity}</strong></span>
+              <span className="text-[10px]">Tempel di CLI / Web GUI OLT</span>
+            </div>
+            <pre className="p-3 rounded-lg bg-slate-950 text-emerald-400 font-mono text-xs overflow-x-auto leading-relaxed border border-slate-800 selection:bg-indigo-500 selection:text-white">
+              {snmpScriptText}
+            </pre>
+          </div>
+        )}
+      </div>
+
+      {/* ── Accordion 2: VPN Configuration (Zetset Style) ────────────────── */}
+      <div className="rounded-xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-black overflow-hidden shadow-2xs">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-neutral-900 border-b border-slate-200 dark:border-neutral-800">
+          <div className="flex items-center space-x-2">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono flex items-center gap-1.5">
+              <span className="text-emerald-500">&lt;&gt;</span> VPN Configuration (L2TP Client)
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              Online
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-1.5">
+            <a
+              href="/network-bridge-setup"
+              target="_blank"
+              rel="noreferrer"
+              className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-neutral-800 text-xs font-bold"
+              title="Buka Wizard Setup Lengkap"
+            >
+              ↗
+            </a>
+            <button
+              type="button"
+              onClick={handleCopyVpn}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-neutral-800 border border-slate-300 dark:border-neutral-700 text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-neutral-700 hover:text-emerald-600 transition-all flex items-center space-x-1 cursor-pointer shadow-2xs"
+              title="Salin script MikroTik L2TP"
+            >
+              {copiedVpn ? (
+                <>
+                  <span className="text-emerald-500 font-bold">✓</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Tersalin!</span>
+                </>
+              ) : (
+                <>
+                  <span>📋</span>
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpenVpn(!openVpn)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-neutral-800"
+            >
+              <span className="text-xs">{openVpn ? '▲' : '▼'}</span>
+            </button>
+          </div>
+        </div>
+
+        {openVpn && (
+          <div className="p-3.5 space-y-3">
+            {/* IP Pool Selector */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                Alokasi IP Tunnel VPN:
+              </label>
+              <div className="w-full px-3 py-1.5 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-lg text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-between">
+                <span>10.254.0.2 (Tersedia)</span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">VPN Aktif: 1/0</span>
+              </div>
+            </div>
+
+            {/* Credentials Card */}
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800">
+                <div className="text-[10px] font-sans text-slate-400 uppercase">Username:</div>
+                <div className="font-bold text-slate-800 dark:text-slate-200 truncate">unms_client</div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800">
+                <div className="text-[10px] font-sans text-slate-400 uppercase">Password:</div>
+                <div className="font-bold text-slate-800 dark:text-slate-200 truncate">unmspassword2026</div>
+              </div>
+            </div>
+
+            {/* RouterOS Version Switch */}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Script MikroTik:</span>
+              <div className="flex rounded-lg border border-slate-300 dark:border-neutral-700 p-0.5 bg-slate-100 dark:bg-neutral-900 text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setRouterOsVersion('v7')}
+                  className={`px-2 py-0.5 rounded ${routerOsVersion === 'v7' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-black dark:hover:text-white'}`}
+                >
+                  RouterOS 7
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRouterOsVersion('v6')}
+                  className={`px-2 py-0.5 rounded ${routerOsVersion === 'v6' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-black dark:hover:text-white'}`}
+                >
+                  RouterOS 6
+                </button>
+              </div>
+            </div>
+
+            {/* Code Block */}
+            <pre className="p-3 rounded-lg bg-slate-950 text-indigo-300 font-mono text-xs overflow-x-auto leading-relaxed border border-slate-800 selection:bg-emerald-500 selection:text-white">
+              {vpnScriptText}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+

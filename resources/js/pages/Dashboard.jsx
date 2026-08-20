@@ -94,16 +94,16 @@ export default function Dashboard() {
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchDashboardData);
 
   // Aggregated Real-Time KPI Stats from DB
-  const totalPop = metrics?.overview?.total_pop ?? stats?.by_type?.POP ?? olts.reduce((sum, o) => sum + (o.pop_count || 1), 0);
-  const totalOdc = metrics?.overview?.total_odc ?? stats?.by_type?.ODC ?? olts.reduce((sum, o) => sum + (o.odc_count || 0), 0);
-  const totalOdp = metrics?.overview?.total_odp ?? stats?.by_type?.ODP ?? olts.reduce((sum, o) => sum + (o.odp_count || 0), 0);
-  const totalCores = metrics?.overview?.total_cores ?? 48;
-  const usedCores = metrics?.overview?.used_cores ?? 1;
+  const totalPop = metrics?.overview?.total_pop ?? stats?.by_type?.POP ?? 0;
+  const totalOdc = metrics?.overview?.total_odc ?? stats?.by_type?.ODC ?? 0;
+  const totalOdp = metrics?.overview?.total_odp ?? stats?.by_type?.ODP ?? 0;
+  const totalCores = metrics?.overview?.total_cores ?? 0;
+  const usedCores = metrics?.overview?.used_cores ?? 0;
   const coreUtilization = metrics?.overview?.core_utilization ?? (totalCores > 0 ? Math.round((usedCores / totalCores) * 100) : 0);
-  const totalOlts = olts.length || metrics?.overview?.total_olts || 1;
-  const activeTicketsCount = metrics?.overview?.active_tickets ?? 1;
+  const totalOlts = metrics?.overview?.total_olts ?? olts.length ?? 0;
+  const activeTicketsCount = metrics?.overview?.active_tickets ?? 0;
   const criticalTicketsCount = metrics?.overview?.critical_tickets ?? 0;
-  const inProgressTicketsCount = metrics?.overview?.in_progress_tickets ?? 1;
+  const inProgressTicketsCount = metrics?.overview?.in_progress_tickets ?? 0;
 
   // Real-Time Optical Signal Power Distribution Chart
   const rxPowerData = useMemo(() => {
@@ -114,7 +114,7 @@ export default function Dashboard() {
         {
           label: 'Jumlah Node / ODP',
           data: [
-            rx?.good ?? (totalOdp > 0 ? totalOdp : 1),
+            rx?.good ?? 0,
             rx?.moderate ?? 0,
             rx?.warning ?? 0,
             rx?.los ?? 0
@@ -130,9 +130,9 @@ export default function Dashboard() {
         }
       ]
     };
-  }, [metrics, totalOdp]);
+  }, [metrics]);
 
-  const avgPowerDbm = metrics?.rx_power?.avg_power ?? -19.5;
+  const avgPowerDbm = metrics?.rx_power?.avg_power ?? null;
 
   const barChartOptions = {
     responsive: true,
@@ -158,70 +158,24 @@ export default function Dashboard() {
 
   // Real-Time Incident Alerts List
   const alertsList = useMemo(() => {
-    if (metrics?.recent_alerts && metrics.recent_alerts.length > 0) {
+    if (metrics?.recent_alerts && Array.isArray(metrics.recent_alerts)) {
       return metrics.recent_alerts;
     }
-    return [
-      {
-        id: 'alert_default_1',
-        severity: 'warning',
-        title: 'TICK-2026-0001: Gangguan Jaringan',
-        description: 'Penanganan kendala redaman tinggi pada jalur distribusi ODP.',
-        node: 'ODP-SLK-01',
-        olt: 'OLT-SOLOK-ZTE C300',
-        time: '47 menit yang lalu',
-      }
-    ];
+    return [];
   }, [metrics]);
 
   const filteredAlerts = alertsList.filter(a => activeAlertFilter === 'all' || a.severity === activeAlertFilter);
 
   // Recent Activities List
   const recentActivities = useMemo(() => {
-    if (metrics?.recent_activities && metrics.recent_activities.length > 0) {
+    if (metrics?.recent_activities && Array.isArray(metrics.recent_activities)) {
       return metrics.recent_activities;
     }
-    return [
-      {
-        id: 1,
-        user: 'Jasen (Super Administrator)',
-        action: 'UPDATE — Infrastruktur Jaringan',
-        node: 'Perbarui node ODC: ODC 01 (ODC-SLK-01)',
-        time: '21 menit yang lalu',
-      },
-      {
-        id: 2,
-        user: 'Jasen (Super Administrator)',
-        action: 'UPDATE — Infrastruktur Jaringan',
-        node: 'Perbarui node ODC: ODC 01a (ODC-SLK-01)',
-        time: '22 menit yang lalu',
-      },
-      {
-        id: 3,
-        user: 'Jasen (Super Administrator)',
-        action: 'UPDATE — Infrastruktur Jaringan',
-        node: 'Perbarui node ODC: ODC 01 (ODC-SLK-01)',
-        time: '30 menit yang lalu',
-      },
-      {
-        id: 4,
-        user: 'Super Administrator',
-        action: 'UPDATE — Infrastruktur Jaringan ODP',
-        node: 'Edit ODP 01',
-        time: '31 menit yang lalu',
-      },
-      {
-        id: 5,
-        user: 'Jasen (Super Administrator)',
-        action: 'UPDATE — Infrastruktur Jaringan',
-        node: 'Perbarui node ODC: ODC 01a (ODC-SLK-01)',
-        time: '31 menit yang lalu',
-      }
-    ];
+    return [];
   }, [metrics]);
 
   const getInitial = (userName) => {
-    if (!userName) return 'JA';
+    if (!userName) return 'SA';
     const clean = userName.replace(/\(.*?\)/g, '').trim();
     const parts = clean.split(' ');
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -531,27 +485,33 @@ export default function Dashboard() {
               </p>
 
               <div className="space-y-2.5 overflow-y-auto max-h-72 pr-1">
-                {recentActivities.map((act) => (
-                  <div
-                    key={act.id}
-                    className="p-2.5 rounded-lg border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 flex items-start gap-2.5"
-                  >
-                    <div className="w-6 h-6 rounded bg-slate-200 dark:bg-neutral-800 text-slate-700 dark:text-slate-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                      {getInitial(act.user)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="font-bold text-[11px] text-blue-600 dark:text-blue-400 block truncate">
-                        {act.action}
-                      </span>
-                      <p className="text-[11px] text-slate-700 dark:text-slate-300 truncate">
-                        {act.node}
-                      </p>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        {act.user} • {act.time}
-                      </span>
-                    </div>
+                {recentActivities.length === 0 ? (
+                  <div className="text-center py-10 text-xs text-slate-400 italic">
+                    Belum ada riwayat aktivitas tercatat.
                   </div>
-                ))}
+                ) : (
+                  recentActivities.map((act) => (
+                    <div
+                      key={act.id}
+                      className="p-2.5 rounded-lg border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 flex items-start gap-2.5"
+                    >
+                      <div className="w-6 h-6 rounded bg-slate-200 dark:bg-neutral-800 text-slate-700 dark:text-slate-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                        {getInitial(act.user)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="font-bold text-[11px] text-blue-600 dark:text-blue-400 block truncate">
+                          {act.action}
+                        </span>
+                        <p className="text-[11px] text-slate-700 dark:text-slate-300 truncate">
+                          {act.node}
+                        </p>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          {act.user} • {act.time}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

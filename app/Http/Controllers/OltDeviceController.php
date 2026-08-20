@@ -359,6 +359,96 @@ class OltDeviceController extends Controller
         ]);
     }
 
+    // ─── POST /api/olts/{id}/snmp-diagnostic ────────────────────────────────
+    public function snmpDiagnostic(Request $request, $id)
+    {
+        $device = OltDevice::findOrFail($id);
+        $oid = $request->input('oid', '1.3.6.1.2.1.1.1.0');
+        $operation = $request->input('operation', 'get'); // 'get' or 'walk'
+
+        if (!SnmpConnector::isAvailable()) {
+            return response()->json([
+                'status'  => 'warning',
+                'message' => 'PHP SNMP extension belum aktif di server. Menampilkan format struktur OID simulasi.',
+                'data'    => [
+                    'oid'         => $oid,
+                    'operation'   => $operation,
+                    'device_ip'   => $device->ip_address,
+                    'response'    => "SysDescr: {$device->vendor} {$device->model} Firmware V2.1.0 (Simulation Mode)",
+                    'latency_ms'  => 12,
+                    'is_live'     => false,
+                ],
+            ]);
+        }
+
+        $connector = ConnectionManager::buildConnector($device);
+        $startTime = microtime(true);
+
+        try {
+            if ($operation === 'walk') {
+                $raw = $connector->walk($oid);
+                $elapsed = (int)((microtime(true) - $startTime) * 1000);
+
+                if ($raw === false) {
+                    return response()->json([
+                        'status'  => 'error',
+                        'message' => "SNMP WALK gagal pada OID {$oid} ke {$device->ip_address}.",
+                        'data'    => ['error' => 'No SNMP response received'],
+                    ], 400);
+                }
+
+                $parsed = [];
+                foreach ($raw as $k => $v) {
+                    $parsed[$k] = SnmpConnector::parseValue((string)$v);
+                }
+
+                return response()->json([
+                    'status'  => 'success',
+                    'message' => "SNMP WALK berhasil pada OID {$oid}",
+                    'data'    => [
+                        'oid'         => $oid,
+                        'operation'   => 'walk',
+                        'device_ip'   => $device->ip_address,
+                        'results'     => $parsed,
+                        'count'       => count($parsed),
+                        'latency_ms'  => $elapsed,
+                        'is_live'     => true,
+                    ],
+                ]);
+            } else {
+                $raw = $connector->get($oid);
+                $elapsed = (int)((microtime(true) - $startTime) * 1000);
+
+                if ($raw === false) {
+                    return response()->json([
+                        'status'  => 'error',
+                        'message' => "SNMP GET gagal pada OID {$oid} ke {$device->ip_address}.",
+                        'data'    => ['error' => 'No SNMP response received'],
+                    ], 400);
+                }
+
+                return response()->json([
+                    'status'  => 'success',
+                    'message' => "SNMP GET berhasil pada OID {$oid}",
+                    'data'    => [
+                        'oid'         => $oid,
+                        'operation'   => 'get',
+                        'device_ip'   => $device->ip_address,
+                        'raw_value'   => (string)$raw,
+                        'parsed_value'=> SnmpConnector::parseValue((string)$raw),
+                        'latency_ms'  => $elapsed,
+                        'is_live'     => true,
+                    ],
+                ]);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => "Error saat query SNMP: " . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ─── Default Seeded OLTs ─────────────────────────────────────────────────
     private function defaultOlts(): array
     {

@@ -67,9 +67,11 @@ const generateAutoNodeCode = (nodeType = 'POP', name = '', allNodes = [], parent
   return autoCode;
 };
 
-const generateAutoCableCode = (popNode, existingCables = []) => {
-  const popAbbr = popNode?.code ? popNode.code.replace(/^POP-/i, '') : 'POP';
-  const prefix = `CBL-${popAbbr}`;
+const generateAutoCableCode = (startNode, existingCables = []) => {
+  const nodeAbbr = startNode?.code
+    ? startNode.code.replace(/^(POP|ODC|ODP|FAT|JC)-/i, '')
+    : (startNode?.name ? startNode.name.replace(/[^A-Za-z0-9]/g, '').substring(0, 4).toUpperCase() : 'POP');
+  const prefix = `CBL-${nodeAbbr}`;
   
   const existingSet = new Set((existingCables || []).map(c => String(c?.code ?? '').toUpperCase().trim()));
   let count = (existingCables || []).length + 1;
@@ -1558,11 +1560,13 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
    MODAL TAMBAH KABEL
 ══════════════════════════════════════════════════════════════════ */
 function AddCableModal({ popNode, onSave, onClose, loading, error, cables = [], allNodes = [] }) {
-  const initialCableCode = generateAutoCableCode(popNode, cables);
+  const initialStartNode = popNode || allNodes.find(n => n.node_type === 'POP') || allNodes[0];
+  const initialCableCode = generateAutoCableCode(initialStartNode, cables);
+  
   const [form, setForm] = useState({
     name: '',
     code: initialCableCode,
-    from_node_id: popNode?.id ?? '',
+    from_node_id: initialStartNode?.id ?? '',
     to_node_id: '',
     length_meters: '',
     core_count_total: 48,
@@ -1585,9 +1589,25 @@ function AddCableModal({ popNode, onSave, onClose, loading, error, cables = [], 
     return updated;
   });
 
+  const handleFromNodeChange = (val) => {
+    const fromId = val ? Number(val) : '';
+    const selectedStartNode = allNodes.find(n => n.id === fromId);
+    setForm(f => {
+      const updated = { ...f, from_node_id: fromId };
+      if (f.to_node_id === fromId) {
+        updated.to_node_id = '';
+      }
+      if (!f.code || f.code.startsWith('CBL-')) {
+        updated.code = generateAutoCableCode(selectedStartNode || popNode, cables);
+      }
+      return updated;
+    });
+  };
+
   const handleSubmit = e => {
     e.preventDefault();
-    const autoCode = form.code || generateAutoCableCode(popNode, cables);
+    const currentStartNode = allNodes.find(n => n.id === form.from_node_id) || popNode;
+    const autoCode = form.code || generateAutoCableCode(currentStartNode, cables);
     onSave({ ...form, code: autoCode });
   };
 
@@ -1599,8 +1619,8 @@ function AddCableModal({ popNode, onSave, onClose, loading, error, cables = [], 
       <div className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-700 max-h-[92vh] flex flex-col overflow-hidden">
         <div className="bg-slate-900 dark:bg-slate-950 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-base font-bold"> Tambah Kabel Backbone Baru</h3>
-            <p className="text-xs text-slate-300">Node Asal: {popNode?.name}</p>
+            <h3 className="text-base font-bold"> Tambah Kabel Fiber Optik Baru</h3>
+            <p className="text-xs text-slate-300">Konfigurasi Node Asal, Node Tujuan, &amp; Core Matrix TIA-598-A</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 font-bold">✕</button>
         </div>
@@ -1612,24 +1632,47 @@ function AddCableModal({ popNode, onSave, onClose, loading, error, cables = [], 
             </div>
           )}
 
-          <div>
-            <label className={lc}>Nama Kabel *</label>
-            <input required value={form.name} onChange={e => set('name', e.target.value)} placeholder="Kabel Backbone Arah A" className={fc} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className={lc}>Nama Kabel *</label>
+              <input required value={form.name} onChange={e => set('name', e.target.value)} placeholder="Kabel Feeder / Distribusi" className={fc} />
+            </div>
+            <div>
+              <label className={lc}>Kode Kabel *</label>
+              <input required value={form.code} onChange={e => set('code', e.target.value.toUpperCase())} placeholder="CBL-..." className={`${fc} font-mono uppercase`} />
+            </div>
           </div>
 
-          <div>
-            <label className={lc}>Node Tujuan (End Point / ODC / ODP / POP)</label>
-            <SearchableSelect
-              value={form.to_node_id || ''}
-              onChange={val => set('to_node_id', val ? Number(val) : '')}
-              placeholder="— Pilih Node Tujuan (End Point) —"
-              searchPlaceholder="Cari ODC, ODP, POP..."
-              options={allNodes.filter(n => n.id !== popNode?.id).map(n => ({
-                value: n.id,
-                label: n.name,
-                sublabel: `[${n.node_type}] ${n.address || ''}`
-              }))}
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className={lc}>Node Mulai (Asal / Starting Point) *</label>
+              <SearchableSelect
+                value={form.from_node_id || ''}
+                onChange={handleFromNodeChange}
+                placeholder="— Pilih Node Mulai (POP / ODC / ODP) —"
+                searchPlaceholder="Cari POP, ODC, ODP..."
+                options={allNodes.filter(n => n.id !== form.to_node_id).map(n => ({
+                  value: n.id,
+                  label: n.name,
+                  sublabel: `[${n.node_type}] ${n.address || ''}`
+                }))}
+              />
+            </div>
+
+            <div>
+              <label className={lc}>Node Tujuan (Akhir / End Point)</label>
+              <SearchableSelect
+                value={form.to_node_id || ''}
+                onChange={val => set('to_node_id', val ? Number(val) : '')}
+                placeholder="— Pilih Node Tujuan (ODC / ODP / POP / FAT) —"
+                searchPlaceholder="Cari ODC, ODP, POP, FAT..."
+                options={allNodes.filter(n => n.id !== form.from_node_id).map(n => ({
+                  value: n.id,
+                  label: n.name,
+                  sublabel: `[${n.node_type}] ${n.address || ''}`
+                }))}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1693,6 +1736,7 @@ function AddCableModal({ popNode, onSave, onClose, loading, error, cables = [], 
 function EditCableModal({ cable, onSave, onClose, loading, error, allNodes = [] }) {
   const [form, setForm] = useState({
     name: cable.name ?? '',
+    from_node_id: cable.from_node_id ?? '',
     to_node_id: cable.to_node_id ?? '',
     length_meters: cable.length_meters ?? '',
     installation_type: cable.installation_type ?? 'Aerial',
@@ -1713,7 +1757,7 @@ function EditCableModal({ cable, onSave, onClose, loading, error, allNodes = [] 
         <div className="bg-slate-900 dark:bg-slate-950 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
           <div>
             <h3 className="text-base font-bold">️ Edit Kabel — {cable.name}</h3>
-            <p className="text-xs text-slate-300 font-mono">{cable.core_count_total} Core</p>
+            <p className="text-xs text-slate-300 font-mono">{cable.code} · {cable.core_count_total} Core</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 font-bold">✕</button>
         </div>
@@ -1730,19 +1774,36 @@ function EditCableModal({ cable, onSave, onClose, loading, error, allNodes = [] 
             <input required value={form.name} onChange={e => set('name', e.target.value)} className={fc} />
           </div>
 
-          <div>
-            <label className={lc}>Node Tujuan (End Point / ODC / ODP / POP)</label>
-            <SearchableSelect
-              value={form.to_node_id || ''}
-              onChange={val => set('to_node_id', val ? Number(val) : '')}
-              placeholder="— Pilih Node Tujuan —"
-              searchPlaceholder="Cari ODC, ODP, POP..."
-              options={allNodes.filter(n => n.id !== cable.from_node_id).map(n => ({
-                value: n.id,
-                label: n.name,
-                sublabel: `[${n.node_type}] ${n.address || ''}`
-              }))}
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className={lc}>Node Mulai (Asal / Starting Point) *</label>
+              <SearchableSelect
+                value={form.from_node_id || ''}
+                onChange={val => set('from_node_id', val ? Number(val) : '')}
+                placeholder="— Pilih Node Mulai (Asal) —"
+                searchPlaceholder="Cari POP, ODC, ODP..."
+                options={allNodes.filter(n => n.id !== form.to_node_id).map(n => ({
+                  value: n.id,
+                  label: n.name,
+                  sublabel: `[${n.node_type}] ${n.address || ''}`
+                }))}
+              />
+            </div>
+
+            <div>
+              <label className={lc}>Node Tujuan (Akhir / End Point)</label>
+              <SearchableSelect
+                value={form.to_node_id || ''}
+                onChange={val => set('to_node_id', val ? Number(val) : '')}
+                placeholder="— Pilih Node Tujuan (Akhir) —"
+                searchPlaceholder="Cari ODC, ODP, POP, FAT..."
+                options={allNodes.filter(n => n.id !== form.from_node_id).map(n => ({
+                  value: n.id,
+                  label: n.name,
+                  sublabel: `[${n.node_type}] ${n.address || ''}`
+                }))}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1764,10 +1825,10 @@ function EditCableModal({ cable, onSave, onClose, loading, error, allNodes = [] 
           <div>
             <label className={lc}>Status Kabel</label>
             <select value={form.status} onChange={e => set('status', e.target.value)} className={fc}>
-              <option value="active"> Aktif</option>
-              <option value="maintenance"> Maintenance</option>
-              <option value="inactive"> Tidak Aktif</option>
-              <option value="damaged"> Rusak / Putus</option>
+              <option value="active">🟢 Aktif</option>
+              <option value="inactive">⚪ Non-Aktif</option>
+              <option value="maintenance">🟡 Maintenance / Pemeliharaan</option>
+              <option value="damaged">🔴 Rusak / Putus</option>
             </select>
           </div>
 
@@ -4488,9 +4549,9 @@ export default function NetworkInfrastructure() {
       )}
 
       {/* Modal Add Cable */}
-      {showAddCableModal && selectedPop && (
+      {showAddCableModal && (
         <AddCableModal
-          popNode={selectedPop}
+          popNode={selectedPop || allNodes.find(n => n.node_type === 'POP') || allNodes[0]}
           cables={popCables}
           allNodes={allNodes}
           onSave={handleSaveCable}

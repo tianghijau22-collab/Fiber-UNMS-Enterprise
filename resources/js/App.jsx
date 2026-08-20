@@ -23,6 +23,7 @@ import DatabaseBackup from './pages/DatabaseBackup.jsx';
 import OdpCheckManagement from './pages/OdpCheckManagement.jsx';
 import PublicTicketTracking from './pages/PublicTicketTracking.jsx';
 import Login from './pages/Login.jsx';
+import NetworkBridgeSetup from './pages/NetworkBridgeSetup.jsx';
 import VoiceCallManager from './components/VoiceCallManager.jsx';
 import PageTransitionWrapper from './components/PageTransitionWrapper.jsx';
 
@@ -83,6 +84,7 @@ function AppContent() {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard"      element={<PrivateRoute><Dashboard /></PrivateRoute>} />
               <Route path="/olt-management" element={<PrivateRoute><OltManagement /></PrivateRoute>} />
+              <Route path="/network-bridge-setup" element={<PrivateRoute><NetworkBridgeSetup /></PrivateRoute>} />
               <Route path="/otdr-tracing"   element={<PrivateRoute><OtdrFaultTracing /></PrivateRoute>} />
               <Route path="/cable-routes"   element={<PrivateRoute><CableRouteEditor /></PrivateRoute>} />
               <Route path="/field-tech"     element={<PrivateRoute><FieldTechWorkOrders /></PrivateRoute>} />

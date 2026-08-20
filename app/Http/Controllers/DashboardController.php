@@ -23,8 +23,8 @@ class DashboardController extends Controller
         $totalOdc  = NetworkNode::where('node_type', 'ODC')->count();
         $totalOdp  = NetworkNode::where('node_type', 'ODP')->count();
 
-        $totalCores = (int) (NetworkCable::sum('core_count_total') ?: 48);
-        $usedCores  = (int) (NetworkCable::sum('core_count_used') ?: 1);
+        $totalCores = (int) NetworkCable::sum('core_count_total');
+        $usedCores  = (int) NetworkCable::sum('core_count_used');
         $coreUtilization = $totalCores > 0 ? round(($usedCores / $totalCores) * 100) : 0;
 
         $activeTickets = Ticket::whereNotIn('status', ['Resolved', 'Closed'])->count();

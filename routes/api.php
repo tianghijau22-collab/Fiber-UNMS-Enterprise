@@ -21,6 +21,8 @@ use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\BtsSiteController;
+use App\Http\Controllers\VpsBridgeController;
+use App\Http\Controllers\LiveMonitorController;
 
 /*
 |--------------------------------------------------------------------------
@@ -60,11 +62,22 @@ Route::put('/olts/{id}', [OltDeviceController::class, 'update']);
 Route::post('/olts/{id}/test-connection', [OltDeviceController::class, 'testConnection']);
 Route::post('/olts/{id}/disconnect', [OltDeviceController::class, 'disconnect']);
 Route::put('/olts/{id}/connection-config', [OltDeviceController::class, 'saveConnectionConfig']);
+Route::post('/olts/{id}/snmp-diagnostic', [OltDeviceController::class, 'snmpDiagnostic']);
 Route::delete('/olts/{id}', [OltDeviceController::class, 'destroy']);
 
 Route::get('/olt/hardware', [OltController::class, 'index']);
 Route::post('/olt/authorize-onu', [OltController::class, 'authorizeOnu']);
 Route::get('/olt/optical-power/{serialNumber}', [OltController::class, 'opticalPower']);
+
+// VPS & MikroTik/OLT Bridge Setup Wizard
+Route::get('/vps-bridge/detect-environment', [VpsBridgeController::class, 'detectEnvironment']);
+Route::post('/vps-bridge/generate-script', [VpsBridgeController::class, 'generateScript']);
+Route::post('/vps-bridge/test-connection', [VpsBridgeController::class, 'testBridgeConnection']);
+
+// Live Polling & Telemetry Monitoring (SNMP & MikroTik RouterOS API)
+Route::get('/monitoring/router/live-metrics', [LiveMonitorController::class, 'getRouterMetrics']);
+Route::get('/monitoring/olt/{id}/live-telemetry', [LiveMonitorController::class, 'getOltTelemetry']);
+Route::post('/monitoring/ping-sweep', [LiveMonitorController::class, 'pingSweep']);
 
 // OTDR Fault Tracing Engine
 Route::get('/fault-tracing/cables', [FaultTracingController::class, 'cables']);
@@ -138,6 +151,7 @@ Route::post('database/backups/upload', [\App\Http\Controllers\DatabaseBackupCont
 Route::get('database/backups/{filename}/download', [\App\Http\Controllers\DatabaseBackupController::class, 'download']);
 Route::post('database/backups/{filename}/restore', [\App\Http\Controllers\DatabaseBackupController::class, 'restore']);
 Route::delete('database/backups/{filename}', [\App\Http\Controllers\DatabaseBackupController::class, 'destroy']);
+Route::post('database/clear-operational-data', [\App\Http\Controllers\DatabaseBackupController::class, 'clearOperationalData']);
 
 // Pengecekan Redaman ODP & OPM Lapangan
 Route::get('odp-checks/stats', [\App\Http\Controllers\OdpMeasurementController::class, 'stats']);

@@ -229,10 +229,11 @@ class NetworkCableController extends Controller
     {
         $this->checkCrudPermission();
 
-        $oldData = $networkCable->only(['name', 'length_meters', 'installation_type', 'status', 'route_description']);
+        $oldData = $networkCable->only(['name', 'from_node_id', 'to_node_id', 'length_meters', 'installation_type', 'status', 'route_description']);
 
         $validated = $request->validate([
             'name'              => 'required|string|max:255',
+            'from_node_id'      => 'nullable|exists:network_nodes,id',
             'to_node_id'        => 'nullable|exists:network_nodes,id',
             'length_meters'     => 'required|numeric|min:1',
             'installation_type' => 'required|string|in:Aerial,Underground,Duct,Wall',
@@ -248,7 +249,7 @@ class NetworkCableController extends Controller
             'Infrastruktur Kabel Optik',
             "Pembaruan data rute/spesifikasi kabel {$networkCable->name} ({$networkCable->code})",
             $oldData,
-            $networkCable->only(['name', 'length_meters', 'installation_type', 'status', 'route_description'])
+            $networkCable->only(['name', 'from_node_id', 'to_node_id', 'length_meters', 'installation_type', 'status', 'route_description'])
         );
 
         return response()->json([

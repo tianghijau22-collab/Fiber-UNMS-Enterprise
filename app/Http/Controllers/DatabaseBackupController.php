@@ -462,6 +462,136 @@ class DatabaseBackupController extends Controller
         ];
     }
 
+    /**
+     * POST /api/database/clear-operational-data
+     * Mengosongkan seluruh data operasional (OLT, POP, ODC, ODP, BTS, Pelanggan, Tiket, Billing)
+     * PERINGATAN: Tabel 'users' dan manajemen hak akses TIDAK AKAN DIHAPUS.
+     */
+    public function clearOperationalData(Request $request)
+    {
+        $request->validate([
+            'confirmation' => 'required|string',
+            'auto_backup'  => 'nullable|boolean',
+        ]);
+
+        if (trim($request->input('confirmation')) !== 'KOSONGKAN-DATABASE-OPERASIONAL') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Kode konfirmasi tidak valid. Harap ketik "KOSONGKAN-DATABASE-OPERASIONAL" secara persis.',
+            ], 422);
+        }
+
+        // Buat auto emergency backup sebelum mengosongkan jika diminta (default true)
+        $backupSummary = null;
+        if ($request->input('auto_backup', true)) {
+            try {
+                $dbName = config('database.connections.pgsql.database', 'fiber_unms_enterprise');
+                $timestamp = Carbon::now()->format('Y-m-d_H-i-s');
+                $filename = "backup_auto_pre_clear_{$timestamp}.sql";
+                $filePath = $this->backupDir . '/' . $filename;
+                $backupSummary = $this->generatePostgresSqlDump($filePath, 'Cadangan Darurat Otomatis sebelum Pengosongan Data Operasional');
+
+                $metaFile = $this->backupDir . '/' . $filename . '.meta.json';
+                File::put($metaFile, json_encode([
+                    'created_at'    => Carbon::now()->toIso8601String(),
+                    'notes'         => 'Cadangan Darurat Otomatis sebelum Pengosongan Data Operasional',
+                    'tables_count'  => $backupSummary['tables_count'],
+                    'records_count' => $backupSummary['records_count'],
+                    'driver'        => config('database.default', 'pgsql'),
+                ], JSON_PRETTY_PRINT));
+            } catch (\Exception $e) {
+                Log::warning("Auto backup pre-clear failed: " . $e->getMessage());
+            }
+        }
+
+        // Daftar tabel operasional yang akan dikosongkan secara bersih
+        $operationalTables = [
+            'ont_registrations',
+            'olt_devices',
+            'odp_measurements',
+            'network_cable_cores',
+            'network_cables',
+            'network_splitters',
+            'network_ports',
+            'network_nodes',
+            'bts_sites',
+            'tickets',
+            'customer_notes',
+            'customer_contacts',
+            'customer_services',
+            'service_surveys',
+            'service_quotas',
+            'billing_payments',
+            'billing_invoices',
+            'customers',
+            'vlan_assignments',
+            'voice_calls',
+            'app_notifications',
+        ];
+
+        $clearedStats = [];
+        $totalRecordsCleared = 0;
+
+        try {
+            DB::beginTransaction();
+
+            // Nonaktifkan trigger foreign key di level session PostgreSQL
+            DB::statement("SET session_replication_role = 'replica';");
+
+            foreach ($operationalTables as $table) {
+                if (\Illuminate\Support\Facades\Schema::hasTable($table)) {
+                    $count = DB::table($table)->count();
+                    $clearedStats[$table] = $count;
+                    $totalRecordsCleared += $count;
+                    DB::table($table)->truncate();
+                }
+            }
+
+            // Kembalikan session_replication_role
+            DB::statement("SET session_replication_role = 'origin';");
+
+            DB::commit();
+
+            // Catat ke Audit Log
+            try {
+                \App\Models\AuditLog::create([
+                    'user_id'     => auth()->id(),
+                    'user_name'   => auth()->user()?->name ?? 'Super Administrator',
+                    'user_role'   => auth()->user()?->role ?? 'Super Administrator',
+                    'action'      => 'CLEAR_OPERATIONAL_DATA',
+                    'module'      => 'DATABASE_MANAGEMENT',
+                    'description' => "Pengosongan {$totalRecordsCleared} record data operasional (OLT, POP, ODC, ODP, BTS, Pelanggan, Tiket). Data Users tetap utuh dan aman.",
+                    'ip_address'  => $request->ip(),
+                    'created_at'  => now(),
+                ]);
+            } catch (\Exception $e) {
+                // Ignore audit log error if any
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Seluruh data operasional berhasil dikosongkan ({$totalRecordsCleared} data dihapus). Data Users & akun login tetap tersimpan aman.",
+                'data' => [
+                    'total_records_cleared' => $totalRecordsCleared,
+                    'tables_cleared'        => $clearedStats,
+                    'users_preserved'       => \App\Models\User::count(),
+                    'auto_backup_created'   => $backupSummary ? true : false,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            try {
+                DB::statement("SET session_replication_role = 'origin';");
+            } catch (\Exception $e2) {}
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengosongkan data database: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     private function formatBytes(int $bytes, int $precision = 2): string
     {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];

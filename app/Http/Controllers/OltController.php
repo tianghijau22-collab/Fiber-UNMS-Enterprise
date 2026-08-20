@@ -9,6 +9,8 @@ use App\Models\NetworkNode;
 use App\Models\AuditLog;
 use App\Services\Olt\ZteC300Driver;
 use App\Services\Olt\ZteC320Driver;
+use App\Services\Olt\HuaweiDriver;
+use App\Services\Olt\VsolDriver;
 use App\Services\Olt\HiosoDriver;
 use App\Services\Olt\HsgqDriver;
 use App\Services\Olt\TarmocDriver;
@@ -24,7 +26,26 @@ class OltController extends Controller
         $community = $device ? $device->getEffectiveCommunity() : 'public';
         $snmpVersion = $device ? ($device->snmp_version ?? 'v2c') : 'v2c';
 
-        switch (strtolower($vendor)) {
+        $v = strtolower($vendor);
+        if (str_contains($v, 'huawei')) {
+            return new HuaweiDriver(
+                ip: $ip,
+                community: $community,
+                snmpVersion: $snmpVersion,
+                isLive: $isLive
+            );
+        }
+
+        if (str_contains($v, 'vsol')) {
+            return new VsolDriver(
+                ip: $ip,
+                community: $community,
+                snmpVersion: $snmpVersion,
+                isLive: $isLive
+            );
+        }
+
+        switch ($v) {
             case 'zte-c320':
                 return new ZteC320Driver();
             case 'hioso':

@@ -77,6 +77,7 @@ export default function DatabaseBackup() {
   // Modal States
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
   const [restoreModalData, setRestoreModalData] = useState(null);
   const [deleteConfirmData, setDeleteConfirmData] = useState(null);
 
@@ -95,6 +96,12 @@ export default function DatabaseBackup() {
   const [restoring, setRestoring] = useState(false);
   const [restoreConfirmationText, setRestoreConfirmationText] = useState('');
   const [restoreError, setRestoreError] = useState(null);
+
+  // Clear Operational Data States
+  const [clearing, setClearing] = useState(false);
+  const [clearConfirmationText, setClearConfirmationText] = useState('');
+  const [clearError, setClearError] = useState(null);
+  const [autoBackupBeforeClear, setAutoBackupBeforeClear] = useState(true);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -235,6 +242,41 @@ export default function DatabaseBackup() {
     }
   };
 
+  const handleClearOperationalData = async () => {
+    if (clearConfirmationText.trim() !== 'KOSONGKAN-DATABASE-OPERASIONAL') {
+      setClearError('Ketik "KOSONGKAN-DATABASE-OPERASIONAL" secara persis dengan huruf besar.');
+      return;
+    }
+
+    setClearing(true);
+    setClearError(null);
+
+    try {
+      const res = await fetch('/api/database/clear-operational-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          confirmation: clearConfirmationText.trim(),
+          auto_backup: autoBackupBeforeClear,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast(json.message || 'Seluruh data operasional berhasil dikosongkan.');
+        setShowClearModal(false);
+        setClearConfirmationText('');
+        fetchBackups();
+      } else {
+        setClearError(json.message || 'Gagal mengosongkan database.');
+      }
+    } catch (err) {
+      console.error(err);
+      setClearError('Terjadi kesalahan jaringan/sistem saat mengosongkan database.');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const filteredBackups = useMemo(() => {
     if (!search.trim()) return backups;
     const q = search.toLowerCase();
@@ -295,6 +337,19 @@ export default function DatabaseBackup() {
               >
                 <span>+</span>
                 <span>Buat Cadangan Database Sekarang</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setClearConfirmationText('');
+                  setClearError(null);
+                  setShowClearModal(true);
+                }}
+                className="px-3.5 py-2.5 rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold text-xs hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Kosongkan data OLT, POP, ODC, ODP, BTS, Pelanggan, Tiket untuk mulai dari awal"
+              >
+                <IconTrash />
+                <span>Kosongkan Seluruh Data</span>
               </button>
             </>
           )}
@@ -724,6 +779,132 @@ export default function DatabaseBackup() {
               >
                 {restoring && <span className="w-4 h-4 border-2 border-slate-400 border-t-white dark:border-t-black rounded-full animate-spin" />}
                 <span>{restoring ? 'Memulihkan Database...' : 'Ya, Pulihkan Sekarang'}</span>
+              </button>
+            </div>
+
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+          CLEAR OPERATIONAL DATA MODAL
+      ══════════════════════════════════════════════════════════════════ */}
+      {showClearModal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-neutral-950 border border-rose-300 dark:border-rose-900/60 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-150">
+            
+            {/* Header */}
+            <div className="px-5 py-4 bg-rose-50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-900/60 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300">
+                  <IconTrash />
+                </span>
+                <div>
+                  <h3 className="font-bold text-base text-rose-900 dark:text-rose-100">Kosongkan Seluruh Data Operasional</h3>
+                  <p className="text-[11px] text-rose-700 dark:text-rose-300">Membersihkan data inputan agar sistem siap dimulai dari awal &amp; bersih</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                disabled={clearing}
+                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-rose-200 dark:hover:bg-rose-900 text-rose-700 dark:text-rose-300 font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+              
+              {/* Detailed Scope Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl space-y-1.5">
+                  <div className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-1.5">
+                    <span>🗑️ Data yang AKAN DIBERSIHKAN:</span>
+                  </div>
+                  <ul className="space-y-1 text-rose-700 dark:text-rose-300/90 pl-3 list-disc">
+                    <li>Semua OLT &amp; Registrasi ONT</li>
+                    <li>Semua Node (POP, ODC, ODP, Closure)</li>
+                    <li>Kabel Fiber, Core Matrix, Splitter &amp; Port</li>
+                    <li>Semua Data Pelanggan, Layanan &amp; Invoice</li>
+                    <li>Semua Tiket &amp; Pengukuran ODP/OPM</li>
+                    <li>Data BTS Sites &amp; Telemetri</li>
+                  </ul>
+                </div>
+
+                <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl space-y-1.5">
+                  <div className="font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5">
+                    <span>🛡️ Data yang DIJAMIN AMAN:</span>
+                  </div>
+                  <ul className="space-y-1 text-emerald-700 dark:text-emerald-300/90 pl-3 list-disc">
+                    <li><strong>Manajemen Users &amp; Akun Login</strong> (Tidak dihapus)</li>
+                    <li>Hak Akses (Roles &amp; Permissions)</li>
+                    <li>Master Wilayah (Provinsi/Kota/Kecamatan)</li>
+                    <li>Tipe Standar Kabel &amp; Splitter</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Auto Backup Safeguard Notice */}
+              <div className="p-3 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-xl flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold text-slate-800 dark:text-slate-100">Cadangan Darurat Otomatis</div>
+                  <div className="text-[11px] text-slate-500">Sistem otomatis membuat backup (.sql) sebelum penghapusan dijalankan.</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoBackupBeforeClear}
+                    onChange={(e) => setAutoBackupBeforeClear(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-neutral-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-neutral-600 peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+
+              {clearError && (
+                <div className="p-3 bg-red-50 dark:bg-neutral-900 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 rounded-xl font-bold">
+                  {clearError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wide mb-1">
+                  Ketik persis kata konfirmasi di bawah untuk mengeksekusi:
+                </label>
+                <div className="p-2 bg-slate-100 dark:bg-neutral-900 rounded-lg text-center font-mono font-black text-rose-600 dark:text-rose-400 select-all mb-2 tracking-wider">
+                  KOSONGKAN-DATABASE-OPERASIONAL
+                </div>
+                <input
+                  type="text"
+                  value={clearConfirmationText}
+                  onChange={(e) => setClearConfirmationText(e.target.value)}
+                  placeholder="Ketik KOSONGKAN-DATABASE-OPERASIONAL"
+                  className={`${fc} uppercase font-mono font-bold tracking-wider text-center text-sm border-rose-300 dark:border-rose-800 focus:ring-rose-500`}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 bg-slate-50 dark:bg-neutral-950 border-t border-slate-200 dark:border-neutral-800 flex items-center justify-end gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                disabled={clearing}
+                className="px-4 py-2 rounded-xl border border-slate-300 dark:border-neutral-700 text-black dark:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 text-xs font-bold transition-all cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleClearOperationalData}
+                disabled={clearing || clearConfirmationText.trim() !== 'KOSONGKAN-DATABASE-OPERASIONAL'}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all disabled:opacity-40 flex items-center gap-2 cursor-pointer shadow-md shadow-rose-600/20"
+              >
+                {clearing && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                <span>{clearing ? 'Sedang Mengosongkan Database...' : '🗑️ Ya, Kosongkan Data Sekarang'}</span>
               </button>
             </div>
 
