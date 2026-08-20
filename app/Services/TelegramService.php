@@ -599,7 +599,7 @@ class TelegramService
                 default    => strtoupper($measurement->power_status ?? 'NORMAL'),
             };
 
-            $timeStr = $measurement->created_at ? $measurement->created_at->format('d/m/Y H:i') . ' WIB' : now()->format('d/m/Y H:i') . ' WIB';
+            $timeStr = ($measurement->created_at ? $measurement->created_at->copy()->timezone('Asia/Jakarta') : now('Asia/Jakarta'))->format('d/m/Y H:i') . ' WIB';
             $coords = ($measurement->latitude && $measurement->longitude)
                 ? "{$measurement->latitude}, {$measurement->longitude}"
                 : "Tidak tersedia";

@@ -775,12 +775,14 @@ export default function OdpCheckManagement() {
                     <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-neutral-950/60 transition-colors">
                       <td className="py-3 px-4 font-mono text-[11px] text-neutral-500 whitespace-nowrap">
                         {new Date(m.created_at).toLocaleString('id-ID', {
+                          timeZone: 'Asia/Jakarta',
                           day: '2-digit',
                           month: '2-digit',
                           year: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit',
-                        })}
+                          hour12: false,
+                        })} WIB
                       </td>
                       <td className="py-3 px-4">
                         <div className="font-bold">{m.odp_name || m.odp_code}</div>

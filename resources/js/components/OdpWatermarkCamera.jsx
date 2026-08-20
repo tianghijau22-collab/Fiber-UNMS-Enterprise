@@ -123,14 +123,17 @@ export default function OdpWatermarkCamera({
     // 3. Format Data Watermark
     const now = new Date();
     const dateStr = now.toLocaleDateString('id-ID', {
+      timeZone: 'Asia/Jakarta',
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
     });
     const timeStr = now.toLocaleTimeString('id-ID', {
+      timeZone: 'Asia/Jakarta',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
+      hour12: false,
     }) + ' WIB';
 
     const odpCode = metaData.odp_code || 'ODP-UNMS';
