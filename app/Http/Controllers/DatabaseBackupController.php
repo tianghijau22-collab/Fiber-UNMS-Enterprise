@@ -213,9 +213,24 @@ class DatabaseBackupController extends Controller
 
             // Eksekusi SQL restore ke PostgreSQL dalam transaksi atomic dengan session_replication_role
             DB::transaction(function () use ($sqlContent) {
-                DB::statement("SET session_replication_role = 'replica';");
+                $replicaSet = false;
+                try {
+                    DB::statement("SET session_replication_role = 'replica';");
+                    $replicaSet = true;
+                } catch (\Throwable $e) {
+                    // Fallback for non-superuser: defer constraints where possible
+                    try {
+                        DB::statement("SET CONSTRAINTS ALL DEFERRED;");
+                    } catch (\Throwable $ignored) {}
+                }
+
                 DB::unprepared($sqlContent);
-                DB::statement("SET session_replication_role = 'origin';");
+
+                if ($replicaSet) {
+                    try {
+                        DB::statement("SET session_replication_role = 'origin';");
+                    } catch (\Throwable $ignored) {}
+                }
             });
 
             // Bersihkan cache aplikasi agar data langsung sinkron
