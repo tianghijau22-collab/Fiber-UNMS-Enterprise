@@ -567,6 +567,142 @@ class TelegramService
     /**
      * Uji koneksi Telegram Bot master (Synchronous untuk UI feedback)
      */
+    /**
+     * Kirim Laporan Pengukuran Redaman ODP ke Telegram Group beserta Foto Watermark Lapangan
+     */
+    public static function sendOdpCheckReport($measurement): array
+    {
+        try {
+            $enabled = SystemSetting::get('telegram_enabled', env('TELEGRAM_ENABLED', 'false'));
+            if ($enabled !== 'true' && $enabled !== true && $enabled !== '1') {
+                return ['success' => false, 'message' => 'Integrasi Telegram tidak aktif.'];
+            }
+
+            $botToken = SystemSetting::get('telegram_bot_token', env('TELEGRAM_BOT_TOKEN'));
+            if (empty($botToken)) {
+                return ['success' => false, 'message' => 'Token Bot Telegram belum dikonfigurasi.'];
+            }
+
+            $targetChatIds = static::getActiveChatIdsForTopic('INFRASTRUCTURE');
+            if (empty($targetChatIds)) {
+                $targetChatIds = static::getActiveChatIdsForTopic('NOC');
+            }
+
+            if (empty($targetChatIds)) {
+                return ['success' => false, 'message' => 'Tidak ada Chat ID Telegram yang terdaftar.'];
+            }
+
+            $statusText = match ($measurement->power_status) {
+                'good'     => 'BAIK / NORMAL',
+                'warning'  => 'PERINGATAN / SEDANG',
+                'critical' => 'KRITIS / REDAMAN TINGGI',
+                default    => strtoupper($measurement->power_status ?? 'NORMAL'),
+            };
+
+            $timeStr = $measurement->created_at ? $measurement->created_at->format('d/m/Y H:i') . ' WIB' : now()->format('d/m/Y H:i') . ' WIB';
+            $coords = ($measurement->latitude && $measurement->longitude)
+                ? "{$measurement->latitude}, {$measurement->longitude}"
+                : "Tidak tersedia";
+
+            $caption = "<b>LAPORAN PENGUKURAN REDAMAN ODP</b>\n";
+            $caption .= "━━━━━━━━━━━━━━━━━━━━\n";
+            $caption .= "• <b>Kode ODP:</b> <code>" . e($measurement->odp_code) . "</code>\n";
+            if (!empty($measurement->odp_name)) {
+                $caption .= "• <b>Nama ODP:</b> " . e($measurement->odp_name) . "\n";
+            }
+            $caption .= "• <b>Port Terukur:</b> " . e($measurement->port_number) . "\n";
+            $caption .= "• <b>Hasil Ukur OPM:</b> <b>" . e($measurement->power_measurement_dbm) . " dBm</b> [{$statusText}]\n";
+            $caption .= "• <b>Kondisi Fisik:</b> " . e($measurement->odp_condition) . "\n";
+            $caption .= "• <b>Koordinat GPS:</b> <code>{$coords}</code>\n";
+            $caption .= "• <b>Petugas / Teknisi:</b> " . e($measurement->technician_name ?? 'Teknisi Lapangan') . "\n";
+            $caption .= "• <b>Waktu Cek:</b> {$timeStr}\n";
+            if (!empty($measurement->notes)) {
+                $caption .= "• <b>Catatan:</b> " . e($measurement->notes) . "\n";
+            }
+            $caption .= "━━━━━━━━━━━━━━━━━━━━\n";
+            $caption .= "<i>Verifikasi Lapangan Fiber-UNMS Enterprise</i>";
+
+            // Kumpulkan file foto yang ada
+            $photos = [];
+            if (!empty($measurement->odp_photo_path) && file_exists(public_path($measurement->odp_photo_path))) {
+                $photos[] = [
+                    'path' => public_path($measurement->odp_photo_path),
+                    'type' => 'Foto Fisik ODP'
+                ];
+            }
+            if (!empty($measurement->opm_photo_path) && file_exists(public_path($measurement->opm_photo_path))) {
+                $photos[] = [
+                    'path' => public_path($measurement->opm_photo_path),
+                    'type' => 'Foto Display OPM'
+                ];
+            }
+
+            $successCount = 0;
+            foreach ($targetChatIds as $chatId) {
+                try {
+                    if (count($photos) === 1) {
+                        // Kirim 1 foto dengan caption lengkap
+                        $res = Http::timeout(15)->attach(
+                            'photo',
+                            file_get_contents($photos[0]['path']),
+                            basename($photos[0]['path'])
+                        )->post("https://api.telegram.org/bot{$botToken}/sendPhoto", [
+                            'chat_id'    => $chatId,
+                            'caption'    => $caption,
+                            'parse_mode' => 'HTML',
+                        ]);
+                        if ($res->successful()) $successCount++;
+                    } elseif (count($photos) >= 2) {
+                        // Kirim 2 foto dalam media group
+                        $mediaGroup = [
+                            [
+                                'type'       => 'photo',
+                                'media'      => 'attach://photo1',
+                                'caption'    => $caption,
+                                'parse_mode' => 'HTML'
+                            ],
+                            [
+                                'type'       => 'photo',
+                                'media'      => 'attach://photo2',
+                            ]
+                        ];
+                        $req = Http::timeout(20)
+                            ->attach('photo1', file_get_contents($photos[0]['path']), basename($photos[0]['path']))
+                            ->attach('photo2', file_get_contents($photos[1]['path']), basename($photos[1]['path']));
+
+                        $res = $req->post("https://api.telegram.org/bot{$botToken}/sendMediaGroup", [
+                            'chat_id' => $chatId,
+                            'media'   => json_encode($mediaGroup),
+                        ]);
+                        if ($res->successful()) $successCount++;
+                    } else {
+                        // Kirim pesan teks jika foto belum diunggah
+                        $res = Http::timeout(10)->post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+                            'chat_id'    => $chatId,
+                            'text'       => $caption,
+                            'parse_mode' => 'HTML',
+                        ]);
+                        if ($res->successful()) $successCount++;
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("Gagal mengirim laporan ODP ke Telegram Chat ID {$chatId}: " . $e->getMessage());
+                }
+            }
+
+            return [
+                'success'     => $successCount > 0,
+                'sent_count'  => $successCount,
+                'total_chats' => count($targetChatIds),
+            ];
+        } catch (\Throwable $e) {
+            Log::error('sendOdpCheckReport Error: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+            ];
+        }
+    }
+
     public static function testConnection(string $botToken, string $chatId): array
     {
         $timeStr = now()->format('d/m/Y, H.i.s');
@@ -617,3 +753,4 @@ class TelegramService
         }
     }
 }
+

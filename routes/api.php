@@ -138,3 +138,10 @@ Route::post('database/backups/upload', [\App\Http\Controllers\DatabaseBackupCont
 Route::get('database/backups/{filename}/download', [\App\Http\Controllers\DatabaseBackupController::class, 'download']);
 Route::post('database/backups/{filename}/restore', [\App\Http\Controllers\DatabaseBackupController::class, 'restore']);
 Route::delete('database/backups/{filename}', [\App\Http\Controllers\DatabaseBackupController::class, 'destroy']);
+
+// Pengecekan Redaman ODP & OPM Lapangan
+Route::get('odp-checks/stats', [\App\Http\Controllers\OdpMeasurementController::class, 'stats']);
+Route::get('odp-checks/odp-options', [\App\Http\Controllers\OdpMeasurementController::class, 'odpOptions']);
+Route::post('odp-checks/{id}/forward-telegram', [\App\Http\Controllers\OdpMeasurementController::class, 'forwardTelegram']);
+Route::apiResource('odp-checks', \App\Http\Controllers\OdpMeasurementController::class)->only(['index', 'store', 'destroy']);
+

@@ -8,6 +8,7 @@ export const ROUTE_ROLES = {
   '/otdr-tracing': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
   '/cable-routes': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
   '/field-tech': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
+  '/odp-checks': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
   '/bts-management': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
   '/network': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
   '/gis-map': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],

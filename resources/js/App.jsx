@@ -20,6 +20,7 @@ import AuditLogs from './pages/AuditLogs.jsx';
 import PushNotificationBroadcast from './pages/PushNotificationBroadcast.jsx';
 import BtsManagement from './pages/BtsManagement.jsx';
 import DatabaseBackup from './pages/DatabaseBackup.jsx';
+import OdpCheckManagement from './pages/OdpCheckManagement.jsx';
 import PublicTicketTracking from './pages/PublicTicketTracking.jsx';
 import Login from './pages/Login.jsx';
 import VoiceCallManager from './components/VoiceCallManager.jsx';
@@ -85,6 +86,7 @@ function AppContent() {
               <Route path="/otdr-tracing"   element={<PrivateRoute><OtdrFaultTracing /></PrivateRoute>} />
               <Route path="/cable-routes"   element={<PrivateRoute><CableRouteEditor /></PrivateRoute>} />
               <Route path="/field-tech"     element={<PrivateRoute><FieldTechWorkOrders /></PrivateRoute>} />
+              <Route path="/odp-checks"     element={<PrivateRoute><OdpCheckManagement /></PrivateRoute>} />
               <Route path="/bts-management" element={<PrivateRoute><BtsManagement /></PrivateRoute>} />
               <Route path="/network"        element={<PrivateRoute><NetworkInfrastructure /></PrivateRoute>} />
               <Route path="/gis-map"        element={<PrivateRoute><GisTopologyMap /></PrivateRoute>} />
