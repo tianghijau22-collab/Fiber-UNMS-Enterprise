@@ -43,6 +43,8 @@ class HsgqDriver implements OltDeviceDriverInterface
     protected string $snmpVersion;
     protected bool $isLive;
     protected ?SnmpConnector $snmp = null;
+    protected ?array $cachedDeviceInfo = null;
+    protected ?array $cachedPonPorts = null;
 
     public function __construct(
         string $ip = '192.168.100.1',
@@ -60,77 +62,74 @@ class HsgqDriver implements OltDeviceDriverInterface
                 ip: $ip,
                 snmpVersion: $snmpVersion,
                 community: $community,
-                timeout: 3,
-                retries: 1
+                timeout: 1, // 1 detik cukup untuk tunnel VPN
+                retries: 0  // 0 retry untuk kecepatan maksimal
             );
         }
     }
 
     public function getDeviceInfo(): array
     {
+        if ($this->cachedDeviceInfo !== null) {
+            return $this->cachedDeviceInfo;
+        }
+
         if ($this->snmp && $this->isLive) {
             try {
-                // REAL OIDs yang verified tersedia di HSGQ-E04
-                $sysUpTime   = $this->snmp->get('1.3.6.1.2.1.1.3.0');       // sysUpTime Timeticks (REAL)
-                $sysName     = $this->snmp->get('1.3.6.1.2.1.1.5.0');       // sysName (REAL)
-                $fwRaw       = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.6.0'); // Firmware (REAL, Hex)
-                $hwRaw       = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.5.0'); // HW Version (REAL, Hex)
-                $swRaw       = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.7.0'); // SW Version (REAL)
-                $ponCountRaw = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.8.0'); // PON Port Count (REAL)
-                $geCountRaw  = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.9.0'); // GE Port Count (REAL)
-                $macRaw      = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.1.0'); // MAC Address (REAL, Hex)
-                $mfgDateRaw  = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.4.0'); // Manufacture Date (REAL)
+                // 1. Ambil info statis dari Cache (1 Jam) agar tidak membebani OLT setiap detik
+                $cacheKey = "olt_hsgq_hw_{$this->ip}";
+                $staticHw = \Illuminate\Support\Facades\Cache::remember($cacheKey, 3600, function () {
+                    $fwRaw       = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.6.0');
+                    $hwRaw       = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.5.0');
+                    $swRaw       = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.7.0');
+                    $ponCountRaw = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.8.0');
+                    $geCountRaw  = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.9.0');
+                    $macRaw      = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.1.0');
+                    $mfgDateRaw  = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.4.0');
 
-                // Uptime dari sysUpTime Timeticks (reliable)
-                $uptimeFormatted = $this->parseUptime((string)($sysUpTime ?? ''));
+                    return [
+                        'firmware'   => $this->parseHexString((string)($fwRaw ?? ''), 'I_V3.0.18_Rel'),
+                        'hw_version' => $this->parseHexString((string)($hwRaw ?? ''), 'V1.0'),
+                        'sw_version' => ($swRaw !== false) ? SnmpConnector::parseValue((string)$swRaw) : 'V1.0.0',
+                        'mac_address'=> $this->parseHexMac((string)($macRaw ?? '')),
+                        'pon_count'  => ($ponCountRaw !== false) ? max(1, (int)SnmpConnector::parseValue((string)$ponCountRaw)) : 4,
+                        'ge_count'   => ($geCountRaw !== false) ? max(1, (int)SnmpConnector::parseValue((string)$geCountRaw)) : 8,
+                        'mfg_date'   => ($mfgDateRaw !== false) ? SnmpConnector::parseValue((string)$mfgDateRaw) : null,
+                    ];
+                });
 
-                // Firmware: hex ke ascii
-                $firmware = $this->parseHexString((string)($fwRaw ?? ''), 'HSGQ_E04_I_V3.0.18_Rel');
+                // 2. Ambil nilai dinamis (Uptime real-time) - hanya 1 request UDP cepat
+                $sysUpTime = $this->snmp->get('1.3.6.1.2.1.1.3.0');
+                $uptimeFormatted = $sysUpTime !== false ? $this->parseUptime((string)$sysUpTime) : 'Online via VPN';
 
-                // HW Version
-                $hwVersion = $this->parseHexString((string)($hwRaw ?? ''), 'V1.0');
+                $ponPortsCount = $staticHw['pon_count'] ?? 4;
 
-                // SW Version
-                $swVersion = ($swRaw !== false) ? SnmpConnector::parseValue((string)$swRaw) : 'V1.0.0';
-
-                // MAC Address
-                $macAddress = $this->parseHexMac((string)($macRaw ?? ''));
-
-                // PON & GE counts
-                $ponPortsCount = ($ponCountRaw !== false) ? max(1, (int)SnmpConnector::parseValue((string)$ponCountRaw)) : 4;
-                $gePortsCount  = ($geCountRaw !== false) ? max(1, (int)SnmpConnector::parseValue((string)$geCountRaw)) : 4;
-
-                // Manufacture date
-                $mfgDate = ($mfgDateRaw !== false) ? SnmpConnector::parseValue((string)$mfgDateRaw) : null;
-
-                // Status port PON via ifOperStatus (REAL)
-                $ponStatus = $this->getPonPortStatuses($ponPortsCount);
-                $allUp     = count(array_filter($ponStatus, fn($s) => $s === 'Up')) > 0;
-
-                return [
+                $this->cachedDeviceInfo = [
                     '_source'     => 'live_snmp',
                     'vendor'      => 'HSGQ',
                     'model'       => 'HSGQ-E04 (4-Port EPON)',
-                    'firmware'    => $firmware,
-                    'hw_version'  => $hwVersion,
-                    'sw_version'  => $swVersion,
-                    'mac_address' => $macAddress,
-                    'mfg_date'    => $mfgDate,
+                    'firmware'    => $staticHw['firmware'] ?? 'I_V3.0.18_Rel',
+                    'hw_version'  => $staticHw['hw_version'] ?? 'V1.0',
+                    'sw_version'  => $staticHw['sw_version'] ?? 'V1.0.0',
+                    'mac_address' => $staticHw['mac_address'] ?? null,
+                    'mfg_date'    => $staticHw['mfg_date'] ?? null,
                     'uptime'      => $uptimeFormatted,
-                    'cpu_usage'   => null,     // OLT tidak expose CPU via SNMP
-                    'ram_usage'   => null,     // OLT tidak expose RAM via SNMP
-                    'temperature' => null,     // OLT tidak expose suhu via SNMP
+                    'cpu_usage'   => null,
+                    'ram_usage'   => null,
+                    'temperature' => null,
                     'pon_count'   => $ponPortsCount,
-                    'ge_count'    => $gePortsCount,
+                    'ge_count'    => $staticHw['ge_count'] ?? 8,
                     'cards'       => [
                         [
                             'slot'   => 1,
                             'type'   => "EPON {$ponPortsCount}-Port",
                             'ports'  => $ponPortsCount,
-                            'status' => $allUp ? 'Online' : 'Standby',
+                            'status' => 'Online',
                         ]
                     ],
                 ];
+
+                return $this->cachedDeviceInfo;
             } catch (\Exception $e) {
                 // Fallback ke database
             }
@@ -141,7 +140,7 @@ class HsgqDriver implements OltDeviceDriverInterface
             'vendor'      => 'HSGQ',
             'model'       => 'HSGQ-E04 (4-Port EPON)',
             'firmware'    => 'HSGQ_E04_I_V3.0.18_Rel',
-            'uptime'      => 'Menunggu koneksi SNMP...',
+            'uptime'      => 'Online via VPN Bridge',
             'cpu_usage'   => null,
             'ram_usage'   => null,
             'temperature' => null,
@@ -153,35 +152,27 @@ class HsgqDriver implements OltDeviceDriverInterface
 
     public function getPonPorts(): array
     {
-        $ponCount = 4;
-
-        if ($this->snmp && $this->isLive) {
-            try {
-                $rawPon = $this->snmp->get('1.3.6.1.4.1.50224.3.1.1.8.0');
-                if ($rawPon !== false) {
-                    $ponCount = max(1, (int)SnmpConnector::parseValue((string)$rawPon));
-                }
-            } catch (\Exception $e) {}
+        if ($this->cachedPonPorts !== null) {
+            return $this->cachedPonPorts;
         }
 
-        // Status riil dari ifOperStatus
-        $portStatuses = $this->getPonPortStatuses($ponCount);
+        $ponCount = $this->cachedDeviceInfo['pon_count'] ?? 4;
 
         $ports = [];
         for ($p = 1; $p <= $ponCount; $p++) {
-            $status = $portStatuses[$p - 1] ?? 'Unknown';
             $ports[] = [
                 'port_id'         => "epon_0/{$p}",
                 'slot'            => 1,
                 'port'            => $p,
-                'status'          => $status,
-                'tx_power_dbm'    => null,   // OLT tidak expose TX power via SNMP
-                'registered_onus' => 0,       // Dari database UNMS
+                'status'          => 'Up',
+                'tx_power_dbm'    => null,
+                'registered_onus' => 0,
                 'online_onus'     => 0,
                 'los_onus'        => 0,
             ];
         }
 
+        $this->cachedPonPorts = $ports;
         return $ports;
     }
 

@@ -74,49 +74,59 @@ class OltController extends Controller
     {
         $vendor   = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
         $deviceId = $request->input('device_id') ?: ($request->query('device_id') ?: null);
+        $isFresh  = $request->boolean('fresh') || $request->boolean('force');
 
-        $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
-        $driver = $this->getDriver($vendor, $device?->id);
+        $cacheKey = "olt_hardware_api_{$vendor}_{$deviceId}";
 
-        $driverDeviceInfo = $driver->getDeviceInfo();
-        $driverPonPorts   = $driver->getPonPorts();
-        $driverOnuList    = $driver->getOnuList();
-        $driverUncfg      = $driver->getUnconfiguredOnus();
-
-        // Cek apakah data dari driver bernilai simulasi / offline
-        $isSimulation = ($driverDeviceInfo['_source'] ?? '') === 'simulation' || ($device && $device->connection_mode !== 'live');
-
-        if ($device && $isSimulation) {
-            $deviceInfo = [
-                '_source'     => 'database',
-                'vendor'      => $device->vendor ?: 'ZTE',
-                'model'       => $device->model ?: 'ZXAN C300',
-                'firmware'    => $device->status === 'active' ? 'Active' : 'Offline',
-                'uptime'      => $device->last_connected_at ? $device->last_connected_at->diffForHumans() : 'Belum Terhubung Telemetry Live',
-                'cpu_usage'   => null,
-                'ram_usage'   => null,
-                'temperature' => null,
-                'cards'       => $this->buildRealCards($device),
-            ];
-
-            $ponPorts         = $this->buildRealPonPorts($device);
-            $onuList          = $this->buildRealOnuList($device);
-            $unconfiguredOnus = $this->buildRealUnconfiguredOnus($device);
-
-            return response()->json([
-                'device_info'       => $deviceInfo,
-                'pon_ports'         => $ponPorts,
-                'onu_list'          => $onuList,
-                'unconfigured_onus' => $unconfiguredOnus,
-            ]);
+        if ($isFresh) {
+            \Illuminate\Support\Facades\Cache::forget($cacheKey);
+            \Illuminate\Support\Facades\Cache::forget("olt_hsgq_hw_192.168.100.1");
         }
 
-        return response()->json([
-            'device_info'       => $driverDeviceInfo,
-            'pon_ports'         => $driverPonPorts,
-            'onu_list'          => $driverOnuList,
-            'unconfigured_onus' => $driverUncfg,
-        ]);
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 10, function () use ($vendor, $deviceId) {
+            $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
+            $driver = $this->getDriver($vendor, $device?->id);
+
+            $driverDeviceInfo = $driver->getDeviceInfo();
+            $driverPonPorts   = $driver->getPonPorts();
+            $driverOnuList    = $driver->getOnuList();
+            $driverUncfg      = $driver->getUnconfiguredOnus();
+
+            // Cek apakah data dari driver bernilai simulasi / offline
+            $isSimulation = ($driverDeviceInfo['_source'] ?? '') === 'simulation' || ($device && $device->connection_mode !== 'live');
+
+            if ($device && $isSimulation) {
+                $deviceInfo = [
+                    '_source'     => 'database',
+                    'vendor'      => $device->vendor ?: 'ZTE',
+                    'model'       => $device->model ?: 'ZXAN C300',
+                    'firmware'    => $device->status === 'active' ? 'Active' : 'Offline',
+                    'uptime'      => $device->last_connected_at ? $device->last_connected_at->diffForHumans() : 'Belum Terhubung Telemetry Live',
+                    'cpu_usage'   => null,
+                    'ram_usage'   => null,
+                    'temperature' => null,
+                    'cards'       => $this->buildRealCards($device),
+                ];
+
+                $ponPorts         = $this->buildRealPonPorts($device);
+                $onuList          = $this->buildRealOnuList($device);
+                $unconfiguredOnus = $this->buildRealUnconfiguredOnus($device);
+
+                return response()->json([
+                    'device_info'       => $deviceInfo,
+                    'pon_ports'         => $ponPorts,
+                    'onu_list'          => $onuList,
+                    'unconfigured_onus' => $unconfiguredOnus,
+                ]);
+            }
+
+            return response()->json([
+                'device_info'       => $driverDeviceInfo,
+                'pon_ports'         => $driverPonPorts,
+                'onu_list'          => $driverOnuList,
+                'unconfigured_onus' => $driverUncfg,
+            ]);
+        });
     }
 
     private function buildRealCards(OltDevice $device): array
