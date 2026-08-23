@@ -1022,6 +1022,33 @@ export default function NetworkBridgeSetup() {
           {/* HSGQ Guide */}
           {oltVendorTab === 'hsgq' && (
             <div className="space-y-4 text-xs">
+              {/* OLT Cabling & Access Options Banner */}
+              <div className="p-4 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-900 dark:text-amber-200 space-y-2">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span>💡</span>
+                  <span>Cara Menghubungkan OLT ke MikroTik (Pilih Salah Satu Opsi):</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div className="p-3 bg-white dark:bg-black rounded-lg border border-amber-300 dark:border-amber-800 space-y-1">
+                    <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                      <span>⭐ Opsi A: Aktifkan In-Band IP (1 Kabel)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                      Colok laptop ke port NMS $\rightarrow$ Buka <code>http://192.168.100.1</code> $\rightarrow$ Menu <strong>System Management</strong> $\rightarrow$ <strong>In-Band IP</strong> $\rightarrow$ Enable ON, IP <code>192.168.100.1</code>, Gateway <code>192.168.100.2</code>, Port <strong>GE1</strong> $\rightarrow$ Save to Flash.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-black rounded-lg border border-amber-300 dark:border-amber-800 space-y-1">
+                    <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                      <span>🔌 Opsi B: Colok 2 Kabel (Paling Praktis)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                      Kabel 1: MikroTik <strong>ether2</strong> $\rightarrow$ OLT <strong>GE1</strong> (Data Internet).<br />
+                      Kabel 2: MikroTik <strong>ether4</strong> $\rightarrow$ OLT <strong>NMS</strong> (Manajemen 192.168.100.1).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* 1. VLAN 100 Setup */}
                 <div className="p-4 rounded-xl border border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-neutral-900/50 space-y-2.5">
@@ -1050,7 +1077,7 @@ export default function NetworkBridgeSetup() {
                     <li>• Centang <strong>SNMP Switch: ON</strong>.</li>
                     <li>• Version: <strong>v2c</strong>.</li>
                     <li>• Read Community: <code className="font-bold text-emerald-600">public</code>.</li>
-                    <li>• Port: <strong>161</strong> (UDP).</li>
+                    <li>• Port di web OLT tertulis 162 (Trap Port - default standar). Query SNMP UNMS otomatis aktif di port <strong>161 (UDP)</strong>.</li>
                     <li>• Klik <strong>Apply</strong> &amp; <strong>Save to Flash</strong>.</li>
                   </ul>
                 </div>

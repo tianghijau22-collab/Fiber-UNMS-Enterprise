@@ -142,15 +142,18 @@ class VpsBridgeController extends Controller
         $rscLines[] = "# Rule 8B: Agar PC Teknisi (192.168.88.x) Bisa Buka Web GUI OLT ({$oltIp}) Langsung Tanpa Ubah IP PC!";
         $rscLines[] = "/ip firewall nat add chain=srcnat src-address=192.168.88.0/24 dst-address={$oltSubnet} action=masquerade comment=\"NAT Akses PC Teknisi ke Web GUI OLT\"";
         $rscLines[] = "";
-        $rscLines[] = "# --- 9. SERVICE API MIKROTIK (PORT 8728 TELEMETRI FIBER-UNMS) ---";
-        $rscLines[] = "/ip service set api port=8728 disabled=no";
+        $rscLines[] = "# --- 9. SERVICE API & SNMP MIKROTIK (TELEMETRI FIBER-UNMS) ---";
+        $rscLines[] = "/ip service set api port=8728 disabled=no address=0.0.0.0/0";
+        $rscLines[] = "/ip service set winbox port=8291 disabled=no";
+        $rscLines[] = "/snmp set enabled=yes contact=\"Admin NOC\" location=\"Server Region OLT\"";
+        $rscLines[] = "/snmp community set [find default=yes] name=public addresses=0.0.0.0/0";
         $rscLines[] = "/user group add name=unms-group policy=api,read,test,winbox";
         $rscLines[] = "/user add name=unms_api group=unms-group password=\"{$pass}\" comment=\"UNMS Telemetry API User\"";
         $rscLines[] = "";
 
         if ($protocol === 'l2tp') {
-            $rscLines[] = "# --- 10. KONEKSI TEROWONGAN VPN L2TP/IPsec KE VPS CLOUD ({$vpsIp}) ---";
-            $rscLines[] = "/interface l2tp-client add name=\"vpn-unms-vps\" connect-to={$vpsIp} user=\"{$user}\" password=\"{$pass}\" ipsec-secret=\"{$secret}\" use-ipsec=yes add-default-route=no disabled=no comment=\"Tunnel UNMS Cloud\"";
+            $rscLines[] = "# --- 10. KONEKSI TEROWONGAN VPN L2TP KE VPS CLOUD ({$vpsIp}) ---";
+            $rscLines[] = "/interface l2tp-client add name=\"vpn-unms-vps\" connect-to={$vpsIp} user=\"{$user}\" password=\"{$pass}\" use-ipsec=no keepalive-timeout=10 add-default-route=no disabled=no comment=\"Tunnel UNMS Cloud\"";
         } elseif ($protocol === 'sstp') {
             $rscLines[] = "# --- 10. KONEKSI TEROWONGAN VPN SSTP (PORT 443) KE VPS CLOUD ({$vpsIp}) ---";
             $rscLines[] = "/interface sstp-client add name=\"vpn-unms-vps\" connect-to={$vpsIp}:443 user=\"{$user}\" password=\"{$pass}\" verify-server-certificate=no add-default-route=no disabled=no comment=\"Tunnel UNMS Cloud\"";
@@ -160,6 +163,14 @@ class VpsBridgeController extends Controller
             $rscLines[] = "/ip address add address=10.254.0.2/24 interface=wg-unms";
             $rscLines[] = "/interface wireguard peers add interface=wg-unms endpoint-address={$vpsIp} endpoint-port=51820 allowed-address=10.254.0.0/24 persistent-keepalive=25s public-key=\"VPS_PUBLIC_KEY_HERE\"";
         }
+
+        $rscLines[] = "";
+        $rscLines[] = "# --- 11. FIREWALL & INTERFACE LIST UNTUK AKSES PENUH TELEMETRI VPS ---";
+        $rscLines[] = "/interface list add name=LAN";
+        $rscLines[] = "/interface list member add list=LAN interface=bridge-lan comment=\"LAN Internal\"";
+        $rscLines[] = "/interface list member add list=LAN interface=vpn-unms-vps comment=\"UNMS Trusted Tunnel\"";
+        $rscLines[] = "/ip firewall filter add chain=input src-address=10.254.0.0/24 action=accept place-before=0 comment=\"Allow UNMS VPS Input\"";
+        $rscLines[] = "/ip firewall filter add chain=forward src-address=10.254.0.0/24 action=accept place-before=0 comment=\"Allow UNMS VPS Forward to OLT\"";
 
         $mikrotikScript = implode("\n", $rscLines);
 
