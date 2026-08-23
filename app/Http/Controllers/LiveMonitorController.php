@@ -25,8 +25,31 @@ class LiveMonitorController extends Controller
         $port = (int) $request->input('port', 8728);
         $wanInterface = $request->input('wan_interface', 'ether1');
 
-        $api = new MikrotikApiService($ip, $user, $pass, $port, false, 2);
-        $connected = $api->connect();
+        $candidates = [
+            [$user, $pass],
+            ['admin', ''],
+            ['admin', $pass],
+            ['unms_api', $pass],
+            ['unms_api', 'unmspassword2026'],
+            ['unms_client', $pass],
+        ];
+
+        $api = null;
+        $connected = false;
+
+        foreach ($candidates as [$candidateUser, $candidatePass]) {
+            if (!$candidateUser) continue;
+            try {
+                $tryApi = new MikrotikApiService($ip, $candidateUser, $candidatePass ?? '', $port, false, 2);
+                if ($tryApi->connect()) {
+                    $api = $tryApi;
+                    $connected = true;
+                    break;
+                }
+            } catch (\Throwable $e) {
+                // Try next candidate
+            }
+        }
 
         if ($connected) {
             $sys = $api->getSystemResource();
