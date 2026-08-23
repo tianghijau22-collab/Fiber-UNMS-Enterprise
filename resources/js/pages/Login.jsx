@@ -8,20 +8,20 @@ import { useTheme } from '../components/ThemeContext.jsx';
 ─────────────────────────────────────────────────────────────────── */
 function InteractiveCinoxBeetle({ usernameLength, isUsernameFocused, isPasswordFocused, showPassword }) {
   // Eye tracking offset based on username input length (-8px to +8px)
-  const maxShift = 7;
+  const maxShift = 6;
   const pupilShiftX = isUsernameFocused
     ? Math.min(maxShift, Math.max(-maxShift, (usernameLength - 6) * 0.75))
     : 0;
 
-  const pupilShiftY = isUsernameFocused ? 2 : 0;
+  const pupilShiftY = isUsernameFocused ? 1 : 0;
 
-  // Determine Wing Covering Transform State for Password Peekaboo
+  // Determine Wing Covering Transform State for Password Peekaboo & Username Teasing
   let leftWingTransform = 'translate(0px, 0px) rotate(0deg)';
   let rightWingTransform = 'translate(0px, 0px) rotate(0deg)';
 
   if (isPasswordFocused) {
     if (!showPassword) {
-      // Cover eyes completely with wings
+      // Cover eyes completely with wings (Tutup mata pakai tangan/sayap)
       leftWingTransform = 'translate(32px, -38px) rotate(20deg)';
       rightWingTransform = 'translate(-32px, -38px) rotate(-20deg)';
     } else {
@@ -29,7 +29,16 @@ function InteractiveCinoxBeetle({ usernameLength, isUsernameFocused, isPasswordF
       leftWingTransform = 'translate(14px, -18px) rotate(32deg)';
       rightWingTransform = 'translate(-14px, -18px) rotate(-32deg)';
     }
+  } else if (isUsernameFocused) {
+    // Playful cheeky teasing wings (Sayap berkacak pinggang & menggoda)
+    const wingWiggle = Math.sin(usernameLength * 0.8) * 3;
+    leftWingTransform = `translate(-10px, -6px) rotate(${-18 + wingWiggle}deg)`;
+    rightWingTransform = `translate(10px, -6px) rotate(${18 - wingWiggle}deg)`;
   }
+
+  // Head tilt when teasing / entering username
+  const headTilt = isUsernameFocused ? (usernameLength % 2 === 0 ? -4 : -2) : 0;
+  const tongueTilt = isUsernameFocused ? (Math.sin(usernameLength * 1.2) * 9 + 5) : 0;
 
   return (
     <div className="relative w-48 h-40 mx-auto -mb-6 z-20 pointer-events-none select-none">
@@ -87,89 +96,182 @@ function InteractiveCinoxBeetle({ usernameLength, isUsernameFocused, isPasswordF
           <line x1="68" y1="120" x2="152" y2="120" stroke="#FFFFFF" strokeWidth="2.5" opacity="0.9" />
         </g>
 
-        {/* ── 3. BEETLE ANTENNAE (Curved Gold Antennae with Glowing Spheres) ── */}
-        <g className="transition-transform duration-200">
-          {/* Left Antenna */}
-          <path
-            d="M 94 38 C 82 18, 68 10, 54 6"
-            stroke="#D97706"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <circle cx="52" cy="6" r="6.5" fill="url(#cinoxGoldGrad)" stroke="#B45309" strokeWidth="1.5" />
-          <circle cx="50" cy="4" r="2" fill="#FFFFFF" opacity="0.85" />
+        {/* ── 3. HEAD & FACE GROUP (With Playful Tilt when Username Focused) ── */}
+        <g
+          style={{
+            transform: `rotate(${headTilt}deg)`,
+            transformOrigin: '110px 90px',
+            transition: 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          }}
+        >
+          {/* ── BEETLE ANTENNAE (Curved Gold Antennae with Glowing Spheres) ── */}
+          <g className="transition-transform duration-200">
+            {/* Left Antenna */}
+            <path
+              d={isUsernameFocused ? "M 94 38 C 80 14, 62 8, 46 8" : "M 94 38 C 82 18, 68 10, 54 6"}
+              stroke="#D97706"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            <circle cx={isUsernameFocused ? "44" : "52"} cy={isUsernameFocused ? "8" : "6"} r="6.5" fill="url(#cinoxGoldGrad)" stroke="#B45309" strokeWidth="1.5" />
+            <circle cx={isUsernameFocused ? "42" : "50"} cy={isUsernameFocused ? "6" : "4"} r="2" fill="#FFFFFF" opacity="0.85" />
 
-          {/* Right Antenna */}
-          <path
-            d="M 126 38 C 138 18, 152 10, 166 6"
-            stroke="#D97706"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <circle cx="168" cy="6" r="6.5" fill="url(#cinoxGoldGrad)" stroke="#B45309" strokeWidth="1.5" />
-          <circle cx="166" cy="4" r="2" fill="#FFFFFF" opacity="0.85" />
-        </g>
+            {/* Right Antenna */}
+            <path
+              d={isUsernameFocused ? "M 126 38 C 140 14, 158 8, 174 8" : "M 126 38 C 138 18, 152 10, 166 6"}
+              stroke="#D97706"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            <circle cx={isUsernameFocused ? "176" : "168"} cy={isUsernameFocused ? "8" : "6"} r="6.5" fill="url(#cinoxGoldGrad)" stroke="#B45309" strokeWidth="1.5" />
+            <circle cx={isUsernameFocused ? "174" : "166"} cy={isUsernameFocused ? "6" : "4"} r="2" fill="#FFFFFF" opacity="0.85" />
+          </g>
 
-        {/* ── 4. BEETLE HEAD (Golden Spherical Head) ── */}
-        <g>
+          {/* ── BEETLE HEAD (Golden Spherical Head) ── */}
           <ellipse cx="110" cy="58" rx="44" ry="36" fill="url(#cinoxHeadGrad)" stroke="#B45309" strokeWidth="2" />
           {/* Head Light Highlight */}
           <ellipse cx="110" cy="34" rx="26" ry="9" fill="#FFFFFF" opacity="0.5" />
+
+          {/* ── EYEBROWS (Playfully Arched when Mocking / Mencibir) ── */}
+          <g className="transition-all duration-200">
+            {/* Left Eyebrow */}
+            <path
+              d={
+                isPasswordFocused && !showPassword
+                  ? "M 80 40 Q 90 46 98 42"
+                  : isUsernameFocused
+                    ? "M 78 35 Q 88 26 98 35" // High arched cheeky eyebrow
+                    : "M 80 42 Q 90 35 98 39"
+              }
+              stroke="#78350F"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+            {/* Right Eyebrow */}
+            <path
+              d={
+                isPasswordFocused && !showPassword
+                  ? "M 122 42 Q 130 46 140 40"
+                  : isUsernameFocused
+                    ? "M 122 41 Q 132 46 142 41" // Smug lowered eyebrow
+                    : "M 122 39 Q 130 35 140 42"
+              }
+              stroke="#78350F"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </g>
+
+          {/* ── EYES (Cheeky Wink / Squint on Left & Sassy Eye on Right when Username Focused) ── */}
+          {isUsernameFocused ? (
+            /* CHEEKY MOCKING / MENCIBIR EYES */
+            <g>
+              {/* Left Eye: Playful Cheeky Wink Arc (Mata Mengedip Nakal) */}
+              <path
+                d="M 78 57 Q 90 46 102 57"
+                stroke="#78350F"
+                strokeWidth="4"
+                strokeLinecap="round"
+                fill="none"
+              />
+              {/* Cute Eyelashes */}
+              <line x1="77" y1="56" x2="72" y2="52" stroke="#78350F" strokeWidth="2.5" strokeLinecap="round" />
+              <line x1="103" y1="56" x2="108" y2="52" stroke="#78350F" strokeWidth="2.5" strokeLinecap="round" />
+
+              {/* Right Eye: Wide Sassy Open Eye with Tracking Pupil */}
+              <ellipse cx="130" cy="55" rx="14" ry="15" fill="#FFFFFF" stroke="#D97706" strokeWidth="1.5" />
+              <g
+                className="transition-transform duration-100 ease-out"
+                style={{ transform: `translate(${pupilShiftX}px, ${pupilShiftY}px)` }}
+              >
+                <circle cx="130" cy="55" r="7.5" fill="#0F172A" />
+                <circle cx="127.5" cy="52.5" r="2.5" fill="#FFFFFF" />
+                {/* Playful sparkle */}
+                <circle cx="133" cy="57" r="1.2" fill="#FFFFFF" opacity="0.9" />
+              </g>
+            </g>
+          ) : (
+            /* NORMAL / PASSWORD FOCUSED EYES */
+            <g>
+              {/* White Eye Sockets */}
+              <ellipse cx="90" cy="55" rx="14" ry="15" fill="#FFFFFF" stroke="#D97706" strokeWidth="1.5" />
+              <ellipse cx="130" cy="55" rx="14" ry="15" fill="#FFFFFF" stroke="#D97706" strokeWidth="1.5" />
+
+              {/* Pupils */}
+              <g
+                className="transition-transform duration-150 ease-out"
+                style={{ transform: `translate(${pupilShiftX}px, ${pupilShiftY}px)` }}
+              >
+                {/* Left Pupil */}
+                <circle cx="90" cy="55" r="7.5" fill="#0F172A" />
+                <circle cx="87.5" cy="52.5" r="2.5" fill="#FFFFFF" />
+
+                {/* Right Pupil */}
+                <circle cx="130" cy="55" r="7.5" fill="#0F172A" />
+                <circle cx="127.5" cy="52.5" r="2.5" fill="#FFFFFF" />
+              </g>
+            </g>
+          )}
+
+          {/* ── MOUTH & STICKING TONGUE (MENCIBIR / MENGEJEK / BLEEEH :P) ── */}
+          {isUsernameFocused ? (
+            <g>
+              {/* Open Cheeky Mouth Cavity */}
+              <path
+                d="M 96 68 Q 110 65 124 68 Q 110 85 96 68 Z"
+                fill="#881337"
+                stroke="#78350F"
+                strokeWidth="2"
+              />
+
+              {/* Sticking Out Tongue (Lidah Pink Menjulur Keluar / Mencibir) */}
+              <g
+                style={{
+                  transformOrigin: '110px 72px',
+                  transform: `rotate(${tongueTilt}deg)`,
+                  transition: 'transform 0.15s ease-out'
+                }}
+              >
+                <path
+                  d="M 103 70 C 103 82, 105 91, 110 91 C 115 91, 117 82, 117 70 Z"
+                  fill="#FB7185"
+                  stroke="#E11D48"
+                  strokeWidth="1.5"
+                />
+                {/* Tongue Center Groove */}
+                <line x1="110" y1="72" x2="110" y2="85" stroke="#E11D48" strokeWidth="1" strokeLinecap="round" opacity="0.8" />
+              </g>
+
+              {/* Upper Smirk Lip Line */}
+              <path
+                d="M 95 67 Q 110 63 125 68"
+                stroke="#78350F"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                fill="none"
+              />
+            </g>
+          ) : (
+            /* Normal Smile or Worried Password Mouth */
+            <path
+              d={isPasswordFocused && !showPassword ? "M 103 72 Q 110 68 117 72" : "M 100 70 Q 110 82 120 70"}
+              stroke="#78350F"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              fill={isPasswordFocused && !showPassword ? "none" : "#DC2626"}
+            />
+          )}
+
+          {/* Blush Cheeks */}
+          <ellipse cx="73" cy="65" rx="7" ry="4" fill="#FDA4AF" opacity={isUsernameFocused ? 0.95 : 0.8} />
+          <ellipse cx="147" cy="65" rx="7" ry="4" fill="#FDA4AF" opacity={isUsernameFocused ? 0.95 : 0.8} />
         </g>
 
-        {/* ── 5. INTERACTIVE CUTE FACE (Big Eyes with Pupil-Tracking & Smile) ── */}
-        {/* Eyebrows */}
-        <g className="transition-transform duration-200">
-          <path
-            d={isPasswordFocused && !showPassword ? "M 80 40 Q 90 46 98 42" : "M 80 42 Q 90 35 98 39"}
-            stroke="#78350F"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <path
-            d={isPasswordFocused && !showPassword ? "M 122 42 Q 130 46 140 40" : "M 122 39 Q 130 35 140 42"}
-            stroke="#78350F"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-        </g>
-
-        {/* White Eye Sockets */}
-        <ellipse cx="90" cy="55" rx="14" ry="15" fill="#FFFFFF" stroke="#D97706" strokeWidth="1.5" />
-        <ellipse cx="130" cy="55" rx="14" ry="15" fill="#FFFFFF" stroke="#D97706" strokeWidth="1.5" />
-
-        {/* Pupils (Interactive Eye-Tracking Offset) */}
-        <g
-          className="transition-transform duration-150 ease-out"
-          style={{ transform: `translate(${pupilShiftX}px, ${pupilShiftY}px)` }}
-        >
-          {/* Left Pupil */}
-          <circle cx="90" cy="55" r="7.5" fill="#0F172A" />
-          <circle cx="87.5" cy="52.5" r="2.5" fill="#FFFFFF" />
-
-          {/* Right Pupil */}
-          <circle cx="130" cy="55" r="7.5" fill="#0F172A" />
-          <circle cx="127.5" cy="52.5" r="2.5" fill="#FFFFFF" />
-        </g>
-
-        {/* Cute Smiling Mouth */}
-        <path
-          d={isPasswordFocused && !showPassword ? "M 103 72 Q 110 68 117 72" : "M 100 70 Q 110 82 120 70"}
-          stroke="#78350F"
-          strokeWidth="3.5"
-          strokeLinecap="round"
-          fill={isPasswordFocused && !showPassword ? "none" : "#DC2626"}
-        />
-
-        {/* Blush Cheeks */}
-        <ellipse cx="73" cy="65" rx="7" ry="4" fill="#FDA4AF" opacity="0.8" />
-        <ellipse cx="147" cy="65" rx="7" ry="4" fill="#FDA4AF" opacity="0.8" />
-
-        {/* ── 6. DYNAMIC INTERACTIVE SWEEPING WINGS (Red & Navy Blue Peekaboo) ── */}
+        {/* ── 4. DYNAMIC INTERACTIVE SWEEPING WINGS (Peekaboo Password & Teasing Wings) ── */}
         {/* Left Wing Pair */}
         <g
           style={{
