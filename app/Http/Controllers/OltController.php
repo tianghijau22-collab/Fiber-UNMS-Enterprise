@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 
 class OltController extends Controller
 {
-    protected function getDriver(string $vendor, ?int $deviceId = null)
+    public function getDriver(string $vendor, ?int $deviceId = null)
     {
         $device = $deviceId ? OltDevice::find($deviceId) : null;
         $isLive = $device ? ($device->connection_mode === 'live') : false;

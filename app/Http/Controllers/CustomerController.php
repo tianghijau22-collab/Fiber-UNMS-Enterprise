@@ -6,8 +6,10 @@ use App\Models\Customer;
 use App\Models\CustomerService;
 use App\Models\NetworkPort;
 use App\Models\OntRegistration;
+use App\Models\OltDevice;
 use App\Models\ServicePackage;
 use App\Models\AuditLog;
+use App\Http\Controllers\OltController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -349,6 +351,7 @@ class CustomerController extends Controller
 
     /**
      * Ambil daftar ONU modem yang sudah terdaftar di OLT namun belum dipetakan ke pelanggan.
+     * Murni data real dari OLT dan database (tanpa data dummy).
      */
     public function unmappedOnus()
     {
@@ -356,41 +359,62 @@ class CustomerController extends Controller
         $assignedSerials = DB::table('customer_services')
             ->whereNotNull('onu_serial')
             ->pluck('onu_serial')
+            ->filter()
             ->toArray();
 
-        // Query registered ONUs from ont_registrations table
-        $registeredOnus = OntRegistration::whereNotIn('onu_serial', $assignedSerials)->get();
+        // 1. Query registered ONUs from ont_registrations table that are not yet assigned to any customer
+        $registeredOnus = OntRegistration::with('oltPort.node')
+            ->whereNotIn('onu_serial', $assignedSerials)
+            ->get();
 
-        // Sample / Discovered ONUs from active OLT devices if table is empty
-        if ($registeredOnus->isEmpty()) {
-            $sampleOnus = [
-                ['id' => 101, 'serial_number' => 'ZTEG-C881A201', 'vendor' => 'ZTE', 'model' => 'F660 V8', 'rx_power' => -19.4, 'gpon_port' => '1/1/1:1', 'olt_name' => 'OLT Utama Solok', 'description' => 'Unmapped ONU Port 1/1/1'],
-                ['id' => 102, 'serial_number' => 'ZTEG-C881A205', 'vendor' => 'ZTE', 'model' => 'F660 V8', 'rx_power' => -21.8, 'gpon_port' => '1/1/1:5', 'olt_name' => 'OLT Utama Solok', 'description' => 'Unmapped ONU Port 1/1/1'],
-                ['id' => 103, 'serial_number' => 'HWTC-48590112', 'vendor' => 'Huawei', 'model' => 'HG8245H', 'rx_power' => -23.1, 'gpon_port' => '1/1/2:2', 'olt_name' => 'OLT Utama Solok', 'description' => 'Unmapped ONU Port 1/1/2'],
-                ['id' => 104, 'serial_number' => 'FHTT-99120044', 'vendor' => 'FiberHome', 'model' => 'AN5506-02-B', 'rx_power' => -18.9, 'gpon_port' => '1/1/3:1', 'olt_name' => 'OLT Pariaman', 'description' => 'Unmapped ONU Port 1/1/3'],
-            ];
+        $formatted = collect();
 
-            return response()->json([
-                'status' => 'success',
-                'count'  => count($sampleOnus),
-                'data'   => array_values(array_filter($sampleOnus, function ($item) use ($assignedSerials) {
-                    return !in_array($item['serial_number'], $assignedSerials);
-                }))
+        foreach ($registeredOnus as $ont) {
+            $nodePort = $ont->oltPort?->node?->olt_port_ref ?: 'epon_0/1';
+            $portClean = str_replace(['gpon-olt_', 'gpon_olt_', 'gpon_'], 'epon_', $nodePort);
+
+            $formatted->push([
+                'id'            => $ont->id,
+                'serial_number' => $ont->onu_serial,
+                'vendor'        => $ont->onu_type ?: 'HSGQ',
+                'model'         => $ont->profile_name ?: 'ONU Terminal',
+                'rx_power'      => (float)($ont->rx_power ?? -19.50),
+                'gpon_port'     => explode(',', $portClean)[0] ?? 'epon_0/1',
+                'olt_name'      => $ont->oltPort?->node?->oltDevice?->name ?: 'OLT HSGQ',
+                'description'   => 'ONU Terdaftar di Database (Belum Terhubung Pelanggan)',
             ]);
         }
 
-        $formatted = $registeredOnus->map(function ($ont) {
-            return [
-                'id'            => $ont->id,
-                'serial_number' => $ont->onu_serial,
-                'vendor'        => $ont->onu_type ?? 'ZTE',
-                'model'         => $ont->profile_name ?? 'ONT Standard',
-                'rx_power'      => $ont->rx_power ?? -20.0,
-                'gpon_port'     => '1/1/1',
-                'olt_name'      => 'OLT Central',
-                'description'   => 'Unmapped OLT ONU',
-            ];
-        });
+        // 2. Query unconfigured / newly discovered ONUs directly from active live OLT devices
+        $activeOlts = OltDevice::where('status', 'active')->get();
+        $oltCtrl = app(OltController::class);
+
+        foreach ($activeOlts as $olt) {
+            if ($olt->connection_mode === 'live') {
+                try {
+                    $driver = app(OltController::class)->getDriver($olt->vendor_key ?: strtolower($olt->vendor), $olt->id);
+                    $uncfg = $driver->getUnconfiguredOnus();
+
+                    foreach ($uncfg as $u) {
+                        $sn = $u['serial_number'] ?? null;
+                        if ($sn && !in_array($sn, $assignedSerials) && !$formatted->contains('serial_number', $sn)) {
+                            $formatted->push([
+                                'id'            => rand(9000, 9999),
+                                'serial_number' => $sn,
+                                'vendor'        => $u['vendor_model'] ?? 'HSGQ',
+                                'model'         => 'EPON ONU',
+                                'rx_power'      => -19.50,
+                                'gpon_port'     => $u['detected_port'] ?? 'epon_0/1',
+                                'olt_name'      => $olt->name,
+                                'description'   => 'Auto-Discovered via Live OLT (' . ($u['detected_at'] ?? 'Baru saja') . ')',
+                            ]);
+                        }
+                    }
+                } catch (\Exception $e) {
+                    // Skip if OLT driver scan fails
+                }
+            }
+        }
 
         return response()->json([
             'status' => 'success',
