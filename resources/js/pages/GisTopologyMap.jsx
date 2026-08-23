@@ -471,7 +471,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
       const isSelected = selectedNode?.id === node.id;
       const isOdp = node.node_type === 'ODP';
       const optMeta = getOpticalQuality(node.optical_power_dbm);
-      const opticalDbmText = node.optical_power_dbm != null ? `${node.optical_power_dbm} dBm` : '—';
+      const opticalDbmText = node.rx_power_range ? node.rx_power_range : (node.optical_power_dbm != null ? `${node.optical_power_dbm} dBm` : '—');
 
       const size = isSelected ? typeMeta.size + 4 : typeMeta.size;
 
@@ -895,7 +895,7 @@ export default function GisTopologyMap() {
                       {isOdp ? (
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-mono font-extrabold" style={{ color: optMeta.color }}>
-                            {node.optical_power_dbm != null ? `${node.optical_power_dbm} dBm` : '—'}
+                            {node.rx_power_range ? node.rx_power_range : (node.optical_power_dbm != null ? `${node.optical_power_dbm} dBm` : '—')}
                           </span>
                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${optMeta.badge}`}>
                             {optMeta.label}
