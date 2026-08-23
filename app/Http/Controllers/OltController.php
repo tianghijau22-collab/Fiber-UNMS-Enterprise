@@ -51,7 +51,12 @@ class OltController extends Controller
             case 'hioso':
                 return new HiosoDriver();
             case 'hsgq':
-                return new HsgqDriver();
+                return new HsgqDriver(
+                    ip: $ip,
+                    community: $community,
+                    snmpVersion: $snmpVersion,
+                    isLive: $isLive
+                );
             case 'tarmoc':
                 return new TarmocDriver();
             case 'zte-c300':
