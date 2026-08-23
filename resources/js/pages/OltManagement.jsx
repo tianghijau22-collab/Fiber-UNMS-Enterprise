@@ -830,26 +830,47 @@ export default function OltManagement() {
           {/* Summary cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
-              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Nama & Lokasi OLT</div>
+              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Nama &amp; Lokasi OLT</div>
               <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-2">{activeOlt?.name}</div>
               <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mt-1">{activeOlt?.location}</div>
+              {oltData.device_info?.mac_address && (
+                <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-1">MAC: {oltData.device_info.mac_address}</div>
+              )}
+              {oltData.device_info?.mfg_date && (
+                <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Produksi: {oltData.device_info.mfg_date}</div>
+              )}
             </div>
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
-              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">IP SNMP & Firmware</div>
+              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">IP SNMP &amp; Firmware</div>
               <div className="text-lg font-mono font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">{maskIpAddress(activeOlt?.ip_address)}</div>
               <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Firmware: {oltData.device_info?.firmware}</div>
             </div>
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
               <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">CPU & Suhu Chassis (SNMP)</div>
-              <div className="flex items-center space-x-3 mt-2">
-                <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{oltData.device_info?.cpu_usage ?? '--'}%</span>
-                <div className="flex-1 bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                  <div className="bg-indigo-600 dark:bg-indigo-500 h-full rounded-full" style={{ width: `${oltData.device_info?.cpu_usage ?? 0}%` }} />
-                </div>
-              </div>
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
-                Suhu: {oltData.device_info?.temperature ?? '--'}°C | Uptime: {oltData.device_info?.uptime ?? '--'}
-              </div>
+              {oltData.device_info?.cpu_usage !== null && oltData.device_info?.cpu_usage !== undefined ? (
+                <>
+                  <div className="flex items-center space-x-3 mt-2">
+                    <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{oltData.device_info.cpu_usage}%</span>
+                    <div className="flex-1 bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                      <div className="bg-indigo-600 dark:bg-indigo-500 h-full rounded-full" style={{ width: `${oltData.device_info.cpu_usage}%` }} />
+                    </div>
+                  </div>
+                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
+                    Suhu: {oltData.device_info?.temperature ?? '--'}°C | Uptime: {oltData.device_info?.uptime ?? '--'}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mt-2">
+                    <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{oltData.device_info?.uptime ?? '--'}</span>
+                  </div>
+                  <div className="mt-1 space-y-0.5">
+                    <div className="text-[10px] text-amber-500 dark:text-amber-400 font-semibold">CPU / RAM / Suhu: N/A</div>
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-snug">OLT tidak mengekspos OID ini via SNMP</div>
+                  </div>
+                </>
+              )}
+
             </div>
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
               <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">ONU Belum Terdaftar</div>
@@ -989,12 +1010,15 @@ export default function OltManagement() {
                               <div className={`text-xs font-extrabold ${port.los_onus > 0 ? 'text-rose-700 dark:text-rose-300 animate-pulse' : 'text-slate-600 dark:text-slate-400'}`}>{port.los_onus}</div>
                             </div>
                           </div>
-                          {port.tx_power_dbm && (
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/80 dark:border-slate-700">
-                              <span>TX Optical:</span>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/80 dark:border-slate-700">
+                            <span>TX Optical:</span>
+                            {port.tx_power_dbm !== null && port.tx_power_dbm !== undefined ? (
                               <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">+{port.tx_power_dbm} dBm</span>
-                            </div>
-                          )}
+                            ) : (
+                              <span className="text-slate-400 dark:text-slate-500 italic text-[10px]">N/A (SNMP)</span>
+                            )}
+                          </div>
+
 
                           {/* Info ODC & ODP Terhubung */}
                           {odcCount > 0 && (
