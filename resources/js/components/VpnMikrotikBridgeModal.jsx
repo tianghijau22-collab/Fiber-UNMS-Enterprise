@@ -48,12 +48,12 @@ export default function VpnMikrotikBridgeModal({ isOpen, onClose }) {
 
   // ── Form State: Generator Script MikroTik (MikroTik -> VPS) ──
   const [mikrotikForm, setMikrotikForm] = useState({
-    vpsPublicIp: window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost' ? window.location.hostname : '103.123.45.67',
-    vpnUser: 'unms_mikrotik',
-    vpnPassword: 'PasswordTunnel123',
-    ipsecSecret: 'SecretIPsec123',
-    oltLocalSubnet: '192.168.10.0/24',
-    oltIpSample: '192.168.10.2',
+    vpsPublicIp: window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost' ? window.location.hostname : '103.89.6.125',
+    vpnUser: 'unms_client',
+    vpnPassword: 'unmspassword2026',
+    ipsecSecret: 'unmssecret2026',
+    oltLocalSubnet: '192.168.100.0/24',
+    oltIpSample: '192.168.100.1',
   });
 
   // ── Form State: Server Lokal Kantor (Direct LAN On-Premise) ──

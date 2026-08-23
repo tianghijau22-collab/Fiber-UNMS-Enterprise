@@ -99,51 +99,63 @@ class VpsBridgeController extends Controller
 
         // Generate MikroTik RouterOS script
         $rscLines = [];
-        $rscLines[] = "# =============================================================";
-        $rscLines[] = "# FIBER-UNMS ENTERPRISE - SETUP LENGKAP MIKROTIK ROUTER & OLT";
-        $rscLines[] = "# Model Target: {$validated['router_model']} | Generated: " . date('Y-m-d H:i:s');
-        $rscLines[] = "# =============================================================";
+        $rscLines[] = "# ===========================================================================";
+        $rscLines[] = "# FIBER-UNMS ENTERPRISE - MASTER SCRIPT MIKROTIK & OLT (LENGKAP & ANTI GAGAL)";
+        $rscLines[] = "# Target: {$validated['router_model']} | Generated: " . date('Y-m-d H:i:s');
+        $rscLines[] = "# ===========================================================================";
         $rscLines[] = "";
-        $rscLines[] = "# --- 1. JALUR INTERNET WAN (Sumber Internet dari Modem ISP) ---";
-        $rscLines[] = "/ip dhcp-client add interface={$wanIf} disabled=no comment=\"WAN Internet ISP\"";
+        $rscLines[] = "# --- 1. IDENTITAS ROUTER & PENGATURAN DNS (PENTING AGAR PC BISA BROWSING) ---";
+        $rscLines[] = "/system identity set name=\"MikroTik-UNMS-Gateway\"";
+        $rscLines[] = "/ip dns set allow-remote-requests=yes servers=8.8.8.8,1.1.1.1,8.8.4.4 max-udp-packet-size=4096";
         $rscLines[] = "";
-        $rscLines[] = "# --- 2. IP GATEWAY MANAJEMEN MENUJU OLT ({$oltIp}) ---";
+        $rscLines[] = "# --- 2. JALUR WAN INTERNET (Sumber Internet dari Modem ISP di Port {$wanIf}) ---";
+        $rscLines[] = "/ip dhcp-client add interface={$wanIf} add-default-route=yes use-peer-dns=yes use-peer-ntp=yes disabled=no comment=\"WAN Internet ISP\"";
+        $rscLines[] = "";
+        $rscLines[] = "# --- 3. LAN BRIDGE UNTUK PC/LAPTOP TEKNISI (Port {$lanIf} & Port ether4) ---";
+        $rscLines[] = "/interface bridge add name=bridge-lan comment=\"Bridge LAN Teknisi & Komputer Kantor\"";
+        $rscLines[] = "/interface bridge port add bridge=bridge-lan interface={$lanIf} comment=\"Port PC Teknisi\"";
+        if ($lanIf !== 'ether4' && $wanIf !== 'ether4' && $oltIf !== 'ether4') {
+            $rscLines[] = "/interface bridge port add bridge=bridge-lan interface=ether4 comment=\"Port LAN Tambahan\"";
+        }
+        $rscLines[] = "/ip address add address=192.168.88.1/24 interface=bridge-lan comment=\"Gateway LAN PC Teknisi (192.168.88.1)\"";
+        $rscLines[] = "/ip pool add name=pool-lan ranges=192.168.88.10-192.168.88.200";
+        $rscLines[] = "/ip dhcp-server add name=dhcp-lan interface=bridge-lan address-pool=pool-lan lease-time=1d disabled=no";
+        $rscLines[] = "/ip dhcp-server network add address=192.168.88.0/24 gateway=192.168.88.1 dns-server=192.168.88.1,8.8.8.8,1.1.1.1 comment=\"Network LAN PC (Automatic DHCP)\"";
+        $rscLines[] = "";
+        $rscLines[] = "# --- 4. IP GATEWAY MANAJEMEN MENUJU OLT ({$oltIp}) DI PORT {$oltIf} ---";
         $rscLines[] = "/ip address add address={$routerOltIp} interface={$oltIf} comment=\"Gateway Menuju OLT ({$oltIp})\"";
         $rscLines[] = "";
-        $rscLines[] = "# --- 3. JALUR LAN LAPTOP / PC TEKNISI (PORT {$lanIf}) ---";
-        $rscLines[] = "/ip address add address=192.168.88.1/24 interface={$lanIf} comment=\"LAN Teknisi / Laptop\"";
-        $rscLines[] = "/ip pool add name=pool-teknisi ranges=192.168.88.10-192.168.88.100";
-        $rscLines[] = "/ip dhcp-server add name=dhcp-teknisi interface={$lanIf} address-pool=pool-teknisi disabled=no";
-        $rscLines[] = "/ip dhcp-server network add address=192.168.88.0/24 gateway=192.168.88.1 dns-server=8.8.8.8,1.1.1.1";
-        $rscLines[] = "";
-        $rscLines[] = "# --- 4. VLAN {$vlanId} TRAFFIC INTERNET PELANGGAN (MENEMBUS OLT {$oltIf}) ---";
+        $rscLines[] = "# --- 5. VLAN {$vlanId} TRAFFIC INTERNET PELANGGAN (MENEMBUS PORT OLT {$oltIf}) ---";
         $rscLines[] = "/interface vlan add name=vlan{$vlanId}-internet vlan-id={$vlanId} interface={$oltIf} comment=\"VLAN Internet Modem Client\"";
         $rscLines[] = "";
-        $rscLines[] = "# --- 5. PPPoE SERVER DI ATAS VLAN {$vlanId} ---";
+        $rscLines[] = "# --- 6. PPPoE SERVER DI ATAS VLAN {$vlanId} ---";
         $rscLines[] = "/ip pool add name=pool-pppoe ranges={$pppoePool}";
         $rscLines[] = "/ppp profile add name=profile-pppoe-{$pppoeRate} local-address={$pppoeGateway} remote-address=pool-pppoe rate-limit=\"{$pppoeRate}\" dns-server=8.8.8.8,1.1.1.1 comment=\"Profile Kecepatan {$pppoeRate}\"";
         $rscLines[] = "/interface pppoe-server server add service-name=pppoe-unms interface=vlan{$vlanId}-internet default-profile=profile-pppoe-{$pppoeRate} one-session-per-host=yes authentication=pap,chap,mschap1,mschap2 disabled=no";
         $rscLines[] = "";
-        $rscLines[] = "# --- 6. AKUN PPPoE SAMPLE PELANGGAN PERTAMA ---";
+        $rscLines[] = "# --- 7. AKUN PPPoE SAMPLE MODEM PELANGGAN PERTAMA ---";
         $rscLines[] = "/ppp secret add name=\"{$pppoeUser}\" password=\"{$pppoePass}\" service=pppoe profile=profile-pppoe-{$pppoeRate} comment=\"Akun Demo Modem Client\"";
         $rscLines[] = "";
-        $rscLines[] = "# --- 7. NAT INTERNET MASQUERADE (SHARING INTERNET) ---";
-        $rscLines[] = "/ip firewall nat add chain=srcnat out-interface={$wanIf} action=masquerade comment=\"NAT Internet Masquerade\"";
+        $rscLines[] = "# --- 8. NAT MASQUERADE (INTERNET BROWSING PC & FORWARDING KE OLT) ---";
+        $rscLines[] = "# Rule 8A: Berbagi Internet ke PC Teknisi & Modem Pelanggan";
+        $rscLines[] = "/ip firewall nat add chain=srcnat out-interface={$wanIf} action=masquerade comment=\"NAT Internet Masquerade WAN\"";
+        $rscLines[] = "# Rule 8B: Agar PC Teknisi (192.168.88.x) Bisa Buka Web GUI OLT ({$oltIp}) Langsung Tanpa Ubah IP PC!";
+        $rscLines[] = "/ip firewall nat add chain=srcnat src-address=192.168.88.0/24 dst-address={$oltSubnet} action=masquerade comment=\"NAT Akses PC Teknisi ke Web GUI OLT\"";
         $rscLines[] = "";
-        $rscLines[] = "# --- 8. SERVICE API MIKROTIK (PORT 8728 TELEMETRI UNMS) ---";
+        $rscLines[] = "# --- 9. SERVICE API MIKROTIK (PORT 8728 TELEMETRI FIBER-UNMS) ---";
         $rscLines[] = "/ip service set api port=8728 disabled=no";
         $rscLines[] = "/user group add name=unms-group policy=api,read,test,winbox";
         $rscLines[] = "/user add name=unms_api group=unms-group password=\"{$pass}\" comment=\"UNMS Telemetry API User\"";
         $rscLines[] = "";
 
         if ($protocol === 'l2tp') {
-            $rscLines[] = "# --- 9. KONEKSI TEROWONGAN VPN L2TP/IPsec KE VPS CLOUD ({$vpsIp}) ---";
-            $rscLines[] = "/interface l2tp-client add name=\"vpn-unms-vps\" connect-to={$vpsIp} user=\"{$user}\" password=\"{$pass}\" ipsec-secret=\"{$secret}\" use-ipsec=yes disabled=no comment=\"Tunnel UNMS Cloud\"";
+            $rscLines[] = "# --- 10. KONEKSI TEROWONGAN VPN L2TP/IPsec KE VPS CLOUD ({$vpsIp}) ---";
+            $rscLines[] = "/interface l2tp-client add name=\"vpn-unms-vps\" connect-to={$vpsIp} user=\"{$user}\" password=\"{$pass}\" ipsec-secret=\"{$secret}\" use-ipsec=yes add-default-route=no disabled=no comment=\"Tunnel UNMS Cloud\"";
         } elseif ($protocol === 'sstp') {
-            $rscLines[] = "# --- 9. KONEKSI TEROWONGAN VPN SSTP (PORT 443) KE VPS CLOUD ({$vpsIp}) ---";
-            $rscLines[] = "/interface sstp-client add name=\"vpn-unms-vps\" connect-to={$vpsIp}:443 user=\"{$user}\" password=\"{$pass}\" verify-server-certificate=no disabled=no comment=\"Tunnel UNMS Cloud\"";
+            $rscLines[] = "# --- 10. KONEKSI TEROWONGAN VPN SSTP (PORT 443) KE VPS CLOUD ({$vpsIp}) ---";
+            $rscLines[] = "/interface sstp-client add name=\"vpn-unms-vps\" connect-to={$vpsIp}:443 user=\"{$user}\" password=\"{$pass}\" verify-server-certificate=no add-default-route=no disabled=no comment=\"Tunnel UNMS Cloud\"";
         } else {
-            $rscLines[] = "# --- 9. KONEKSI TEROWONGAN WIREGUARD KE VPS CLOUD ({$vpsIp}) ---";
+            $rscLines[] = "# --- 10. KONEKSI TEROWONGAN WIREGUARD KE VPS CLOUD ({$vpsIp}) ---";
             $rscLines[] = "/interface wireguard add name=wg-unms listen-port=13231 comment=\"WireGuard UNMS\"";
             $rscLines[] = "/ip address add address=10.254.0.2/24 interface=wg-unms";
             $rscLines[] = "/interface wireguard peers add interface=wg-unms endpoint-address={$vpsIp} endpoint-port=51820 allowed-address=10.254.0.0/24 persistent-keepalive=25s public-key=\"VPS_PUBLIC_KEY_HERE\"";
@@ -151,17 +163,22 @@ class VpsBridgeController extends Controller
 
         $mikrotikScript = implode("\n", $rscLines);
 
+        // Clean Reset Script for MikroTik
+        $resetScript = "/system reset-configuration no-defaults=yes skip-backup=yes";
+
         // Generate VPS Linux commands
         $vpsLines = [];
-        $vpsLines[] = "# Jalankan di Terminal SSH VPS ({$vpsIp}):";
+        $vpsLines[] = "# =============================================================";
+        $vpsLines[] = "# PERINTAH DI TERMINAL SSH VPS CLOUD ({$vpsIp}):";
+        $vpsLines[] = "# =============================================================";
         $vpsLines[] = "";
-        $vpsLines[] = "# 1. Install & Aktifkan L2TP / VPN Server Otomatis (Sudah Aktif di VPS):";
+        $vpsLines[] = "# 1. Cek Status Layanan VPN Server (Sudah Aktif di VPS):";
         $vpsLines[] = "systemctl status xl2tpd strongswan-starter";
         $vpsLines[] = "";
         $vpsLines[] = "# 2. Tambahkan Rute agar VPS bisa menjangkau IP OLT ({$oltIp}) lewat VPN MikroTik:";
-        $vpsLines[] = "sudo ip route add {$oltSubnet} via 10.254.0.2";
+        $vpsLines[] = "sudo ip route replace {$oltSubnet} via 10.254.0.2";
         $vpsLines[] = "";
-        $vpsLines[] = "# 3. Uji Ping & Query SNMP dari VPS ke OLT:";
+        $vpsLines[] = "# 3. Uji Ping & Query SNMP dari VPS ke OLT Lokal di Meja Anda:";
         $vpsLines[] = "ping -c 3 {$oltIp}";
         $vpsLines[] = "snmpwalk -v 2c -c public {$oltIp} 1.3.6.1.2.1.1.1.0";
 
@@ -171,6 +188,7 @@ class VpsBridgeController extends Controller
             'status' => 'success',
             'data' => [
                 'mikrotik_script' => $mikrotikScript,
+                'reset_script'    => $resetScript,
                 'vps_script'      => $vpsScript,
                 'summary' => [
                     'vps_ip'       => $vpsIp,

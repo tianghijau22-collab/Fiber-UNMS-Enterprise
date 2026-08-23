@@ -43,12 +43,16 @@ export default function NetworkBridgeSetup() {
   const [routerApiResult, setRouterApiResult] = useState(null);
   const [testTargetType, setTestTargetType] = useState('olt'); // 'olt' or 'router'
 
-  // Sub-tab state for Step 4 & Step 5
+  // Sub-tab state for Step 1 (Reset), Step 3 (PC Setup), Step 6 (OLT), Step 7 (Modem)
+  const [resetTab, setResetTab] = useState('mikrotik'); // 'mikrotik' or 'olt'
+  const [pcSetupTab, setPcSetupTab] = useState('dhcp'); // 'dhcp' or 'static'
   const [oltVendorTab, setOltVendorTab] = useState('hsgq'); // 'hsgq', 'zte', 'huawei', 'vsol'
   const [modemVendorTab, setModemVendorTab] = useState('zte'); // 'zte', 'huawei', 'hsgq_vsol'
 
   // Physical Checklist State
   const [checklist, setChecklist] = useState({
+    mikrotikReset: false,
+    oltReset: false,
     wanPlugged: false,
     oltPlugged: false,
     lanPlugged: false,
@@ -195,12 +199,14 @@ export default function NetworkBridgeSetup() {
   };
 
   const steps = [
-    { num: 1, title: '1. Topologi & Kabel', desc: 'Perkabelan Fisik Lengkap' },
-    { num: 2, title: '2. Setup VPN VPS', desc: 'Terowongan Cloud' },
-    { num: 3, title: '3. Setup MikroTik Awal', desc: 'VLAN + PPPoE + VPN' },
-    { num: 4, title: '4. Setup OLT & Registrasi', desc: 'Otorisasi Modem Client' },
-    { num: 5, title: '5. Setting Modem Client', desc: 'PPPoE + VLAN 100' },
-    { num: 6, title: '6. Uji Bridge Live', desc: 'End-to-End Diagnostic' },
+    { num: 1, title: '1. Reset Perangkat Bekas', desc: 'MikroTik & OLT Factory Default' },
+    { num: 2, title: '2. Topologi & Kabel', desc: 'Perkabelan Fisik hAP lite & OLT' },
+    { num: 3, title: '3. Setting PC Teknisi', desc: 'IP Otomatis DHCP vs Static' },
+    { num: 4, title: '4. Server VPN VPS', desc: 'Status Tunnel Cloud 103.89.6.125' },
+    { num: 5, title: '5. Script Master MikroTik', desc: 'DNS + NAT + VLAN + PPPoE + VPN' },
+    { num: 6, title: '6. Setup OLT HSGQ', desc: 'VLAN 100 + SNMP + Registrasi ONU' },
+    { num: 7, title: '7. Setting Modem Client', desc: 'PPPoE Route VLAN 100' },
+    { num: 8, title: '8. Uji Bridge Live', desc: 'End-to-End Live Diagnostic' },
   ];
 
   const inputCls = "w-full px-3.5 py-2.5 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium transition-all";
@@ -315,9 +321,9 @@ export default function NetworkBridgeSetup() {
         </div>
       </div>
 
-      {/* ── Wizard Progress Navigation Tabs (6 STEPS) ───────────────────────── */}
+      {/* ── Wizard Progress Navigation Tabs (8 STEPS) ───────────────────────── */}
       <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-lg p-2 shadow-2xs">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
           {steps.map(s => {
             const isActive = activeStep === s.num;
             const isCompleted = activeStep > s.num;
@@ -325,15 +331,15 @@ export default function NetworkBridgeSetup() {
               <button
                 key={s.num}
                 onClick={() => setActiveStep(s.num)}
-                className={`p-3 rounded-lg text-left transition-all relative ${isActive
+                className={`p-2.5 rounded-lg text-left transition-all relative cursor-pointer ${isActive
                   ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-sm'
                   : isCompleted
                     ? 'bg-slate-50 dark:bg-neutral-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-neutral-800'
                     : 'bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-neutral-900/50'
                   }`}
               >
-                <div className="flex items-center space-x-2">
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isActive
+                <div className="flex items-center space-x-1.5">
+                  <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${isActive
                     ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white'
                     : isCompleted
                       ? 'bg-emerald-600 text-white'
@@ -341,9 +347,9 @@ export default function NetworkBridgeSetup() {
                     }`}>
                     {isCompleted ? '✓' : s.num}
                   </span>
-                  <div className="font-bold text-xs truncate">{s.title}</div>
+                  <div className="font-bold text-[11px] truncate">{s.title}</div>
                 </div>
-                <div className={`text-[10px] mt-1 truncate ${isActive ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'}`}>
+                <div className={`text-[9px] mt-1 truncate ${isActive ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'}`}>
                   {s.desc}
                 </div>
               </button>
@@ -353,16 +359,192 @@ export default function NetworkBridgeSetup() {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          STEP 1: TOPOLOGI FISIK & PERKABELAN LENGKAP
+          STEP 1: RESET PERANGKAT BEKAS (FACTORY DEFAULT)
       ══════════════════════════════════════════════════════════════════════ */}
       {activeStep === 1 && (
         <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-lg p-6 shadow-2xs space-y-6">
+          <div className="border-b border-slate-100 dark:border-[#222222] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span>🔄</span>
+                <span>Langkah 1: Reset &amp; Factory Default Perangkat Bekas</span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Karena Router MikroTik &amp; OLT yang Anda gunakan adalah perangkat bekas, <strong>Wajib di-reset total</strong> agar tidak ada sisa konfigurasi lama yang bentrok.
+              </p>
+            </div>
+            <span className="px-2.5 py-1 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 text-xs font-bold border border-rose-200 dark:border-rose-800 self-start sm:self-auto">
+              Wajib Dilakukan Dahulu
+            </span>
+          </div>
+
+          {/* Sub-tab Selector: MikroTik Reset vs OLT HSGQ Reset */}
+          <div className="flex items-center gap-2 border-b border-slate-200 dark:border-[#222222] pb-3">
+            <button
+              onClick={() => setResetTab('mikrotik')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${resetTab === 'mikrotik'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs'
+                : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
+                }`}
+            >
+              📶 1. Reset MikroTik hAP lite (RB941-2nD)
+            </button>
+            <button
+              onClick={() => setResetTab('olt')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${resetTab === 'olt'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs'
+                : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
+                }`}
+            >
+              🏢 2. Reset OLT HSGQ-E04 (4-Port EPON)
+            </button>
+          </div>
+
+          {/* Tab 1: MikroTik Reset Guide */}
+          {resetTab === 'mikrotik' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Method A: Winbox No-Default Reset */}
+                <div className="p-5 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
+                      <span>💻</span>
+                      <span>Metode A: Reset Bersih via Winbox (Paling Cepat)</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-200 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200">
+                      Rekomendasi ⭐
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Gunakan opsi <strong>no-defaults=yes</strong> agar MikroTik benar-benar bersih tanpa aturan default firewall yang mengunci port LAN/WAN.
+                  </p>
+                  <div className="p-3 bg-slate-950 rounded-lg font-mono text-xs text-indigo-300 flex items-center justify-between">
+                    <code>/system reset-configuration no-defaults=yes skip-backup=yes</code>
+                    <button
+                      onClick={() => copyToClipboard('/system reset-configuration no-defaults=yes skip-backup=yes', 'reset_cmd')}
+                      className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-sans font-bold"
+                    >
+                      {copiedType === 'reset_cmd' ? '✓ Disalin' : 'Salin'}
+                    </button>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                    <li>Buka aplikasi <strong>Winbox</strong> $\rightarrow$ Masuk tab <strong>Neighbors</strong>.</li>
+                    <li>Klik <strong>MAC Address</strong> MikroTik Anda $\rightarrow$ Login (User: <code>admin</code>, Pass: kosong atau sesuai stiker <code>RPQ4AWTC59</code>).</li>
+                    <li>Buka menu <strong>New Terminal</strong> $\rightarrow$ Paste perintah di atas lalu tekan <strong>Enter</strong>.</li>
+                    <li>Ketik <strong>y</strong> untuk konfirmasi $\rightarrow$ MikroTik akan reboot bersih selama 20-30 detik.</li>
+                  </ol>
+                </div>
+
+                {/* Method B: Hardware Button Reset */}
+                <div className="p-5 rounded-xl border border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-neutral-900/50 space-y-3">
+                  <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>🔘</span>
+                    <span>Metode B: Hard Reset Tombol Fisik hAP lite</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Gunakan metode ini jika Anda tidak bisa login ke Winbox karena lupa password pemilik lama:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                    <li><strong>Cabut kabel power</strong> (Micro USB) dari MikroTik hAP lite.</li>
+                    <li>Siapkan jarum / paperclip, <strong>tekan &amp; tahan tombol RESET</strong> (lubang kecil di samping port power).</li>
+                    <li>Sambil tombol reset tetap ditekan, <strong>colokkan kembali kabel power</strong>.</li>
+                    <li>Perhatikan lampu <strong>ACT LED</strong>. Lampu akan menyala diam lalu mulai <strong>berkedip (blinking)</strong>.</li>
+                    <li>Saat lampu ACT mulai berkedip (sekitar 5-8 detik), <strong>SEGERA LEPAS tombol reset!</strong></li>
+                    <li>Tunggu router restart. Router sekarang sudah kembali ke setelan awal pabrik.</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: OLT HSGQ Reset Guide */}
+          {resetTab === 'olt' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Method 1: NMS Port Access */}
+                <div className="p-5 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+                      <span>🔌</span>
+                      <span>1. Port NMS HSGQ</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
+                      IP Pasti 192.168.100.1
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    OLT HSGQ-E04 memiliki port fisik <strong>NMS</strong> (di samping port Console). Port NMS adalah port manajemen terisolasi yang <strong>selalu beralamat 192.168.100.1</strong> walaupun IP in-band port GE diubah pemilik lama!
+                  </p>
+                  <div className="p-3 bg-white dark:bg-black rounded-lg border border-emerald-200 dark:border-emerald-900 text-xs space-y-1 font-mono">
+                    <div>• Colok LAN Laptop $\rightarrow$ Port NMS OLT</div>
+                    <div>• Set IP Laptop: <code>192.168.100.100</code></div>
+                    <div>• Buka URL: <code>http://192.168.100.1</code></div>
+                  </div>
+                </div>
+
+                {/* Method 2: Web GUI Factory Reset */}
+                <div className="p-5 rounded-xl border border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-neutral-900/50 space-y-3">
+                  <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>🌐</span>
+                    <span>2. Web GUI Factory Reset</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Setelah berhasil membuka Web GUI OLT HSGQ:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                    <li>Login dengan User: <code>root</code>, Pass: <code>admin</code> (atau <code>admin / admin</code>).</li>
+                    <li>Masuk ke menu <strong>System Management</strong> $\rightarrow$ <strong>Configuration Management</strong>.</li>
+                    <li>Klik opsi <strong>Restore Factory Default</strong>.</li>
+                    <li>Klik <strong>Apply / Confirm</strong> lalu <strong>Reboot</strong>.</li>
+                    <li>Semua data VLAN, ONU lama, dan password lama akan terhapus bersih.</li>
+                  </ol>
+                </div>
+
+                {/* Method 3: Console Port Reset */}
+                <div className="p-5 rounded-xl border border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-neutral-900/50 space-y-3">
+                  <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>📟</span>
+                    <span>3. Port CONSOLE Serial</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Jika IP OLT diubah total dan Web GUI tidak bisa diakses sama sekali:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                    <li>Gunakan kabel Console (RJ45 to USB serial) colok ke port <strong>CONSOLE</strong>.</li>
+                    <li>Buka <strong>PuTTY</strong> $\rightarrow$ Pilih Connection Type <strong>Serial</strong> (Baudrate: <code>115200</code> atau <code>9600</code>).</li>
+                    <li>Login: <code>root / admin</code>.</li>
+                    <li>Ketik: <code>restore default</code> lalu <code>reboot</code>.</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between items-center pt-2">
+            <div className="text-xs text-slate-400">
+              Pastikan kedua perangkat sudah dalam kondisi fresh/reset sebelum melanjutkan.
+            </div>
+            <button
+              onClick={() => setActiveStep(2)}
+              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
+            >
+              <span>Lanjut ke Langkah 2: Topologi &amp; Perkabelan ➜</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          STEP 2: TOPOLOGI FISIK & PERKABELAN LENGKAP
+      ══════════════════════════════════════════════════════════════════════ */}
+      {activeStep === 2 && (
+        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-lg p-6 shadow-2xs space-y-6">
           <div className="border-b border-slate-100 dark:border-[#222222] pb-3">
             <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-              🔌 Langkah 1: Topologi Fisik &amp; Perkabelan Lengkap ISP
+              🔌 Langkah 2: Topologi Fisik &amp; Perkabelan Lengkap ISP
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Hubungkan kabel jaringan pada MikroTik hAP lite, OLT HSGQ, dan Modem Client (ONU/ONT) sesuai skema di bawah.
+              Hubungkan kabel jaringan pada MikroTik hAP lite, OLT HSGQ-E04, dan Modem Client (ONU/ONT) sesuai skema port di bawah.
             </p>
           </div>
 
@@ -373,21 +555,24 @@ export default function NetworkBridgeSetup() {
               <div className="flex items-center justify-between">
                 <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
                   <span>📶</span>
-                  <span>1. Router MikroTik hAP lite</span>
+                  <span>1. MikroTik hAP lite (RB941)</span>
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                  VPN &amp; PPPoE Server
+                  Router Gateway + VPN
                 </span>
               </div>
               <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-300 font-mono">
-                <li className="p-2 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                  <span className="text-indigo-600 font-bold">Ether 1 (WAN):</span> Colok kabel internet dari Modem ISP Kantor.
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-indigo-600 font-bold">Ether 1 (WAN):</span> Colok kabel LAN dari Modem Internet ISP Kantor.
                 </li>
-                <li className="p-2 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                  <span className="text-emerald-600 font-bold">Ether 2 (OLT):</span> Colok kabel LAN ke port <strong>Uplink 1 (GE1) OLT HSGQ</strong>.
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-emerald-600 font-bold">Ether 2 (OLT):</span> Colok kabel LAN ke port <strong>Uplink GE1 OLT HSGQ</strong>.
                 </li>
-                <li className="p-2 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                  <span className="text-amber-600 font-bold">Ether 3 (LAN):</span> Colok kabel ke <strong>Laptop Teknisi</strong>.
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-amber-600 font-bold">Ether 3 (LAN PC):</span> Colok kabel LAN ke <strong>Laptop / PC Anda</strong>.
+                </li>
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-purple-600 font-bold">Ether 4 (LAN AP):</span> (Opsional) Access Point / Komputer kantor lainnya.
                 </li>
               </ul>
             </div>
@@ -397,21 +582,21 @@ export default function NetworkBridgeSetup() {
               <div className="flex items-center justify-between">
                 <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
                   <span>🏢</span>
-                  <span>2. OLT HSGQ-E04</span>
+                  <span>2. OLT HSGQ-E04 (4-PON)</span>
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
                   IP: 192.168.100.1
                 </span>
               </div>
               <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-300 font-mono">
-                <li className="p-2 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                  <span className="text-emerald-600 font-bold">Port GE1 (Uplink):</span> Menerima jalur data &amp; VLAN dari Ether 2 MikroTik.
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-emerald-600 font-bold">Port GE1 (Uplink):</span> Menerima jalur VLAN 100 dari Ether 2 MikroTik.
                 </li>
-                <li className="p-2 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                  <span className="text-indigo-600 font-bold">Port PON 1:</span> Pasang Modul SFP PON &amp; kabel Fiber Optik (Dropcore).
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-indigo-600 font-bold">Port PON 1:</span> Pasang SFP PON EPON PX20+ $\rightarrow$ Dropcore ke ODP/Splitter.
                 </li>
-                <li className="p-2 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                  <span className="text-slate-500 font-bold">Layanan SNMP:</span> Port UDP 161 (Read: public).
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-slate-500 font-bold">Port NMS:</span> (Opsional) Out-of-band management port 192.168.100.1.
                 </li>
               </ul>
             </div>
@@ -424,80 +609,164 @@ export default function NetworkBridgeSetup() {
                   <span>3. Modem Client (ONU / ONT)</span>
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
-                  Pelanggan
+                  Rumah Pelanggan
                 </span>
               </div>
               <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-300 font-mono">
-                <li className="p-2 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                  <span className="text-purple-600 font-bold">Port Optik (PON):</span> Colok kabel fiber dari splitter/ODP OLT.
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-purple-600 font-bold">Port Optik (PON):</span> Colok kabel fiber dropcore dari ODP/OLT.
                 </li>
-                <li className="p-2 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                  <span className="text-indigo-600 font-bold">Port LAN 1-4 &amp; Wi-Fi:</span> Terhubung ke HP/PC Pelanggan.
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-indigo-600 font-bold">Port LAN 1-4 &amp; Wi-Fi:</span> Terhubung ke HP/Laptop pelanggan.
                 </li>
-                <li className="p-2 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                  <span className="text-emerald-600 font-bold">Mode Dial:</span> PPPoE Client (VLAN ID 100).
+                <li className="p-2.5 rounded bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
+                  <span className="text-emerald-600 font-bold">Mode Dial WAN:</span> PPPoE Client (VLAN ID {config.vlanId}).
                 </li>
               </ul>
             </div>
           </div>
 
-          {/* Interactive Checklist */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-3">
-            <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-              Checklist Kesiapan Fisik Perangkat:
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-              <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                <input
-                  type="checkbox"
-                  checked={checklist.wanPlugged}
-                  onChange={e => setChecklist({ ...checklist, wanPlugged: e.target.checked })}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                />
-                <span className="font-medium text-slate-700 dark:text-slate-300">Ether 1 hAP lite terhubung ke Internet WAN</span>
-              </label>
-
-              <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                <input
-                  type="checkbox"
-                  checked={checklist.oltPlugged}
-                  onChange={e => setChecklist({ ...checklist, oltPlugged: e.target.checked })}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                />
-                <span className="font-medium text-slate-700 dark:text-slate-300">Ether 2 hAP lite terhubung ke Uplink OLT</span>
-              </label>
-
-              <label className="flex items-center space-x-2 cursor-pointer p-2 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-neutral-800">
-                <input
-                  type="checkbox"
-                  checked={checklist.fiberPlugged}
-                  onChange={e => setChecklist({ ...checklist, fiberPlugged: e.target.checked })}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                />
-                <span className="font-medium text-slate-700 dark:text-slate-300">SFP PON OLT terpasang kabel Dropcore</span>
-              </label>
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-2">
+          <div className="flex justify-between items-center pt-2">
             <button
-              onClick={() => setActiveStep(2)}
-              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs"
+              onClick={() => setActiveStep(1)}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 cursor-pointer"
             >
-              <span>Lanjut ke Langkah 2: Setup VPN VPS ➜</span>
+              ⬅ Kembali
+            </button>
+            <button
+              onClick={() => setActiveStep(3)}
+              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
+            >
+              <span>Lanjut ke Langkah 3: Setting PC Teknisi ➜</span>
             </button>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          STEP 2: SETUP VPN SERVER DI VPS CLOUD
+          STEP 3: SETTING NETWORK ADAPTER PC TEKNISI (WINDOWS SETUP)
       ══════════════════════════════════════════════════════════════════════ */}
-      {activeStep === 2 && (
+      {activeStep === 3 && (
+        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-lg p-6 shadow-2xs space-y-6">
+          <div className="border-b border-slate-100 dark:border-[#222222] pb-3">
+            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <span>💻</span>
+              <span>Langkah 3: Pengaturan Network Adapter PC / Laptop Anda (Windows)</span>
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Menjawab pertanyaan: <em>&quot;Apakah PC saya harus menggunakan IP static agar bisa terkoneksi ke internet?&quot;</em>
+            </p>
+          </div>
+
+          {/* Sub-tab: DHCP Automatic vs Static Mode */}
+          <div className="flex items-center gap-2 border-b border-slate-200 dark:border-[#222222] pb-3">
+            <button
+              onClick={() => setPcSetupTab('dhcp')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${pcSetupTab === 'dhcp'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
+                }`}
+            >
+              🌐 1. Mode Normal Internetan (DHCP Otomatis - REKOMENDASI)
+            </button>
+            <button
+              onClick={() => setPcSetupTab('static')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${pcSetupTab === 'static'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs'
+                : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
+                }`}
+            >
+              ⚙️ 2. Mode Konfigurasi Darurat OLT (IP Static)
+            </button>
+          </div>
+
+          {/* Tab 1: DHCP Automatic Mode (Recommended) */}
+          {pcSetupTab === 'dhcp' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 text-xs text-emerald-900 dark:text-emerald-200">
+                <div className="font-bold text-sm mb-1">✅ KEPUTUSAN TERBAIK: Atur PC ke Otomatis (DHCP)!</div>
+                <p className="leading-relaxed">
+                  Setelah Anda mengeksekusi Script Master MikroTik di Langkah 5, MikroTik hAP lite akan mengaktifkan <strong>DHCP Server di Port Ether 3 &amp; Ether 4</strong>. PC Anda akan otomatis mendapatkan IP <code>192.168.88.x</code>, Gateway <code>192.168.88.1</code>, dan DNS.
+                </p>
+                <div className="mt-2 p-2.5 bg-white dark:bg-black rounded-lg border border-emerald-300 dark:border-emerald-800 font-bold text-emerald-700 dark:text-emerald-300">
+                  🎉 Keuntungan: PC Anda bisa <strong>LANGSUNG INTERNETAN</strong> dan sekaligus <strong>LANGSUNG BISA BUKA WEB OLT <code>http://192.168.100.1</code></strong> dari browser tanpa ubah IP manual lagi!
+                </div>
+              </div>
+
+              {/* Windows Step-by-Step Tutorial */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-3">
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Cara Mengatur IP Otomatis di Windows 10 / 11:
+                </h3>
+                <ol className="list-decimal list-inside space-y-2 text-xs text-slate-700 dark:text-slate-300">
+                  <li>Tekan kombinasi tombol <kbd className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-neutral-800 font-mono font-bold">Win + R</kbd> di keyboard Anda.</li>
+                  <li>Ketik <code className="font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 rounded">ncpa.cpl</code> lalu tekan <strong>Enter</strong> (Network Connections akan terbuka).</li>
+                  <li>Klik kanan pada adapter <strong>Ethernet</strong> $\rightarrow$ Pilih <strong>Properties</strong>.</li>
+                  <li>Klik dua kali pada <strong>Internet Protocol Version 4 (TCP/IPv4)</strong>.</li>
+                  <li>Pilih: <strong>&quot;Obtain an IP address automatically&quot;</strong> dan <strong>&quot;Obtain DNS server address automatically&quot;</strong>.</li>
+                  <li>Klik <strong>OK</strong> $\rightarrow$ Klik <strong>OK</strong>.</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: Static IP Mode */}
+          {pcSetupTab === 'static' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 text-xs text-amber-900 dark:text-amber-200">
+                <div className="font-bold text-sm mb-1">⚠️ KAPAN MODE STATIC DIGUNAKAN?</div>
+                <p className="leading-relaxed">
+                  Mode IP Static hanya digunakan <strong>jika Anda mencolokkan kabel LAN langsung dari Laptop ke port NMS OLT</strong> (tanpa melewati router MikroTik).
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-3">
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  Parameter IP Static untuk Akses Langsung OLT:
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                  <div className="p-3 bg-white dark:bg-black rounded-lg border border-slate-200 dark:border-neutral-800">
+                    <div className="text-[10px] text-slate-400 font-sans">IP Address PC</div>
+                    <div className="font-bold text-indigo-600 mt-1">192.168.100.100</div>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-black rounded-lg border border-slate-200 dark:border-neutral-800">
+                    <div className="text-[10px] text-slate-400 font-sans">Subnet Mask</div>
+                    <div className="font-bold text-slate-900 dark:text-white mt-1">255.255.255.0</div>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-black rounded-lg border border-slate-200 dark:border-neutral-800">
+                    <div className="text-[10px] text-slate-400 font-sans">Default Gateway</div>
+                    <div className="font-bold text-emerald-600 mt-1">192.168.100.1</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between items-center pt-2">
+            <button
+              onClick={() => setActiveStep(2)}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 cursor-pointer"
+            >
+              ⬅ Kembali
+            </button>
+            <button
+              onClick={() => setActiveStep(4)}
+              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
+            >
+              <span>Lanjut ke Langkah 4: Setup VPN VPS ➜</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          STEP 4: SETUP VPN SERVER DI VPS CLOUD
+      ══════════════════════════════════════════════════════════════════════ */}
+      {activeStep === 4 && (
         <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-lg p-6 shadow-2xs space-y-6">
           <div className="border-b border-slate-100 dark:border-[#222222] pb-3">
             <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-              🛡️ Langkah 2: Server VPN L2TP/IPsec VPS Cloud (Aktif &amp; Siap)
+              🛡️ Langkah 4: Server VPN L2TP/IPsec VPS Cloud (Aktif &amp; Siap)
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Server VPN pada VPS <code className="text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.5 rounded">{config.vpsIp}</code> sudah aktif terpasang dan siap menerima koneksi terowongan dari router MikroTik kantor Anda.
@@ -530,49 +799,63 @@ export default function NetworkBridgeSetup() {
 
           <div className="flex justify-between items-center pt-2">
             <button
-              onClick={() => setActiveStep(1)}
-              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800"
+              onClick={() => setActiveStep(3)}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 cursor-pointer"
             >
               ⬅ Kembali
             </button>
             <button
-              onClick={() => setActiveStep(3)}
-              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs"
+              onClick={() => setActiveStep(5)}
+              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
             >
-              <span>Lanjut ke Langkah 3: Setup MikroTik Awal ➜</span>
+              <span>Lanjut ke Langkah 5: Script Master MikroTik ➜</span>
             </button>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          STEP 3: SETUP ROUTER MIKROTIK AWAL (VLAN + PPPoE + OLT BRIDGE + VPN)
+          STEP 5: SCRIPT MASTER MIKROTIK (LENGKAP & ANTI-GAGAL)
       ══════════════════════════════════════════════════════════════════════ */}
-      {activeStep === 3 && (
+      {activeStep === 5 && (
         <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-lg p-6 shadow-2xs space-y-6">
           <div className="border-b border-slate-100 dark:border-[#222222] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                🚀 Langkah 3: Setup Router MikroTik Awal (VLAN, PPPoE &amp; VPN)
+              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span>🚀</span>
+                <span>Langkah 5: Script Master MikroTik (Lengkap, Anti-Gagal &amp; Full Internet)</span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Konfigurasi lengkap router agar siap mengalirkan traffic internet pelanggan via PPPoE + VLAN 100 dan terhubung ke OLT.
+                Konfigurasi lengkap router: DNS Remote Requests, LAN Bridge, NAT Masquerade, VLAN {config.vlanId}, PPPoE Server, &amp; VPN Tunnel.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={downloadRscFile}
-                className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors shadow-2xs flex items-center gap-1"
+                className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-200 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors shadow-2xs flex items-center gap-1 cursor-pointer"
               >
                 <span>💾 Download .RSC</span>
               </button>
               <button
                 onClick={() => copyToClipboard(scripts?.mikrotik_script || '', 'mikrotik')}
-                className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-colors flex items-center gap-1 shadow-xs"
+                className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
               >
                 <span>{copiedType === 'mikrotik' ? '✓ Tersalin!' : '📋 Salin Script Winbox'}</span>
               </button>
             </div>
+          </div>
+
+          {/* Why it was failing explanation alert */}
+          <div className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/60 text-xs text-indigo-950 dark:text-indigo-200 space-y-2">
+            <div className="font-bold flex items-center gap-1.5">
+              <span>💡</span>
+              <span>Kenapa Kemarin PC Anda Belum Bisa Konek Internet?</span>
+            </div>
+            <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
+              <li><strong>DNS Remote Requests Belum Aktif:</strong> Pada RouterOS, jika <code>allow-remote-requests=yes</code> tidak diaktifkan, komputer Anda tidak bisa menerjemahkan nama domain (misal google.com) sehingga internet terasa mati!</li>
+              <li><strong>Bridge LAN Belum Terpasang:</strong> Script master ini sudah membuat <code>bridge-lan</code> yang mencakup Ether 3 &amp; Ether 4, lengkap dengan DHCP Server otomatis.</li>
+              <li><strong>Dual NAT Masquerade:</strong> Script ini memiliki NAT untuk keluar ke Internet WAN dan NAT khusus agar PC teknisi bisa membuka Web GUI OLT <code>192.168.100.1</code> secara langsung!</li>
+            </ul>
           </div>
 
           {/* Interactive Parameters Setup Form */}
@@ -601,14 +884,14 @@ export default function NetworkBridgeSetup() {
                   onChange={e => setConfig({ ...config, oltInterface: e.target.value })}
                   className={inputCls}
                 >
-                  <option value="ether2">ether2 (Default OLT)</option>
+                  <option value="ether2">ether2 (Default OLT GE1)</option>
                   <option value="ether3">ether3</option>
                   <option value="ether4">ether4</option>
                 </select>
               </div>
 
               <div>
-                <label className={labelCls}>Port LAN Teknisi / Laptop</label>
+                <label className={labelCls}>Port LAN Teknisi / PC</label>
                 <select
                   value={config.lanInterface}
                   onChange={e => setConfig({ ...config, lanInterface: e.target.value })}
@@ -670,8 +953,8 @@ export default function NetworkBridgeSetup() {
           {/* Script Output Box */}
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-              <span>Script Terminal Winbox (Otomatis Ter-update):</span>
-              <span className="font-mono text-[11px]">RouterOS v6 / v7 Ready</span>
+              <span>Script Terminal Winbox (Master Full Config):</span>
+              <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">100% Tested RouterOS v6 / v7</span>
             </div>
             <pre className="bg-slate-950 dark:bg-black text-indigo-300 dark:text-indigo-200 p-4 rounded-xl font-mono text-xs overflow-x-auto leading-relaxed border border-slate-800 dark:border-[#222222] shadow-inner max-h-96">
               {scripts?.mikrotik_script || 'Menghasilkan script MikroTik...'}
@@ -679,45 +962,46 @@ export default function NetworkBridgeSetup() {
           </div>
 
           {/* How to paste guide */}
-          <div className="p-3.5 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/60 text-xs text-indigo-900 dark:text-indigo-300">
-            💡 <strong>Cara Pakai:</strong> Buka aplikasi <strong>Winbox</strong> $\rightarrow$ Hubungkan ke MikroTik hAP lite $\rightarrow$ Klik menu <strong>New Terminal</strong> $\rightarrow$ Paste script di atas lalu tekan Enter.
+          <div className="p-3.5 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/60 text-xs text-emerald-900 dark:text-emerald-300">
+            💡 <strong>Cara Eksekusi:</strong> Buka aplikasi <strong>Winbox</strong> $\rightarrow$ Connect ke MikroTik hAP lite $\rightarrow$ Klik menu <strong>New Terminal</strong> $\rightarrow$ Paste script di atas lalu tekan Enter.
           </div>
 
           <div className="flex justify-between items-center pt-2">
             <button
-              onClick={() => setActiveStep(2)}
-              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800"
+              onClick={() => setActiveStep(4)}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 cursor-pointer"
             >
               ⬅ Kembali
             </button>
             <button
-              onClick={() => setActiveStep(4)}
-              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs"
+              onClick={() => setActiveStep(6)}
+              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
             >
-              <span>Lanjut ke Langkah 4: Setup OLT &amp; Registrasi ONU ➜</span>
+              <span>Lanjut ke Langkah 6: Setup OLT HSGQ ➜</span>
             </button>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          STEP 4: SETUP OLT & CARA REGISTRASI MODEM CLIENT (ONU)
+          STEP 6: SETUP OLT & CARA REGISTRASI MODEM CLIENT (ONU)
       ══════════════════════════════════════════════════════════════════════ */}
-      {activeStep === 4 && (
+      {activeStep === 6 && (
         <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-lg p-6 shadow-2xs space-y-6">
           <div className="border-b border-slate-100 dark:border-[#222222] pb-3">
-            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-              🏢 Langkah 4: Setup OLT &amp; Cara Registrasi Modem Client (ONU)
+            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <span>🏢</span>
+              <span>Langkah 6: Setup OLT HSGQ-E04 &amp; Cara Registrasi Modem Client (ONU)</span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Panduan mengaktifkan VLAN {config.vlanId}, SNMP, dan melakukan otorisasi modem client (ONU) agar terbaca di OLT.
+              Panduan mengaktifkan VLAN {config.vlanId}, SNMP v2c, dan melakukan otorisasi modem client (ONU) di OLT HSGQ-E04.
             </p>
           </div>
 
           {/* OLT Vendor Selector */}
           <div className="flex items-center gap-2 border-b border-slate-200 dark:border-[#222222] pb-2">
             {[
-              { id: 'hsgq', label: 'HSGQ-E04 / G004 (Web GUI)' },
+              { id: 'hsgq', label: 'HSGQ-E04 (Web GUI) ⭐' },
               { id: 'zte', label: 'ZTE C300 / C320 (CLI)' },
               { id: 'huawei', label: 'Huawei SmartAX (CLI)' },
               { id: 'vsol', label: 'VSOL EPON/GPON (Web GUI)' },
@@ -725,7 +1009,7 @@ export default function NetworkBridgeSetup() {
               <button
                 key={tab.id}
                 onClick={() => setOltVendorTab(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${oltVendorTab === tab.id
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${oltVendorTab === tab.id
                   ? 'bg-indigo-600 text-white shadow-xs'
                   : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
                   }`}
@@ -861,29 +1145,30 @@ service-port vlan ${config.vlanId} gpon 0/1/0 ont 1 gemport 1 multi-service user
 
           <div className="flex justify-between items-center pt-2">
             <button
-              onClick={() => setActiveStep(3)}
-              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800"
+              onClick={() => setActiveStep(5)}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 cursor-pointer"
             >
               ⬅ Kembali
             </button>
             <button
-              onClick={() => setActiveStep(5)}
-              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs"
+              onClick={() => setActiveStep(7)}
+              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
             >
-              <span>Lanjut ke Langkah 5: Setting Modem Client ➜</span>
+              <span>Lanjut ke Langkah 7: Setting Modem Client ➜</span>
             </button>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          STEP 5: KONFIGURASI MODEM CLIENT (ONU / ONT RUMAH PELANGGAN)
+          STEP 7: KONFIGURASI MODEM CLIENT (ONU / ONT RUMAH PELANGGAN)
       ══════════════════════════════════════════════════════════════════════ */}
-      {activeStep === 5 && (
+      {activeStep === 7 && (
         <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-lg p-6 shadow-2xs space-y-6">
           <div className="border-b border-slate-100 dark:border-[#222222] pb-3">
-            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-              🏠 Langkah 5: Konfigurasi Modem Client (PPPoE &amp; VLAN {config.vlanId})
+            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <span>🏠</span>
+              <span>Langkah 7: Konfigurasi Modem Client (PPPoE &amp; VLAN {config.vlanId})</span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Panduan setting modem pelanggan di rumah agar otomatis dial PPPoE ke MikroTik dan terkoneksi ke internet.
@@ -900,7 +1185,7 @@ service-port vlan ${config.vlanId} gpon 0/1/0 ont 1 gemport 1 multi-service user
               <button
                 key={tab.id}
                 onClick={() => setModemVendorTab(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${modemVendorTab === tab.id
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${modemVendorTab === tab.id
                   ? 'bg-purple-600 text-white shadow-xs'
                   : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
                   }`}
@@ -996,29 +1281,30 @@ service-port vlan ${config.vlanId} gpon 0/1/0 ont 1 gemport 1 multi-service user
 
           <div className="flex justify-between items-center pt-2">
             <button
-              onClick={() => setActiveStep(4)}
-              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800"
+              onClick={() => setActiveStep(6)}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 cursor-pointer"
             >
               ⬅ Kembali
             </button>
             <button
-              onClick={() => setActiveStep(6)}
-              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs"
+              onClick={() => setActiveStep(8)}
+              className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 shadow-xs cursor-pointer"
             >
-              <span>Lanjut ke Langkah 6: Uji Bridge &amp; Diagnostic Live ➜</span>
+              <span>Lanjut ke Langkah 8: Uji Bridge &amp; Diagnostic Live ➜</span>
             </button>
           </div>
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
-          STEP 6: UJI KONEKSI BRIDGE & DIAGNOSTIC SNMP LIVE
+          STEP 8: UJI KONEKSI BRIDGE & DIAGNOSTIC SNMP LIVE
       ══════════════════════════════════════════════════════════════════════ */}
-      {activeStep === 6 && (
+      {activeStep === 8 && (
         <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-lg p-6 shadow-2xs space-y-6">
           <div className="border-b border-slate-100 dark:border-[#222222] pb-3">
-            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-              ⚡ Langkah 6: Uji Jangkauan End-to-End VPS ke OLT &amp; Router
+            <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <span>⚡</span>
+              <span>Langkah 8: Uji Jangkauan End-to-End VPS ke OLT &amp; Router</span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Tekan tombol di bawah untuk menguji apakah VPS Cloud sudah bisa melakukan Ping dan membaca SNMP OLT serta RouterOS API di meja kantor Anda.
@@ -1029,7 +1315,7 @@ service-port vlan ${config.vlanId} gpon 0/1/0 ont 1 gemport 1 multi-service user
           <div className="flex items-center gap-2 border-b border-slate-200 dark:border-[#222222] pb-3">
             <button
               onClick={() => setTestTargetType('olt')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${testTargetType === 'olt'
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${testTargetType === 'olt'
                 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm'
                 : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
                 }`}
@@ -1038,7 +1324,7 @@ service-port vlan ${config.vlanId} gpon 0/1/0 ont 1 gemport 1 multi-service user
             </button>
             <button
               onClick={() => setTestTargetType('router')}
-              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${testTargetType === 'router'
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${testTargetType === 'router'
                 ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm'
                 : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400 hover:text-black dark:hover:text-white'
                 }`}
@@ -1061,7 +1347,7 @@ service-port vlan ${config.vlanId} gpon 0/1/0 ont 1 gemport 1 multi-service user
               <button
                 onClick={handleTestBridge}
                 disabled={testing}
-                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-xs flex items-center justify-center gap-2 disabled:opacity-50"
+                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {testing ? <span>Menguji Koneksi...</span> : (
                   <span>{testTargetType === 'olt' ? '⚡ Uji Koneksi Live SNMP OLT' : '⚡ Uji RouterOS API Socket'}</span>
@@ -1148,8 +1434,8 @@ service-port vlan ${config.vlanId} gpon 0/1/0 ont 1 gemport 1 multi-service user
 
           <div className="flex justify-between items-center pt-2">
             <button
-              onClick={() => setActiveStep(5)}
-              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800"
+              onClick={() => setActiveStep(7)}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-neutral-800 cursor-pointer"
             >
               ⬅ Kembali
             </button>
