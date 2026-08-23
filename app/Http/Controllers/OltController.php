@@ -23,6 +23,7 @@ class OltController extends Controller
         $device = $deviceId ? OltDevice::find($deviceId) : null;
         $isLive = $device ? ($device->connection_mode === 'live') : false;
         $ip = $device ? $device->ip_address : '10.10.10.1';
+        $port = $device ? ($device->snmp_port ?? 161) : 161;
         $community = $device ? $device->getEffectiveCommunity() : 'public';
         $snmpVersion = $device ? ($device->snmp_version ?? 'v2c') : 'v2c';
 
@@ -55,7 +56,8 @@ class OltController extends Controller
                     ip: $ip,
                     community: $community,
                     snmpVersion: $snmpVersion,
-                    isLive: $isLive
+                    isLive: $isLive,
+                    port: $port
                 );
             case 'tarmoc':
                 return new TarmocDriver();

@@ -42,6 +42,7 @@ class HsgqDriver implements OltDeviceDriverInterface
     protected string $community;
     protected string $snmpVersion;
     protected bool $isLive;
+    protected int $port;
     protected ?SnmpConnector $snmp = null;
     protected ?array $cachedDeviceInfo = null;
     protected ?array $cachedPonPorts = null;
@@ -50,18 +51,21 @@ class HsgqDriver implements OltDeviceDriverInterface
         string $ip = '192.168.100.1',
         string $community = 'public',
         string $snmpVersion = 'v2c',
-        bool $isLive = false
+        bool $isLive = false,
+        int $port = 161
     ) {
         $this->ip = $ip;
         $this->community = $community;
         $this->snmpVersion = $snmpVersion;
         $this->isLive = $isLive;
+        $this->port = $port;
 
         if ($this->isLive && SnmpConnector::isAvailable()) {
             $this->snmp = new SnmpConnector(
                 ip: $ip,
                 snmpVersion: $snmpVersion,
                 community: $community,
+                port: $port,
                 timeout: 1, // 1 detik cukup untuk tunnel VPN
                 retries: 0  // 0 retry untuk kecepatan maksimal
             );
