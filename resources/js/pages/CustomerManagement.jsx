@@ -586,9 +586,13 @@ export default function CustomerManagement() {
                             <span className="font-mono text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
                               {c.onu_serial || '—'}
                             </span>
-                            {rx !== null && (
+                            {rx !== null ? (
                               <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${rxBadge}`}>
                                 {rxLabel}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">
+                                Rx: N/A
                               </span>
                             )}
                           </div>

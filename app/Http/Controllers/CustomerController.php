@@ -33,6 +33,17 @@ class CustomerController extends Controller
             $port = $primaryService?->networkPort;
             $odpNode = $port?->node;
             $ont = $primaryService?->ontRegistration;
+            // Cari OLT yang menaungi ODP ini (bisa direct OLT, via ODC parent, atau OLT aktif)
+            $oltDevice = $odpNode?->oltDevice ?: ($odpNode?->parent?->oltDevice ?: ($odpNode?->parent?->parent?->oltDevice ?: OltDevice::first()));
+            $oltName = $oltDevice?->name ?: 'OLT-TES-HSGQ';
+
+            // Resolve Interface dari port OLT / ODP
+            $rawPortRef = $odpNode?->olt_port_ref ?: ($ont?->oltPort?->node?->olt_port_ref ?: 'epon_0/1');
+            $cleanInterface = str_replace(['gpon-olt_', 'gpon_olt_', 'gpon_'], 'epon_', $rawPortRef);
+            $interfaceDisplay = explode(',', $cleanInterface)[0] ?? 'epon_0/1';
+            if ($port?->port_number) {
+                $interfaceDisplay .= ':' . $port->port_number;
+            }
 
             return [
                 'id'                 => $c->id,
@@ -45,16 +56,16 @@ class CustomerController extends Controller
                 'service_id'         => $primaryService?->id,
                 'service_number'     => $primaryService?->service_number,
                 'service_package_id' => $primaryService?->service_package_id,
-                'package_name'       => $primaryService?->servicePackage?->name ?? 'Home Basic 20Mbps',
+                'package_name'       => $primaryService?->servicePackage?->name ?? 'Paket Internet',
                 'odp_id'             => $odpNode?->id,
                 'odp_name'           => $odpNode?->name,
                 'odp_code'           => $odpNode?->code,
                 'odp_port_id'        => $port?->id,
                 'odp_port_number'    => $port?->port_number,
-                'olt_name'           => $odpNode?->parent?->oltDevice?->name ?? 'OLT Utama Solok',
-                'gpon_interface'     => $odpNode?->olt_port_ref ? str_replace('gpon-olt_', '', $odpNode->olt_port_ref) . ':' . ($port?->port_number ?? '1') : '1/1/1:' . ($port?->port_number ?? '1'),
+                'olt_name'           => $oltName,
+                'gpon_interface'     => $interfaceDisplay,
                 'onu_serial'         => $ont?->onu_serial ?? $primaryService?->onu_serial,
-                'rx_power'           => $ont?->rx_power ?? -18.5,
+                'rx_power'           => $ont?->rx_power !== null ? (float)$ont->rx_power : null,
                 'created_at'         => $c->created_at,
             ];
         });
