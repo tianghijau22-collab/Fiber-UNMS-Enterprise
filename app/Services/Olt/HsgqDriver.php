@@ -59,8 +59,12 @@ class HsgqDriver implements OltDeviceDriverInterface
                     $firmware = 'HSGQ_E04_I_V3.0.18_Rel';
                     if ($fwRaw !== false) {
                         $parsedFw = SnmpConnector::parseValue((string)$fwRaw);
-                        if (preg_match('/^[0-9a-fA-F\s]+$/', $parsedFw) && strlen(str_replace(' ', '', $parsedFw)) > 6) {
-                            $firmware = trim(hex2bin(str_replace(' ', '', $parsedFw)));
+                        if (str_starts_with($parsedFw, 'Hex-STRING:')) {
+                            $hex = preg_replace('/[^0-9a-fA-F]/', '', str_replace('Hex-STRING:', '', $parsedFw));
+                            $converted = @hex2bin($hex);
+                            if ($converted !== false && !empty(trim($converted))) {
+                                $firmware = trim(str_replace("\0", '', $converted));
+                            }
                         } else if (!empty($parsedFw)) {
                             $firmware = $parsedFw;
                         }
