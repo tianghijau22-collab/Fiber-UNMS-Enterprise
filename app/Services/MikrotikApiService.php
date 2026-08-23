@@ -71,9 +71,13 @@ class MikrotikApiService
                     '=response=00' . $md5,
                 ]);
                 $this->connected = !isset($legacyRes[0]['!trap']);
+                if (!$this->connected) {
+                    $this->disconnect();
+                }
                 return $this->connected;
             }
             $this->connected = false;
+            $this->disconnect();
             return false;
         }
 
