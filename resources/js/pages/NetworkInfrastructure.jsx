@@ -375,7 +375,7 @@ const STANDARD_TUBES = [
 function MultiOltPortSelector({ value, onChange, selectedOlt }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSlot, setActiveSlot] = useState(1);
-  const [customInput, setCustomInput] = useState('');
+  const [portSearch, setPortSearch] = useState('');
   const dropdownRef = useRef(null);
 
   const selectedPorts = useMemo(() => {
@@ -383,19 +383,19 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
     return value.split(',').map(s => s.trim().replace(/^gpon-olt_/i, '').replace(/^gpon_olt_/i, '')).filter(Boolean);
   }, [value]);
 
-  // Deteksi apakah OLT ini bertipe EPON / Compact (seperti HSGQ, VSOL 4/8 Port) atau Modular Multi-Slot
+  // Deteksi arsitektur OLT: Compact/Fixed Port (HSGQ, VSOL 4/8P) vs Modular Multi-Slot Chassis (ZTE C300, Huawei)
   const isCompactOlt = useMemo(() => {
     if (!selectedOlt) return false;
     const vendor = (selectedOlt.vendor || selectedOlt.vendor_key || selectedOlt.model || '').toUpperCase();
     const ports = selectedOlt.total_ports || 4;
-    return vendor.includes('HSGQ') || vendor.includes('EPON') || vendor.includes('VSOL') || vendor.includes('HIOSO') || ports <= 8;
+    return vendor.includes('HSGQ') || vendor.includes('EPON') || (ports <= 8 && !vendor.includes('C300') && !vendor.includes('MA5680'));
   }, [selectedOlt]);
 
-  // Ambil daftar port langsung dari snapshot database telemetri OLT jika ada
-  const availableOltPorts = useMemo(() => {
+  // Ambil daftar port riil untuk OLT Compact
+  const compactPorts = useMemo(() => {
     if (!selectedOlt) return [];
 
-    // 1. Dari Telemetry Snapshot Database
+    // Dari snapshot telemetri database
     if (selectedOlt.last_telemetry_snapshot?.pon_ports?.length > 0) {
       return selectedOlt.last_telemetry_snapshot.pon_ports.map(p => ({
         id: p.port_id,
@@ -404,7 +404,6 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
       }));
     }
 
-    // 2. Jika HSGQ / EPON compact OLT
     const totalPorts = selectedOlt.total_ports || 4;
     const vendor = (selectedOlt.vendor || selectedOlt.vendor_key || '').toUpperCase();
     const prefix = vendor.includes('HSGQ') || vendor.includes('EPON') ? 'epon_0/' : 'gpon_0/';
@@ -420,14 +419,14 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
     return list;
   }, [selectedOlt]);
 
-  // Dynamically determine slot count for modular OLTs (ZTE / Huawei)
+  // Penentuan Slot untuk OLT Modular (ZTE C300 = 16 Slot, C320 = 4 Slot, Huawei = 8-16 Slot)
   const maxSlots = useMemo(() => {
     if (!selectedOlt) return 4;
     const vendor = (selectedOlt.vendor || selectedOlt.model || '').toUpperCase();
     const ports = selectedOlt.total_ports || 0;
-    if (vendor.includes('C320') || vendor.includes('MA5608T') || ports === 16 || ports === 32) return 4;
     if (vendor.includes('C300') || vendor.includes('MA5680T')) return 16;
-    return Math.max(1, Math.ceil((ports || 4) / 16));
+    if (vendor.includes('C320') || vendor.includes('MA5608T')) return 4;
+    return Math.max(1, Math.ceil((ports || 16) / 16));
   }, [selectedOlt]);
 
   const slots = useMemo(() => {
@@ -438,13 +437,32 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
     return list;
   }, [maxSlots]);
 
+  // Daftar 16 port dalam slot aktif untuk OLT Modular
   const portsInActiveSlot = useMemo(() => {
     const list = [];
     for (let i = 1; i <= 16; i++) {
-      list.push(`1/${activeSlot}/${i}`);
+      list.push({
+        id: `1/${activeSlot}/${i}`,
+        label: `Port ${String(i).padStart(2, '0')}`,
+        shortLabel: `P${i}`,
+        fullRef: `gpon-olt_1/${activeSlot}/${i}`,
+      });
     }
     return list;
   }, [activeSlot]);
+
+  // Filter port berdasarkan pencarian
+  const filteredCompactPorts = useMemo(() => {
+    if (!portSearch.trim()) return compactPorts;
+    const q = portSearch.toLowerCase();
+    return compactPorts.filter(p => p.label.toLowerCase().includes(q));
+  }, [compactPorts, portSearch]);
+
+  const filteredModularPorts = useMemo(() => {
+    if (!portSearch.trim()) return portsInActiveSlot;
+    const q = portSearch.toLowerCase();
+    return portsInActiveSlot.filter(p => p.id.toLowerCase().includes(q) || p.label.toLowerCase().includes(q));
+  }, [portsInActiveSlot, portSearch]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -456,32 +474,33 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const togglePort = (port) => {
+  const togglePort = (portId) => {
     let updated;
-    if (selectedPorts.includes(port)) {
-      updated = selectedPorts.filter(p => p !== port);
+    if (selectedPorts.includes(portId)) {
+      updated = selectedPorts.filter(p => p !== portId);
     } else {
-      updated = [...selectedPorts, port];
+      updated = [...selectedPorts, portId];
     }
     onChange(updated.join(', '));
   };
 
-  const selectAllInSlot = () => {
-    const newPorts = portsInActiveSlot.filter(p => !selectedPorts.includes(p));
-    onChange([...selectedPorts, ...newPorts].join(', '));
+  const selectAllSlot = () => {
+    const toAdd = portsInActiveSlot.map(p => p.id).filter(id => !selectedPorts.includes(id));
+    onChange([...selectedPorts, ...toAdd].join(', '));
   };
 
-  const deselectAllInSlot = () => {
-    const updated = selectedPorts.filter(p => !portsInActiveSlot.includes(p));
+  const clearSlot = () => {
+    const slotIds = portsInActiveSlot.map(p => p.id);
+    const updated = selectedPorts.filter(id => !slotIds.includes(id));
     onChange(updated.join(', '));
   };
 
   const selectAllCompact = () => {
-    const allIds = availableOltPorts.map(p => p.id);
+    const allIds = compactPorts.map(p => p.id);
     onChange(allIds.join(', '));
   };
 
-  const deselectAllCompact = () => {
+  const clearAll = () => {
     onChange('');
   };
 
@@ -493,100 +512,136 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
   return (
     <div className="relative space-y-1" ref={dropdownRef}>
       <div className="flex items-center justify-between">
-        <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
-          INTERFACE
+        <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wide">
+          INTERFACE PORT OLT
         </label>
         {selectedOlt && (
-          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/70 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
             {selectedOlt.name} ({selectedOlt.vendor || 'OLT'})
           </span>
         )}
       </div>
 
+      {/* Input Trigger Box */}
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="min-h-[44px] p-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer flex items-center justify-between gap-2 flex-wrap hover:border-indigo-500 transition-all shadow-xs"
+        className="min-h-[44px] p-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 rounded-xl cursor-pointer flex items-center justify-between gap-2 flex-wrap hover:border-indigo-500 dark:hover:border-indigo-400 transition-all shadow-2xs"
       >
         <div className="flex items-center gap-1.5 flex-wrap min-h-[26px]">
           {selectedPorts.length > 0 ? (
             selectedPorts.map(port => (
               <span
                 key={port}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-200 border border-indigo-300 dark:border-indigo-800 shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-2xs"
               >
                 <span>{port}</span>
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); removePort(port); }}
-                  className="hover:text-red-500 font-extrabold text-[11px] leading-none ml-0.5"
+                  className="w-4 h-4 rounded-full hover:bg-indigo-200 dark:hover:bg-indigo-800 flex items-center justify-center text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-rose-500 font-extrabold transition-colors"
                 >
                   ✕
                 </button>
               </span>
             ))
           ) : (
-            <span className="text-xs text-slate-400 dark:text-slate-500 px-1">
-              — Pilih Interface Port OLT —
+            <span className="text-xs text-slate-400 dark:text-slate-500 px-1 font-medium">
+              — Klik untuk memilih Interface Port OLT —
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1 shrink-0 text-xs text-slate-400 dark:text-slate-500 font-bold px-1">
+        <div className="flex items-center gap-1.5 shrink-0 text-xs text-slate-400 dark:text-slate-500 font-bold px-1">
           {selectedPorts.length > 0 && (
-            <span className="text-[10px] bg-indigo-600 text-white font-extrabold px-1.5 py-0.5 rounded-full">
+            <span className="text-[10px] bg-indigo-600 text-white font-extrabold px-2 py-0.5 rounded-full shadow-2xs">
               {selectedPorts.length} Port
             </span>
           )}
-          <span>{isOpen ? '▲' : '▼'}</span>
+          <span className="text-[10px] text-slate-400">{isOpen ? '▲' : '▼'}</span>
         </div>
       </div>
 
+      {/* Dropdown Floating Panel */}
       {isOpen && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-100">
-          {isCompactOlt ? (
-            /* ── Layout Port OLT Compact / HSGQ (Direct Port Grid) ── */
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between text-xs pb-1 border-b border-slate-100 dark:border-slate-800">
-                <span className="font-bold text-slate-700 dark:text-slate-200 text-[11px]">
-                  Daftar Port PON OLT ({availableOltPorts.length} Port Aktif):
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={selectAllCompact}
-                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
-                  >
-                    Pilih Semua
-                  </button>
-                  <span className="text-slate-300">|</span>
-                  <button
-                    type="button"
-                    onClick={deselectAllCompact}
-                    className="text-[10px] font-bold text-rose-500 hover:underline"
-                  >
-                    Reset
-                  </button>
-                </div>
-              </div>
+        <div className="absolute z-50 left-0 right-0 sm:left-auto sm:right-0 sm:min-w-[420px] max-w-[500px] mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-4 space-y-3.5 animate-in fade-in zoom-in-95 duration-100">
+          {/* Header Panel */}
+          <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h5 className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                Pilih Interface ({isCompactOlt ? `${compactPorts.length} Port PON` : `Modular ${maxSlots} Slot Card`})
+              </h5>
+              <p className="text-[10px] text-slate-400">
+                {selectedOlt ? `${selectedOlt.name} • ${selectedOlt.model || selectedOlt.vendor}` : 'Pilih interface yang mengarah ke ODC/ODP'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {isCompactOlt ? (
+                <button
+                  type="button"
+                  onClick={selectAllCompact}
+                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  Pilih Semua
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={selectAllSlot}
+                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  Pilih All Slot {activeSlot}
+                </button>
+              )}
+              <span className="text-slate-300 dark:text-slate-700">|</span>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-[11px] font-bold text-rose-500 hover:underline"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {availableOltPorts.map(p => {
+          {/* Quick Search */}
+          <div>
+            <input
+              type="text"
+              placeholder="🔍 Cari interface (contoh: 1, epon, 1/1/4)..."
+              value={portSearch}
+              onChange={e => setPortSearch(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+            />
+          </div>
+
+          {isCompactOlt ? (
+            /* ══════════════════════════════════════════════════════════════
+               LAYOUT A: COMPACT OLT (HSGQ 4-Port, VSOL, HIOSO)
+            ══════════════════════════════════════════════════════════════ */
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+                {filteredCompactPorts.map(p => {
                   const isSelected = selectedPorts.includes(p.id);
                   return (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => togglePort(p.id)}
-                      className={`p-2.5 rounded-xl border text-xs font-mono font-bold transition-all flex items-center justify-between ${
+                      className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 ${
                         isSelected
-                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
-                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
+                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                          : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-400 dark:hover:border-indigo-500'
                       }`}
                     >
-                      <span>{p.label}</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-md ${
-                        isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-500'}`} />
+                        <span className="font-mono text-xs font-bold tracking-tight">{p.label}</span>
+                      </div>
+                      <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${
+                        isSelected
+                          ? 'bg-white/20 text-white'
+                          : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
                       }`}>
-                        {p.status}
+                        {isSelected ? '✓ Aktif' : p.status}
                       </span>
                     </button>
                   );
@@ -594,33 +649,34 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
               </div>
             </div>
           ) : (
-            /* ── Layout Modular Slot OLT (ZTE / Huawei) ── */
+            /* ══════════════════════════════════════════════════════════════
+               LAYOUT B: MODULAR CHASSIS OLT (ZTE C300/C320, HUAWEI)
+            ══════════════════════════════════════════════════════════════ */
             <div className="space-y-3">
+              {/* Slot / Card Tab Switcher */}
               <div className="space-y-1.5">
-                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between items-center">
-                  <span>Pilih Slot / Card OLT ({maxSlots} Slot)</span>
-                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">16 Port per Card</span>
-                </div>
-
-                {/* Scrollable Slot Tabs Row */}
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                  Pilih Slot Card ({maxSlots} Slot Chassis):
+                </span>
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
                   {slots.map(s => {
                     const countInSlot = selectedPorts.filter(p => p.startsWith(`1/${s.id}/`)).length;
+                    const isActive = activeSlot === s.id;
                     return (
                       <button
                         key={s.id}
                         type="button"
                         onClick={() => setActiveSlot(s.id)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
-                          activeSlot === s.id
+                          isActive
                             ? 'bg-indigo-600 text-white shadow-xs'
                             : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                         }`}
                       >
                         <span>Slot {s.id}</span>
                         {countInSlot > 0 && (
-                          <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ${
-                            activeSlot === s.id ? 'bg-white text-indigo-700' : 'bg-indigo-600 text-white'
+                          <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                            isActive ? 'bg-white text-indigo-700' : 'bg-indigo-600 text-white'
                           }`}>
                             {countInSlot}
                           </span>
@@ -631,51 +687,70 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 dark:border-slate-800">
-                <span className="font-bold text-slate-700 dark:text-slate-200 text-[11px]">
-                  Daftar Port Slot {activeSlot} (Card 1/{activeSlot}/*):
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={selectAllInSlot}
-                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
-                  >
-                    Pilih All Slot {activeSlot}
-                  </button>
-                  <span className="text-slate-300">|</span>
-                  <button
-                    type="button"
-                    onClick={deselectAllInSlot}
-                    className="text-[10px] font-bold text-rose-500 hover:underline"
-                  >
-                    Hapus Slot {activeSlot}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
-                {portsInActiveSlot.map(port => {
-                  const isSelected = selectedPorts.includes(port);
-                  const portNum = port.split('/')[2];
-                  return (
+              {/* 16 Port Grid in Active Slot */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-700 dark:text-slate-200 text-[11px]">
+                    16 Port PON Slot {activeSlot} (Card 1/{activeSlot}/*):
+                  </span>
+                  <div className="flex items-center gap-2">
                     <button
-                      key={port}
                       type="button"
-                      onClick={() => togglePort(port)}
-                      className={`py-2 px-1 text-center rounded-xl border text-xs font-mono font-bold transition-all ${
-                        isSelected
-                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
-                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
-                      }`}
+                      onClick={selectAllSlot}
+                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
                     >
-                      <span>P{portNum}</span>
+                      Pilih Semua
                     </button>
-                  );
-                })}
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={clearSlot}
+                      className="text-[10px] font-bold text-rose-500 hover:underline"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
+                  {filteredModularPorts.map(p => {
+                    const isSelected = selectedPorts.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => togglePort(p.id)}
+                        className={`p-2.5 rounded-xl border text-xs font-mono font-bold transition-all flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
+                        }`}
+                      >
+                        <span>{p.shortLabel}</span>
+                        <span className={`text-[9px] px-1 py-0.5 rounded ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300'
+                        }`}>
+                          {p.id}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
+
+          {/* Footer Info */}
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Terpilih: <strong className="text-indigo-600 dark:text-indigo-400">{selectedPorts.length} Interface</strong></span>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="px-3 py-1 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors"
+            >
+              Selesai
+            </button>
+          </div>
         </div>
       )}
     </div>
