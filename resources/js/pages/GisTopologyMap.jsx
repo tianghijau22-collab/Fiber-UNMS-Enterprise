@@ -21,10 +21,10 @@ const STATUS_META = {
 const getOpticalQuality = (dbm) => {
   if (dbm == null) return { label: '—', color: '#64748b', badge: 'bg-slate-800 text-slate-400' };
   const num = parseFloat(dbm);
-  if (num >= -22.5) return { label: 'Sangat Bagus', color: '#047857', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-800' };
-  if (num >= -25.5) return { label: 'Bagus', color: '#1d4ed8', badge: 'bg-blue-950/80 text-blue-300 border-blue-800' };
-  if (num >= -27.5) return { label: 'Waspada', color: '#d97706', badge: 'bg-amber-950/80 text-amber-300 border-amber-800' };
-  return { label: 'Kritis High Loss', color: '#881337', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' };
+  if (num >= -23.9) return { label: 'Prima (Bagus)', color: '#10b981', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-800' };
+  if (num >= -25.9) return { label: 'Optimal', color: '#3b82f6', badge: 'bg-blue-950/80 text-blue-300 border-blue-800' };
+  if (num >= -27.4) return { label: 'Kurang Baik', color: '#f59e0b', badge: 'bg-amber-950/80 text-amber-300 border-amber-800' };
+  return { label: 'Kritis (Loss/Buruk)', color: '#ef4444', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' };
 };
 
 const pct = (u, t) => t ? Math.round((u / t) * 100) : 0;
@@ -389,18 +389,6 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
       }
     });
 
-    const fetchRoadRoute = async (lat1, lng1, lat2, lng2) => {
-      try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`;
-        const res = await fetch(url);
-        const json = await res.json();
-        if (json.routes && json.routes.length > 0) {
-          return json.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-        }
-      } catch { }
-      return [[lat1, lng1], [lat2, lng2]];
-    };
-
     let cancelled = false;
 
     const renderLines = async () => {
@@ -423,13 +411,37 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
           const nLng = parseFloat(node.longitude);
 
           const isOdpLine = node.node_type === 'ODP';
-          // Pekat & Vivid line colors
-          const strokeColor = isOdpLine ? '#059669' : '#1d4ed8';
+
+          // Warna Garis Fiber Dinamis Berdasarkan Kualitas Redaman Nyata
+          let strokeColor = '#1d4ed8'; // Feeder Backbone (Biru)
+
+          if (isOdpLine) {
+            const bestPower = node.best_rx_power != null 
+              ? parseFloat(node.best_rx_power) 
+              : (node.optical_power_dbm != null ? parseFloat(node.optical_power_dbm) : null);
+
+            if (node.status === 'damaged' || (bestPower != null && bestPower <= -27.5)) {
+              // Kritis / Loss Total -> Garis Merah
+              strokeColor = '#ef4444';
+            } else if (bestPower != null && bestPower <= -25.9) {
+              // Kurang Baik / Waspada -> Garis Kuning / Amber
+              strokeColor = '#f59e0b';
+            } else if (bestPower != null && bestPower <= -23.9) {
+              // Optimal -> Garis Biru
+              strokeColor = '#3b82f6';
+            } else if (bestPower != null && bestPower > -23.9) {
+              // Prima / Bagus -> Garis Hijau Emerald
+              strokeColor = '#10b981';
+            } else {
+              // Belum ada klien / ODP aktif standar -> Garis Hijau
+              strokeColor = '#059669';
+            }
+          }
 
           let lineCoords = [[pLat, pLng], [nLat, nLng]];
 
           if (followRoads) {
-            lineCoords = await fetchRoadRoute(pLat, pLng, nLat, nLng);
+            lineCoords = await fetchRoadRouteWithFallback(pLat, pLng, nLat, nLng);
           }
 
           if (cancelled) break;
@@ -470,8 +482,10 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
       const statusMeta = STATUS_META[node.status] ?? STATUS_META.active;
       const isSelected = selectedNode?.id === node.id;
       const isOdp = node.node_type === 'ODP';
-      const optMeta = getOpticalQuality(node.optical_power_dbm);
-      const opticalDbmText = node.rx_power_range ? node.rx_power_range : (node.optical_power_dbm != null ? `${node.optical_power_dbm} dBm` : '—');
+      // Deteksi Kualitas Optik Terbaik (Best Rx Power)
+      const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
+      const optMeta = getOpticalQuality(effectiveBestPower);
+      const opticalDbmText = node.rx_power_range ? node.rx_power_range : (effectiveBestPower != null ? `${effectiveBestPower} dBm` : '—');
 
       const size = isSelected ? typeMeta.size + 4 : typeMeta.size;
 
@@ -867,7 +881,8 @@ export default function GisTopologyMap() {
                 const meta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
                 const statusMeta = STATUS_META[node.status] ?? STATUS_META.active;
                 const isOdp = node.node_type === 'ODP';
-                const optMeta = getOpticalQuality(node.optical_power_dbm);
+                const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
+                const optMeta = getOpticalQuality(effectiveBestPower);
                 const p = pct(node.used_ports, node.total_ports);
                 const hasCoords = node.latitude && node.longitude && parseFloat(node.latitude) !== 0;
 
