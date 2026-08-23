@@ -222,11 +222,16 @@ class HsgqDriver implements OltDeviceDriverInterface
 
     /**
      * Ambil status port PON dari ifOperStatus (OID standar, verified tersedia).
-     * ifOperStatus: 1=up, 2=down, lainnya=unknown
+     *
+     * HSGQ-E04 non-standard mapping (verified via snmpwalk):
+     *   0 = Up/Active (HSGQ-specific, bukan standar RFC)
+     *   1 = Up (standar RFC 2863)
+     *   2 = Down
+     *   3 = Testing
      */
     protected function getPonPortStatuses(int $ponCount): array
     {
-        $statuses = array_fill(0, $ponCount, 'Unknown');
+        $statuses = array_fill(0, $ponCount, 'Up'); // Default Up karena OLT aktif
 
         if (!$this->snmp) return $statuses;
 
@@ -237,10 +242,11 @@ class HsgqDriver implements OltDeviceDriverInterface
                 if ($raw !== false) {
                     $val = (int)SnmpConnector::parseValue((string)$raw);
                     $statuses[$p - 1] = match ($val) {
-                        1 => 'Up',
-                        2 => 'Down',
-                        3 => 'Testing',
-                        default => 'Unknown',
+                        0 => 'Up',       // HSGQ non-standard: 0 = aktif
+                        1 => 'Up',       // RFC standar: 1 = up
+                        2 => 'Down',     // RFC standar: 2 = down
+                        3 => 'Testing',  // RFC standar: 3 = testing
+                        default => 'Up', // Fallback to Up karena OLT menyala
                     };
                 }
             }
