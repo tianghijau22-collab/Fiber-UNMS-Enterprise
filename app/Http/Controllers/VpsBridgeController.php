@@ -111,10 +111,10 @@ class VpsBridgeController extends Controller
         $rscLines[] = "# --- 2. JALUR WAN INTERNET (Sumber Internet dari Modem ISP di Port {$wanIf}) ---";
         $rscLines[] = "/ip dhcp-client add interface={$wanIf} add-default-route=yes use-peer-dns=yes use-peer-ntp=yes disabled=no comment=\"WAN Internet ISP\"";
         $rscLines[] = "";
-        $rscLines[] = "# --- 3. IP GATEWAY MANAJEMEN MENUJU OLT ({$oltIp}) DI PORT {$oltIf} ---";
-        $rscLines[] = "/ip address add address={$routerOltIp} interface={$oltIf} comment=\"Gateway Menuju OLT ({$oltIp})\"";
+        $rscLines[] = "# --- 3. IP GATEWAY MANAJEMEN MENUJU PORT NMS OLT ({$oltIp}) DI PORT ether4 ---";
+        $rscLines[] = "/ip address add address={$routerOltIp} interface=ether4 comment=\"Gateway Menuju OLT NMS ({$oltIp})\"";
         $rscLines[] = "";
-        $rscLines[] = "# --- 4. VLAN {$vlanId} TRAFFIC INTERNET PELANGGAN (MENEMBUS PORT OLT {$oltIf}) ---";
+        $rscLines[] = "# --- 4. VLAN {$vlanId} TRAFFIC INTERNET PELANGGAN (PORT OLT {$oltIf} / GE01) ---";
         $rscLines[] = "/interface vlan add name=vlan{$vlanId}-internet vlan-id={$vlanId} interface={$oltIf} comment=\"VLAN Internet Modem Client\"";
         $rscLines[] = "";
         $rscLines[] = "# --- 5. PPPoE SERVER DI ATAS VLAN {$vlanId} ---";
@@ -123,8 +123,9 @@ class VpsBridgeController extends Controller
         $rscLines[] = "/interface pppoe-server server add service-name=pppoe-unms interface=vlan{$vlanId}-internet default-profile=profile-pppoe-{$pppoeRate} one-session-per-host=yes authentication=pap,chap,mschap1,mschap2 disabled=no";
         $rscLines[] = "/ppp secret add name=\"{$pppoeUser}\" password=\"{$pppoePass}\" service=pppoe profile=profile-pppoe-{$pppoeRate} comment=\"Akun Demo Modem Client\"";
         $rscLines[] = "";
-        $rscLines[] = "# --- 6. NAT MASQUERADE (INTERNET BROWSING PC & FORWARDING KE OLT) ---";
+        $rscLines[] = "# --- 6. NAT MASQUERADE (INTERNET BROWSING PC & FORWARDING KE OLT NMS) ---";
         $rscLines[] = "/ip firewall nat add chain=srcnat out-interface={$wanIf} action=masquerade comment=\"NAT Internet Masquerade WAN\"";
+        $rscLines[] = "/ip firewall nat add chain=srcnat out-interface=ether4 action=masquerade comment=\"NAT Akses ke OLT NMS\"";
         $rscLines[] = "/ip firewall nat add chain=srcnat src-address=192.168.88.0/24 dst-address={$oltSubnet} action=masquerade comment=\"NAT Akses PC Teknisi ke Web GUI OLT\"";
         $rscLines[] = "";
         $rscLines[] = "# --- 7. SERVICE API & SNMP MIKROTIK (TELEMETRI FIBER-UNMS) ---";
@@ -154,12 +155,9 @@ class VpsBridgeController extends Controller
         $rscLines[] = "/ip firewall filter add chain=input src-address=10.254.0.0/24 action=accept place-before=0 comment=\"Allow UNMS VPS Input\"";
         $rscLines[] = "/ip firewall filter add chain=forward src-address=10.254.0.0/24 action=accept place-before=0 comment=\"Allow UNMS VPS Forward to OLT\"";
         $rscLines[] = "";
-        $rscLines[] = "# --- 10. LAN BRIDGE UNTUK PC/LAPTOP TEKNISI (Port {$lanIf} & Port ether4) ---";
+        $rscLines[] = "# --- 10. LAN BRIDGE UNTUK PC/LAPTOP TEKNISI (Port {$lanIf}) ---";
         $rscLines[] = "/interface bridge add name=bridge-lan comment=\"Bridge LAN Teknisi & Komputer Kantor\"";
         $rscLines[] = "/interface bridge port add bridge=bridge-lan interface={$lanIf} comment=\"Port PC Teknisi\"";
-        if ($lanIf !== 'ether4' && $wanIf !== 'ether4' && $oltIf !== 'ether4') {
-            $rscLines[] = "/interface bridge port add bridge=bridge-lan interface=ether4 comment=\"Port LAN Tambahan\"";
-        }
         $rscLines[] = "/interface list add name=LAN";
         $rscLines[] = "/interface list member add list=LAN interface=bridge-lan comment=\"LAN Internal\"";
         $rscLines[] = "/interface list member add list=LAN interface=vpn-unms-vps comment=\"UNMS Trusted Tunnel\"";
