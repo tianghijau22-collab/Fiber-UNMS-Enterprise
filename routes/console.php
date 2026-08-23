@@ -10,7 +10,10 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// ─── Schedule Sync Telemetri OLT (Interval Aman: Setiap 5 Menit) ────────────
+// ─── Polling Otomatis Telemetri OLT & Snapshot Database (Setiap 1 Menit) ────────
+Schedule::command('olt:poll-telemetry')->everyMinute()->withoutOverlapping()->name('olt:background-poll-telemetry');
+
+// ─── Schedule Sync Health & Auto-Recovery OLT (Setiap 5 Menit) ────────────
 Schedule::call(function () {
     $devices = OltDevice::where('connection_mode', 'live')->get();
     foreach ($devices as $device) {

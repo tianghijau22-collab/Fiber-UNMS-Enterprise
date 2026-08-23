@@ -78,57 +78,38 @@ class OltController extends Controller
         $deviceId = $request->input('device_id') ?: ($request->query('device_id') ?: null);
         $isFresh  = $request->boolean('fresh') || $request->boolean('force');
 
-        $cacheKey = "olt_hardware_api_{$vendor}_{$deviceId}";
+        $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
 
-        if ($isFresh) {
-            \Illuminate\Support\Facades\Cache::forget($cacheKey);
-            \Illuminate\Support\Facades\Cache::forget("olt_hsgq_hw_192.168.100.1");
+        // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh, sajikan INSTAN dari database (< 5ms)
+        if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
+            $snapshot = $device->last_telemetry_snapshot;
+            return response()->json($snapshot);
         }
 
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 10, function () use ($vendor, $deviceId) {
-            $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
-            $driver = $this->getDriver($vendor, $device?->id);
+        // 2. Jika dipaksa refresh atau snapshot belum ada, ambil live via Driver dan simpan ke Database
+        $driver = $this->getDriver($vendor, $device?->id);
 
-            $driverDeviceInfo = $driver->getDeviceInfo();
-            $driverPonPorts   = $driver->getPonPorts();
-            $driverOnuList    = $driver->getOnuList();
-            $driverUncfg      = $driver->getUnconfiguredOnus();
+        $driverDeviceInfo = $driver->getDeviceInfo();
+        $driverPonPorts   = $driver->getPonPorts();
+        $driverOnuList    = $driver->getOnuList();
+        $driverUncfg      = $driver->getUnconfiguredOnus();
 
-            // Cek apakah data dari driver bernilai simulasi / offline
-            $isSimulation = ($driverDeviceInfo['_source'] ?? '') === 'simulation' || ($device && $device->connection_mode !== 'live');
+        $snapshot = [
+            'device_info'       => $driverDeviceInfo,
+            'pon_ports'         => $driverPonPorts,
+            'onu_list'          => $driverOnuList,
+            'unconfigured_onus' => $driverUncfg,
+            'polled_at'         => now()->toIso8601String(),
+        ];
 
-            if ($device && $isSimulation) {
-                $deviceInfo = [
-                    '_source'     => 'database',
-                    'vendor'      => $device->vendor ?: 'ZTE',
-                    'model'       => $device->model ?: 'ZXAN C300',
-                    'firmware'    => $device->status === 'active' ? 'Active' : 'Offline',
-                    'uptime'      => $device->last_connected_at ? $device->last_connected_at->diffForHumans() : 'Belum Terhubung Telemetry Live',
-                    'cpu_usage'   => null,
-                    'ram_usage'   => null,
-                    'temperature' => null,
-                    'cards'       => $this->buildRealCards($device),
-                ];
-
-                $ponPorts         = $this->buildRealPonPorts($device);
-                $onuList          = $this->buildRealOnuList($device);
-                $unconfiguredOnus = $this->buildRealUnconfiguredOnus($device);
-
-                return response()->json([
-                    'device_info'       => $deviceInfo,
-                    'pon_ports'         => $ponPorts,
-                    'onu_list'          => $onuList,
-                    'unconfigured_onus' => $unconfiguredOnus,
-                ]);
-            }
-
-            return response()->json([
-                'device_info'       => $driverDeviceInfo,
-                'pon_ports'         => $driverPonPorts,
-                'onu_list'          => $driverOnuList,
-                'unconfigured_onus' => $driverUncfg,
+        if ($device) {
+            $device->update([
+                'last_telemetry_snapshot' => $snapshot,
+                'last_connected_at'       => now(),
             ]);
-        });
+        }
+
+        return response()->json($snapshot);
     }
 
     private function buildRealCards(OltDevice $device): array
