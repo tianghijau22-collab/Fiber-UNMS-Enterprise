@@ -149,20 +149,26 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
           {isOdp ? (
             <div className="p-3 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-xl border border-slate-700 shadow-inner">
               <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Redaman Modem Pelanggan (Rx)</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Redaman Klien (Rx Power)</span>
                 <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  Live ONU Modem
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Realtime
                 </span>
               </div>
               <div className="flex items-baseline justify-between mt-1">
-                <span className="text-2xl font-extrabold font-mono tracking-tight text-white">
-                  {node.optical_power_dbm != null ? `${node.optical_power_dbm} dBm` : '— dBm'}
+                <span className="text-xl font-extrabold font-mono tracking-tight text-white">
+                  {node.rx_power_range ? node.rx_power_range : (node.optical_power_dbm != null ? `${node.optical_power_dbm} dBm` : '—')}
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md" style={{ background: optMeta.color, color: '#ffffff' }}>
                   {optMeta.label}
                 </span>
               </div>
+              {node.worst_rx_power != null && node.best_rx_power != null && (
+                <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-300 font-mono">
+                  <span>Terbaik: <strong className="text-emerald-400">{node.best_rx_power} dBm</strong></span>
+                  <span>Kritis: <strong className="text-rose-400">{node.worst_rx_power} dBm</strong></span>
+                </div>
+              )}
               <div className="mt-2 space-y-1">
                 <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden flex">
                   <div className="h-full bg-emerald-600 w-[45%]" />
@@ -171,10 +177,9 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
                   <div className="h-full bg-rose-800 w-[20%]" />
                 </div>
                 <div className="flex justify-between text-[9px] font-mono text-slate-400">
-                  <span>-14 dBm</span>
-                  <span>-22 dBm</span>
-                  <span>-26 dBm</span>
-                  <span>-30 dBm</span>
+                  <span>-14 dBm (Bagus)</span>
+                  <span>-24 dBm</span>
+                  <span>-27 dBm (Kritis)</span>
                 </div>
               </div>
             </div>
@@ -659,49 +664,32 @@ export default function GisTopologyMap() {
   const [activeView, setActiveView] = useState('map');
   const [streetViewTarget, setStreetViewTarget] = useState(null);
 
-  const fetchNodes = useCallback(async () => {
-    setLoading(true);
+  const fetchNodes = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const r = await fetch('/api/network-nodes?per_page=500');
       const d = await r.json();
       const rawNodes = d.data ?? [];
 
-      const enriched = rawNodes.map((n) => {
-        const isOdp = n.node_type === 'ODP';
-        const usedPortsCount = parseInt(n.used_ports || 0, 10);
-        const hasActiveCustomers = isOdp && usedPortsCount > 0;
-
-        // HANYA ODP yang memiliki pelanggan terkoneksi (used_ports > 0) yang memiliki data redaman!
-        const opticalDbm = hasActiveCustomers ? (n.optical_power_dbm ?? -21.4) : null;
-
-        return {
-          ...n,
-          optical_power_dbm: opticalDbm,
-        };
-      });
-
-      setAllNodes(enriched);
-    } catch { setAllNodes([]); }
-    finally { setLoading(false); }
+      setAllNodes(rawNodes);
+    } catch {
+      if (!silent) setAllNodes([]);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchNodes(); }, [fetchNodes]);
 
-  // Live polling telemetry HANYA meng-update ODP yang memiliki pelanggan (used_ports > 0)
+  // Live polling telemetry: silent fetch dari backend API setiap 15 detik
   useEffect(() => {
     if (!livePolling) return;
     const timer = setInterval(() => {
-      setAllNodes(prev => prev.map(node => {
-        if (node.node_type !== 'ODP' || !node.used_ports || node.used_ports <= 0 || node.optical_power_dbm == null) return node;
-        const current = parseFloat(node.optical_power_dbm);
-        const delta = (Math.random() * 0.4 - 0.2);
-        const nextVal = Math.max(-32.0, Math.min(-14.0, current + delta)).toFixed(1);
-        return { ...node, optical_power_dbm: nextVal };
-      }));
-    }, 4000);
+      fetchNodes(true);
+    }, 15000);
 
     return () => clearInterval(timer);
-  }, [livePolling]);
+  }, [livePolling, fetchNodes]);
 
   useEffect(() => {
     if (selectedNode) {
