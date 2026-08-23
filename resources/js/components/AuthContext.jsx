@@ -37,7 +37,7 @@ export function AuthProvider({ children }) {
 
   const [loading, setLoading] = useState(false);
 
-  const login = async (username, password) => {
+  const login = async (username, password, deferCommit = false) => {
     setLoading(true);
     try {
       const res = await fetch('/api/auth/login', {
@@ -56,7 +56,9 @@ export function AuthProvider({ children }) {
       }
 
       localStorage.setItem('fiber_user', JSON.stringify(data.user));
-      setCurrentUser(data.user);
+      if (!deferCommit) {
+        setCurrentUser(data.user);
+      }
       setLoading(false);
       return data;
     } catch (err) {

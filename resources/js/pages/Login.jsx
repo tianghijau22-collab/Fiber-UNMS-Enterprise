@@ -4,7 +4,7 @@ import { useAuth } from '../components/AuthContext.jsx';
 import { useTheme } from '../components/ThemeContext.jsx';
 
 /* ───────────────────────────────────────────────────────────────────
-   Pure Iconic CinoxMediaNet Beetle Mascot (Kumbang Ikonik Murni)
+   Pure Iconic Fiber-UNMS Beetle Mascot
    With Dynamic States:
    - Idle: Friendly calm look
    - Username: Cheeky teasing / mencibir (melet lidah & kedip)
@@ -81,34 +81,34 @@ function InteractiveCinoxBeetle({
             transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
             opacity: 1;
           }
-          12% {
+          10% {
             /* Stand up & take off upward right */
-            transform: translate3d(120px, -110px, 0) scale(1.15) rotate(22deg);
+            transform: translate3d(90px, -90px, 0) scale(1.15) rotate(22deg);
           }
-          30% {
-            /* Swoop across top right */
-            transform: translate3d(320px, -280px, 0) scale(1.25) rotate(60deg);
+          28% {
+            /* Swoop across top right of screen */
+            transform: translate3d(260px, -240px, 0) scale(1.25) rotate(60deg);
           }
           50% {
-            /* Loop across top left */
-            transform: translate3d(-320px, -250px, 0) scale(1.3) rotate(-50deg);
+            /* Loop across top to left side of screen */
+            transform: translate3d(-260px, -210px, 0) scale(1.3) rotate(-55deg);
           }
-          70% {
+          72% {
             /* Swoop down bottom left */
-            transform: translate3d(-200px, 110px, 0) scale(1.15) rotate(15deg);
+            transform: translate3d(-160px, 90px, 0) scale(1.15) rotate(15deg);
           }
-          85% {
-            /* Bank towards center */
-            transform: translate3d(100px, -40px, 0) scale(1.35) rotate(-15deg);
+          86% {
+            /* Bank towards center bottom */
+            transform: translate3d(80px, -30px, 0) scale(1.35) rotate(-15deg);
           }
           94% {
             /* Center screen triumphant burst */
-            transform: translate3d(0px, -80px, 0) scale(1.7) rotate(0deg);
+            transform: translate3d(0px, -60px, 0) scale(1.7) rotate(0deg);
             opacity: 1;
           }
           100% {
             /* Zoom into dashboard */
-            transform: translate3d(0px, -120px, 0) scale(2.6) rotate(0deg);
+            transform: translate3d(0px, -90px, 0) scale(2.6) rotate(0deg);
             opacity: 0;
           }
         }
@@ -185,21 +185,21 @@ function InteractiveCinoxBeetle({
           }`}
         >
           <defs>
-            {/* CinoxMediaNet Brand Gradients */}
-            <linearGradient id="cinoxGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            {/* Gold & Blue Gradients */}
+            <linearGradient id="unmsGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#FBBF24" />
               <stop offset="100%" stopColor="#D97706" />
             </linearGradient>
-            <linearGradient id="cinoxHeadGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id="unmsHeadGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#FDE68A" />
               <stop offset="50%" stopColor="#F59E0B" />
               <stop offset="100%" stopColor="#D97706" />
             </linearGradient>
-            <linearGradient id="cinoxRedGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id="unmsRedGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#EF4444" />
               <stop offset="100%" stopColor="#B91C1C" />
             </linearGradient>
-            <linearGradient id="cinoxBlueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id="unmsBlueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#3B82F6" />
               <stop offset="100%" stopColor="#1E3A8A" />
             </linearGradient>
@@ -273,10 +273,10 @@ function InteractiveCinoxBeetle({
           {/* ── 2. BROADBAND FIBER GLOBE BODY (Golden Telemetry Sphere) ── */}
           <g>
             {/* Main Globe Base */}
-            <circle cx="110" cy="120" r="44" fill="url(#cinoxGoldGrad)" stroke="#B45309" strokeWidth="2" />
+            <circle cx="110" cy="120" r="44" fill="url(#unmsGoldGrad)" stroke="#B45309" strokeWidth="2" />
             {/* Ambient Glow Inside Globe */}
             <circle cx="110" cy="120" r="40" fill={isError ? "#EF4444" : "#F59E0B"} opacity={isError ? "0.3" : "0.4"} />
-            {/* Latitude & Longitude Fiber Rings (Exact to Cinox Logo) */}
+            {/* Latitude & Longitude Fiber Rings */}
             <ellipse cx="110" cy="120" rx="38" ry="18" fill="none" stroke="#FFFFFF" strokeWidth="2.5" opacity="0.9" />
             <ellipse cx="110" cy="120" rx="20" ry="40" fill="none" stroke="#FFFFFF" strokeWidth="2.5" opacity="0.9" />
             <line x1="68" y1="120" x2="152" y2="120" stroke="#FFFFFF" strokeWidth="2.5" opacity="0.9" />
@@ -306,7 +306,7 @@ function InteractiveCinoxBeetle({
                 strokeLinecap="round"
                 fill="none"
               />
-              <circle cx={isTeasing ? "44" : isError ? "44" : "52"} cy={isTeasing ? "8" : isError ? "34" : "6"} r="6.5" fill="url(#cinoxGoldGrad)" stroke="#B45309" strokeWidth="1.5" />
+              <circle cx={isTeasing ? "44" : isError ? "44" : "52"} cy={isTeasing ? "8" : isError ? "34" : "6"} r="6.5" fill="url(#unmsGoldGrad)" stroke="#B45309" strokeWidth="1.5" />
               <circle cx={isTeasing ? "42" : isError ? "42" : "50"} cy={isTeasing ? "6" : isError ? "32" : "4"} r="2" fill="#FFFFFF" opacity="0.85" />
 
               {/* Right Antenna */}
@@ -323,12 +323,12 @@ function InteractiveCinoxBeetle({
                 strokeLinecap="round"
                 fill="none"
               />
-              <circle cx={isTeasing ? "176" : isError ? "176" : "168"} cy={isTeasing ? "8" : isError ? "34" : "6"} r="6.5" fill="url(#cinoxGoldGrad)" stroke="#B45309" strokeWidth="1.5" />
+              <circle cx={isTeasing ? "176" : isError ? "176" : "168"} cy={isTeasing ? "8" : isError ? "34" : "6"} r="6.5" fill="url(#unmsGoldGrad)" stroke="#B45309" strokeWidth="1.5" />
               <circle cx={isTeasing ? "174" : isError ? "174" : "166"} cy={isTeasing ? "6" : isError ? "32" : "4"} r="2" fill="#FFFFFF" opacity="0.85" />
             </g>
 
             {/* ── BEETLE HEAD ── */}
-            <ellipse cx="110" cy="58" rx="44" ry="36" fill="url(#cinoxHeadGrad)" stroke="#B45309" strokeWidth="2" />
+            <ellipse cx="110" cy="58" rx="44" ry="36" fill="url(#unmsHeadGrad)" stroke="#B45309" strokeWidth="2" />
             {/* Head Light Highlight */}
             <ellipse cx="110" cy="34" rx="26" ry="9" fill="#FFFFFF" opacity="0.5" />
 
@@ -481,14 +481,14 @@ function InteractiveCinoxBeetle({
             {/* Left Red Outer Wing */}
             <path
               d="M 80 80 C 42 85, 12 118, 16 160 C 26 168, 38 152, 48 130 C 62 104, 78 88, 80 80 Z"
-              fill="url(#cinoxRedGrad)"
+              fill="url(#unmsRedGrad)"
               stroke="#991B1B"
               strokeWidth="1.5"
             />
             {/* Left Navy Blue Inner Wing */}
             <path
               d="M 88 92 C 58 105, 34 132, 40 170 C 50 175, 58 156, 70 134 C 80 114, 88 100, 88 92 Z"
-              fill="url(#cinoxBlueGrad)"
+              fill="url(#unmsBlueGrad)"
               stroke="#172554"
               strokeWidth="1.5"
             />
@@ -506,14 +506,14 @@ function InteractiveCinoxBeetle({
             {/* Right Red Outer Wing */}
             <path
               d="M 140 80 C 178 85, 208 118, 204 160 C 194 168, 182 152, 172 130 C 158 104, 142 88, 140 80 Z"
-              fill="url(#cinoxRedGrad)"
+              fill="url(#unmsRedGrad)"
               stroke="#991B1B"
               strokeWidth="1.5"
             />
             {/* Right Navy Blue Inner Wing */}
             <path
               d="M 132 92 C 162 105, 186 132, 180 170 C 170 175, 162 156, 150 134 C 140 114, 132 100, 132 92 Z"
-              fill="url(#cinoxBlueGrad)"
+              fill="url(#unmsBlueGrad)"
               stroke="#172554"
               strokeWidth="1.5"
             />
@@ -525,10 +525,10 @@ function InteractiveCinoxBeetle({
 }
 
 /* ───────────────────────────────────────────────────────────────────
-   Modern Monochrome Login Page with CinoxMediaNet Identity
+   Modern Clean Monochrome Login Page
 ─────────────────────────────────────────────────────────────────── */
 export default function Login() {
-  const { login, loading } = useAuth();
+  const { login, commitLogin, loading } = useAuth();
   const { isDark, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -584,12 +584,15 @@ export default function Login() {
     setMascotState('idle');
 
     try {
-      await login(username.trim(), password);
+      // Defer commit so currentUser is not set immediately, giving time for flight animation
+      await login(username.trim(), password, true);
+
       // SUCCESS: Trigger Celebratory Stand-up & Flight Orbit around screen
       setMascotState('success');
 
-      // Wait for flight animation loop (~2300ms) before navigating to dashboard
+      // Wait for flight animation loop (~2350ms) before committing session and navigating
       setTimeout(() => {
+        commitLogin();
         navigate(from, { replace: true });
       }, 2350);
     } catch (err) {
@@ -642,7 +645,7 @@ export default function Login() {
         {/* Main Container */}
         <div className="w-full max-w-md relative z-10 my-auto">
 
-          {/* Pure Iconic CinoxMediaNet Beetle Mascot */}
+          {/* Beetle Mascot */}
           <InteractiveCinoxBeetle
             usernameLength={username.length}
             isUsernameFocused={isUsernameFocused}
@@ -654,26 +657,18 @@ export default function Login() {
           {/* Clean Monochrome Login Card */}
           <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#52525b] p-6 sm:p-8 pt-7 rounded-xl shadow-2xl space-y-5 relative">
 
-            {/* Header Title with CinoxMediaNet Brand Styling */}
-            <div className="text-center space-y-1">
-              <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-[#52525b] px-3 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider mb-1">
+            {/* Header Title */}
+            <div className="text-center space-y-1.5 pt-1">
+              <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-[#52525b] px-3 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider mb-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>FIBER-UNMS TELEMETRY GATEWAY</span>
+                <span>FIBER-UNMS ENTERPRISE</span>
               </div>
 
-              {/* Official CinoxMediaNet Brand Signature */}
-              <div className="pt-0.5 pb-1">
-                <div className="text-2xl sm:text-3xl font-extrabold tracking-tight font-sans">
-                  <span className="text-[#1E3A8A] dark:text-blue-400">Cinox</span>
-                  <span className="text-[#DC2626] dark:text-red-500">Media</span>
-                  <span className="text-[#D97706] dark:text-amber-400">Net</span>
-                </div>
-                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5 tracking-wide">
-                  The <span className="text-[#DC2626] dark:text-red-400 font-bold border-b border-[#DC2626]">Reliable</span> Broadband Access
-                </p>
-              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+                Portal Akses Monitoring
+              </h1>
 
-              <p className="text-xs text-slate-500 dark:text-slate-400 pt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Masuk untuk mengelola dan memonitor jaringan fiber optik
               </p>
             </div>
@@ -794,13 +789,17 @@ export default function Login() {
                 disabled={loading || mascotState === 'success'}
                 className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2 cursor-pointer"
               >
-                {loading || mascotState === 'success' ? (
+                {loading && mascotState !== 'success' ? (
                   <>
                     <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    <span>{mascotState === 'success' ? 'Sukses! Mengalihkan...' : 'Mengotentikasi...'}</span>
+                    <span>Mengotentikasi...</span>
+                  </>
+                ) : mascotState === 'success' ? (
+                  <>
+                    <span className="text-emerald-300 font-bold">✨ Login Berhasil! Memasuki Dashboard...</span>
                   </>
                 ) : (
                   <>
@@ -823,7 +822,7 @@ export default function Login() {
                 </button>
               </p>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                © 2026 CinoxMediaNet · Fiber-UNMS Enterprise.
+                © 2026 Fiber-UNMS Enterprise. All rights reserved.
               </p>
             </div>
 
@@ -846,7 +845,7 @@ export default function Login() {
                       {helpModal === 'forgot_password' ? 'Lupa Kata Sandi Akun' : 'Pendaftaran Akun Baru'}
                     </h3>
                     <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 uppercase">
-                      CINOXMEDIANET SECURITY GATEWAY
+                      FIBER-UNMS SECURITY GATEWAY
                     </span>
                   </div>
                 </div>
@@ -867,7 +866,7 @@ export default function Login() {
               {helpModal === 'forgot_password' ? (
                 <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   <p>
-                    Untuk menjaga integritas dan keamanan sistem telemetri fiber optik <strong className="text-slate-900 dark:text-white">CinoxMediaNet</strong>, proses <strong className="text-slate-900 dark:text-white">reset kata sandi</strong> hanya dapat dilakukan langsung oleh <strong className="text-blue-600 dark:text-blue-400">Super Administrator</strong> atau tim <strong className="text-blue-600 dark:text-blue-400">NOC Central</strong>.
+                    Untuk menjaga integritas dan keamanan sistem telemetri fiber optik <strong className="text-slate-900 dark:text-white">Fiber-UNMS</strong>, proses <strong className="text-slate-900 dark:text-white">reset kata sandi</strong> hanya dapat dilakukan langsung oleh <strong className="text-blue-600 dark:text-blue-400">Super Administrator</strong> atau tim <strong className="text-blue-600 dark:text-blue-400">NOC Central</strong>.
                   </p>
                   <div className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-[#52525b] rounded-lg space-y-1.5 font-sans">
                     <div className="font-bold text-slate-900 dark:text-white text-[11px]">
@@ -883,7 +882,7 @@ export default function Login() {
               ) : (
                 <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   <p>
-                    Sistem <strong className="text-slate-900 dark:text-white">CinoxMediaNet Fiber-UNMS</strong> adalah portal internal operasional jaringan terbatas untuk tim teknis (NOC, Jointer, Teknisi Lapangan, dan CS).
+                    Sistem <strong className="text-slate-900 dark:text-white">Fiber-UNMS Enterprise</strong> adalah portal internal operasional jaringan terbatas untuk tim teknis (NOC, Jointer, Teknisi Lapangan, dan CS).
                   </p>
                   <div className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-[#52525b] rounded-lg space-y-1.5 font-sans">
                     <div className="font-bold text-slate-900 dark:text-white text-[11px]">
@@ -891,7 +890,7 @@ export default function Login() {
                     </div>
                     <ul className="list-disc list-inside space-y-1 text-slate-500 dark:text-slate-400 text-[11px]">
                       <li>Akun didaftarkan langsung oleh Super Administrator melalui menu <code>/users</code>.</li>
-                      <li>Ajukan permohonan akses akun baru kepada Koordinator NOC atau Manajemen IT CinoxMediaNet.</li>
+                      <li>Ajukan permohonan akses akun baru kepada Koordinator NOC atau Manajemen IT.</li>
                     </ul>
                   </div>
                 </div>
