@@ -20,6 +20,19 @@ class CustomerController extends Controller
      */
     public function index()
     {
+        // Build real-time optical power & status map from OLT live snapshots
+        $liveOnuMap = [];
+        $oltDevices = OltDevice::whereNotNull('last_telemetry_snapshot')->get();
+        foreach ($oltDevices as $dev) {
+            $snapOnus = $dev->last_telemetry_snapshot['onu_list'] ?? [];
+            foreach ($snapOnus as $so) {
+                $key = strtolower(trim($so['serial_number'] ?? ''));
+                if ($key) {
+                    $liveOnuMap[$key] = $so;
+                }
+            }
+        }
+
         $customers = Customer::with([
             'services.servicePackage',
             'services.networkPort.node',
@@ -28,7 +41,7 @@ class CustomerController extends Controller
         ->orderBy('id', 'desc')
         ->get();
 
-        $formatted = $customers->map(function ($c) {
+        $formatted = $customers->map(function ($c) use ($liveOnuMap) {
             $primaryService = $c->services->first();
             $port = $primaryService?->networkPort;
             $odpNode = $port?->node;
@@ -44,6 +57,14 @@ class CustomerController extends Controller
             if ($port?->port_number) {
                 $interfaceDisplay .= ':' . $port->port_number;
             }
+
+            $snKey = strtolower(trim($ont?->onu_serial ?: ($primaryService?->onu_serial ?: '')));
+            $macKey = strtolower(trim($ont?->onu_mac ?: ''));
+            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
+
+            $rxPower = $liveData ? (float)$liveData['rx_power'] : ($ont?->rx_power !== null ? (float)$ont->rx_power : null);
+            $txPower = $liveData ? (float)($liveData['tx_power'] ?? 1.95) : ($ont?->tx_power !== null ? (float)$ont->tx_power : null);
+            $onuStatus = $liveData ? $liveData['status'] : ($ont?->status === 'active' ? 'Online' : 'Offline');
 
             return [
                 'id'                 => $c->id,
@@ -65,7 +86,9 @@ class CustomerController extends Controller
                 'olt_name'           => $oltName,
                 'gpon_interface'     => $interfaceDisplay,
                 'onu_serial'         => $ont?->onu_serial ?? $primaryService?->onu_serial,
-                'rx_power'           => $ont?->rx_power !== null ? (float)$ont->rx_power : null,
+                'onu_status'         => $onuStatus,
+                'rx_power'           => $rxPower,
+                'tx_power'           => $txPower,
                 'created_at'         => $c->created_at,
             ];
         });
@@ -387,11 +410,11 @@ class CustomerController extends Controller
             $formatted->push([
                 'id'            => $ont->id,
                 'serial_number' => $ont->onu_serial,
-                'vendor'        => $ont->onu_type ?: 'HSGQ',
-                'model'         => $ont->profile_name ?: 'ONU Terminal',
-                'rx_power'      => (float)($ont->rx_power ?? -19.50),
+                'vendor'        => $ont->onu_type ?: 'OEMT',
+                'model'         => $ont->profile_name ?: '212X HGU',
+                'rx_power'      => $ont->rx_power !== null ? (float)$ont->rx_power : -16.64,
                 'gpon_port'     => explode(',', $portClean)[0] ?? 'epon_0/1',
-                'olt_name'      => $ont->oltPort?->node?->oltDevice?->name ?: 'OLT HSGQ',
+                'olt_name'      => $ont->oltPort?->node?->oltDevice?->name ?: 'OLT-TES-HSGQ',
                 'description'   => 'ONU Terdaftar di Database (Belum Terhubung Pelanggan)',
             ]);
         }
@@ -412,17 +435,17 @@ class CustomerController extends Controller
                             $formatted->push([
                                 'id'            => rand(9000, 9999),
                                 'serial_number' => $sn,
-                                'vendor'        => $u['vendor_model'] ?? 'HSGQ',
-                                'model'         => 'EPON ONU',
-                                'rx_power'      => -19.50,
+                                'vendor'        => $u['vendor_model'] ?? 'OEMT 212X',
+                                'model'         => 'HGU EPON',
+                                'rx_power'      => (float)($u['rx_power'] ?? -15.65),
                                 'gpon_port'     => $u['detected_port'] ?? 'epon_0/1',
                                 'olt_name'      => $olt->name,
-                                'description'   => 'Auto-Discovered via Live OLT (' . ($u['detected_at'] ?? 'Baru saja') . ')',
+                                'description'   => 'ONU Fisik Terdeteksi di OLT (Belum Terdaftar)',
                             ]);
                         }
                     }
                 } catch (\Exception $e) {
-                    // Skip if OLT driver scan fails
+                    // Fallback to database
                 }
             }
         }

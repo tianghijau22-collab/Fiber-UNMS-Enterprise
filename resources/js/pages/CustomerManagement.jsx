@@ -373,7 +373,7 @@ export default function CustomerManagement() {
       title: 'Hapus Data Pelanggan?',
       message: (
         <span>
-          Apakah Anda yakin ingin menghapus data pelanggan <strong className="text-slate-700 dark:text-slate-200">"{c.name}"</strong> ({c.customer_code})? <br />
+          Apakah Anda yakin ingin menghapus data pelanggan <strong className="text-slate-800 dark:text-slate-200">"{c.name}"</strong> ({c.customer_code})? <br />
           <span className="text-rose-600 dark:text-rose-400 font-bold mt-1 block">Port ODP yang terhubung akan dilepaskan otomatis.</span>
         </span>
       ),
@@ -427,7 +427,7 @@ export default function CustomerManagement() {
       {toast && (
         <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold flex items-center gap-2 ${toast.type === 'error' ? 'bg-red-900 text-white border-red-700' : 'bg-emerald-900 text-white border-emerald-700'
           }`}>
-          <span>{toast.type === 'error' ? '️' : ''}</span>
+          <span>{toast.type === 'error' ? '' : ''}</span>
           <span>{toast.msg}</span>
         </div>
       )}
@@ -450,9 +450,9 @@ export default function CustomerManagement() {
             <>
               <button
                 onClick={handleOpenDiscoveryModal}
-                className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-2"
               >
-                <span>⚡ Sync Auto-Discover ONU OLT</span>
+                <span>Sync Auto-Discover ONU OLT</span>
               </button>
               <button
                 onClick={openAddModal}
@@ -478,7 +478,7 @@ export default function CustomerManagement() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="all">Semua Status</option>
             <option value="active"> Aktif</option>
@@ -507,7 +507,7 @@ export default function CustomerManagement() {
           <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-700 dark:text-slate-300 tracking-wider font-bold">
                   <tr>
                     <th className="px-5 py-3.5">ID Pelanggan</th>
                     <th className="px-5 py-3.5">Nama Pelanggan</th>
@@ -616,7 +616,7 @@ export default function CustomerManagement() {
                               className="px-2.5 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 text-[11px] font-bold hover:bg-cyan-100 dark:hover:bg-cyan-900/80 transition-all flex items-center gap-1"
                               title="Ganti ONU Modem (Penggantian Modem Rusak)"
                             >
-                              <span>🔄 Ganti ONU</span>
+                              <span>Ganti ONU</span>
                             </button>
                             {canCrud && (
                               <>
@@ -652,17 +652,17 @@ export default function CustomerManagement() {
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
                 >
                   ← Sebelumnya
                 </button>
-                <span className="px-2 font-bold text-slate-700 dark:text-slate-200">
+                <span className="px-2 font-bold text-slate-800 dark:text-slate-200">
                   Halaman {currentPage} dari {totalPages}
                 </span>
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
                 >
                   Berikutnya →
                 </button>
@@ -691,7 +691,7 @@ export default function CustomerManagement() {
                     {/* Row 1: # Index */}
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-slate-50/70 dark:bg-slate-800/40">
                       <span className="text-slate-400 font-semibold">#</span>
-                      <span className="col-span-2 font-mono font-bold text-slate-700 dark:text-slate-200">{globalIndex}</span>
+                      <span className="col-span-2 font-mono font-bold text-slate-800 dark:text-slate-200">{globalIndex}</span>
                     </div>
 
                     {/* Row 2: Code / ID Pelanggan */}
@@ -775,7 +775,7 @@ export default function CustomerManagement() {
                         onClick={() => openSwapModal(c)}
                         className="px-2.5 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 text-[11px] font-bold hover:bg-cyan-100 transition-all flex items-center gap-1"
                       >
-                        <span>🔄 Ganti ONU</span>
+                        <span>Ganti ONU</span>
                       </button>
                       {canCrud && (
                         <>
@@ -805,7 +805,7 @@ export default function CustomerManagement() {
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40"
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40"
                 >
                   ← Prev
                 </button>
@@ -815,7 +815,7 @@ export default function CustomerManagement() {
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40"
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40"
                 >
                   Next →
                 </button>
@@ -835,14 +835,14 @@ export default function CustomerManagement() {
               <h3 className="text-base font-bold flex items-center gap-2">
                 <span></span> {editingCustomer ? 'Edit Data Pelanggan' : 'Registrasi Pelanggan & Koneksi ODP Baru'}
               </h3>
-              <button onClick={() => setShowModal(false)} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 font-bold">✕</button>
+              <button onClick={() => setShowModal(false)} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 font-bold"></button>
             </div>
 
             {/* Form Body */}
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
               {formErr && (
                 <div className="p-3 bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-200 rounded-xl font-medium">
-                  ️ {formErr}
+                   {formErr}
                 </div>
               )}
 
@@ -1002,7 +1002,7 @@ export default function CustomerManagement() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300"
+                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold hover:bg-slate-300"
                 >
                   Batal
                 </button>
@@ -1025,11 +1025,10 @@ export default function CustomerManagement() {
         <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/75 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
           <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[88vh] overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in duration-150">
             {/* Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 px-6 py-4 border-b border-slate-800 text-white flex items-center justify-between">
+            <div className="bg-slate-50 dark:bg-slate-800/90 px-6 py-4 border-b border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-teal-500/20 border border-teal-500/40 text-teal-400 flex items-center justify-center font-bold text-lg">
-                  ⚡
-                </div>
+                  </div>
                 <div>
                   <h3 className="font-bold text-base text-white">Auto-Discover &amp; Fast Mapping ONU OLT</h3>
                   <p className="text-xs text-teal-300">
@@ -1041,7 +1040,7 @@ export default function CustomerManagement() {
                 onClick={() => setShowDiscoveryModal(false)}
                 className="w-8 h-8 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold"
               >
-                ✕
+                
               </button>
             </div>
 
@@ -1049,14 +1048,14 @@ export default function CustomerManagement() {
             <div className="p-6 overflow-y-auto flex-1 space-y-4">
               {loadingDiscovery ? (
                 <div className="py-16 text-center text-slate-400 text-xs animate-pulse">
-                  <span>⚡</span> Melakukan pemindaian ONU modem terdaftar dari OLT...
+                  <span></span> Melakukan pemindaian ONU modem terdaftar dari OLT...
                 </div>
               ) : unmappedOnus.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-xs">
                   <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 flex items-center justify-center mx-auto mb-3 text-xl font-bold">
-                    ✓
+                    
                   </div>
-                  <p className="font-bold text-sm text-slate-700 dark:text-slate-200">Seluruh ONU Modem OLT Telah Terpetakan!</p>
+                  <p className="font-bold text-sm text-slate-800 dark:text-slate-200">Seluruh ONU Modem OLT Telah Terpetakan!</p>
                   <p className="mt-1 max-w-md mx-auto">
                     Semua SN ONU modem yang aktif di OLT sudah terhubung dengan data Pelanggan &amp; Port ODP.
                   </p>
@@ -1202,7 +1201,7 @@ export default function CustomerManagement() {
                                   disabled={batchSubmitting || !formVal.name.trim()}
                                   className="w-full py-2.5 px-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-md shadow-teal-600/20 transition-all flex items-center justify-center gap-1.5"
                                 >
-                                  <span>🚀 Konekkan ODP</span>
+                                  <span>Konekkan ODP</span>
                                 </button>
                               </div>
                             </div>
@@ -1220,7 +1219,7 @@ export default function CustomerManagement() {
               <span className="text-slate-500">Auto-Discovery Sync OLT Active Engine</span>
               <button
                 onClick={() => setShowDiscoveryModal(false)}
-                className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300"
+                className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold hover:bg-slate-300"
               >
                 Tutup
               </button>
@@ -1234,11 +1233,10 @@ export default function CustomerManagement() {
         <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/75 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
           <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[88vh] overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in duration-150">
             {/* Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-teal-900 to-cyan-900 px-6 py-4 text-white flex items-center justify-between shadow-md">
+            <div className="bg-slate-50 dark:bg-slate-800/90 px-6 py-4 border-b border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white flex items-center justify-between shadow-md">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 flex items-center justify-center font-bold text-lg">
-                  🔄
-                </div>
+                  </div>
                 <div>
                   <h3 className="font-bold text-base text-white">Fitur Pergantian ONU Modem</h3>
                   <p className="text-xs text-cyan-200">
@@ -1250,7 +1248,7 @@ export default function CustomerManagement() {
                 onClick={() => setShowSwapModal(false)}
                 className="w-8 h-8 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold"
               >
-                ✕
+                
               </button>
             </div>
 
@@ -1345,16 +1343,16 @@ export default function CustomerManagement() {
                 <button
                   type="button"
                   onClick={() => setShowSwapModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold hover:bg-slate-300"
+                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold hover:bg-slate-300"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={swapping}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white font-bold disabled:opacity-60 shadow-md shadow-cyan-600/20 transition-all flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold disabled:opacity-60 shadow-xs transition-all flex items-center gap-1.5"
                 >
-                  <span>{swapping ? 'Memproses Swap...' : '🔄 Simpan & Update SN Baru'}</span>
+                  <span>{swapping ? 'Memproses Swap...' : 'Simpan & Update SN Baru'}</span>
                 </button>
               </div>
             </form>

@@ -50,6 +50,20 @@ class PollOltTelemetry extends Command
                     'last_connected_at'       => now(),
                 ]);
 
+                // Sync live optical data directly to OntRegistration records in database
+                foreach ($onuList as $onuData) {
+                    $sn = $onuData['serial_number'] ?? null;
+                    if ($sn) {
+                        \App\Models\OntRegistration::where('onu_serial', $sn)
+                            ->orWhere('onu_mac', $sn)
+                            ->update([
+                                'rx_power' => $onuData['rx_power'] ?? null,
+                                'tx_power' => $onuData['tx_power'] ?? null,
+                                'status'   => ($onuData['status'] === 'Online') ? 'active' : 'inactive',
+                            ]);
+                    }
+                }
+
                 // Clear web API fast cache so all frontend users get the latest DB snapshot immediately
                 $cacheKey = "olt_hardware_api_{$device->vendor_key}_{$device->id}";
                 \Illuminate\Support\Facades\Cache::forget($cacheKey);
