@@ -525,8 +525,8 @@ export default function OltManagement() {
 
   const badge = getConnectionBadge(activeOlt);
 
-  const inputCls = "w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium";
-  const labelCls = "block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1";
+  const inputCls = "w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium";
+  const labelCls = "block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5";
 
   // ─── Filtered ONU List (Terdaftar) ──────────────────────────────────────────
   const filteredOnus = (oltData?.onu_list || []).filter(onu => {
@@ -571,13 +571,13 @@ export default function OltManagement() {
     <div className="space-y-6 transition-colors duration-300 stagger-enter">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] p-5 rounded-lg shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-lg shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
             Manajemen Perangkat OLT
           </h1>
           <div className="flex items-center flex-wrap gap-2 mt-0.5">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Akuisisi Data &amp; Monitoring Telemetri via SNMP —
             </p>
             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${badge.cls}`}>
@@ -679,14 +679,14 @@ export default function OltManagement() {
                 Arsitektur Telemetri OLT via VPN &amp; SNMP
               </h2>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Sistem UNMS mengambil data redaman &amp; status port OLT murni via query SNMP (UDP 161) melalui terowongan VPN router kantor Anda.
             </p>
           </div>
 
           {/* 3-Hop Pipeline Map */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
-            <div className="p-2.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-[#222222] flex items-center gap-2">
+            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-2">
               <span className="text-base"></span>
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">1. OLT Fisik</div>
@@ -694,7 +694,7 @@ export default function OltManagement() {
               </div>
             </div>
 
-            <div className="p-2.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-[#222222] flex items-center gap-2">
+            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-2">
               <span className="text-base"></span>
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">2. VPN Gateway</div>
@@ -702,7 +702,7 @@ export default function OltManagement() {
               </div>
             </div>
 
-            <div className="p-2.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-[#222222] flex items-center gap-2">
+            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-2">
               <span className="text-base"></span>
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">3. UNMS Cloud</div>
@@ -717,10 +717,10 @@ export default function OltManagement() {
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
               Daftar Perangkat OLT
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               Klik salah satu kartu OLT di bawah untuk memilih perangkat aktif
             </p>
           </div>
@@ -729,7 +729,7 @@ export default function OltManagement() {
               onClick={() => setShowSensitiveIp(!showSensitiveIp)}
               className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${showSensitiveIp
                 ? 'bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-300'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               title="Hanya tim NOC / Administrator yang berhak melihat IP address"
             >
@@ -748,7 +748,7 @@ export default function OltManagement() {
             const isActive = selectedOltId === o.id;
             const isLive = o.connection_mode === 'live';
             return (
-              <div key={o.id} className={`p-3 rounded-xl border text-left transition-all group relative ${isActive ? 'bg-indigo-600 border-indigo-600 shadow-md text-white' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-700'
+              <div key={o.id} className={`p-3 rounded-xl border text-left transition-all group relative ${isActive ? 'bg-indigo-600 border-indigo-600 shadow-md text-white' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-700'
                 }`}>
                 <button onClick={() => setSelectedOltId(o.id)} className="w-full text-left">
                   <div className="flex items-center justify-between">
@@ -756,7 +756,7 @@ export default function OltManagement() {
                     <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-emerald-400' : 'bg-amber-400'}`} title={isLive ? 'Live SNMP' : 'Database UNMS'} />
                   </div>
                   <div className="font-bold text-xs mt-1 truncate">{o.name}</div>
-                  <div className={`text-[11px] font-mono mt-0.5 ${isActive ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'}`}>{maskIpAddress(o.ip_address)}</div>
+                  <div className={`text-[11px] font-mono mt-0.5 ${isActive ? 'text-indigo-100' : 'text-slate-600 dark:text-slate-400'}`}>{maskIpAddress(o.ip_address)}</div>
                   <div className={`text-[10px] mt-0.5 truncate ${isActive ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>{o.location}</div>
                 </button>
                 {/* Action buttons */}
@@ -798,8 +798,8 @@ export default function OltManagement() {
       {!loadingOltList && olts.length === 0 && (
         <div className="bg-white dark:bg-slate-900 p-12 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs text-center space-y-4">
           <div className="text-4xl"></div>
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Belum Ada Perangkat OLT Terdaftar</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Belum Ada Perangkat OLT Terdaftar</h3>
+          <p className="text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">
             Database OLT saat ini kosong. Silakan tambahkan perangkat OLT aktif Anda (ZTE, Huawei, VSOL, HSGQ, Hioso, Tarmoc, BDCOM, FiberHome) untuk mulai pemantauan telemetri via SNMP.
           </p>
           <button
@@ -813,7 +813,7 @@ export default function OltManagement() {
 
       {/* ── Hardware Telemetry via SNMP ───────────────────────────────────────── */}
       {loading ? (
-        <div className="bg-white dark:bg-slate-900 p-12 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs text-center text-slate-500 dark:text-slate-400 flex flex-col items-center space-y-3">
+        <div className="bg-white dark:bg-slate-900 p-12 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs text-center text-slate-600 dark:text-slate-400 flex flex-col items-center space-y-3">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm font-medium">Melakukan polling SNMP ke telemetri {activeOlt?.name}...</span>
         </div>
@@ -849,7 +849,7 @@ export default function OltManagement() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
               <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Nama &amp; Lokasi OLT</div>
-              <div className="text-lg font-extrabold text-slate-800 dark:text-slate-100 mt-2">{activeOlt?.name}</div>
+              <div className="text-lg font-extrabold text-slate-900 dark:text-white mt-2">{activeOlt?.name}</div>
               <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mt-1">{activeOlt?.location}</div>
               {oltData.device_info?.mac_address && (
                 <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-1">MAC: {oltData.device_info.mac_address}</div>
@@ -861,19 +861,19 @@ export default function OltManagement() {
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
               <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">IP SNMP &amp; Firmware</div>
               <div className="text-lg font-mono font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">{maskIpAddress(activeOlt?.ip_address)}</div>
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Firmware: {oltData.device_info?.firmware}</div>
+              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mt-1">Firmware: {oltData.device_info?.firmware}</div>
             </div>
             <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
               <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">CPU & Suhu Chassis (SNMP)</div>
               {oltData.device_info?.cpu_usage !== null && oltData.device_info?.cpu_usage !== undefined ? (
                 <>
                   <div className="flex items-center space-x-3 mt-2">
-                    <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{oltData.device_info.cpu_usage}%</span>
+                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{oltData.device_info.cpu_usage}%</span>
                     <div className="flex-1 bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
                       <div className="bg-indigo-600 dark:bg-indigo-500 h-full rounded-full" style={{ width: `${oltData.device_info.cpu_usage}%` }} />
                     </div>
                   </div>
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
+                  <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mt-1">
                     Suhu: {oltData.device_info?.temperature ?? '--'}°C | Uptime: {oltData.device_info?.uptime ?? '--'}
                   </div>
                 </>
@@ -895,7 +895,7 @@ export default function OltManagement() {
               <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-2">
                 {oltData.unconfigured_onus?.length ?? 0} Perangkat
               </div>
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Menunggu otorisasi via Database</div>
+              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mt-1">Menunggu otorisasi via Database</div>
             </div>
           </div>
 
@@ -903,8 +903,8 @@ export default function OltManagement() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div>
-                <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Slot & Card — {activeOlt?.name}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Klik salah satu Slot Card di bawah untuk memfilter daftar Port PON</p>
+                <h3 className="font-bold text-slate-900 dark:text-white text-lg">Slot & Card — {activeOlt?.name}</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Klik salah satu Slot Card di bawah untuk memfilter daftar Port PON</p>
               </div>
               <div className="flex items-center space-x-2">
                 <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">Total {oltData.device_info?.cards?.length ?? 0} Slot</span>
@@ -929,7 +929,7 @@ export default function OltManagement() {
                     }}
                     className={`p-4 rounded-xl space-y-2 text-left transition-all relative ${isSelected
                       ? 'bg-indigo-600 border-2 border-indigo-600 shadow-md text-white ring-2 ring-indigo-500/20'
-                      : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-700'
+                      : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-700'
                       }`}
                   >
                     <div className="flex items-center justify-between text-xs font-bold">
@@ -939,7 +939,7 @@ export default function OltManagement() {
                         : 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
                         }`}>{card.status}</span>
                     </div>
-                    <div className={`text-xs ${isSelected ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                    <div className={`text-xs ${isSelected ? 'text-indigo-100' : 'text-slate-600 dark:text-slate-400'}`}>
                       Kapasitas: <span className="font-bold">{card.ports} Port</span>
                     </div>
                     {isSelected && (
@@ -963,12 +963,12 @@ export default function OltManagement() {
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-2">
                   <div>
-                    <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-lg">
                       {selectedSlotFilter
                         ? `Status Port PON & Power Optical (SFP) — Filtered [ Slot ${selectedSlotFilter} ]`
                         : `Status Port PON & Power Optical (SFP) — ${activeOlt?.name}`}
                     </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                       {selectedSlotFilter
                         ? `Menampilkan ${displayPorts?.length ?? 0} Port PON pada Slot ${selectedSlotFilter}. Klik salah satu kartu port untuk memfilter tabel ONU.`
                         : `Klik Slot Card di atas atau klik salah satu kartu Port PON di bawah untuk memfilter tabel ONU.`}
@@ -1017,7 +1017,7 @@ export default function OltManagement() {
                           <div className="grid grid-cols-3 gap-1.5 text-center">
                             <div className="bg-white dark:bg-slate-900 p-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
                               <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500">Total</div>
-                              <div className="text-xs font-extrabold text-slate-800 dark:text-slate-100">{port.registered_onus}</div>
+                              <div className="text-xs font-extrabold text-slate-900 dark:text-white">{port.registered_onus}</div>
                             </div>
                             <div className="bg-emerald-50 dark:bg-emerald-900/10 p-1.5 rounded-lg border border-emerald-200 dark:border-emerald-900/30">
                               <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Online</div>
@@ -1028,7 +1028,7 @@ export default function OltManagement() {
                               <div className={`text-xs font-extrabold ${port.los_onus > 0 ? 'text-rose-700 dark:text-rose-300 animate-pulse' : 'text-slate-600 dark:text-slate-400'}`}>{port.los_onus}</div>
                             </div>
                           </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/80 dark:border-slate-700">
+                          <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/80 dark:border-slate-700">
                             <span>TX Optical:</span>
                             {port.tx_power_dbm !== null && port.tx_power_dbm !== undefined ? (
                               <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">+{port.tx_power_dbm} dBm</span>
@@ -1073,10 +1073,10 @@ export default function OltManagement() {
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div>
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
                     Topologi Pasif (ODC &amp; ODP) — Port {selectedPortFilter}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                     Perangkat ODC dan ODP yang mendistribusikan sinyal optik dari port ini ke pelanggan
                   </p>
                 </div>
@@ -1112,7 +1112,7 @@ export default function OltManagement() {
                         </div>
 
                         {odc.parent_node && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400"> POP Induk: <strong className="text-slate-700 dark:text-slate-200">{odc.parent_node.name}</strong></p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400"> POP Induk: <strong className="text-slate-900 dark:text-white">{odc.parent_node.name}</strong></p>
                         )}
 
                         {odc.odps && odc.odps.length > 0 ? (
@@ -1123,7 +1123,7 @@ export default function OltManagement() {
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                               {odc.odps.map(odp => (
                                 <div key={odp.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs">
-                                  <p className="font-bold text-slate-800 dark:text-slate-100 truncate">{odp.name}</p>
+                                  <p className="font-bold text-slate-900 dark:text-white truncate">{odp.name}</p>
                                   <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{odp.used_ports}/{odp.total_ports} Port</p>
                                 </div>
                               ))}
@@ -1143,14 +1143,14 @@ export default function OltManagement() {
           {/* ══════════════════════════════════════════════════════════════════
               TABEL ONU FISIK TERDETEKSI DI OLT (BELUM TERDAFTAR DI UNMS)
           ══════════════════════════════════════════════════════════════════ */}
-          <div className="bg-white dark:bg-slate-900 border-2 border-amber-500/40 dark:border-amber-500/30 rounded-2xl shadow-md overflow-hidden transition-all duration-300">
-            <div className="p-6 bg-slate-50 dark:bg-slate-850 border-b border-amber-500/20 dark:border-amber-500/20 space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-600/50 rounded-2xl shadow-md overflow-hidden transition-all duration-300">
+            <div className="p-6 bg-slate-50 dark:bg-slate-800/80 border-b border-amber-500/20 dark:border-amber-500/20 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5 shadow-xs"><IconNetwork /></div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-lg">
+                      <h3 className="font-extrabold text-slate-900 dark:text-white text-lg">
                         ONU Fisik Terdeteksi di OLT (Belum Terdaftar di Sistem)
                       </h3>
                       <span className="relative flex h-3 w-3">
@@ -1158,7 +1158,7 @@ export default function OltManagement() {
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                       Modem / ONU fisik yang sudah tersambung &amp; aktif pada port PON OLT, namun belum diregistrasikan ke data pelanggan Fiber UNMS.
                     </p>
                   </div>
@@ -1186,7 +1186,7 @@ export default function OltManagement() {
                   )}
                 </div>
 
-                <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                <div className="text-xs font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-2">
                   <span>Sumber Telemetri:</span>
                   <span className="px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold text-[11px]">
                     Live Physical OLT Discovery (Realtime)
@@ -1197,7 +1197,7 @@ export default function OltManagement() {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-600 dark:text-slate-400 tracking-wider">
                   <tr>
                     <th className="px-6 py-4">Port PON &amp; ONU ID</th>
                     <th className="px-6 py-4">Nama Perangkat di OLT</th>
@@ -1223,10 +1223,10 @@ export default function OltManagement() {
                               {onu.detected_port} ({onu.onu_index || onu.onu_id})
                             </span>
                           </td>
-                          <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-100">
+                          <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
                             {onu.onu_name || 'ONU Tanpa Nama'}
                           </td>
-                          <td className="px-6 py-4 font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
+                          <td className="px-6 py-4 font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
                             {onu.mac_address || onu.serial_number}
                           </td>
                           <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">
@@ -1251,7 +1251,7 @@ export default function OltManagement() {
                               {onu.rx_power != null ? `${onu.rx_power} dBm` : '—'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400">
+                          <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">
                             {onu.register_time || onu.detected_at || 'Baru Saja'}
                           </td>
                           <td className="px-6 py-4 text-right space-x-2">
@@ -1261,7 +1261,7 @@ export default function OltManagement() {
                                 customer_name: onu.onu_name || 'ONU Belum Terdaftar',
                                 port: onu.detected_port,
                               })}
-                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold transition-colors inline-flex items-center gap-1"
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold transition-colors inline-flex items-center gap-1"
                               title="Cek Detail Power Live (SNMP/API)"
                             >
                               <span>Sinyal</span>
@@ -1281,7 +1281,7 @@ export default function OltManagement() {
                       <td colSpan={8} className="px-6 py-10 text-center text-slate-400 dark:text-slate-500 text-xs">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-2"><IconCheck size="w-5 h-5" /></div>
-                          <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">Semua ONU Fisik Sudah Terdaftar di Fiber UNMS</p>
+                          <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">Semua ONU Fisik Sudah Terdaftar di Fiber UNMS</p>
                           <p className="text-[11px] text-slate-400 max-w-md">Tidak ada modem baru yang belum terpetakan. Ketika ada modem baru dipasang di OLT, data akan otomatis muncul di tabel ini secara realtime.</p>
                         </div>
                       </td>
@@ -1297,12 +1297,12 @@ export default function OltManagement() {
             <div className="p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-lg">
                     {selectedPortFilter
                       ? `Daftar ONU Filtered Port [ ${selectedPortFilter} ]`
                       : `Daftar Semua ONU Terdaftar — ${activeOlt?.name}`}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                     Menampilkan {filteredOnus.length} dari total {oltData.onu_list?.length ?? 0} ONU terdaftar
                   </p>
                 </div>
@@ -1361,7 +1361,7 @@ export default function OltManagement() {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-600 dark:text-slate-400 tracking-wider">
                   <tr>
                     <th className="px-6 py-4">Nama Pelanggan</th>
                     <th className="px-6 py-4">Port & ONU ID</th>
@@ -1377,7 +1377,7 @@ export default function OltManagement() {
                   {filteredOnus.length > 0 ? (
                     filteredOnus.map(onu => (
                       <tr key={onu.serial_number} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                        <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-100">{onu.customer_name}</td>
+                        <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">{onu.customer_name}</td>
                         <td className="px-6 py-4 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{onu.port} ({onu.onu_id})</td>
                         <td className="px-6 py-4 font-mono text-xs text-slate-700 dark:text-slate-400">{onu.serial_number}</td>
                         <td className="px-6 py-4">
@@ -1426,8 +1426,8 @@ export default function OltManagement() {
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Konfigurasi Koneksi SNMP OLT</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-semibold text-indigo-600 dark:text-indigo-400">{activeOlt?.name} — {maskIpAddress(activeOlt?.ip_address)}</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Konfigurasi Koneksi SNMP OLT</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 font-semibold text-indigo-600 dark:text-indigo-400">{activeOlt?.name} — {maskIpAddress(activeOlt?.ip_address)}</p>
               </div>
               <button onClick={() => { setShowConfigModal(false); setTestResult(null); }}
                 className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
@@ -1439,7 +1439,7 @@ export default function OltManagement() {
 
               {/* ── Section 1: Deployment Mode ────────────────────────────── */}
               <div>
-                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 flex items-center space-x-2">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center space-x-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">1</span>
                   <span>Mode Deployment Server UNMS</span>
                 </h4>
@@ -1454,8 +1454,8 @@ export default function OltManagement() {
                           : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-slate-50 dark:hover:bg-slate-700'
                           }`}>
                         <div className="text-lg">{mode.icon}</div>
-                        <div className={`text-xs font-bold mt-1 ${selected ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300'}`}>{mode.label}</div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 leading-tight">{mode.desc}</div>
+                        <div className={`text-xs font-bold mt-1 ${selected ? 'text-indigo-700 dark:text-indigo-300' : 'text-slate-800 dark:text-slate-200'}`}>{mode.label}</div>
+                        <div className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5 leading-tight">{mode.desc}</div>
                         {selected && <div className="mt-1.5 text-indigo-600 dark:text-indigo-400"><IconCheck size="w-3.5 h-3.5" /></div>}
                       </button>
                     );
@@ -1466,7 +1466,7 @@ export default function OltManagement() {
               {/* ── Section 2: SNMP Configuration ───────────────────────────── */}
               {configForm.deployment_mode !== 'probe' && (
                 <div className="space-y-4">
-                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center space-x-2">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
                     <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">2</span>
                     <span>Kredensial &amp; Protokol SNMP (Pure Data Polling)</span>
                   </h4>
@@ -1593,7 +1593,7 @@ export default function OltManagement() {
               {/* ── Section 3: Probe Agent ─────────────────────────────────── */}
               {configForm.deployment_mode === 'probe' && (
                 <div className="space-y-3">
-                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200 flex items-center space-x-2">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
                     <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-xs flex items-center justify-center font-bold">2</span>
                     <span>Konfigurasi NMS Probe Agent</span>
                   </h4>
@@ -1696,7 +1696,7 @@ export default function OltManagement() {
 
                       {testResult.recommendations && testResult.recommendations.length > 0 && (
                         <div className="bg-white dark:bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-800 text-xs space-y-1">
-                          <div className="font-bold text-slate-700 dark:text-slate-300">Rekomendasi:</div>
+                          <div className="font-bold text-slate-800 dark:text-slate-200">Rekomendasi:</div>
                           {testResult.recommendations.map((r, i) => (
                             <div key={i} className="text-slate-600 dark:text-slate-400 flex items-start space-x-1.5">
                               <span className="text-indigo-500 font-bold">•</span>
@@ -1726,7 +1726,7 @@ export default function OltManagement() {
                   type="button"
                   onClick={handleSaveConfig}
                   disabled={savingConfig}
-                  className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50">
                   {savingConfig ? 'Menyimpan...' : 'Simpan Saja'}
                 </button>
 
@@ -1754,8 +1754,8 @@ export default function OltManagement() {
 
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Tambah Perangkat OLT Baru</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Dukungan Multi-Vendor via SNMP (ZTE, Huawei, VSOL, HSGQ, Hioso, Tarmoc, BDCOM, FiberHome)</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Tambah Perangkat OLT Baru</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Dukungan Multi-Vendor via SNMP (ZTE, Huawei, VSOL, HSGQ, Hioso, Tarmoc, BDCOM, FiberHome)</p>
               </div>
               <button onClick={() => setShowAddOltModal(false)}
                 className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
@@ -1938,8 +1938,8 @@ export default function OltManagement() {
 
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Edit Perangkat OLT</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{editingOlt.name} ({editingOlt.code})</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Perangkat OLT</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{editingOlt.name} ({editingOlt.code})</p>
               </div>
               <button onClick={() => { setShowEditOltModal(false); setEditingOlt(null); }}
                 className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
@@ -2129,7 +2129,7 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
   return createPortal(
     <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
       <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl my-auto overflow-hidden animate-in fade-in zoom-in duration-150">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-900 text-white">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-800/90 text-slate-900 dark:text-white">
           <div>
             <h3 className="text-base font-bold flex items-center gap-2">
               <span>Telemetri Redaman Optik (SNMP)</span>
@@ -2169,35 +2169,35 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-center">
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Tx Power (ONU)</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
                     {opticalData.tx_power_dbm ? `+${opticalData.tx_power_dbm} dBm` : '—'}
                   </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">OLT Rx Power</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
                     {opticalData.olt_rx_power_dbm ? `${opticalData.olt_rx_power_dbm} dBm` : '—'}
                   </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Tegangan (V)</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
                     {opticalData.voltage_v ? `${opticalData.voltage_v} V` : '3.30 V'}
                   </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Bias Current</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
                     {opticalData.bias_current_ma ? `${opticalData.bias_current_ma} mA` : '14.0 mA'}
                   </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Suhu Transceiver</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100 mt-1">
+                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
                     {opticalData.temperature_c ? `${opticalData.temperature_c} °C` : '40 °C'}
                   </div>
                 </div>
@@ -2235,7 +2235,7 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
           </button>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+            className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
           >
             Tutup
           </button>
@@ -2288,7 +2288,7 @@ function SnmpDiagnosticModal({ activeOlt, onClose }) {
   return createPortal(
     <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
       <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl my-auto overflow-hidden animate-in fade-in zoom-in duration-150 flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-900 text-white">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-800/90 text-slate-900 dark:text-white">
           <div>
             <h3 className="text-base font-bold flex items-center gap-2">
               <span>Diagnostic SNMP &amp; MIB OID Explorer</span>
@@ -2312,7 +2312,7 @@ function SnmpDiagnosticModal({ activeOlt, onClose }) {
                   onClick={() => { setOid(p.oid); setOperation(p.op); }}
                   className={`p-2 rounded-xl text-left border text-xs transition-all ${oid === p.oid && operation === p.op
                     ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 font-bold text-indigo-700 dark:text-indigo-300'
-                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100'
                     }`}
                 >
                   <div>{p.label}</div>
@@ -2375,7 +2375,7 @@ function SnmpDiagnosticModal({ activeOlt, onClose }) {
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end bg-slate-50 dark:bg-slate-900/50">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+            className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
           >
             Tutup
           </button>
@@ -2505,7 +2505,7 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
 
         {openSnmp && (
           <div className="p-3.5 space-y-2">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
               <span>Community: <strong className="font-mono text-indigo-600 dark:text-indigo-400">{effectiveCommunity}</strong></span>
               <span className="text-[10px]">Tempel di CLI / Web GUI OLT</span>
             </div>
