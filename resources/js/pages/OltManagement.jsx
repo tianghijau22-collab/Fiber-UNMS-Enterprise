@@ -528,7 +528,7 @@ export default function OltManagement() {
   const inputCls = "w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium";
   const labelCls = "block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1";
 
-  // ─── Filtered ONU List ───────────────────────────────────────────────────────
+  // ─── Filtered ONU List (Terdaftar) ──────────────────────────────────────────
   const filteredOnus = (oltData?.onu_list || []).filter(onu => {
     if (selectedPortFilter && onu.port !== selectedPortFilter && !onu.port.startsWith(selectedPortFilter)) {
       return false;
@@ -544,6 +544,24 @@ export default function OltManagement() {
       const matchPort = onu.port?.toLowerCase().includes(q);
       const matchIp = onu.ip_address?.toLowerCase().includes(q);
       return matchName || matchSn || matchPort || matchIp;
+    }
+    return true;
+  });
+
+  // ─── Filtered Unregistered ONUs (Fisik di OLT tapi belum di UNMS) ───────────
+  const [unregisteredSearchQuery, setUnregisteredSearchQuery] = useState('');
+
+  const filteredUnregisteredOnus = (oltData?.unconfigured_onus || []).filter(onu => {
+    if (selectedPortFilter && onu.detected_port !== selectedPortFilter && !onu.detected_port.startsWith(selectedPortFilter)) {
+      return false;
+    }
+    if (unregisteredSearchQuery) {
+      const q = unregisteredSearchQuery.toLowerCase();
+      const matchSn = (onu.serial_number || onu.mac_address)?.toLowerCase().includes(q);
+      const matchName = onu.onu_name?.toLowerCase().includes(q);
+      const matchPort = onu.detected_port?.toLowerCase().includes(q);
+      const matchModel = onu.vendor_model?.toLowerCase().includes(q);
+      return matchSn || matchName || matchPort || matchModel;
     }
     return true;
   });
@@ -1121,6 +1139,160 @@ export default function OltManagement() {
               })()}
             </div>
           )}
+
+          {/* ══════════════════════════════════════════════════════════════════
+              TABEL ONU FISIK TERDETEKSI DI OLT (BELUM TERDAFTAR DI UNMS)
+          ══════════════════════════════════════════════════════════════════ */}
+          <div className="bg-white dark:bg-slate-900 border-2 border-amber-500/40 dark:border-amber-500/30 rounded-2xl shadow-md overflow-hidden transition-all duration-300">
+            <div className="p-6 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 dark:border-amber-500/20 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                    <span className="text-xl">📡</span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-lg">
+                        ONU Fisik Terdeteksi di OLT (Belum Terdaftar di Sistem)
+                      </h3>
+                      <span className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Modem / ONU fisik yang sudah tersambung &amp; aktif pada port PON OLT, namun belum diregistrasikan ke data pelanggan Fiber UNMS.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-extrabold text-xs border border-amber-300 dark:border-amber-700/60 shadow-2xs">
+                    ⚡ {oltData.unconfigured_onus?.length ?? 0} Perangkat Menunggu Registrasi
+                  </span>
+                </div>
+              </div>
+
+              {/* Search Bar & Status Info */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <div className="relative flex-1 max-w-md">
+                  <input
+                    type="text"
+                    value={unregisteredSearchQuery}
+                    onChange={e => setUnregisteredSearchQuery(e.target.value)}
+                    placeholder="🔍 Cari MAC / Serial Number, Nama di OLT, atau Port..."
+                    className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
+                  />
+                  {unregisteredSearchQuery && (
+                    <button onClick={() => setUnregisteredSearchQuery('')} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600">✕</button>
+                  )}
+                </div>
+
+                <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                  <span>Sumber Telemetri:</span>
+                  <span className="px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold text-[11px]">
+                    🟢 Live Physical OLT Discovery (Realtime)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
+                  <tr>
+                    <th className="px-6 py-4">Port PON &amp; ONU ID</th>
+                    <th className="px-6 py-4">Nama Perangkat di OLT</th>
+                    <th className="px-6 py-4">MAC Address / SN</th>
+                    <th className="px-6 py-4">Tipe / Model</th>
+                    <th className="px-6 py-4">Status Fisik OLT</th>
+                    <th className="px-6 py-4">Redaman Rx Power Live</th>
+                    <th className="px-6 py-4">Waktu Terdaftar di OLT</th>
+                    <th className="px-6 py-4 text-right">Aksi Registrasi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredUnregisteredOnus.length > 0 ? (
+                    filteredUnregisteredOnus.map((onu, idx) => {
+                      const rx = parseFloat(onu.rx_power);
+                      const isGoodRx = !isNaN(rx) && rx >= -24.0;
+                      const isWarningRx = !isNaN(rx) && rx < -24.0 && rx >= -27.0;
+
+                      return (
+                        <tr key={onu.serial_number || idx} className="hover:bg-amber-50/40 dark:hover:bg-amber-950/20 transition-colors">
+                          <td className="px-6 py-4 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                            <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800">
+                              {onu.detected_port} ({onu.onu_index || onu.onu_id})
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-100">
+                            {onu.onu_name || 'ONU Tanpa Nama'}
+                          </td>
+                          <td className="px-6 py-4 font-mono text-xs font-bold text-slate-700 dark:text-slate-300">
+                            {onu.mac_address || onu.serial_number}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-600 dark:text-slate-400">
+                            <span className="px-2.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold">
+                              {onu.vendor_model || 'HGU EPON'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 w-fit">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                              <span>{onu.status || 'Online'} ({onu.auth_state || 'Authorized'})</span>
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-mono text-xs font-bold">
+                            <span className={`px-2.5 py-1 rounded-lg font-mono font-bold ${
+                              isGoodRx 
+                                ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                                : (isWarningRx 
+                                    ? 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                                    : 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800')
+                            }`}>
+                              {onu.rx_power != null ? `${onu.rx_power} dBm` : '—'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400">
+                            {onu.register_time || onu.detected_at || 'Baru Saja'}
+                          </td>
+                          <td className="px-6 py-4 text-right space-x-2">
+                            <button
+                              onClick={() => setSelectedOnuForOptical({
+                                ...onu,
+                                customer_name: onu.onu_name || 'ONU Belum Terdaftar',
+                                port: onu.detected_port,
+                              })}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold transition-colors inline-flex items-center gap-1"
+                              title="Cek Detail Power Live (SNMP/API)"
+                            >
+                              <span>📶 Sinyal</span>
+                            </button>
+                            <a
+                              href={`/customers?new=1&onu_sn=${encodeURIComponent(onu.serial_number || onu.mac_address)}&port=${encodeURIComponent(onu.detected_port || '')}&onu_name=${encodeURIComponent(onu.onu_name || '')}`}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-xs"
+                            >
+                              <span>⚡ Registrasikan</span>
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-10 text-center text-slate-400 dark:text-slate-500 text-xs">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <span className="text-3xl">✨</span>
+                          <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">Semua ONU Fisik Sudah Terdaftar di Fiber UNMS</p>
+                          <p className="text-[11px] text-slate-400 max-w-md">Tidak ada modem baru yang belum terpetakan. Ketika ada modem baru dipasang di OLT, data akan otomatis muncul di tabel ini secara realtime.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {/* ONU Table with Search, Filter & Live Optical Power Inspection */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
