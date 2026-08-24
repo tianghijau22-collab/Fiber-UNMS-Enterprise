@@ -1029,11 +1029,11 @@ export default function OltManagement() {
                             </div>
                           </div>
                           <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/80 dark:border-slate-700">
-                            <span>TX Optical:</span>
+                            <span>TX Optical SFP:</span>
                             {port.tx_power_dbm !== null && port.tx_power_dbm !== undefined ? (
                               <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">+{port.tx_power_dbm} dBm</span>
                             ) : (
-                              <span className="text-slate-400 dark:text-slate-500 italic text-[10px]">N/A (SNMP)</span>
+                              <span className="text-slate-400 dark:text-slate-500 font-medium text-[10px]">SFP Belum Terpasang</span>
                             )}
                           </div>
 
