@@ -60,21 +60,21 @@ const DEPLOYMENT_MODES = [
     value: 'vpn',
     label: 'VPN Tunnel / L2TP Perusahaan (Rekomendasi)',
     desc: 'VPS terhubung ke jaringan ISP via VPN L2TP / Tunnel MikroTik. SNMP langsung menjangkau IP lokal OLT.',
-    icon: '🛡️',
+    icon: '',
     color: 'emerald',
   },
   {
     value: 'direct',
     label: 'Direct LAN (Satu Jaringan)',
     desc: 'Server UNMS berada dalam satu jaringan lokal yang sama persis dengan OLT.',
-    icon: '🏢',
+    icon: '',
     color: 'indigo',
   },
   {
     value: 'probe',
     label: 'Local Probe Agent (Cloud External)',
     desc: 'Server di luar ISP tanpa VPN. Memerlukan NMS Probe Agent yang diinstal di dalam jaringan lokal kantor.',
-    icon: '📡',
+    icon: '',
     color: 'amber',
   },
 ];
@@ -326,7 +326,7 @@ export default function OltManagement() {
         fetchOlts();
       })
       .catch(() => {
-        setTestResult({ message: '⚠️ Gagal menghubungi server.', connection_mode: 'simulation' });
+        setTestResult({ message: 'Gagal menghubungi server.', connection_mode: 'simulation' });
         setTestingConnection(false);
       });
   };
@@ -357,13 +357,13 @@ export default function OltManagement() {
       .then(r => r.json())
       .then(() => {
         setSavingConfig(false);
-        showNotif('✅ Konfigurasi SNMP berhasil disimpan.', 'success');
+        showNotif('Konfigurasi SNMP berhasil disimpan.', 'success');
         setShowConfigModal(false);
         fetchOlts();
       })
       .catch(() => {
         setSavingConfig(false);
-        showNotif('❌ Gagal menyimpan konfigurasi.', 'error');
+        showNotif('Gagal menyimpan konfigurasi.', 'error');
       });
   };
 
@@ -433,14 +433,14 @@ export default function OltManagement() {
             const vk = res.data.vendor_key || res.data.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
             fetchOltHardware(vk, res.data.id);
           }
-          showNotif(res.message || '✅ Perangkat OLT berhasil diperbarui!', 'success');
+          showNotif(res.message || 'Perangkat OLT berhasil diperbarui!', 'success');
           setEditingOlt(null);
         } else {
           const errors = res.errors ? Object.values(res.errors).flat().join(' ') : '';
-          showNotif(res.message || `❌ Gagal memperbarui OLT. ${errors}`, 'error');
+          showNotif(res.message || `Gagal memperbarui OLT. ${errors}`, 'error');
         }
       })
-      .catch(() => { setSubmittingEditOlt(false); showNotif('❌ Gagal menghubungi server.', 'error'); });
+      .catch(() => { setSubmittingEditOlt(false); showNotif('Gagal menghubungi server.', 'error'); });
   };
 
   // ─── Disconnect OLT ──────────────────────────────────────────────────────────
@@ -520,7 +520,7 @@ export default function OltManagement() {
   const getConnectionBadge = (olt) => {
     const mode = olt?.connection_mode || 'simulation';
     if (mode === 'live') return { label: '● Live SNMP', cls: 'bg-emerald-400 text-emerald-950 font-bold' };
-    return { label: '💾 Realtime Database UNMS', cls: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold' };
+    return { label: 'Realtime Database UNMS', cls: 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold' };
   };
 
   const badge = getConnectionBadge(activeOlt);
@@ -622,7 +622,7 @@ export default function OltManagement() {
               className="px-4 py-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 font-bold text-xs transition-all flex items-center space-x-1.5 cursor-pointer shadow-xs"
               title="Uji OID MIB SNMP Live langsung dari browser"
             >
-              <span>📡 Diagnostic SNMP &amp; MIB</span>
+              <span>Diagnostic SNMP &amp; MIB</span>
             </button>
           )}
           <button
@@ -687,7 +687,7 @@ export default function OltManagement() {
           {/* 3-Hop Pipeline Map */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
             <div className="p-2.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-[#222222] flex items-center gap-2">
-              <span className="text-base">🏢</span>
+              <span className="text-base"></span>
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">1. OLT Fisik</div>
                 <div className="font-bold text-slate-800 dark:text-slate-200">Port SNMP 161 (public)</div>
@@ -695,7 +695,7 @@ export default function OltManagement() {
             </div>
 
             <div className="p-2.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-[#222222] flex items-center gap-2">
-              <span className="text-base">🛡️</span>
+              <span className="text-base"></span>
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">2. VPN Gateway</div>
                 <div className="font-bold text-emerald-600 dark:text-emerald-400">MikroTik (10.254.0.2)</div>
@@ -703,7 +703,7 @@ export default function OltManagement() {
             </div>
 
             <div className="p-2.5 rounded-lg bg-white dark:bg-black border border-slate-200 dark:border-[#222222] flex items-center gap-2">
-              <span className="text-base">☁️</span>
+              <span className="text-base"></span>
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">3. UNMS Cloud</div>
                 <div className="font-bold text-indigo-600 dark:text-indigo-400">Live Polling (103.89.6.125)</div>
@@ -733,7 +733,7 @@ export default function OltManagement() {
                 }`}
               title="Hanya tim NOC / Administrator yang berhak melihat IP address"
             >
-              <span>{showSensitiveIp ? '🔒 Sembunyikan IP' : '👁️ Buka IP'}</span>
+              <span>{showSensitiveIp ? 'Sembunyikan IP' : 'Buka IP'}</span>
             </button>
             <div className="text-right">
               <div className="text-xs text-slate-400 dark:text-slate-500 font-medium">Total OLT</div>
@@ -797,7 +797,7 @@ export default function OltManagement() {
       {/* ── Empty State ── */}
       {!loadingOltList && olts.length === 0 && (
         <div className="bg-white dark:bg-slate-900 p-12 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs text-center space-y-4">
-          <div className="text-4xl">🏢</div>
+          <div className="text-4xl"></div>
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Belum Ada Perangkat OLT Terdaftar</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
             Database OLT saat ini kosong. Silakan tambahkan perangkat OLT aktif Anda (ZTE, Huawei, VSOL, HSGQ, Hioso, Tarmoc, BDCOM, FiberHome) untuk mulai pemantauan telemetri via SNMP.
@@ -827,7 +827,7 @@ export default function OltManagement() {
               : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
               }`}>
               <div className="flex items-center space-x-2">
-                <span>{oltData.device_info._source === 'live_snmp' ? '🟢' : '💾'}</span>
+                <span>{oltData.device_info._source === 'live_snmp' ? '' : ''}</span>
                 <span>
                   {oltData.device_info._source === 'live_snmp'
                     ? `Data real dari OLT via SNMP — IP: ${maskIpAddress(activeOlt?.ip_address)} (Port UDP 161)`
@@ -839,7 +839,7 @@ export default function OltManagement() {
                   onClick={() => handleDisconnectOlt(activeOlt)}
                   disabled={disconnectingId === activeOlt.id}
                   className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-colors flex items-center space-x-1 disabled:opacity-50">
-                  {disconnectingId === activeOlt.id ? <Spinner /> : <span>⏹️ Hentikan SNMP</span>}
+                  {disconnectingId === activeOlt.id ? <Spinner /> : <span>Hentikan SNMP</span>}
                 </button>
               )}
             </div>
@@ -1144,12 +1144,10 @@ export default function OltManagement() {
               TABEL ONU FISIK TERDETEKSI DI OLT (BELUM TERDAFTAR DI UNMS)
           ══════════════════════════════════════════════════════════════════ */}
           <div className="bg-white dark:bg-slate-900 border-2 border-amber-500/40 dark:border-amber-500/30 rounded-2xl shadow-md overflow-hidden transition-all duration-300">
-            <div className="p-6 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 dark:border-amber-500/20 space-y-4">
+            <div className="p-6 bg-slate-50 dark:bg-slate-850 border-b border-amber-500/20 dark:border-amber-500/20 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                    <span className="text-xl">📡</span>
-                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5 shadow-xs"><IconNetwork /></div>
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-lg">
@@ -1168,7 +1166,7 @@ export default function OltManagement() {
 
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-1.5 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 font-extrabold text-xs border border-amber-300 dark:border-amber-700/60 shadow-2xs">
-                    ⚡ {oltData.unconfigured_onus?.length ?? 0} Perangkat Menunggu Registrasi
+                    {oltData.unconfigured_onus?.length ?? 0} Perangkat Menunggu Registrasi
                   </span>
                 </div>
               </div>
@@ -1180,18 +1178,18 @@ export default function OltManagement() {
                     type="text"
                     value={unregisteredSearchQuery}
                     onChange={e => setUnregisteredSearchQuery(e.target.value)}
-                    placeholder="🔍 Cari MAC / Serial Number, Nama di OLT, atau Port..."
+                    placeholder="Cari MAC / Serial Number, Nama di OLT, atau Port..."
                     className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
                   />
                   {unregisteredSearchQuery && (
-                    <button onClick={() => setUnregisteredSearchQuery('')} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600">✕</button>
+                    <button onClick={() => setUnregisteredSearchQuery('')} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold">✕</button>
                   )}
                 </div>
 
                 <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2">
                   <span>Sumber Telemetri:</span>
                   <span className="px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold text-[11px]">
-                    🟢 Live Physical OLT Discovery (Realtime)
+                    Live Physical OLT Discovery (Realtime)
                   </span>
                 </div>
               </div>
@@ -1266,13 +1264,13 @@ export default function OltManagement() {
                               className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold transition-colors inline-flex items-center gap-1"
                               title="Cek Detail Power Live (SNMP/API)"
                             >
-                              <span>📶 Sinyal</span>
+                              <span>Sinyal</span>
                             </button>
                             <a
                               href={`/customers?new=1&onu_sn=${encodeURIComponent(onu.serial_number || onu.mac_address)}&port=${encodeURIComponent(onu.detected_port || '')}&onu_name=${encodeURIComponent(onu.onu_name || '')}`}
                               className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-xs"
                             >
-                              <span>⚡ Registrasikan</span>
+                              <span>Registrasikan</span>
                             </a>
                           </td>
                         </tr>
@@ -1282,7 +1280,7 @@ export default function OltManagement() {
                     <tr>
                       <td colSpan={8} className="px-6 py-10 text-center text-slate-400 dark:text-slate-500 text-xs">
                         <div className="flex flex-col items-center justify-center gap-2">
-                          <span className="text-3xl">✨</span>
+                          <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-2"><IconCheck size="w-5 h-5" /></div>
                           <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">Semua ONU Fisik Sudah Terdaftar di Fiber UNMS</p>
                           <p className="text-[11px] text-slate-400 max-w-md">Tidak ada modem baru yang belum terpetakan. Ketika ada modem baru dipasang di OLT, data akan otomatis muncul di tabel ini secara realtime.</p>
                         </div>
@@ -1319,7 +1317,7 @@ export default function OltManagement() {
                     </button>
                   )}
                   <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                    {oltData.device_info?._source === 'live_snmp' ? '🟢 Live SNMP Telemetry' : '💾 Realtime Database UNMS'}
+                    {oltData.device_info?._source === 'live_snmp' ? 'Live SNMP Telemetry' : 'Realtime Database UNMS'}
                   </span>
                 </div>
               </div>
@@ -1331,20 +1329,20 @@ export default function OltManagement() {
                     type="text"
                     value={onuSearchQuery}
                     onChange={e => setOnuSearchQuery(e.target.value)}
-                    placeholder="🔍 Cari Pelanggan, Serial Number (SN), Port, atau IP..."
+                    placeholder="Cari Pelanggan, Serial Number (SN), Port, atau IP..."
                     className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                   />
                   {onuSearchQuery && (
-                    <button onClick={() => setOnuSearchQuery('')} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600">✕</button>
+                    <button onClick={() => setOnuSearchQuery('')} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold">✕</button>
                   )}
                 </div>
 
                 <div className="flex items-center gap-1.5 overflow-x-auto">
                   {[
                     { id: 'all', label: 'Semua Status' },
-                    { id: 'online', label: '🟢 Online' },
-                    { id: 'los', label: '🔴 LOS / Offline' },
-                    { id: 'high_loss', label: '⚠️ Redaman Drop (< -27 dBm)' },
+                    { id: 'online', label: 'Online' },
+                    { id: 'los', label: 'LOS / Offline' },
+                    { id: 'high_loss', label: 'Redaman Drop (< -27 dBm)' },
                   ].map(f => (
                     <button
                       key={f.id}
@@ -1399,7 +1397,7 @@ export default function OltManagement() {
                             className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
                             title="Query live optical diagnostic data via SNMP"
                           >
-                            <span>📶 Cek Power (SNMP)</span>
+                            <span>Cek Power (SNMP)</span>
                           </button>
                         </td>
                       </tr>
@@ -1645,10 +1643,10 @@ export default function OltManagement() {
                 const isPartial = !isSuccess && testResult.ping?.success;
 
                 const statusConfig = isSuccess
-                  ? { bg: 'bg-emerald-50 dark:bg-emerald-900/15', border: 'border-emerald-300 dark:border-emerald-700', badge: 'bg-emerald-500', badgeText: 'KONEKSI SNMP BERHASIL', icon: '✅', headerText: 'text-emerald-800 dark:text-emerald-200', subText: 'text-emerald-700 dark:text-emerald-300' }
+                  ? { bg: 'bg-emerald-50 dark:bg-emerald-900/15', border: 'border-emerald-300 dark:border-emerald-700', badge: 'bg-emerald-500', badgeText: 'KONEKSI SNMP BERHASIL', icon: '', headerText: 'text-emerald-800 dark:text-emerald-200', subText: 'text-emerald-700 dark:text-emerald-300' }
                   : isPartial
-                    ? { bg: 'bg-amber-50 dark:bg-amber-900/15', border: 'border-amber-300 dark:border-amber-700', badge: 'bg-amber-500', badgeText: 'PING OK · SNMP TIDAK MERESPON', icon: '⚠️', headerText: 'text-amber-800 dark:text-amber-200', subText: 'text-amber-700 dark:text-amber-300' }
-                    : { bg: 'bg-rose-50 dark:bg-rose-900/15', border: 'border-rose-300 dark:border-rose-700', badge: 'bg-rose-500', badgeText: 'KONEKSI GAGAL', icon: '❌', headerText: 'text-rose-800 dark:text-rose-200', subText: 'text-rose-700 dark:text-rose-300' };
+                    ? { bg: 'bg-amber-50 dark:bg-amber-900/15', border: 'border-amber-300 dark:border-amber-700', badge: 'bg-amber-500', badgeText: 'PING OK · SNMP TIDAK MERESPON', icon: '', headerText: 'text-amber-800 dark:text-amber-200', subText: 'text-amber-700 dark:text-amber-300' }
+                    : { bg: 'bg-rose-50 dark:bg-rose-900/15', border: 'border-rose-300 dark:border-rose-700', badge: 'bg-rose-500', badgeText: 'KONEKSI GAGAL', icon: '', headerText: 'text-rose-800 dark:text-rose-200', subText: 'text-rose-700 dark:text-rose-300' };
 
                 return (
                   <div className={`rounded-xl border-2 ${statusConfig.bg} ${statusConfig.border} overflow-hidden`}>
@@ -1670,7 +1668,7 @@ export default function OltManagement() {
                         {testResult.ping && (
                           <div className={`rounded-lg p-3 border flex items-start space-x-2.5 ${testResult.ping.success ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800'}`}>
                             <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold ${testResult.ping.success ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                              {testResult.ping.success ? '✓' : '✕'}
+                              {testResult.ping.success ? "✓" : "✕"}
                             </div>
                             <div>
                               <div className={`text-xs font-bold ${testResult.ping.success ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>Ping / ICMP</div>
@@ -1684,7 +1682,7 @@ export default function OltManagement() {
                         {testResult.snmp && (
                           <div className={`rounded-lg p-3 border flex items-start space-x-2.5 ${testResult.snmp.success ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800'}`}>
                             <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold ${testResult.snmp.success ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                              {testResult.snmp.success ? '✓' : '✕'}
+                              {testResult.snmp.success ? "✓" : "✕"}
                             </div>
                             <div>
                               <div className={`text-xs font-bold ${testResult.snmp.success ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>Query SNMP (sysDescr)</div>
@@ -1737,7 +1735,7 @@ export default function OltManagement() {
                   onClick={handleTestConnection}
                   disabled={testingConnection}
                   className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 disabled:opacity-50">
-                  {testingConnection ? <><Spinner /><span>Menguji SNMP...</span></> : <><span>⚡ Uji &amp; Terapkan SNMP</span></>}
+                  {testingConnection ? <><Spinner /><span>Menguji SNMP...</span></> : <><span>Uji &amp; Terapkan SNMP</span></>}
                 </button>
               </div>
             </div>
@@ -2134,11 +2132,11 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-900 text-white">
           <div>
             <h3 className="text-base font-bold flex items-center gap-2">
-              <span>📶 Telemetri Redaman Optik (SNMP)</span>
+              <span>Telemetri Redaman Optik (SNMP)</span>
             </h3>
             <p className="text-xs text-slate-300 font-mono mt-0.5">{onu.customer_name} · {onu.serial_number}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg flex items-center justify-center"><IconX /></button>
         </div>
 
         <div className="p-6 space-y-5">
@@ -2163,7 +2161,7 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
                 <div className="text-xs font-bold uppercase tracking-wider">Rx Optical Power (ONU)</div>
                 <div className="text-3xl font-black font-mono">{rx} dBm</div>
                 <div className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-white/80 dark:bg-black/40 shadow-2xs">
-                  {isGood ? '🟢 Kualitas Redaman Baik' : isWarning ? '🟡 Redaman Waspada' : '🔴 Redaman Buruk / Kritis'}
+                  {isGood ? 'Kualitas Redaman Baik' : isWarning ? 'Redaman Waspada' : 'Redaman Buruk / Kritis'}
                 </div>
               </div>
 
@@ -2214,7 +2212,7 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
 
               {/* Diagnosis Advice */}
               <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
-                <div className="font-bold text-slate-800 dark:text-slate-200">💡 Analisa &amp; Rekomendasi Jaringan:</div>
+                <div className="font-bold text-slate-800 dark:text-slate-200">Analisa &amp; Rekomendasi Jaringan:</div>
                 <p className="text-slate-600 dark:text-slate-400">
                   {isGood
                     ? 'Redaman optik sangat baik (antara -15 hingga -24 dBm). Layanan internet berjalan optimal tanpa packet loss optik.'
@@ -2233,7 +2231,7 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
             disabled={loading}
             className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-xs"
           >
-            {loading ? <Spinner /> : <span>🔄 Polling Ulang SNMP</span>}
+            {loading ? <Spinner /> : <span>Polling Ulang SNMP</span>}
           </button>
           <button
             onClick={onClose}
@@ -2293,11 +2291,11 @@ function SnmpDiagnosticModal({ activeOlt, onClose }) {
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-900 text-white">
           <div>
             <h3 className="text-base font-bold flex items-center gap-2">
-              <span>📡 Diagnostic SNMP &amp; MIB OID Explorer</span>
+              <span>Diagnostic SNMP &amp; MIB OID Explorer</span>
             </h3>
             <p className="text-xs text-slate-300 font-mono mt-0.5">{activeOlt.name} ({activeOlt.ip_address})</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg flex items-center justify-center"><IconX /></button>
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto flex-1">
@@ -2356,7 +2354,7 @@ function SnmpDiagnosticModal({ activeOlt, onClose }) {
               disabled={loading}
               className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {loading ? <><Spinner /><span>Sedang Menjalankan Query SNMP...</span></> : <span>⚡ Jalankan Query SNMP ke {activeOlt.ip_address}</span>}
+              {loading ? <><Spinner /><span>Sedang Menjalankan Query SNMP...</span></> : <span>Jalankan Query SNMP ke {activeOlt.ip_address}</span>}
             </button>
           </form>
 
@@ -2485,12 +2483,12 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
             >
               {copiedSnmp ? (
                 <>
-                  <span className="text-emerald-500 font-bold">✓</span>
+                  <span className="text-emerald-500 font-bold"></span>
                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Tersalin!</span>
                 </>
               ) : (
                 <>
-                  <span>📋</span>
+                  <span></span>
                   <span>Copy</span>
                 </>
               )}
@@ -2548,12 +2546,12 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
             >
               {copiedVpn ? (
                 <>
-                  <span className="text-emerald-500 font-bold">✓</span>
+                  <span className="text-emerald-500 font-bold"></span>
                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Tersalin!</span>
                 </>
               ) : (
                 <>
-                  <span>📋</span>
+                  <span></span>
                   <span>Copy</span>
                 </>
               )}
