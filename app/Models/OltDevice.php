@@ -18,7 +18,7 @@ class OltDevice extends Model
         'snmp_port', 'snmp_timeout', 'snmp_retries',
         'cli_protocol', 'cli_username', 'cli_password', 'cli_port',
         'probe_agent_url', 'probe_agent_token',
-        'status', 'connection_mode', 'last_connected_at',
+        'status', 'connection_mode', 'polling_interval_seconds', 'last_connected_at',
         'last_ping_ms', 'last_telemetry_snapshot',
     ];
 

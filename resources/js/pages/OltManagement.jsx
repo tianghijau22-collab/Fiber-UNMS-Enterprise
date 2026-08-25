@@ -180,7 +180,7 @@ export default function OltManagement() {
     deployment_mode: 'vpn',
     // SNMP
     snmp_version: 'v2c',
-    snmp_community_type: 'public',
+    snmp_community_type: 'public', polling_interval_seconds: 60,
     snmp_community: '',
     snmp_port: 161,
     snmp_timeout: 3,
@@ -193,6 +193,7 @@ export default function OltManagement() {
     // Probe Agent
     probe_agent_url: '',
     probe_agent_token: '',
+    polling_interval_seconds: 60,
   };
   const [configForm, setConfigForm] = useState(defaultConfigForm);
 
@@ -201,7 +202,7 @@ export default function OltManagement() {
     name: '', code: '', vendor: 'ZTE', model: 'ZXAN C300',
     location: '', ip_address: '', total_ports: 16,
     deployment_mode: 'vpn', snmp_version: 'v2c',
-    snmp_community_type: 'public', snmp_community: '',
+    snmp_community_type: 'public', snmp_community: '', polling_interval_seconds: 60,
   };
   const [newOltForm, setNewOltForm] = useState(defaultNewOltForm);
 
@@ -283,6 +284,7 @@ export default function OltManagement() {
         snmp_port: activeOlt.snmp_port || 161,
         snmp_timeout: activeOlt.snmp_timeout || 3,
         probe_agent_url: activeOlt.probe_agent_url || '',
+        polling_interval_seconds: activeOlt.polling_interval_seconds || 60,
       });
     } else {
       setLoading(false);
@@ -313,6 +315,8 @@ export default function OltManagement() {
         snmp_timeout: configForm.snmp_timeout,
         probe_agent_url: configForm.probe_agent_url || undefined,
         probe_agent_token: configForm.probe_agent_token || undefined,
+        polling_interval_seconds: configForm.polling_interval_seconds || 60,
+        polling_interval_seconds: configForm.polling_interval_seconds || 60,
       }),
     })
       .then(r => r.json())
@@ -407,6 +411,7 @@ export default function OltManagement() {
       ip_address: olt.ip_address || '',
       total_ports: olt.total_ports || 16,
       deployment_mode: olt.deployment_mode || 'vpn',
+      polling_interval_seconds: olt.polling_interval_seconds || 60,
       snmp_version: olt.snmp_version || 'v2c',
       snmp_community_type: olt.snmp_community_type || 'public',
     });
@@ -2374,20 +2379,50 @@ export default function OltManagement() {
                     </div>
                   )}
 
-                  {/* Tuning SNMP Port & Timeout */}
-                  <div className="grid grid-cols-2 gap-3 pt-2">
+                  {/* Tuning SNMP Port, Timeout & Polling Interval */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                     <div>
                       <label className={labelCls}>Port UDP SNMP</label>
                       <input type="number" value={configForm.snmp_port}
-                        onChange={e => setConfigForm({ ...configForm, snmp_port: parseInt(e.target.value) })}
+                        onChange={e => setConfigForm({ ...configForm, snmp_port: parseInt(e.target.value) || 161 })}
                         className={inputCls} />
                     </div>
                     <div>
-                      <label className={labelCls}>Timeout Polling (detik)</label>
+                      <label className={labelCls}>Timeout (detik)</label>
                       <input type="number" value={configForm.snmp_timeout}
-                        onChange={e => setConfigForm({ ...configForm, snmp_timeout: parseInt(e.target.value) })}
+                        onChange={e => setConfigForm({ ...configForm, snmp_timeout: parseInt(e.target.value) || 3 })}
                         className={inputCls} />
                     </div>
+                    <div>
+                      <label className={labelCls}>Interval Polling (detik)</label>
+                      <input type="number" value={configForm.polling_interval_seconds || 60}
+                        onChange={e => setConfigForm({ ...configForm, polling_interval_seconds: parseInt(e.target.value) || 60 })}
+                        className={inputCls} />
+                    </div>
+                  </div>
+
+                  {/* Quick Presets for Polling Interval */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-1">Preset Rekomendasi:</span>
+                    {[
+                      { label: '⚡ 30s (Cepat / <200 ONU)', val: 30 },
+                      { label: '⏱️ 60s (Standar)', val: 60 },
+                      { label: '🛡️ 120s (Aman ZTE C300 / 2000 ONU)', val: 120 },
+                      { label: '🐢 300s (5 Menit)', val: 300 },
+                    ].map((pr) => (
+                      <button
+                        key={pr.val}
+                        type="button"
+                        onClick={() => setConfigForm({ ...configForm, polling_interval_seconds: pr.val })}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                          (configForm.polling_interval_seconds || 60) === pr.val
+                            ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-800 shadow-2xs'
+                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {pr.label}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Quick Copy Scripts for OLT SNMP */}

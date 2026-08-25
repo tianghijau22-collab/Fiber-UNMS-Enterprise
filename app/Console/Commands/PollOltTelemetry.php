@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 
 class PollOltTelemetry extends Command
 {
-    protected $signature = 'olt:poll-telemetry {--device= : Specific OLT Device ID to poll}';
+    protected $signature = 'olt:poll-telemetry {--device= : Specific OLT Device ID to poll} {--force : Force polling regardless of interval}';
     protected $description = 'Polls live telemetry from active OLTs via SNMP and stores snapshot in database';
 
     public function handle(OltController $oltCtrl)
@@ -27,7 +27,19 @@ class PollOltTelemetry extends Command
         }
 
         foreach ($devices as $device) {
-            $this->info("Polling OLT: {$device->name} ({$device->ip_address}:{$device->snmp_port}) Mode: {$device->connection_mode}...");
+            $interval = $device->polling_interval_seconds ?: 60;
+            $force = $this->option('force');
+
+            // Cek apakah sudah saatnya di-poll berdasarkan interval masing-masing perangkat
+            if (!$force && $device->last_connected_at) {
+                $secondsSinceLast = now()->diffInSeconds($device->last_connected_at);
+                if ($secondsSinceLast < ($interval - 5)) {
+                    $this->info("Skipping {$device->name}: last polled {$secondsSinceLast}s ago (configured interval: {$interval}s).");
+                    continue;
+                }
+            }
+
+            $this->info("Polling OLT: {$device->name} ({$device->ip_address}:{$device->snmp_port}) Mode: {$device->connection_mode} Interval: {$interval}s...");
 
             try {
                 $driver = $oltCtrl->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);

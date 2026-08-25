@@ -84,6 +84,7 @@ class OltDeviceController extends Controller
             // Probe
             'probe_agent_url'   => 'nullable|url',
             'probe_agent_token' => 'nullable|string',
+            'polling_interval_seconds' => 'nullable|integer|min:10|max:3600',
         ]);
 
         $device = OltDevice::create([
@@ -117,6 +118,7 @@ class OltDeviceController extends Controller
             'probe_agent_token' => $validated['probe_agent_token'] ?? null,
             'status'            => 'active',
             'connection_mode'   => 'simulation',
+            'polling_interval_seconds' => $validated['polling_interval_seconds'] ?? 60,
         ]);
 
         AuditLog::record(
@@ -222,6 +224,7 @@ class OltDeviceController extends Controller
             'cli_port'             => 'nullable|integer',
             'probe_agent_url'      => 'nullable|url',
             'probe_agent_token'    => 'nullable|string',
+            'polling_interval_seconds' => 'nullable|integer|min:10|max:3600',
         ]);
 
         $updateData = [

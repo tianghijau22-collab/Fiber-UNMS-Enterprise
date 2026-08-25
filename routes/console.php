@@ -11,7 +11,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // ─── Polling Otomatis Telemetri OLT & Snapshot Database (Setiap 1 Menit) ────────
-Schedule::command('olt:poll-telemetry')->everyMinute()->withoutOverlapping()->name('olt:background-poll-telemetry');
+Schedule::command('olt:poll-telemetry')->everyThirtySeconds()->withoutOverlapping()->name('olt:background-poll-telemetry');
 
 // ─── Schedule Sync Health & Auto-Recovery OLT (Setiap 5 Menit) ────────────
 Schedule::call(function () {
