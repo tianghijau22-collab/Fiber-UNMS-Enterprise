@@ -102,10 +102,9 @@ class NetworkNodeResource extends JsonResource
             return $this->_cachedClientRxPowers = ['powers' => [], 'total' => 0, 'has_loss' => false];
         }
 
-        // Single optimized JOIN query
+        // Single optimized direct JOIN query
         $onts = DB::table('ont_registrations')
-            ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
-            ->join('network_ports', 'network_ports.id', '=', 'customer_services.network_port_id')
+            ->join('network_ports', 'network_ports.customer_service_id', '=', 'ont_registrations.customer_service_id')
             ->where('network_ports.node_id', $this->id)
             ->select('ont_registrations.status', 'ont_registrations.rx_power')
             ->get();
