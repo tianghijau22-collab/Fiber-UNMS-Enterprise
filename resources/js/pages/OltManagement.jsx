@@ -549,6 +549,14 @@ export default function OltManagement() {
   });
 
   // ─── Filtered Unregistered ONUs (Fisik di OLT tapi belum di UNMS) ───────────
+  const [tableSectionTab, setTableSectionTab] = useState('registered'); // 'registered' | 'unregistered' | 'orphaned'
+
+  const [orphanedSearchQuery, setOrphanedSearchQuery] = useState('');
+  const [orphanedPage, setOrphanedPage] = useState(1);
+  const orphanedPerPage = 10;
+  const [selectedOrphanedIds, setSelectedOrphanedIds] = useState([]);
+  const [isDeletingOrphaned, setIsDeletingOrphaned] = useState(false);
+
   const [unregisteredSearchQuery, setUnregisteredSearchQuery] = useState('');
   const [unregisteredPage, setUnregisteredPage] = useState(1);
   const unregisteredPerPage = 10;
@@ -582,6 +590,115 @@ export default function OltManagement() {
     (registeredPage - 1) * registeredPerPage,
     registeredPage * registeredPerPage
   );
+
+  const filteredOrphanedOnus = (oltData?.orphaned_onus || []).filter(onu => {
+    if (selectedPortFilter && onu.olt_port !== selectedPortFilter && !onu.olt_port.startsWith(selectedPortFilter)) {
+      return false;
+    }
+    if (orphanedSearchQuery) {
+      const q = orphanedSearchQuery.toLowerCase();
+      const matchName = onu.customer_name?.toLowerCase().includes(q);
+      const matchSn = (onu.onu_serial || onu.onu_mac)?.toLowerCase().includes(q);
+      const matchCode = onu.customer_number?.toLowerCase().includes(q);
+      const matchOdp = onu.odp_name?.toLowerCase().includes(q);
+      const matchPort = onu.olt_port?.toLowerCase().includes(q);
+      return matchName || matchSn || matchCode || matchOdp || matchPort;
+    }
+    return true;
+  });
+
+  const totalOrphanedPages = Math.max(1, Math.ceil(filteredOrphanedOnus.length / orphanedPerPage));
+  const paginatedOrphanedOnus = filteredOrphanedOnus.slice(
+    (orphanedPage - 1) * orphanedPerPage,
+    orphanedPage * orphanedPerPage
+  );
+
+  const handleDeleteOrphaned = (onu) => {
+    openConfirm({
+      title: 'Pembersihan Data Modem Terputus',
+      message: `Apakah Anda yakin ingin menghapus data ONU ${onu.onu_serial || onu.onu_mac} milik "${onu.customer_name}" dari database UNMS? Tindakan ini akan otomatis membebaskan port ${onu.odp_name} (${onu.odp_port}) agar dapat digunakan kembali oleh pelanggan baru.`,
+      confirmLabel: 'Ya, Hapus Data',
+      variant: 'danger',
+      onConfirm: () => {
+        setIsDeletingOrphaned(true);
+        fetch(`/api/olt/orphaned-onus/${onu.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+          }
+        })
+          .then(res => res.json())
+          .then(data => {
+            closeConfirm();
+            setIsDeletingOrphaned(false);
+            if (data.success) {
+              showNotif(data.message || 'Data berhasil dibersihkan dari UNMS.', 'success');
+              setOltData(prev => ({
+                ...prev,
+                orphaned_onus: (prev.orphaned_onus || []).filter(o => o.id !== onu.id),
+              }));
+              setSelectedOrphanedIds(prev => prev.filter(id => id !== onu.id));
+            } else {
+              showNotif(data.message || 'Gagal menghapus data.', 'error');
+            }
+          })
+          .catch(() => {
+            closeConfirm();
+            setIsDeletingOrphaned(false);
+            showNotif('Terjadi kesalahan jaringan saat menghapus data.', 'error');
+          });
+      }
+    });
+  };
+
+  const handleBulkDeleteOrphaned = (targetIds = null) => {
+    const idsToDelete = targetIds || selectedOrphanedIds;
+    if (!idsToDelete.length) {
+      showNotif('Pilih setidaknya satu data untuk dibersihkan.', 'error');
+      return;
+    }
+
+    openConfirm({
+      title: `Pembersihan Masal (${idsToDelete.length} Data)`,
+      message: `Apakah Anda yakin ingin menghapus ${idsToDelete.length} data ONU terputus yang dipilih dari database UNMS? Seluruh port ODP terkait akan otomatis dibebaskan kembali.`,
+      confirmLabel: `Ya, Bersihkan ${idsToDelete.length} Data`,
+      variant: 'danger',
+      onConfirm: () => {
+        setIsDeletingOrphaned(true);
+        fetch('/api/olt/orphaned-onus/bulk-delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+          },
+          body: JSON.stringify({ ids: idsToDelete }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            closeConfirm();
+            setIsDeletingOrphaned(false);
+            if (data.success) {
+              showNotif(data.message || 'Pembersihan masal berhasil dilakukan.', 'success');
+              setOltData(prev => ({
+                ...prev,
+                orphaned_onus: (prev.orphaned_onus || []).filter(o => !idsToDelete.includes(o.id)),
+              }));
+              setSelectedOrphanedIds([]);
+            } else {
+              showNotif(data.message || 'Gagal melakukan pembersihan masal.', 'error');
+            }
+          })
+          .catch(() => {
+            closeConfirm();
+            setIsDeletingOrphaned(false);
+            showNotif('Terjadi kesalahan koneksi saat pembersihan masal.', 'error');
+          });
+      }
+    });
+  };
 
   // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
@@ -1158,576 +1275,647 @@ export default function OltManagement() {
           )}
 
           {/* ══════════════════════════════════════════════════════════════════
-              TABEL 1: ONU FISIK TERDETEKSI DI OLT (BELUM TERDAFTAR)
+              NAVIGASI TAB KATEGORI ONU & AUDIT DATA TERPUTUS
           ══════════════════════════════════════════════════════════════════ */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden space-y-0">
-            {/* Header & Filter Bar */}
-            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900 dark:text-white text-lg">
-                      ONU Fisik Terdeteksi di OLT (Belum Terdaftar)
-                    </h3>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60">
-                      {oltData.unconfigured_onus?.length ?? 0} Menunggu Registrasi
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                    Menampilkan {filteredUnregisteredOnus.length} dari total {oltData.unconfigured_onus?.length ?? 0} modem fisik yang tersambung ke port PON OLT namun belum diregistrasikan ke data pelanggan UNMS
-                  </p>
-                </div>
-                <div className="flex items-center space-x-3">
-                  {selectedPortFilter && (
-                    <button
-                      onClick={() => { setSelectedPortFilter(null); setUnregisteredPage(1); }}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center space-x-1"
-                    >
-                      <IconX />
-                      <span>Tampilkan Semua Port ({oltData.unconfigured_onus?.length ?? 0})</span>
-                    </button>
-                  )}
-                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                    Live Physical OLT Discovery
-                  </span>
-                </div>
-              </div>
-
-              {/* Search Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                <div className="relative flex-1 max-w-md">
-                  <input
-                    type="text"
-                    value={unregisteredSearchQuery}
-                    onChange={e => { setUnregisteredSearchQuery(e.target.value); setUnregisteredPage(1); }}
-                    placeholder="Cari MAC Address, Serial Number, Nama OLT, atau Port..."
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  />
-                  {unregisteredSearchQuery && (
-                    <button onClick={() => { setUnregisteredSearchQuery(''); setUnregisteredPage(1); }} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold">✕</button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 overflow-x-auto">
-                  <span className="text-xs font-bold text-slate-600 dark:text-slate-400 mr-1">Status:</span>
-                  <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                    Semua ({filteredUnregisteredOnus.length})
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Desktop Table View (hidden on mobile md:block) */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-700 dark:text-slate-300 tracking-wider">
-                  <tr>
-                    <th className="px-5 py-3.5">#</th>
-                    <th className="px-5 py-3.5">Nama Perangkat di OLT</th>
-                    <th className="px-5 py-3.5">Port &amp; ONU ID</th>
-                    <th className="px-5 py-3.5">MAC Address / SN</th>
-                    <th className="px-5 py-3.5">Status</th>
-                    <th className="px-5 py-3.5">Redaman Rx Power</th>
-                    <th className="px-5 py-3.5">Tipe / Model</th>
-                    <th className="px-5 py-3.5">Waktu Terdaftar</th>
-                    <th className="px-5 py-3.5 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {paginatedUnregisteredOnus.length > 0 ? (
-                    paginatedUnregisteredOnus.map((onu, idx) => {
-                      const globalIndex = (unregisteredPage - 1) * unregisteredPerPage + idx + 1;
-                      const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
-                      return (
-                        <tr key={onu.serial_number || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                          <td className="px-5 py-3.5 font-mono text-xs text-slate-400 font-semibold">{globalIndex}</td>
-                          <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">
-                            {onu.onu_name || 'ONU Tanpa Nama'}
-                          </td>
-                          <td className="px-5 py-3.5 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
-                            {onu.detected_port} ({onu.onu_index || onu.onu_id})
-                          </td>
-                          <td className="px-5 py-3.5 font-mono text-xs text-slate-700 dark:text-slate-400">
-                            {onu.mac_address || onu.serial_number}
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${onu.status === 'Online'
-                              ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                              : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                              }`}>
-                              {onu.status || 'Online'}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3.5 font-mono text-xs font-bold">
-                            {isOffline ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                Loss (-∞ dBm)
-                              </span>
-                            ) : onu.rx_power < -27 ? (
-                              <span className="text-rose-600 dark:text-rose-400 font-bold">
-                                {onu.rx_power} dBm
-                              </span>
-                            ) : onu.rx_power < -24 ? (
-                              <span className="text-amber-600 dark:text-amber-400 font-bold">
-                                {onu.rx_power} dBm
-                              </span>
-                            ) : (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                {onu.rx_power} dBm
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400 text-xs">
-                            {onu.vendor_model || 'HGU EPON'}
-                          </td>
-                          <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400 text-xs">
-                            {onu.register_time || onu.detected_at || 'Baru Saja'}
-                          </td>
-                          <td className="px-5 py-3.5 text-right space-x-2">
-                            <button
-                              onClick={() => setSelectedOnuForOptical({
-                                ...onu,
-                                customer_name: onu.onu_name || 'ONU Belum Terdaftar',
-                                port: onu.detected_port,
-                              })}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
-                              title="Query live optical diagnostic data via SNMP"
-                            >
-                              <span>Cek Power (SNMP)</span>
-                            </button>
-                            <a
-                              href={`/customers?new=1&onu_sn=${encodeURIComponent(onu.serial_number || onu.mac_address)}&port=${encodeURIComponent(onu.detected_port || '')}&onu_name=${encodeURIComponent(onu.onu_name || '')}`}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
-                            >
-                              <span>Registrasikan</span>
-                            </a>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={9} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
-                        Semua ONU fisik pada OLT sudah terdaftar di Fiber UNMS.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile Cards View (block on mobile md:hidden) */}
-            <div className="block md:hidden p-4 space-y-4">
-              {paginatedUnregisteredOnus.length > 0 ? (
-                paginatedUnregisteredOnus.map((onu, idx) => {
-                  const globalIndex = (unregisteredPage - 1) * unregisteredPerPage + idx + 1;
-                  const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
-                  return (
-                    <div key={onu.serial_number || idx} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-                      <div className="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
-                        {/* Row 1: # Index */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-slate-50/70 dark:bg-slate-800/40">
-                          <span className="text-slate-400 font-semibold">#</span>
-                          <span className="col-span-2 font-mono font-bold text-slate-800 dark:text-slate-200">{globalIndex}</span>
-                        </div>
-
-                        {/* Row 2: Nama ONU */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Nama ONU</span>
-                          <span className="col-span-2 font-bold text-slate-900 dark:text-white uppercase">
-                            {onu.onu_name || 'ONU Tanpa Nama'}
-                          </span>
-                        </div>
-
-                        {/* Row 3: Port & ONU ID */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Port &amp; ID</span>
-                          <span className="col-span-2 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                            {onu.detected_port} ({onu.onu_index || onu.onu_id})
-                          </span>
-                        </div>
-
-                        {/* Row 4: MAC / SN */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">MAC / SN</span>
-                          <span className="col-span-2 font-mono text-slate-700 dark:text-slate-300">
-                            {onu.mac_address || onu.serial_number}
-                          </span>
-                        </div>
-
-                        {/* Row 5: Status */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Status</span>
-                          <span className="col-span-2">
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${onu.status === 'Online'
-                              ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                              : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                              }`}>
-                              {onu.status || 'Online'}
-                            </span>
-                          </span>
-                        </div>
-
-                        {/* Row 6: Redaman Rx */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Redaman Rx</span>
-                          <span className="col-span-2 font-mono font-bold">
-                            {isOffline ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                Loss (-∞ dBm)
-                              </span>
-                            ) : onu.rx_power < -27 ? (
-                              <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
-                            ) : onu.rx_power < -24 ? (
-                              <span className="text-amber-600 dark:text-amber-400 font-bold">{onu.rx_power} dBm</span>
-                            ) : (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onu.rx_power} dBm</span>
-                            )}
-                          </span>
-                        </div>
-
-                        {/* Row 7: Model & Waktu */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Tipe / Model</span>
-                          <span className="col-span-2 text-slate-700 dark:text-slate-300">
-                            {onu.vendor_model || 'HGU EPON'} · <span className="text-[11px] text-slate-400">{onu.register_time || onu.detected_at || 'Baru Saja'}</span>
-                          </span>
-                        </div>
-
-                        {/* Row 8: Aksi */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-3 items-center bg-slate-50/50 dark:bg-slate-800/20">
-                          <span className="text-slate-400 font-semibold">Aksi</span>
-                          <div className="col-span-2 flex items-center gap-2">
-                            <button
-                              onClick={() => setSelectedOnuForOptical({
-                                ...onu,
-                                customer_name: onu.onu_name || 'ONU Belum Terdaftar',
-                                port: onu.detected_port,
-                              })}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-xs hover:bg-indigo-100"
-                            >
-                              Cek Power
-                            </button>
-                            <a
-                              href={`/customers?new=1&onu_sn=${encodeURIComponent(onu.serial_number || onu.mac_address)}&port=${encodeURIComponent(onu.detected_port || '')}&onu_name=${encodeURIComponent(onu.onu_name || '')}`}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
-                            >
-                              Registrasikan
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="p-6 text-center text-slate-400 text-xs">
-                  Semua ONU fisik pada OLT sudah terdaftar di Fiber UNMS.
-                </div>
-              )}
-            </div>
-
-            {/* Table 1 Pagination Bar */}
-            <div className="p-4 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <span className="text-slate-500 font-medium">
-                Menampilkan data <span className="font-bold text-slate-800 dark:text-slate-200">{(unregisteredPage - 1) * unregisteredPerPage + 1}</span> - <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min(unregisteredPage * unregisteredPerPage, filteredUnregisteredOnus.length)}</span> dari total <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredUnregisteredOnus.length}</span> modem fisik
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setUnregisteredPage(p => Math.max(1, p - 1))}
-                  disabled={unregisteredPage === 1}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
-                >
-                  ← Sebelumnya
-                </button>
-                <span className="px-2 font-bold text-slate-800 dark:text-slate-200">
-                  Halaman {unregisteredPage} dari {totalUnregisteredPages}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2 shadow-xs flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Tab 1: Semua ONU Terdaftar */}
+              <button
+                onClick={() => setTableSectionTab('registered')}
+                className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 ${
+                  tableSectionTab === 'registered'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span>Daftar Semua ONU Terdaftar</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  tableSectionTab === 'registered'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                }`}>
+                  {oltData.onu_list?.length ?? 0}
                 </span>
-                <button
-                  onClick={() => setUnregisteredPage(p => Math.min(totalUnregisteredPages, p + 1))}
-                  disabled={unregisteredPage === totalUnregisteredPages}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
-                >
-                  Berikutnya →
-                </button>
-              </div>
+              </button>
+
+              {/* Tab 2: ONU Fisik Terdeteksi */}
+              <button
+                onClick={() => setTableSectionTab('unregistered')}
+                className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 ${
+                  tableSectionTab === 'unregistered'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span>ONU Fisik Terdeteksi (Belum Terdaftar)</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  tableSectionTab === 'unregistered'
+                    ? 'bg-white/20 text-white'
+                    : (oltData.unconfigured_onus?.length > 0
+                        ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300')
+                }`}>
+                  {oltData.unconfigured_onus?.length ?? 0}
+                </span>
+              </button>
+
+              {/* Tab 3: Data Terputus / Tidak di OLT (Decommissioned) */}
+              <button
+                onClick={() => setTableSectionTab('orphaned')}
+                className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 ${
+                  tableSectionTab === 'orphaned'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200/60 dark:border-rose-900/40'
+                }`}
+              >
+                <span>Data Terputus / Tidak di OLT</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  tableSectionTab === 'orphaned'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                }`}>
+                  {oltData.orphaned_onus?.length ?? 0} Perlu Pembersihan
+                </span>
+              </button>
+            </div>
+
+            <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-3 py-1">
+              {tableSectionTab === 'orphaned' ? 'Modus Audit Sinkronisasi OLT' : 'Monitoring Telemetri OLT'}
             </div>
           </div>
 
           {/* ══════════════════════════════════════════════════════════════════
-              TABEL 2: DAFTAR SEMUA ONU TERDAFTAR (REGISTERED)
+              TABEL 1: ONU FISIK TERDETEKSI DI OLT (BELUM TERDAFTAR)
           ══════════════════════════════════════════════════════════════════ */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden space-y-0">
-            {/* Header & Filter Bar */}
-            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-lg">
-                    {selectedPortFilter
-                      ? `Daftar ONU Filtered Port [ ${selectedPortFilter} ]`
-                      : `Daftar Semua ONU Terdaftar — ${activeOlt?.name}`}
-                  </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                    Menampilkan {filteredOnus.length} dari total {oltData.onu_list?.length ?? 0} ONU terdaftar
-                  </p>
+          {tableSectionTab === 'unregistered' && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden space-y-0 animate-in fade-in duration-150">
+              {/* Header & Filter Bar */}
+              <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-slate-900 dark:text-white text-lg">
+                        ONU Fisik Terdeteksi di OLT (Belum Terdaftar)
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60">
+                        {oltData.unconfigured_onus?.length ?? 0} Menunggu Registrasi
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                      Menampilkan {filteredUnregisteredOnus.length} dari total {oltData.unconfigured_onus?.length ?? 0} modem fisik yang tersambung ke port PON OLT namun belum diregistrasikan ke data pelanggan UNMS
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    {selectedPortFilter && (
+                      <button
+                        onClick={() => { setSelectedPortFilter(null); setUnregisteredPage(1); }}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center space-x-1"
+                      >
+                        <IconX />
+                        <span>Tampilkan Semua Port ({oltData.unconfigured_onus?.length ?? 0})</span>
+                      </button>
+                    )}
+                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                      Live Physical OLT Discovery
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-3">
-                  {selectedPortFilter && (
-                    <button
-                      onClick={() => { setSelectedPortFilter(null); setRegisteredPage(1); }}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center space-x-1"
-                    >
-                      <IconX />
-                      <span>Tampilkan Semua Port ({oltData.onu_list?.length ?? 0})</span>
-                    </button>
-                  )}
-                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-                    {oltData.device_info?._source === 'live_snmp' ? 'Live SNMP Telemetry' : 'Realtime Database UNMS'}
-                  </span>
+
+                {/* Search Bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                  <div className="relative flex-1 max-w-md">
+                    <input
+                      type="text"
+                      value={unregisteredSearchQuery}
+                      onChange={e => { setUnregisteredSearchQuery(e.target.value); setUnregisteredPage(1); }}
+                      placeholder="Cari MAC Address, Serial Number, Nama OLT, atau Port..."
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    />
+                    {unregisteredSearchQuery && (
+                      <button onClick={() => { setUnregisteredSearchQuery(''); setUnregisteredPage(1); }} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-400 mr-1">Status:</span>
+                    <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      Semua ({filteredUnregisteredOnus.length})
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Search Bar & Filters */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                <div className="relative flex-1 max-w-md">
-                  <input
-                    type="text"
-                    value={onuSearchQuery}
-                    onChange={e => { setOnuSearchQuery(e.target.value); setRegisteredPage(1); }}
-                    placeholder="Cari Pelanggan, Serial Number (SN), Port, atau IP..."
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  />
-                  {onuSearchQuery && (
-                    <button onClick={() => { setOnuSearchQuery(''); setRegisteredPage(1); }} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold">✕</button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 overflow-x-auto">
-                  {[
-                    { id: 'all', label: 'Semua Status' },
-                    { id: 'online', label: 'Online' },
-                    { id: 'los', label: 'LOS / Offline' },
-                    { id: 'high_loss', label: 'Redaman Drop (< -27 dBm)' },
-                  ].map(f => (
-                    <button
-                      key={f.id}
-                      onClick={() => { setOnuStatusFilter(f.id); setRegisteredPage(1); }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${onuStatusFilter === f.id
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                        }`}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Desktop Table View (hidden on mobile md:block) */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-700 dark:text-slate-300 tracking-wider">
-                  <tr>
-                    <th className="px-5 py-3.5">#</th>
-                    <th className="px-5 py-3.5">Nama Pelanggan</th>
-                    <th className="px-5 py-3.5">Port &amp; ONU ID</th>
-                    <th className="px-5 py-3.5">Serial Number</th>
-                    <th className="px-5 py-3.5">Status</th>
-                    <th className="px-5 py-3.5">Redaman Rx Power</th>
-                    <th className="px-5 py-3.5">Jarak Fiber</th>
-                    <th className="px-5 py-3.5">IP Address</th>
-                    <th className="px-5 py-3.5 text-right">Aksi Telemetri</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {paginatedRegisteredOnus.length > 0 ? (
-                    paginatedRegisteredOnus.map((onu, idx) => {
-                      const globalIndex = (registeredPage - 1) * registeredPerPage + idx + 1;
-                      const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
-                      return (
-                        <tr key={onu.serial_number || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                          <td className="px-5 py-3.5 font-mono text-xs text-slate-400 font-semibold">{globalIndex}</td>
-                          <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">{onu.customer_name}</td>
-                          <td className="px-5 py-3.5 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{onu.port} ({onu.onu_id})</td>
-                          <td className="px-5 py-3.5 font-mono text-xs text-slate-700 dark:text-slate-400">{onu.serial_number}</td>
-                          <td className="px-5 py-3.5">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${onu.status === 'Online'
-                              ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                              : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 animate-pulse'
-                              }`}>{onu.status}</span>
-                          </td>
-                          <td className="px-5 py-3.5 font-mono text-xs font-bold">
-                            {isOffline ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                Loss (-∞ dBm)
-                              </span>
-                            ) : onu.rx_power < -27 ? (
-                              <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
-                            ) : onu.rx_power < -24 ? (
-                              <span className="text-amber-600 dark:text-amber-400 font-bold">{onu.rx_power} dBm</span>
-                            ) : (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onu.rx_power} dBm</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400 text-xs">{onu.distance_meters} m</td>
-                          <td className="px-5 py-3.5 font-mono text-xs text-slate-500 dark:text-slate-500">{maskIpAddress(onu.ip_address)}</td>
-                          <td className="px-5 py-3.5 text-right">
-                            <button
-                              onClick={() => setSelectedOnuForOptical(onu)}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
-                              title="Query live optical diagnostic data via SNMP"
-                            >
-                              <span>Cek Power (SNMP)</span>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
+              {/* Desktop Table View (hidden on mobile md:block) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-700 dark:text-slate-300 tracking-wider">
                     <tr>
-                      <td colSpan={9} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
-                        Tidak ada ONU yang cocok dengan kriteria pencarian/filter.
-                      </td>
+                      <th className="px-5 py-3.5">#</th>
+                      <th className="px-5 py-3.5">Nama Perangkat di OLT</th>
+                      <th className="px-5 py-3.5">Port &amp; ONU ID</th>
+                      <th className="px-5 py-3.5">MAC Address / SN</th>
+                      <th className="px-5 py-3.5">Status</th>
+                      <th className="px-5 py-3.5">Redaman Rx Power</th>
+                      <th className="px-5 py-3.5">Tipe / Model</th>
+                      <th className="px-5 py-3.5">Waktu Terdaftar</th>
+                      <th className="px-5 py-3.5 text-right">Aksi</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile Cards View (block on mobile md:hidden) */}
-            <div className="block md:hidden p-4 space-y-4">
-              {paginatedRegisteredOnus.length > 0 ? (
-                paginatedRegisteredOnus.map((onu, idx) => {
-                  const globalIndex = (registeredPage - 1) * registeredPerPage + idx + 1;
-                  const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
-                  return (
-                    <div key={onu.serial_number || idx} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-                      <div className="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
-                        {/* Row 1: # Index */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-slate-50/70 dark:bg-slate-800/40">
-                          <span className="text-slate-400 font-semibold">#</span>
-                          <span className="col-span-2 font-mono font-bold text-slate-800 dark:text-slate-200">{globalIndex}</span>
-                        </div>
-
-                        {/* Row 2: Nama Pelanggan */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Nama Pelanggan</span>
-                          <span className="col-span-2 font-bold text-slate-900 dark:text-white uppercase">
-                            {onu.customer_name}
-                          </span>
-                        </div>
-
-                        {/* Row 3: Port & ONU ID */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Port &amp; ID</span>
-                          <span className="col-span-2 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                            {onu.port} ({onu.onu_id})
-                          </span>
-                        </div>
-
-                        {/* Row 4: Serial Number */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Serial Number</span>
-                          <span className="col-span-2 font-mono text-slate-700 dark:text-slate-300">
-                            {onu.serial_number}
-                          </span>
-                        </div>
-
-                        {/* Row 5: Status */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Status</span>
-                          <span className="col-span-2">
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${onu.status === 'Online'
-                              ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                              : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 animate-pulse'
-                              }`}>
-                              {onu.status}
-                            </span>
-                          </span>
-                        </div>
-
-                        {/* Row 6: Redaman Rx */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Redaman Rx</span>
-                          <span className="col-span-2 font-mono font-bold">
-                            {isOffline ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                Loss (-∞ dBm)
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {paginatedUnregisteredOnus.length > 0 ? (
+                      paginatedUnregisteredOnus.map((onu, idx) => {
+                        const globalIndex = (unregisteredPage - 1) * unregisteredPerPage + idx + 1;
+                        const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
+                        return (
+                          <tr key={onu.serial_number || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                            <td className="px-5 py-3.5 font-mono text-xs text-slate-400 font-semibold">{globalIndex}</td>
+                            <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">
+                              {onu.onu_name || 'ONU Tanpa Nama'}
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
+                              {onu.detected_port} ({onu.onu_index || onu.onu_id})
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-xs text-slate-700 dark:text-slate-400">
+                              {onu.mac_address || onu.serial_number}
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${onu.status === 'Online'
+                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
+                                }`}>
+                                {onu.status || 'Online'}
                               </span>
-                            ) : onu.rx_power < -27 ? (
-                              <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
-                            ) : onu.rx_power < -24 ? (
-                              <span className="text-amber-600 dark:text-amber-400 font-bold">{onu.rx_power} dBm</span>
-                            ) : (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onu.rx_power} dBm</span>
-                            )}
-                          </span>
-                        </div>
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-xs font-bold">
+                              {isOffline ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                  Loss (-∞ dBm)
+                                </span>
+                              ) : onu.rx_power < -27 ? (
+                                <span className="text-rose-600 dark:text-rose-400 font-bold">
+                                  {onu.rx_power} dBm
+                                </span>
+                              ) : onu.rx_power < -24 ? (
+                                <span className="text-amber-600 dark:text-amber-400 font-bold">
+                                  {onu.rx_power} dBm
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                  {onu.rx_power} dBm
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400 text-xs">
+                              {onu.vendor_model || 'HGU EPON'}
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400 text-xs">
+                              {onu.register_time || onu.detected_at || 'Baru Saja'}
+                            </td>
+                            <td className="px-5 py-3.5 text-right space-x-2">
+                              <button
+                                onClick={() => setSelectedOnuForOptical({
+                                  ...onu,
+                                  customer_name: onu.onu_name || 'ONU Belum Terdaftar',
+                                  port: onu.detected_port,
+                                })}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
+                                title="Query live optical diagnostic data via SNMP"
+                              >
+                                <span>Cek Power (SNMP)</span>
+                              </button>
+                              <a
+                                href={`/customers?new=1&onu_sn=${encodeURIComponent(onu.serial_number || onu.mac_address)}&port=${encodeURIComponent(onu.detected_port || '')}&onu_name=${encodeURIComponent(onu.onu_name || '')}`}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
+                              >
+                                <span>Registrasikan</span>
+                              </a>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={9} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
+                          Semua ONU fisik pada OLT sudah terdaftar di Fiber UNMS.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-                        {/* Row 7: Jarak & IP */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                          <span className="text-slate-400 font-semibold">Jarak &amp; IP</span>
-                          <span className="col-span-2 text-slate-700 dark:text-slate-300">
-                            {onu.distance_meters} m · <span className="font-mono text-[11px] text-slate-500">{maskIpAddress(onu.ip_address)}</span>
-                          </span>
-                        </div>
+              {/* Mobile Cards View (block on mobile md:hidden) */}
+              <div className="block md:hidden p-4 space-y-4">
+                {paginatedUnregisteredOnus.length > 0 ? (
+                  paginatedUnregisteredOnus.map((onu, idx) => {
+                    const globalIndex = (unregisteredPage - 1) * unregisteredPerPage + idx + 1;
+                    const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
+                    return (
+                      <div key={onu.serial_number || idx} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+                        <div className="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
+                          {/* Row 1: # Index */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-slate-50/70 dark:bg-slate-800/40">
+                            <span className="text-slate-400 font-semibold">#</span>
+                            <span className="col-span-2 font-mono font-bold text-slate-800 dark:text-slate-200">{globalIndex}</span>
+                          </div>
 
-                        {/* Row 8: Aksi */}
-                        <div className="grid grid-cols-3 gap-2 px-4 py-3 items-center bg-slate-50/50 dark:bg-slate-800/20">
-                          <span className="text-slate-400 font-semibold">Aksi</span>
-                          <div className="col-span-2 flex items-center gap-2">
-                            <button
-                              onClick={() => setSelectedOnuForOptical(onu)}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-xs hover:bg-indigo-100"
-                            >
-                              Cek Power (SNMP)
-                            </button>
+                          {/* Row 2: Nama ONU */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Nama ONU</span>
+                            <span className="col-span-2 font-bold text-slate-900 dark:text-white uppercase">
+                              {onu.onu_name || 'ONU Tanpa Nama'}
+                            </span>
+                          </div>
+
+                          {/* Row 3: Port & ONU ID */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Port &amp; ID</span>
+                            <span className="col-span-2 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                              {onu.detected_port} ({onu.onu_index || onu.onu_id})
+                            </span>
+                          </div>
+
+                          {/* Row 4: MAC / SN */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">MAC / SN</span>
+                            <span className="col-span-2 font-mono text-slate-700 dark:text-slate-300">
+                              {onu.mac_address || onu.serial_number}
+                            </span>
+                          </div>
+
+                          {/* Row 5: Status */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Status</span>
+                            <span className="col-span-2">
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${onu.status === 'Online'
+                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
+                                }`}>
+                                {onu.status || 'Online'}
+                              </span>
+                            </span>
+                          </div>
+
+                          {/* Row 6: Redaman Rx */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Redaman Rx</span>
+                            <span className="col-span-2 font-mono font-bold">
+                              {isOffline ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                  Loss (-∞ dBm)
+                                </span>
+                              ) : onu.rx_power < -27 ? (
+                                <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
+                              ) : onu.rx_power < -24 ? (
+                                <span className="text-amber-600 dark:text-amber-400 font-bold">{onu.rx_power} dBm</span>
+                              ) : (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onu.rx_power} dBm</span>
+                              )}
+                            </span>
+                          </div>
+
+                          {/* Row 7: Model & Waktu */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Tipe / Model</span>
+                            <span className="col-span-2 text-slate-700 dark:text-slate-300">
+                              {onu.vendor_model || 'HGU EPON'} · <span className="text-[11px] text-slate-400">{onu.register_time || onu.detected_at || 'Baru Saja'}</span>
+                            </span>
+                          </div>
+
+                          {/* Row 8: Aksi */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-3 items-center bg-slate-50/50 dark:bg-slate-800/20">
+                            <span className="text-slate-400 font-semibold">Aksi</span>
+                            <div className="col-span-2 flex items-center gap-2">
+                              <button
+                                onClick={() => setSelectedOnuForOptical({
+                                  ...onu,
+                                  customer_name: onu.onu_name || 'ONU Belum Terdaftar',
+                                  port: onu.detected_port,
+                                })}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-xs hover:bg-indigo-100"
+                              >
+                                Cek Power
+                              </button>
+                              <a
+                                href={`/customers?new=1&onu_sn=${encodeURIComponent(onu.serial_number || onu.mac_address)}&port=${encodeURIComponent(onu.detected_port || '')}&onu_name=${encodeURIComponent(onu.onu_name || '')}`}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
+                              >
+                                Registrasikan
+                              </a>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="p-6 text-center text-slate-400 text-xs">
-                  Tidak ada ONU yang cocok dengan kriteria pencarian/filter.
-                </div>
-              )}
-            </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-6 text-center text-slate-400 text-xs">
+                    Semua ONU fisik pada OLT sudah terdaftar di Fiber UNMS.
+                  </div>
+                )}
+              </div>
 
-            {/* Table 2 Pagination Bar */}
-            <div className="p-4 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <span className="text-slate-500 font-medium">
-                Menampilkan data <span className="font-bold text-slate-800 dark:text-slate-200">{(registeredPage - 1) * registeredPerPage + 1}</span> - <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min(registeredPage * registeredPerPage, filteredOnus.length)}</span> dari total <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredOnus.length}</span> ONU terdaftar
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setRegisteredPage(p => Math.max(1, p - 1))}
-                  disabled={registeredPage === 1}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
-                >
-                  ← Sebelumnya
-                </button>
-                <span className="px-2 font-bold text-slate-800 dark:text-slate-200">
-                  Halaman {registeredPage} dari {totalRegisteredPages}
+              {/* Table 1 Pagination Bar */}
+              <div className="p-4 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <span className="text-slate-500 font-medium">
+                  Menampilkan data <span className="font-bold text-slate-800 dark:text-slate-200">{(unregisteredPage - 1) * unregisteredPerPage + 1}</span> - <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min(unregisteredPage * unregisteredPerPage, filteredUnregisteredOnus.length)}</span> dari total <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredUnregisteredOnus.length}</span> modem fisik
                 </span>
-                <button
-                  onClick={() => setRegisteredPage(p => Math.min(totalRegisteredPages, p + 1))}
-                  disabled={registeredPage === totalRegisteredPages}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
-                >
-                  Berikutnya →
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setUnregisteredPage(p => Math.max(1, p - 1))}
+                    disabled={unregisteredPage === 1}
+                    className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                  >
+                    ← Sebelumnya
+                  </button>
+                  <span className="px-2 font-bold text-slate-800 dark:text-slate-200">
+                    Halaman {unregisteredPage} dari {totalUnregisteredPages}
+                  </span>
+                  <button
+                    onClick={() => setUnregisteredPage(p => Math.min(totalUnregisteredPages, p + 1))}
+                    disabled={unregisteredPage === totalUnregisteredPages}
+                    className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                  >
+                    Berikutnya →
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════════
+              TABEL 2: DAFTAR SEMUA ONU TERDAFTAR (REGISTERED)
+          ══════════════════════════════════════════════════════════════════ */}
+          {tableSectionTab === 'registered' && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden space-y-0 animate-in fade-in duration-150">
+              {/* Header & Filter Bar */}
+              <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-lg">
+                      {selectedPortFilter
+                        ? `Daftar ONU Filtered Port [ ${selectedPortFilter} ]`
+                        : `Daftar Semua ONU Terdaftar — ${activeOlt?.name}`}
+                    </h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                      Menampilkan {filteredOnus.length} dari total {oltData.onu_list?.length ?? 0} ONU terdaftar
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    {selectedPortFilter && (
+                      <button
+                        onClick={() => { setSelectedPortFilter(null); setRegisteredPage(1); }}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center space-x-1"
+                      >
+                        <IconX />
+                        <span>Tampilkan Semua Port ({oltData.onu_list?.length ?? 0})</span>
+                      </button>
+                    )}
+                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                      {oltData.device_info?._source === 'live_snmp' ? 'Live SNMP Telemetry' : 'Realtime Database UNMS'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Search Bar & Filters */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                  <div className="relative flex-1 max-w-md">
+                    <input
+                      type="text"
+                      value={onuSearchQuery}
+                      onChange={e => { setOnuSearchQuery(e.target.value); setRegisteredPage(1); }}
+                      placeholder="Cari Pelanggan, Serial Number (SN), Port, atau IP..."
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    />
+                    {onuSearchQuery && (
+                      <button onClick={() => { setOnuSearchQuery(''); setRegisteredPage(1); }} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                    {[
+                      { id: 'all', label: 'Semua Status' },
+                      { id: 'online', label: 'Online' },
+                      { id: 'los', label: 'LOS / Offline' },
+                      { id: 'high_loss', label: 'Redaman Drop (< -27 dBm)' },
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => { setOnuStatusFilter(f.id); setRegisteredPage(1); }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${onuStatusFilter === f.id
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Desktop Table View (hidden on mobile md:block) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-700 dark:text-slate-300 tracking-wider">
+                    <tr>
+                      <th className="px-5 py-3.5">#</th>
+                      <th className="px-5 py-3.5">Nama Pelanggan</th>
+                      <th className="px-5 py-3.5">Port &amp; ONU ID</th>
+                      <th className="px-5 py-3.5">Serial Number</th>
+                      <th className="px-5 py-3.5">Status</th>
+                      <th className="px-5 py-3.5">Redaman Rx Power</th>
+                      <th className="px-5 py-3.5">Jarak Fiber</th>
+                      <th className="px-5 py-3.5">IP Address</th>
+                      <th className="px-5 py-3.5 text-right">Aksi Telemetri</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {paginatedRegisteredOnus.length > 0 ? (
+                      paginatedRegisteredOnus.map((onu, idx) => {
+                        const globalIndex = (registeredPage - 1) * registeredPerPage + idx + 1;
+                        const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
+                        return (
+                          <tr key={onu.serial_number || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                            <td className="px-5 py-3.5 font-mono text-xs text-slate-400 font-semibold">{globalIndex}</td>
+                            <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">{onu.customer_name}</td>
+                            <td className="px-5 py-3.5 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{onu.port} ({onu.onu_id})</td>
+                            <td className="px-5 py-3.5 font-mono text-xs text-slate-700 dark:text-slate-400">{onu.serial_number}</td>
+                            <td className="px-5 py-3.5">
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${onu.status === 'Online'
+                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 animate-pulse'
+                                }`}>{onu.status}</span>
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-xs font-bold">
+                              {isOffline ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                  Loss (-∞ dBm)
+                                </span>
+                              ) : onu.rx_power < -27 ? (
+                                <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
+                              ) : onu.rx_power < -24 ? (
+                                <span className="text-amber-600 dark:text-amber-400 font-bold">{onu.rx_power} dBm</span>
+                              ) : (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onu.rx_power} dBm</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400 text-xs">{onu.distance_meters} m</td>
+                            <td className="px-5 py-3.5 font-mono text-xs text-slate-500 dark:text-slate-500">{maskIpAddress(onu.ip_address)}</td>
+                            <td className="px-5 py-3.5 text-right">
+                              <button
+                                onClick={() => setSelectedOnuForOptical(onu)}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
+                                title="Query live optical diagnostic data via SNMP"
+                              >
+                                <span>Cek Power (SNMP)</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={9} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
+                          Tidak ada ONU yang cocok dengan kriteria pencarian/filter.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View (block on mobile md:hidden) */}
+              <div className="block md:hidden p-4 space-y-4">
+                {paginatedRegisteredOnus.length > 0 ? (
+                  paginatedRegisteredOnus.map((onu, idx) => {
+                    const globalIndex = (registeredPage - 1) * registeredPerPage + idx + 1;
+                    const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
+                    return (
+                      <div key={onu.serial_number || idx} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+                        <div className="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
+                          {/* Row 1: # Index */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-slate-50/70 dark:bg-slate-800/40">
+                            <span className="text-slate-400 font-semibold">#</span>
+                            <span className="col-span-2 font-mono font-bold text-slate-800 dark:text-slate-200">{globalIndex}</span>
+                          </div>
+
+                          {/* Row 2: Nama Pelanggan */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Nama Pelanggan</span>
+                            <span className="col-span-2 font-bold text-slate-900 dark:text-white uppercase">
+                              {onu.customer_name}
+                            </span>
+                          </div>
+
+                          {/* Row 3: Port & ONU ID */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Port &amp; ID</span>
+                            <span className="col-span-2 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                              {onu.port} ({onu.onu_id})
+                            </span>
+                          </div>
+
+                          {/* Row 4: Serial Number */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Serial Number</span>
+                            <span className="col-span-2 font-mono text-slate-700 dark:text-slate-300">
+                              {onu.serial_number}
+                            </span>
+                          </div>
+
+                          {/* Row 5: Status */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Status</span>
+                            <span className="col-span-2">
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${onu.status === 'Online'
+                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 animate-pulse'
+                                }`}>
+                                {onu.status}
+                              </span>
+                            </span>
+                          </div>
+
+                          {/* Row 6: Redaman Rx */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Redaman Rx</span>
+                            <span className="col-span-2 font-mono font-bold">
+                              {isOffline ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                  Loss (-∞ dBm)
+                                </span>
+                              ) : onu.rx_power < -27 ? (
+                                <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
+                              ) : onu.rx_power < -24 ? (
+                                <span className="text-amber-600 dark:text-amber-400 font-bold">{onu.rx_power} dBm</span>
+                              ) : (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onu.rx_power} dBm</span>
+                              )}
+                            </span>
+                          </div>
+
+                          {/* Row 7: Jarak & IP */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Jarak &amp; IP</span>
+                            <span className="col-span-2 text-slate-700 dark:text-slate-300">
+                              {onu.distance_meters} m · <span className="font-mono text-[11px] text-slate-500">{maskIpAddress(onu.ip_address)}</span>
+                            </span>
+                          </div>
+
+                          {/* Row 8: Aksi */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-3 items-center bg-slate-50/50 dark:bg-slate-800/20">
+                            <span className="text-slate-400 font-semibold">Aksi</span>
+                            <div className="col-span-2 flex items-center gap-2">
+                              <button
+                                onClick={() => setSelectedOnuForOptical(onu)}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-xs hover:bg-indigo-100"
+                              >
+                                Cek Power (SNMP)
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-6 text-center text-slate-400 text-xs">
+                    Tidak ada ONU yang cocok dengan kriteria pencarian/filter.
+                  </div>
+                )}
+              </div>
+
+              {/* Table 2 Pagination Bar */}
+              <div className="p-4 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <span className="text-slate-500 font-medium">
+                  Menampilkan data <span className="font-bold text-slate-800 dark:text-slate-200">{(registeredPage - 1) * registeredPerPage + 1}</span> - <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min(registeredPage * registeredPerPage, filteredOnus.length)}</span> dari total <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredOnus.length}</span> ONU terdaftar
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setRegisteredPage(p => Math.max(1, p - 1))}
+                    disabled={registeredPage === 1}
+                    className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                  >
+                    ← Sebelumnya
+                  </button>
+                  <span className="px-2 font-bold text-slate-800 dark:text-slate-200">
+                    Halaman {registeredPage} dari {totalRegisteredPages}
+                  </span>
+                  <button
+                    onClick={() => setRegisteredPage(p => Math.min(totalRegisteredPages, p + 1))}
+                    disabled={registeredPage === totalRegisteredPages}
+                    className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                  >
+                    Berikutnya →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          MODAL: Konfigurasi Koneksi SNMP OLT (Pure SNMP — No CLI)
-      ══════════════════════════════════════════════════════════════════════ */}
       {showConfigModal && createPortal(
         <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
           <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">

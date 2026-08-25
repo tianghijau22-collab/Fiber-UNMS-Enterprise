@@ -83,6 +83,9 @@ class OltController extends Controller
         // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh, sajikan INSTAN dari database (< 5ms)
         if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
             $snapshot = $device->last_telemetry_snapshot;
+            if (!isset($snapshot['orphaned_onus'])) {
+                $snapshot['orphaned_onus'] = $this->computeOrphanedOnus($device, $snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
+            }
             return response()->json($snapshot);
         }
 
@@ -93,12 +96,14 @@ class OltController extends Controller
         $driverPonPorts   = $driver->getPonPorts();
         $driverOnuList    = $driver->getOnuList();
         $driverUncfg      = $driver->getUnconfiguredOnus();
+        $driverOrphaned   = $this->computeOrphanedOnus($device, $driverOnuList, $driverUncfg);
 
         $snapshot = [
             'device_info'       => $driverDeviceInfo,
             'pon_ports'         => $driverPonPorts,
             'onu_list'          => $driverOnuList,
             'unconfigured_onus' => $driverUncfg,
+            'orphaned_onus'     => $driverOrphaned,
             'polled_at'         => now()->toIso8601String(),
         ];
 
@@ -258,5 +263,194 @@ class OltController extends Controller
         $driver   = $this->getDriver($vendor, $deviceId);
 
         return response()->json($driver->getOnuOpticalPower($serialNumber));
+    }
+
+    /**
+     * Hitung daftar ONU di database UNMS yang sudah tidak ditemukan lagi pada OLT fisik
+     */
+    public function computeOrphanedOnus(?OltDevice $device, array $activeOnuList = [], array $activeUncfg = []): array
+    {
+        // Kumpulkan semua serial number & MAC yang AKTIF atau terdeteksi di OLT
+        $activeSerials = collect($activeOnuList)
+            ->pluck('serial_number')
+            ->merge(collect($activeUncfg)->pluck('serial_number'))
+            ->merge(collect($activeUncfg)->pluck('mac_address'))
+            ->filter()
+            ->map(fn($s) => strtoupper(trim((string)$s)))
+            ->unique()
+            ->values();
+
+        // Ambil data registrasi ONT di database UNMS
+        $query = OntRegistration::with([
+            'customerService.customer',
+            'customerService.networkPort.node',
+            'oltPort.node'
+        ]);
+
+        if ($device) {
+            $query->whereHas('customerService.networkPort.node', function ($q) use ($device) {
+                $q->where('olt_device_id', $device->id);
+            });
+        }
+
+        $dbOnts = $query->get();
+        $orphaned = [];
+
+        foreach ($dbOnts as $reg) {
+            $sn  = strtoupper(trim((string)$reg->onu_serial));
+            $mac = strtoupper(trim((string)$reg->onu_mac));
+
+            // Jika SN atau MAC tidak ditemukan di OLT fisik sama sekali
+            $isFoundOnOlt = false;
+            if (!empty($sn) && $activeSerials->contains($sn)) {
+                $isFoundOnOlt = true;
+            }
+            if (!empty($mac) && $activeSerials->contains($mac)) {
+                $isFoundOnOlt = true;
+            }
+
+            if (!$isFoundOnOlt) {
+                $customerName = $reg->customerService?->customer?->name ?: ('Pelanggan #' . $reg->id);
+                $customerCode = $reg->customerService?->customer?->customer_number ?: ('CUST-' . $reg->id);
+                $customerId   = $reg->customerService?->customer?->id;
+                $serviceId    = $reg->customerService?->id;
+                $node         = $reg->customerService?->networkPort?->node ?: $reg->oltPort?->node;
+                $portNumber   = $reg->customerService?->networkPort?->port_number;
+                $oltName      = $device?->name ?: ($node?->oltDevice?->name ?: 'OLT Utama');
+                $oltPortRef   = $node?->olt_port_ref ?: 'epon_0/1';
+
+                $orphaned[] = [
+                    'id'                  => $reg->id,
+                    'customer_id'         => $customerId,
+                    'customer_name'       => $customerName,
+                    'customer_number'     => $customerCode,
+                    'service_id'          => $serviceId,
+                    'onu_serial'          => $reg->onu_serial,
+                    'onu_mac'             => $reg->onu_mac,
+                    'onu_type'            => $reg->onu_type ?: 'HGU EPON/GPON',
+                    'odp_name'            => $node?->name ?: 'ODP Tidak Diketahui',
+                    'odp_port'            => $portNumber ? "Port {$portNumber}" : '—',
+                    'olt_name'            => $oltName,
+                    'olt_port'            => $oltPortRef,
+                    'registered_at'       => $reg->registered_at?->format('d M Y H:i') ?: ($reg->created_at?->format('d M Y H:i') ?: '—'),
+                    'last_online_at'      => $reg->last_online_at?->format('d M Y H:i') ?: 'Tidak Pernah Online',
+                    'unms_status'         => $reg->status ?: 'inactive',
+                    'orphan_reason'       => 'Tidak Ditemukan di OLT (Telah Dihapus dari Perangkat OLT / Putus Berlangganan)',
+                ];
+            }
+        }
+
+        return $orphaned;
+    }
+
+    public function getOrphanedOnus(Request $request)
+    {
+        $deviceId = $request->query('device_id');
+        $device   = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
+        $snapshot = $device?->last_telemetry_snapshot;
+
+        $orphaned = $this->computeOrphanedOnus($device, $snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
+
+        return response()->json([
+            'success'       => true,
+            'orphaned_onus' => $orphaned,
+            'total'         => count($orphaned),
+        ]);
+    }
+
+    public function deleteOrphanedOnu(Request $request, $id)
+    {
+        $reg = OntRegistration::with(['customerService.networkPort', 'customerService.customer'])->findOrFail($id);
+        $sn = $reg->onu_serial ?: $reg->onu_mac;
+        $custName = $reg->customerService?->customer?->name ?: "Pelanggan #{$reg->id}";
+
+        DB::transaction(function () use ($reg, $sn, $custName) {
+            // 1. Bebaskan port ODP jika ada
+            if ($reg->customerService && $reg->customerService->networkPort) {
+                $reg->customerService->networkPort->update([
+                    'status' => 'available',
+                    'customer_service_id' => null,
+                ]);
+            }
+
+            // 2. Putus kaitan pada customer service
+            if ($reg->customerService) {
+                $reg->customerService->update([
+                    'status' => 'terminated',
+                    'notes' => trim(($reg->customerService->notes ?? '') . ' [Data ONU dibersihkan dari OLT/UNMS pada ' . now()->format('d/m/Y H:i') . ']'),
+                ]);
+            }
+
+            // 3. Hapus record OntRegistration
+            $reg->delete();
+
+            // 4. Catat ke AuditLog
+            AuditLog::record(
+                'PEMBERSIHAN_DATA',
+                'Manajemen OLT & Inventaris',
+                "Pembersihan Data: Menghapus data ONU terputus {$sn} milik {$custName} dari UNMS dan membebaskan port ODP terkait.",
+                auth()->user()?->id,
+                ['onu_serial' => $sn, 'customer_name' => $custName]
+            );
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => "Data ONU {$sn} milik {$custName} berhasil dibersihkan dari sistem UNMS dan port ODP telah dibebaskan.",
+        ]);
+    }
+
+    public function bulkDeleteOrphanedOnus(Request $request)
+    {
+        $request->validate([
+            'ids' => 'required|array',
+            'ids.*' => 'integer',
+        ]);
+
+        $ids = $request->input('ids', []);
+        if (empty($ids)) {
+            return response()->json(['success' => false, 'message' => 'Tidak ada data yang dipilih.'], 400);
+        }
+
+        $regs = OntRegistration::with(['customerService.networkPort', 'customerService.customer'])->whereIn('id', $ids)->get();
+        $deletedCount = 0;
+
+        DB::transaction(function () use ($regs, &$deletedCount) {
+            foreach ($regs as $reg) {
+                $sn = $reg->onu_serial ?: $reg->onu_mac;
+                $custName = $reg->customerService?->customer?->name ?: "Pelanggan #{$reg->id}";
+
+                // Bebaskan port ODP
+                if ($reg->customerService && $reg->customerService->networkPort) {
+                    $reg->customerService->networkPort->update([
+                        'status' => 'available',
+                        'customer_service_id' => null,
+                    ]);
+                }
+
+                if ($reg->customerService) {
+                    $reg->customerService->update([
+                        'status' => 'terminated',
+                    ]);
+                }
+
+                $reg->delete();
+                $deletedCount++;
+            }
+
+            AuditLog::record(
+                'PEMBERSIHAN_DATA_MASAL',
+                'Manajemen OLT & Inventaris',
+                "Pembersihan Masal: Menghapus {$deletedCount} data ONU terputus dari UNMS.",
+                auth()->user()?->id,
+                ['count' => $deletedCount]
+            );
+        });
+
+        return response()->json([
+            'success' => true,
+            'deleted_count' => $deletedCount,
+            'message' => "Berhasil membersihkan {$deletedCount} data ONU terputus dari UNMS. Seluruh port ODP terkait telah dibebaskan.",
+        ]);
     }
 }
