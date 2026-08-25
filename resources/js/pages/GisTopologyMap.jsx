@@ -3,28 +3,46 @@ import { useSearchParams } from 'react-router-dom';
 import { decimalToDms } from '../utils/coordinateParser.js';
 
 /* ══════════════════════════════════════════════════════════════════
-   PEKAT & VIVID COLOR DICTIONARY FOR INFRASTRUCTURE NODES
+   HIGH-CONTRAST VIVID COLOR PALETTE FOR NETWORK INFRASTRUCTURE
 ══════════════════════════════════════════════════════════════════ */
 const TYPE_META = {
-  POP: { label: 'POP Central', bg: 'bg-indigo-950/80 text-indigo-300 border-indigo-800', color: '#3730a3', ring: '#6366f1', size: 22 },
-  ODC: { label: 'ODC Cabinet', bg: 'bg-blue-950/80 text-blue-300 border-blue-800', color: '#1d4ed8', ring: '#3b82f6', size: 19 },
-  ODP: { label: 'ODP Point', bg: 'bg-emerald-950/80 text-emerald-300 border-emerald-800', color: '#047857', ring: '#10b981', size: 15 },
+  POP: {
+    label: 'POP Central',
+    bg: 'bg-violet-950/90 text-violet-300 border-violet-700',
+    color: '#7c3aed',
+    glow: 'rgba(124, 58, 237, 0.65)',
+    size: 24,
+  },
+  ODC: {
+    label: 'ODC Cabinet',
+    bg: 'bg-blue-950/90 text-blue-300 border-blue-700',
+    color: '#2563eb',
+    glow: 'rgba(37, 99, 235, 0.65)',
+    size: 20,
+  },
+  ODP: {
+    label: 'ODP Point',
+    bg: 'bg-emerald-950/90 text-emerald-300 border-emerald-700',
+    color: '#059669',
+    glow: 'rgba(16, 185, 129, 0.65)',
+    size: 16,
+  },
 };
 
 const STATUS_META = {
-  active: { label: 'Aktif Normal', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-800', dot: 'bg-emerald-500', color: '#047857' },
-  maintenance: { label: 'Maintenance', badge: 'bg-amber-950/80 text-amber-300 border-amber-800', dot: 'bg-amber-500', color: '#d97706' },
-  inactive: { label: 'Tidak Aktif', badge: 'bg-slate-800 text-slate-300 border-slate-700', dot: 'bg-slate-400', color: '#64748b' },
-  damaged: { label: 'Rusak / Putus Loss', badge: 'bg-rose-950/80 text-rose-300 border-rose-800', dot: 'bg-rose-600', color: '#881337' },
+  active: { label: 'Aktif Normal', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-800', color: '#10b981' },
+  maintenance: { label: 'Maintenance', badge: 'bg-amber-950/80 text-amber-300 border-amber-800', color: '#f59e0b' },
+  inactive: { label: 'Tidak Aktif', badge: 'bg-slate-800 text-slate-300 border-slate-700', color: '#64748b' },
+  damaged: { label: 'Rusak / Putus Loss', badge: 'bg-rose-950/80 text-rose-300 border-rose-800', color: '#ef4444' },
 };
 
 const getOpticalQuality = (dbm) => {
   if (dbm == null) return { label: '—', color: '#64748b', badge: 'bg-slate-800 text-slate-400' };
   const num = parseFloat(dbm);
-  if (num >= -23.9) return { label: 'Prima (Bagus)', color: '#10b981', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-800' };
-  if (num >= -25.9) return { label: 'Optimal', color: '#3b82f6', badge: 'bg-blue-950/80 text-blue-300 border-blue-800' };
-  if (num >= -27.5) return { label: 'Waspada (Tinggi)', color: '#f59e0b', badge: 'bg-amber-950/80 text-amber-300 border-amber-800' };
-  return { label: 'Kritis / Loss', color: '#ef4444', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' };
+  if (num >= -23.9) return { label: 'Prima (Bagus)', color: '#00ff88', glow: 'rgba(0,255,136,0.6)', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-800' };
+  if (num >= -25.9) return { label: 'Optimal', color: '#38bdf8', glow: 'rgba(56,189,248,0.6)', badge: 'bg-blue-950/80 text-blue-300 border-blue-800' };
+  if (num >= -27.5) return { label: 'Waspada (Tinggi)', color: '#fbbf24', glow: 'rgba(251,191,36,0.6)', badge: 'bg-amber-950/80 text-amber-300 border-amber-800' };
+  return { label: 'Kritis / Loss', color: '#ff0055', glow: 'rgba(255,0,85,0.8)', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' };
 };
 
 /* ══════════════════════════════════════════════════════════════════
@@ -87,7 +105,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
   const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
   const isLoss = node.status === 'damaged' || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')));
   const optMeta = isLoss 
-    ? { label: 'Loss / Kritis', color: '#ef4444', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' }
+    ? { label: 'Loss / Kritis', color: '#ff0055', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' }
     : getOpticalQuality(effectivePower);
   const p = node.total_ports > 0 ? Math.round((node.used_ports / node.total_ports) * 100) : 0;
 
@@ -106,8 +124,8 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
   };
 
   return (
-    <div className="absolute top-4 left-4 z-[999] w-84 sm:w-96 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 transition-all text-slate-800 dark:text-slate-100 max-h-[90vh] overflow-y-auto">
-      <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+    <div className="absolute top-4 left-4 z-[999] w-84 sm:w-96 bg-white/95 dark:bg-black/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200 dark:border-neutral-800 p-5 transition-all text-slate-800 dark:text-slate-100 max-h-[90vh] overflow-y-auto">
+      <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-neutral-800">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border ${typeMeta.bg}`}>
@@ -124,7 +142,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
         </div>
         <button
           onClick={onClose}
-          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all text-xs font-bold"
+          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all text-xs font-bold"
         >
           ✕
         </button>
@@ -133,7 +151,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
       <div className="mt-4 space-y-4 text-xs">
         {/* Optical Telemetry Signal Box */}
         {node.node_type === 'ODP' && (
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+          <div className="p-3.5 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800 space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Telemetry Redaman Rx</span>
               <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${optMeta.badge}`}>
@@ -157,14 +175,14 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
             Posisi Geografis GPS
           </span>
           {node.latitude && node.longitude ? (
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+            <div className="p-3 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                   Koordinat Desimal:
                 </span>
                 <button
                   onClick={handleCopyCoords}
-                  className="px-2 py-0.5 text-[10px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-700 dark:text-slate-300"
+                  className="px-2 py-0.5 text-[10px] font-bold bg-white dark:bg-black border border-slate-200 dark:border-neutral-700 rounded-lg hover:bg-slate-100 dark:hover:bg-neutral-800 transition-all text-slate-700 dark:text-slate-300"
                 >
                   {copied ? 'Tersalin!' : 'Salin'}
                 </button>
@@ -181,7 +199,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/60 dark:border-neutral-800">
                 <button
                   onClick={() => onOpenStreetView(node.latitude, node.longitude, node.name)}
                   className="py-2 px-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 shadow-xs transition-all text-center col-span-3 sm:col-span-1"
@@ -215,21 +233,21 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
 
         <div className="space-y-3">
           {node.total_ports > 0 && (
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
+            <div className="p-3 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-100 dark:border-neutral-800">
               <div className="flex justify-between items-center mb-1.5">
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Kapasitas Port</span>
                 <span className="font-bold text-slate-700 dark:text-slate-300">{node.used_ports}/{node.total_ports} Port ({p}%)</span>
               </div>
-              <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+              <div className="w-full bg-slate-200 dark:bg-neutral-800 h-2 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${p > 90 ? 'bg-rose-700' : p > 75 ? 'bg-amber-600' : 'bg-emerald-600'}`}
+                  className={`h-full rounded-full transition-all ${p > 90 ? 'bg-rose-600' : p > 75 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                   style={{ width: `${p}%` }}
                 />
               </div>
             </div>
           )}
 
-          <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+          <div className="p-3 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-100 dark:border-neutral-800 text-slate-700 dark:text-slate-300">
             <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">OLT &amp; Port Uplink</span>
             <p className="font-bold">{node.olt_device?.name || node.parent_node?.olt_device?.name || 'OLT Region'}</p>
             <p className="text-[11px] font-mono text-blue-600 dark:text-blue-400 font-semibold">{node.olt_port_ref || 'PON 1/1/1'}</p>
@@ -241,7 +259,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   FAST INTERACTIVE LEAFLET TOPOLOGY MAP (IDENTICAL PATTERN TO CABLE-ROUTES)
+   FAST INTERACTIVE LEAFLET TOPOLOGY MAP WITH LASER FLOW ANIMATION
 ══════════════════════════════════════════════════════════════════ */
 function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
   const mapRef = useRef(null);
@@ -253,7 +271,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isSatellite, setIsSatellite] = useState(true);
 
-  // 1. Initialize Map Instance (Smooth & Instant)
+  // 1. Initialize Map Instance with SVG Renderer
   useEffect(() => {
     if (mapInstanceRef.current) return;
 
@@ -276,6 +294,8 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
           zoom: 15,
           zoomControl: true,
           scrollWheelZoom: true,
+          preferCanvas: false,
+          renderer: Lf.svg(),
         });
 
         const satUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
@@ -349,7 +369,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
     }
   }, [nodes]);
 
-  // 4. Synchronously Render Markers & Connecting Lines via LayerGroup (Fast 0ms)
+  // 4. Synchronously Render Markers & Animated Fiber Laser Lines via LayerGroup
   useEffect(() => {
     if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current || !layersGroupRef.current) return;
     const Lf = leafletRef.current;
@@ -367,7 +387,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
 
     const bounds = [];
 
-    // Draw Cable Lines between Parent & Child
+    // Draw Glowing Animated Fiber Lines between Parent & Child
     nodes.forEach(node => {
       if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
 
@@ -386,7 +406,8 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
         const nLng = parseFloat(node.longitude);
 
         const isOdpLine = node.node_type === 'ODP';
-        let strokeColor = '#1d4ed8'; // Feeder Backbone (Biru)
+        let laserColor = '#06b6d4'; // Cyan Feeder
+        let ambientGlowColor = 'rgba(6, 182, 212, 0.4)';
 
         if (isOdpLine) {
           const bestPower = node.best_rx_power != null 
@@ -398,28 +419,45 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
             || (bestPower != null && bestPower <= -27.5);
 
           if (isLossLine) {
-            strokeColor = '#ef4444'; // Kritis Loss
+            laserColor = '#ff0055'; // Kritis Laser Red
+            ambientGlowColor = 'rgba(255, 0, 85, 0.45)';
           } else if (bestPower != null && bestPower <= -25.9) {
-            strokeColor = '#f59e0b'; // Waspada
+            laserColor = '#fbbf24'; // Waspada Gold
+            ambientGlowColor = 'rgba(251, 191, 36, 0.4)';
           } else if (bestPower != null && bestPower <= -23.9) {
-            strokeColor = '#3b82f6'; // Optimal
+            laserColor = '#38bdf8'; // Azure Sky
+            ambientGlowColor = 'rgba(56, 189, 248, 0.4)';
           } else if (bestPower != null && bestPower > -23.9) {
-            strokeColor = '#10b981'; // Bagus
+            laserColor = '#00ff88'; // Prima Neon Emerald
+            ambientGlowColor = 'rgba(0, 255, 136, 0.45)';
           } else {
-            strokeColor = '#059669';
+            laserColor = '#10b981';
+            ambientGlowColor = 'rgba(16, 185, 129, 0.4)';
           }
         }
 
-        Lf.polyline([[pLat, pLng], [nLat, nLng]], {
-          color: strokeColor,
-          weight: isOdpLine ? 4 : 5,
-          opacity: 0.9,
-          dashArray: '8, 6',
+        const lineCoords = [[pLat, pLng], [nLat, nLng]];
+
+        // 1. Ambient Glow Line (Outer Halo)
+        Lf.polyline(lineCoords, {
+          color: ambientGlowColor,
+          weight: isOdpLine ? 7 : 9,
+          opacity: 0.8,
+          lineCap: 'round',
+        }).addTo(layerGroup);
+
+        // 2. Core Animated Laser Pulse Flow Line
+        Lf.polyline(lineCoords, {
+          color: laserColor,
+          weight: isOdpLine ? 3.5 : 4.5,
+          opacity: 1,
+          dashArray: '14, 10',
+          className: 'animated-fiber-laser-flow',
         }).addTo(layerGroup);
       }
     });
 
-    // Draw Node Markers
+    // Draw Modern Ultra-Vivid Node Markers
     nodes.forEach(node => {
       if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
 
@@ -433,11 +471,28 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
       const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
       const isLossRange = node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS'));
       const optMeta = isLossRange 
-        ? { label: 'Loss / Kritis', color: '#ef4444' } 
+        ? { label: 'Loss / Kritis', color: '#ff0055', glow: 'rgba(255,0,85,0.8)' } 
         : getOpticalQuality(effectiveBestPower);
       const opticalDbmText = node.rx_power_range ? node.rx_power_range : (effectiveBestPower != null ? `${effectiveBestPower} dBm` : '—');
 
       const size = isSelected ? typeMeta.size + 4 : typeMeta.size;
+
+      // Icon Color Gradient & Glow Styling
+      let pinGradient = 'linear-gradient(135deg, #10b981, #059669)';
+      let pinShadow = '0 0 16px rgba(16, 185, 129, 0.75), 0 4px 10px rgba(0,0,0,0.6)';
+
+      if (node.node_type === 'POP') {
+        pinGradient = 'linear-gradient(135deg, #8b5cf6, #6366f1)';
+        pinShadow = '0 0 20px rgba(139, 92, 246, 0.85), 0 4px 10px rgba(0,0,0,0.6)';
+      } else if (node.node_type === 'ODC') {
+        pinGradient = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
+        pinShadow = '0 0 18px rgba(59, 130, 246, 0.85), 0 4px 10px rgba(0,0,0,0.6)';
+      }
+
+      if (isLossRange || node.status === 'damaged') {
+        pinGradient = 'linear-gradient(135deg, #f43f5e, #e11d48)';
+        pinShadow = '0 0 22px rgba(244, 63, 94, 0.95), 0 4px 10px rgba(0,0,0,0.6)';
+      }
 
       const icon = Lf.divIcon({
         className: `custom-gis-node-marker ${isSelected ? 'is-selected' : ''}`,
@@ -446,16 +501,16 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
             ${(isOdp && node.used_ports > 0 && (node.optical_power_dbm != null || node.rx_power_range != null)) ? `
               <div style="
                 background: ${optMeta.color};
-                color: #ffffff;
+                color: #000000;
                 font-weight: 900;
                 font-size: 11px;
-                padding: 3px 9px;
+                padding: 3px 10px;
                 border-radius: 9999px;
                 border: 2px solid #ffffff;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.65);
+                box-shadow: 0 0 14px ${optMeta.glow || 'rgba(0,0,0,0.5)'}, 0 4px 8px rgba(0,0,0,0.6);
                 white-space: nowrap;
                 margin-bottom: 4px;
-                font-family: monospace;
+                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
                 letter-spacing: -0.3px;
               ">
                 ${opticalDbmText}
@@ -465,9 +520,9 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
               width: ${size * 2}px;
               height: ${size * 2}px;
               border-radius: 50%;
-              background: ${typeMeta.color};
-              border: 3.5px solid #ffffff;
-              box-shadow: 0 5px 14px rgba(0,0,0,0.65);
+              background: ${pinGradient};
+              border: 3px solid #ffffff;
+              box-shadow: ${pinShadow};
               display: flex;
               align-items: center;
               justify-content: center;
@@ -479,16 +534,17 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
               ${node.node_type}
             </div>
             <div style="
-              background: rgba(15, 23, 42, 0.95);
+              background: rgba(0, 0, 0, 0.88);
+              backdrop-filter: blur(4px);
               color: #ffffff;
-              padding: 3px 8px;
+              padding: 3px 9px;
               border-radius: 7px;
               font-size: 11px;
               font-weight: 800;
               white-space: nowrap;
               margin-top: 4px;
-              border: 1.5px solid rgba(255,255,255,0.3);
-              box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+              border: 1.5px solid rgba(255,255,255,0.4);
+              box-shadow: 0 4px 10px rgba(0,0,0,0.6);
             ">
               ${node.name}
             </div>
@@ -519,6 +575,23 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
 
   return (
     <div className="relative w-full h-full">
+      {/* CSS Animation specifically for SVG Laser Line Movement */}
+      <style>{`
+        @keyframes fiberLaserPulseFlow {
+          0% {
+            stroke-dashoffset: 48;
+          }
+          100% {
+            stroke-dashoffset: 0;
+          }
+        }
+        .animated-fiber-laser-flow,
+        .leaflet-overlay-pane svg path.animated-fiber-laser-flow {
+          stroke-dasharray: 14 10 !important;
+          animation: fiberLaserPulseFlow 0.9s linear infinite !important;
+        }
+      `}</style>
+
       <div
         ref={mapRef}
         className="w-full rounded-2xl overflow-hidden shadow-inner relative z-0"
@@ -529,7 +602,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
       <div className="absolute top-4 right-4 z-[999] flex flex-wrap items-center justify-end gap-2">
         <button
           onClick={toggleMapMode}
-          className="px-3.5 py-2 bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-bold rounded-xl border border-slate-700 shadow-lg backdrop-blur-xs transition-all flex items-center gap-1.5"
+          className="px-3.5 py-2 bg-black/85 hover:bg-black text-white text-xs font-bold rounded-xl border border-neutral-700 shadow-xl backdrop-blur-md transition-all flex items-center gap-1.5"
         >
           <span>{isSatellite ? '🗺️ Mode Peta Vektor' : '🛰️ Mode Satelit High-Res'}</span>
         </button>
@@ -537,7 +610,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
         {selectedNode && selectedNode.latitude && selectedNode.longitude && (
           <button
             onClick={() => onOpenStreetView(selectedNode.latitude, selectedNode.longitude, selectedNode.name)}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all flex items-center gap-1.5"
+            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xl transition-all flex items-center gap-1.5"
           >
             <span>👁️ Street View 360°</span>
           </button>
@@ -546,7 +619,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
 
       <button
         onClick={handleRecenterMap}
-        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-bold rounded-xl border border-slate-700 shadow-lg backdrop-blur-xs flex items-center gap-1.5 transition-all"
+        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-black/85 hover:bg-black text-white text-xs font-bold rounded-xl border border-neutral-700 shadow-xl backdrop-blur-md flex items-center gap-1.5 transition-all"
         title="Pusatkan Peta ke Lokasi Node"
       >
         <span>Fokus Lokasi Node</span>
@@ -568,24 +641,24 @@ function GisStatCards({ nodes }) {
   const avgOdpDbm = odpOptValues.length > 0 ? (odpOptValues.reduce((a, b) => a + b, 0) / odpOptValues.length).toFixed(1) : '—';
 
   const cards = [
-    { label: 'POP Central', value: pops.length, sub: `${pops.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Core Headend' },
-    { label: 'ODC Cabinet', value: odcs.length, sub: `${odcs.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Distribution' },
-    { label: 'ODP Point', value: odps.length, sub: `${odps.filter(n => n.status === 'active').length} Total Point ODP`, badge: 'Access Terminal' },
-    { label: 'Rerata Redaman ODP', value: avgOdpDbm !== '—' ? `${avgOdpDbm} dBm` : '— dBm', sub: `${activeOdps.length} ODP Ada Pelanggan`, badge: 'Modem ONU' },
+    { label: 'POP Central', value: pops.length, sub: `${pops.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Core Headend', color: 'border-l-4 border-l-purple-500' },
+    { label: 'ODC Cabinet', value: odcs.length, sub: `${odcs.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Distribution', color: 'border-l-4 border-l-blue-500' },
+    { label: 'ODP Point', value: odps.length, sub: `${odps.filter(n => n.status === 'active').length} Total Point ODP`, badge: 'Access Terminal', color: 'border-l-4 border-l-emerald-500' },
+    { label: 'Rerata Redaman ODP', value: avgOdpDbm !== '—' ? `${avgOdpDbm} dBm` : '— dBm', sub: `${activeOdps.length} ODP Ada Pelanggan`, badge: 'Modem ONU', color: 'border-l-4 border-l-cyan-500' },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 stagger-enter">
       {cards.map((c, i) => (
-        <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 transition-colors duration-300">
+        <div key={i} className={`bg-white dark:bg-black rounded-2xl border border-slate-200 dark:border-neutral-800 shadow-2xs p-4 transition-colors duration-300 ${c.color}`}>
           <div className="flex justify-between items-start mb-1">
-            <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 leading-none">{c.value}</span>
-            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+            <span className="text-2xl font-black text-slate-900 dark:text-white leading-none">{c.value}</span>
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-300">
               {c.badge}
             </span>
           </div>
-          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1">{c.label}</p>
-          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{c.sub}</p>
+          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">{c.label}</p>
+          <p className="text-[10px] text-slate-400 dark:text-slate-400 mt-0.5 font-medium">{c.sub}</p>
         </div>
       ))}
     </div>
@@ -671,28 +744,34 @@ export default function GisTopologyMap() {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
+      <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 p-5 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
         <div>
-          <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
-            Peta POP-ODC-ODP
-          </h3>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight font-sans">
+              Peta Topologi GIS Spasial (POP-ODC-ODP)
+            </h3>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Monitoring transmisi optik, rute feeder FO, dan sebaran ODP secara real-time
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveView('map')}
             className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${activeView === 'map'
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+              : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
               }`}
           >
-            Peta GIS Widescreen
+            Peta GIS Interaktif
           </button>
           <button
             onClick={() => setActiveView('list')}
             className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${activeView === 'list'
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+              : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
               }`}
           >
             Tabel Telemetry Redaman
@@ -703,20 +782,20 @@ export default function GisTopologyMap() {
       <GisStatCards nodes={allNodes} />
 
       {/* Main Controls Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs transition-colors duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 p-4 rounded-2xl shadow-2xs transition-colors duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Cari nama node, lokasi..."
-            className="px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-64"
+            placeholder="Cari nama node, kode, lokasi..."
+            className="px-3.5 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64"
           />
 
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Semua Tipe Node</option>
             <option value="POP">POP Central</option>
@@ -727,7 +806,7 @@ export default function GisTopologyMap() {
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Semua Status</option>
             <option value="active">Aktif Normal</option>
@@ -742,7 +821,7 @@ export default function GisTopologyMap() {
             onClick={() => setLivePolling(!livePolling)}
             className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${livePolling
               ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-              : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+              : 'bg-slate-100 dark:bg-neutral-900 border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400'
               }`}
           >
             <span className={`w-2 h-2 rounded-full ${livePolling ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
@@ -753,11 +832,11 @@ export default function GisTopologyMap() {
 
       {/* Main Content Area */}
       {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center text-slate-400 dark:text-slate-500 text-xs animate-pulse">
+        <div className="bg-white dark:bg-black rounded-2xl border border-slate-200 dark:border-neutral-800 p-12 text-center text-slate-400 dark:text-slate-500 text-xs animate-pulse">
           Memuat topologi spasial GIS &amp; data redaman...
         </div>
       ) : activeView === 'map' ? (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden relative transition-colors duration-300 min-h-[580px]">
+        <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[620px]">
           <NodeDetailPanel
             node={selectedNode}
             onClose={() => setSelectedNode(null)}
@@ -773,11 +852,11 @@ export default function GisTopologyMap() {
         </div>
       ) : (
         /* Tabel Telemetry Redaman */
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden transition-colors duration-300">
+        <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden transition-colors duration-300">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50/50 dark:bg-neutral-950 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="px-5 py-3.5">Node &amp; Kode</th>
                   <th className="px-4 py-3.5">Tipe</th>
                   <th className="px-4 py-3.5">Status</th>
@@ -787,18 +866,18 @@ export default function GisTopologyMap() {
                   <th className="px-4 py-3.5 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
+              <tbody className="divide-y divide-slate-100 dark:divide-neutral-900 text-xs">
                 {filteredNodes.map(node => {
                   const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
                   const statusMeta = STATUS_META[node.status] ?? STATUS_META.active;
                   const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
                   const isLoss = node.status === 'damaged' || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')));
                   const optMeta = isLoss 
-                    ? { label: 'Loss / Kritis', color: '#ef4444', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' }
+                    ? { label: 'Loss / Kritis', color: '#ff0055', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' }
                     : getOpticalQuality(effectivePower);
 
                   return (
-                    <tr key={node.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <tr key={node.id} className="hover:bg-slate-50/60 dark:hover:bg-neutral-900/50 transition-colors">
                       <td className="px-5 py-3">
                         <span className="font-bold text-slate-800 dark:text-slate-200 block">{node.name}</span>
                         <span className="text-[10px] font-mono text-slate-400">{node.code}</span>
@@ -843,7 +922,7 @@ export default function GisTopologyMap() {
                             setSelectedNode(node);
                             setActiveView('map');
                           }}
-                          className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-all border border-indigo-200 dark:border-indigo-800"
+                          className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 rounded-lg text-xs font-bold transition-all border border-blue-200 dark:border-blue-800"
                         >
                           Lihat Peta
                         </button>
