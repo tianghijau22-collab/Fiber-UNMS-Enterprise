@@ -1913,6 +1913,317 @@ export default function OltManagement() {
               </div>
             </div>
           )}
+
+          {/* ══════════════════════════════════════════════════════════════════
+              TABEL 3: DATA TERPUTUS / TIDAK DI OLT (DECOMMISSIONED & ORPHANED)
+          ══════════════════════════════════════════════════════════════════ */}
+          {tableSectionTab === 'orphaned' && (
+            <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 rounded-2xl shadow-xs overflow-hidden space-y-0 animate-in fade-in duration-150">
+              {/* Header & Batch Actions Bar */}
+              <div className="p-5 sm:p-6 border-b border-rose-100 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/20 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-rose-950 dark:text-rose-200 text-lg">
+                        Data Pelanggan / ONU Terputus (Tidak Ditemukan di OLT)
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-600 text-white shadow-2xs">
+                        {oltData.orphaned_onus?.length ?? 0} Perlu Pembersihan
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-700/80 dark:text-rose-300/70 mt-0.5">
+                      Daftar modem yang terdaftar di database UNMS namun <strong>sudah tidak ada di OLT fisik</strong> (misal pelanggan berhenti berlangganan). Hapus data ini untuk membebaskan port ODP dan mencegah penumpukan data.
+                    </p>
+                  </div>
+
+                  {/* Batch Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {selectedOrphanedIds.length > 0 && (
+                      <button
+                        onClick={() => handleBulkDeleteOrphaned()}
+                        disabled={isDeletingOrphaned}
+                        className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <span>Hapus Terpilih ({selectedOrphanedIds.length})</span>
+                      </button>
+                    )}
+
+                    {filteredOrphanedOnus.length > 0 && (
+                      <button
+                        onClick={() => handleBulkDeleteOrphaned(filteredOrphanedOnus.map(o => o.id))}
+                        disabled={isDeletingOrphaned}
+                        className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <span>Bersihkan Semua ({filteredOrphanedOnus.length})</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Search Bar */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                  <div className="relative flex-1 max-w-md">
+                    <input
+                      type="text"
+                      value={orphanedSearchQuery}
+                      onChange={e => { setOrphanedSearchQuery(e.target.value); setOrphanedPage(1); }}
+                      placeholder="Cari Nama Pelanggan, Kode, Serial Number, atau ODP..."
+                      className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                    />
+                    {orphanedSearchQuery && (
+                      <button onClick={() => { setOrphanedSearchQuery(''); setOrphanedPage(1); }} className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (selectedOrphanedIds.length === paginatedOrphanedOnus.length) {
+                          setSelectedOrphanedIds([]);
+                        } else {
+                          setSelectedOrphanedIds(paginatedOrphanedOnus.map(o => o.id));
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-rose-300 dark:border-rose-800 text-xs font-bold text-rose-800 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950 transition-colors"
+                    >
+                      {selectedOrphanedIds.length === paginatedOrphanedOnus.length && paginatedOrphanedOnus.length > 0 ? 'Batalkan Pilihan' : 'Pilih Semua di Halaman Ini'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Desktop Table View (hidden on mobile md:block) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                  <thead className="bg-rose-100/50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-900/60 text-xs uppercase font-bold text-rose-900 dark:text-rose-300 tracking-wider">
+                    <tr>
+                      <th className="px-5 py-3.5 w-10">
+                        <input
+                          type="checkbox"
+                          checked={paginatedOrphanedOnus.length > 0 && paginatedOrphanedOnus.every(o => selectedOrphanedIds.includes(o.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const pageIds = paginatedOrphanedOnus.map(o => o.id);
+                              setSelectedOrphanedIds(prev => Array.from(new Set([...prev, ...pageIds])));
+                            } else {
+                              const pageIds = paginatedOrphanedOnus.map(o => o.id);
+                              setSelectedOrphanedIds(prev => prev.filter(id => !pageIds.includes(id)));
+                            }
+                          }}
+                          className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer"
+                        />
+                      </th>
+                      <th className="px-5 py-3.5">#</th>
+                      <th className="px-5 py-3.5">Nama Pelanggan / ID</th>
+                      <th className="px-5 py-3.5">ODP &amp; Port</th>
+                      <th className="px-5 py-3.5">Serial Number / MAC</th>
+                      <th className="px-5 py-3.5">Status &amp; Indikasi</th>
+                      <th className="px-5 py-3.5">Terakhir Terdaftar</th>
+                      <th className="px-5 py-3.5 text-right">Aksi Pembersihan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-rose-100/60 dark:divide-rose-950/40">
+                    {paginatedOrphanedOnus.length > 0 ? (
+                      paginatedOrphanedOnus.map((onu, idx) => {
+                        const globalIndex = (orphanedPage - 1) * orphanedPerPage + idx + 1;
+                        const isChecked = selectedOrphanedIds.includes(onu.id);
+                        return (
+                          <tr key={onu.id} className={`hover:bg-rose-50/50 dark:hover:bg-rose-950/30 transition-colors ${isChecked ? 'bg-rose-50/70 dark:bg-rose-950/50' : ''}`}>
+                            <td className="px-5 py-3.5">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  setSelectedOrphanedIds(prev =>
+                                    prev.includes(onu.id) ? prev.filter(id => id !== onu.id) : [...prev, onu.id]
+                                  );
+                                }}
+                                className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer"
+                              />
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-xs text-slate-400 font-semibold">{globalIndex}</td>
+                            <td className="px-5 py-3.5">
+                              <p className="font-bold text-slate-900 dark:text-white">{onu.customer_name}</p>
+                              <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-bold">
+                                {onu.customer_number}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <div className="space-y-0.5">
+                                <span className="px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                                  {onu.odp_name}
+                                </span>
+                                <p className="text-[11px] font-mono text-slate-500">{onu.odp_port}</p>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <div className="space-y-0.5">
+                                <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
+                                  {onu.onu_serial || '—'}
+                                </span>
+                                {onu.onu_mac && (
+                                  <p className="font-mono text-[10px] text-slate-500">MAC: {onu.onu_mac}</p>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                                Tidak Ditemukan di OLT (Terputus)
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 text-xs text-slate-600 dark:text-slate-400">
+                              {onu.registered_at}
+                            </td>
+                            <td className="px-5 py-3.5 text-right space-x-2">
+                              {onu.customer_id && (
+                                <a
+                                  href={`/customers?id=${onu.customer_id}`}
+                                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors inline-block"
+                                >
+                                  Pelanggan
+                                </a>
+                              )}
+                              <button
+                                onClick={() => handleDeleteOrphaned(onu)}
+                                className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors shadow-2xs"
+                                title="Hapus data ONU ini dan bebaskan port ODP"
+                              >
+                                Hapus dari UNMS
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-8 text-center text-emerald-600 dark:text-emerald-400 text-sm font-semibold">
+                          Bersih! Seluruh data ONU di database UNMS sinkron dengan perangkat OLT.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View (block on mobile md:hidden) */}
+              <div className="block md:hidden p-4 space-y-4">
+                {paginatedOrphanedOnus.length > 0 ? (
+                  paginatedOrphanedOnus.map((onu, idx) => {
+                    const globalIndex = (orphanedPage - 1) * orphanedPerPage + idx + 1;
+                    const isChecked = selectedOrphanedIds.includes(onu.id);
+                    return (
+                      <div key={onu.id} className={`bg-white dark:bg-slate-900 rounded-2xl border ${isChecked ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-rose-200 dark:border-rose-900/60'} shadow-xs overflow-hidden`}>
+                        <div className="divide-y divide-rose-100 dark:divide-rose-950/40 text-xs">
+                          {/* Row 1: Checkbox & # Index */}
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-rose-50/70 dark:bg-rose-950/40">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  setSelectedOrphanedIds(prev =>
+                                    prev.includes(onu.id) ? prev.filter(id => id !== onu.id) : [...prev, onu.id]
+                                  );
+                                }}
+                                className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-4 h-4"
+                              />
+                              <span className="font-bold text-rose-950 dark:text-rose-200">Pilih Data</span>
+                            </label>
+                            <span className="font-mono font-bold text-slate-500">#{globalIndex}</span>
+                          </div>
+
+                          {/* Row 2: Nama Pelanggan */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Pelanggan</span>
+                            <span className="col-span-2 font-bold text-slate-900 dark:text-white uppercase">
+                              {onu.customer_name} <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold block text-[11px]">{onu.customer_number}</span>
+                            </span>
+                          </div>
+
+                          {/* Row 3: ODP & Port */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">ODP &amp; Port</span>
+                            <span className="col-span-2 font-bold text-slate-800 dark:text-slate-200">
+                              {onu.odp_name} <span className="text-indigo-600 dark:text-indigo-400 font-mono">({onu.odp_port})</span>
+                            </span>
+                          </div>
+
+                          {/* Row 4: Serial Number */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Serial Number</span>
+                            <span className="col-span-2 font-mono font-bold text-slate-800 dark:text-slate-200">
+                              {onu.onu_serial || onu.onu_mac}
+                            </span>
+                          </div>
+
+                          {/* Row 5: Status Indikasi */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-slate-400 font-semibold">Indikasi</span>
+                            <span className="col-span-2">
+                              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                                Tidak di OLT (Terputus)
+                              </span>
+                            </span>
+                          </div>
+
+                          {/* Row 6: Aksi */}
+                          <div className="grid grid-cols-3 gap-2 px-4 py-3 items-center bg-rose-50/40 dark:bg-rose-950/20">
+                            <span className="text-slate-400 font-semibold">Aksi</span>
+                            <div className="col-span-2 flex items-center gap-2">
+                              {onu.customer_id && (
+                                <a
+                                  href={`/customers?id=${onu.customer_id}`}
+                                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs"
+                                >
+                                  Pelanggan
+                                </a>
+                              )}
+                              <button
+                                onClick={() => handleDeleteOrphaned(onu)}
+                                className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs"
+                              >
+                                Hapus dari UNMS
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-6 text-center text-emerald-600 text-xs font-bold">
+                    Bersih! Seluruh data ONU di database UNMS sinkron dengan perangkat OLT.
+                  </div>
+                )}
+              </div>
+
+              {/* Table 3 Pagination Bar */}
+              <div className="p-4 bg-rose-50/50 dark:bg-rose-950/30 border-t border-rose-200 dark:border-rose-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <span className="text-slate-500 font-medium">
+                  Menampilkan data <span className="font-bold text-slate-800 dark:text-slate-200">{(orphanedPage - 1) * orphanedPerPage + 1}</span> - <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min(orphanedPage * orphanedPerPage, filteredOrphanedOnus.length)}</span> dari total <span className="font-bold text-rose-600 dark:text-rose-400">{filteredOrphanedOnus.length}</span> data terputus
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setOrphanedPage(p => Math.max(1, p - 1))}
+                    disabled={orphanedPage === 1}
+                    className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                  >
+                    ← Sebelumnya
+                  </button>
+                  <span className="px-2 font-bold text-slate-800 dark:text-slate-200">
+                    Halaman {orphanedPage} dari {totalOrphanedPages}
+                  </span>
+                  <button
+                    onClick={() => setOrphanedPage(p => Math.min(totalOrphanedPages, p + 1))}
+                    disabled={orphanedPage === totalOrphanedPages}
+                    className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                  >
+                    Berikutnya →
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
