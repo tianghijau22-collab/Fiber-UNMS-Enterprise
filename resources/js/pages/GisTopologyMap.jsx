@@ -23,14 +23,12 @@ const getOpticalQuality = (dbm) => {
   const num = parseFloat(dbm);
   if (num >= -23.9) return { label: 'Prima (Bagus)', color: '#10b981', badge: 'bg-emerald-950/80 text-emerald-300 border-emerald-800' };
   if (num >= -25.9) return { label: 'Optimal', color: '#3b82f6', badge: 'bg-blue-950/80 text-blue-300 border-blue-800' };
-  if (num >= -27.4) return { label: 'Kurang Baik', color: '#f59e0b', badge: 'bg-amber-950/80 text-amber-300 border-amber-800' };
-  return { label: 'Kritis (Loss/Buruk)', color: '#ef4444', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' };
+  if (num >= -27.5) return { label: 'Waspada (Tinggi)', color: '#f59e0b', badge: 'bg-amber-950/80 text-amber-300 border-amber-800' };
+  return { label: 'Kritis / Loss', color: '#ef4444', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' };
 };
 
-const pct = (u, t) => t ? Math.round((u / t) * 100) : 0;
-
 /* ══════════════════════════════════════════════════════════════════
-   STREET VIEW MODAL COMPONENT
+   STREET VIEW 360 MODAL
 ══════════════════════════════════════════════════════════════════ */
 function StreetViewModal({ lat, lng, title, onClose }) {
   if (!lat || !lng) return null;
@@ -38,12 +36,14 @@ function StreetViewModal({ lat, lng, title, onClose }) {
   const directUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
+      <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-700 overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="bg-slate-950 text-white px-5 py-4 flex items-center justify-between shrink-0 border-b border-slate-800">
           <div>
-            <h3 className="text-base font-bold">Google Street View 360° Panorama</h3>
-            <p className="text-xs text-slate-300">{title || `Koordinat: ${lat}, ${lng}`}</p>
+            <h3 className="text-base font-bold flex items-center gap-2">
+              <span>Google Street View 360°</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">{title || `Koordinat: ${lat}, ${lng}`}</p>
           </div>
           <div className="flex items-center space-x-2">
             <a
@@ -54,14 +54,19 @@ function StreetViewModal({ lat, lng, title, onClose }) {
             >
               Buka di Tab Baru ↗
             </a>
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 font-bold">✕</button>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white font-bold transition-all"
+            >
+              ✕
+            </button>
           </div>
         </div>
-        <div className="flex-1 min-h-[420px] bg-slate-950 relative">
+        <div className="flex-1 min-h-[440px] bg-slate-950 relative">
           <iframe
             title="Street View 360"
             src={embedUrl}
-            className="w-full h-full min-h-[420px] border-0"
+            className="w-full h-full min-h-[440px] border-0"
             allowFullScreen
             loading="lazy"
           />
@@ -72,45 +77,28 @@ function StreetViewModal({ lat, lng, title, onClose }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   NODE DETAIL PANEL
+   NODE DETAIL DRAWER / POPUP MODAL
 ══════════════════════════════════════════════════════════════════ */
 function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
-  const [copied, setCopied] = useState(false);
+  if (!node) return null;
 
-  if (!node) {
-    return (
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 sm:p-5 flex items-center justify-between gap-4 transition-colors duration-300">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">Pilih Marker Node pada Peta di Atas</p>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-              Klik salah satu titik ODP, ODC, atau POP pada peta di atas untuk membuka telemetry redaman optik live, spesifikasi port &amp; Street View 360°.
-            </p>
-          </div>
-        </div>
-        <span className="hidden sm:inline-flex px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-          Standby Monitoring
-        </span>
-      </div>
-    );
-  }
-
-  const meta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
+  const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
   const statusMeta = STATUS_META[node.status] ?? STATUS_META.active;
-  const isOdp = node.node_type === 'ODP';
-  const optMeta = getOpticalQuality(node.optical_power_dbm);
-  const p = pct(node.used_ports, node.total_ports);
-  const dmsInfo = decimalToDms(node.latitude, node.longitude);
-  const hasCoords = node.latitude && node.longitude && parseFloat(node.latitude) !== 0;
+  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+  const isLoss = node.status === 'damaged' || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')));
+  const optMeta = isLoss 
+    ? { label: 'Loss / Kritis', color: '#ef4444', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' }
+    : getOpticalQuality(effectivePower);
+  const p = node.total_ports > 0 ? Math.round((node.used_ports / node.total_ports) * 100) : 0;
+
+  const [copied, setCopied] = useState(false);
+  const dmsInfo = useMemo(() => {
+    if (!node.latitude || !node.longitude) return { formattedDms: '' };
+    return decimalToDms(node.latitude, node.longitude);
+  }, [node.latitude, node.longitude]);
 
   const handleCopyCoords = () => {
-    if (hasCoords) {
+    if (node.latitude && node.longitude) {
       navigator.clipboard.writeText(`${node.latitude}, ${node.longitude}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -118,85 +106,61 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden transition-colors duration-300">
-      <div className="bg-slate-900 border-b border-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className={`inline-flex px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${meta.bg}`}>
-            {meta.label}
-          </span>
-          {isOdp && (
-            <span className={`inline-flex px-2 py-0.5 rounded-lg text-[10px] font-bold border ${optMeta.badge}`}>
-              {optMeta.label}
+    <div className="absolute top-4 left-4 z-[999] w-84 sm:w-96 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 transition-all text-slate-800 dark:text-slate-100 max-h-[90vh] overflow-y-auto">
+      <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border ${typeMeta.bg}`}>
+              {node.node_type}
             </span>
-          )}
-          <h3 className="text-sm font-bold truncate text-white ml-1">{node.name}</h3>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${statusMeta.badge}`}>
+              {statusMeta.label}
+            </span>
+          </div>
+          <h4 className="text-base font-extrabold text-slate-900 dark:text-white leading-tight">
+            {node.name}
+          </h4>
+          <p className="text-xs text-slate-400 font-mono mt-0.5">{node.code}</p>
         </div>
-        <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 font-bold shrink-0">✕</button>
+        <button
+          onClick={onClose}
+          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all text-xs font-bold"
+        >
+          ✕
+        </button>
       </div>
 
-      <div className="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Status Operasional</span>
-            <div className="flex items-center gap-1.5">
-              <span className={`w-2.5 h-2.5 rounded-full ${statusMeta.dot}`} />
-              <span className={`font-bold px-2 py-0.5 rounded-md border ${statusMeta.badge}`}>
-                {statusMeta.label}
+      <div className="mt-4 space-y-4 text-xs">
+        {/* Optical Telemetry Signal Box */}
+        {node.node_type === 'ODP' && (
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Telemetry Redaman Rx</span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${optMeta.badge}`}>
+                {optMeta.label}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-black font-mono" style={{ color: optMeta.color }}>
+                {node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${effectivePower} dBm` : '—')}
+              </span>
+              <span className="text-[10px] font-mono text-slate-400">
+                {node.used_ports} Klien Terhubung
               </span>
             </div>
           </div>
+        )}
 
-          {isOdp ? (
-            <div className="p-3 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-xl border border-slate-700 shadow-inner">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Redaman Klien (Rx Power)</span>
-                <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Realtime
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-xl font-extrabold font-mono tracking-tight text-white">
-                  {node.rx_power_range ? node.rx_power_range : (node.optical_power_dbm != null ? `${node.optical_power_dbm} dBm` : '—')}
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md" style={{ background: optMeta.color, color: '#ffffff' }}>
-                  {optMeta.label}
-                </span>
-              </div>
-              {node.worst_rx_power != null && node.best_rx_power != null && (
-                <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-300 font-mono">
-                  <span>Terbaik: <strong className="text-emerald-400">{node.best_rx_power} dBm</strong></span>
-                  <span>Kritis: <strong className="text-rose-400">{node.worst_rx_power} dBm</strong></span>
-                </div>
-              )}
-              <div className="mt-2 space-y-1">
-                <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden flex">
-                  <div className="h-full bg-emerald-600 w-[45%]" />
-                  <div className="h-full bg-blue-600 w-[20%]" />
-                  <div className="h-full bg-amber-600 w-[15%]" />
-                  <div className="h-full bg-rose-800 w-[20%]" />
-                </div>
-                <div className="flex justify-between text-[9px] font-mono text-slate-400">
-                  <span>-14 dBm (Bagus)</span>
-                  <span>-24 dBm</span>
-                  <span>-27 dBm (Kritis)</span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
-              <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Informasi Perangkat ({node.node_type})</span>
-              <p className="text-slate-600 dark:text-slate-300 font-semibold">{node.address || 'Lokasi terdaftar pada database UNMS.'}</p>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-3">
-          {hasCoords ? (
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+        {/* GPS Coordinates & Google Earth / Maps Navigation */}
+        <div className="space-y-2">
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+            Posisi Geografis GPS
+          </span>
+          {node.latitude && node.longitude ? (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider block">
-                  📍 Koordinat Lokasi Node
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                  Koordinat Desimal:
                 </span>
                 <button
                   onClick={handleCopyCoords}
@@ -222,7 +186,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
                   onClick={() => onOpenStreetView(node.latitude, node.longitude, node.name)}
                   className="py-2 px-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 shadow-xs transition-all text-center col-span-3 sm:col-span-1"
                 >
-                  <span>👁️ Street View 360°</span>
+                  <span>👁️ Street View</span>
                 </button>
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${node.latitude},${node.longitude}`}
@@ -238,13 +202,13 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
                   rel="noopener noreferrer"
                   className="py-2 px-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 shadow-xs transition-all text-center"
                 >
-                  <span>🌍 Google Earth</span>
+                  <span>🌍 Earth</span>
                 </a>
               </div>
             </div>
           ) : (
             <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-900/60 text-xs text-amber-700 dark:text-amber-300">
-              Belum ada koordinat GPS terdaftar. Edit node untuk memasukkan posisi peta.
+              Belum ada koordinat GPS terdaftar.
             </div>
           )}
         </div>
@@ -267,7 +231,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
 
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-300">
             <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">OLT &amp; Port Uplink</span>
-            <p className="font-bold">{node.olt_device?.name || node.parent_node?.olt_device?.name || 'OLT Utama Solok'}</p>
+            <p className="font-bold">{node.olt_device?.name || node.parent_node?.olt_device?.name || 'OLT Region'}</p>
             <p className="text-[11px] font-mono text-blue-600 dark:text-blue-400 font-semibold">{node.olt_port_ref || 'PON 1/1/1'}</p>
           </div>
         </div>
@@ -277,19 +241,19 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   INTERACTIVE LEAFLET MAP COMPONENT (SVG RENDERER FOR LIVE FLOW ANIMATION)
+   FAST INTERACTIVE LEAFLET TOPOLOGY MAP (IDENTICAL PATTERN TO CABLE-ROUTES)
 ══════════════════════════════════════════════════════════════════ */
-function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStreetView }) {
+function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
-  const tileLayerRef = useRef(null);
-  const markersRef = useRef([]);
-  const linesRef = useRef([]);
   const leafletRef = useRef(null);
+  const tileLayerRef = useRef(null);
+  const layersGroupRef = useRef(null);
   const isFirstRenderRef = useRef(true);
+  const [mapLoaded, setMapLoaded] = useState(false);
   const [isSatellite, setIsSatellite] = useState(true);
 
-  // Initialize Map with SVG Renderer (CRITICAL for CSS stroke-dashoffset animation!)
+  // 1. Initialize Map Instance (Smooth & Instant)
   useEffect(() => {
     if (mapInstanceRef.current) return;
 
@@ -304,40 +268,32 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
         shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
       });
 
-      // SVG Renderer explicitly set to support animated stroke-dashoffset SVG polylines
-      const map = Lf.map(mapRef.current, {
-        center: [-0.785, 100.654],
-        zoom: 14,
-        zoomControl: true,
-        scrollWheelZoom: true,
-        preferCanvas: false,
-        renderer: Lf.svg(),
-      });
+      if (!mapInstanceRef.current && mapRef.current) {
+        const defaultCenter = [-0.785, 100.654];
 
-      const satUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
-      tileLayerRef.current = Lf.tileLayer(satUrl, {
-        maxZoom: 20,
-        subdomains: ['0', '1', '2', '3'],
-      }).addTo(map);
+        const map = Lf.map(mapRef.current, {
+          center: defaultCenter,
+          zoom: 15,
+          zoomControl: true,
+          scrollWheelZoom: true,
+        });
 
-      mapInstanceRef.current = map;
+        const satUrl = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+        tileLayerRef.current = Lf.tileLayer(satUrl, {
+          maxZoom: 20,
+          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+        }).addTo(map);
 
-      // Ensure full viewport coverage immediately and after layout paint
-      map.invalidateSize();
-      setTimeout(() => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
-        }
-      }, 150);
+        layersGroupRef.current = Lf.layerGroup().addTo(map);
+        mapInstanceRef.current = map;
+        setMapLoaded(true);
 
-      // ResizeObserver to handle container / viewport resize instantly
-      if (window.ResizeObserver && mapRef.current) {
-        const ro = new ResizeObserver(() => {
+        map.invalidateSize();
+        setTimeout(() => {
           if (mapInstanceRef.current) {
             mapInstanceRef.current.invalidateSize();
           }
-        });
-        ro.observe(mapRef.current);
+        }, 150);
       }
     }).catch(err => console.warn('Leaflet load failed:', err));
 
@@ -349,6 +305,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
     };
   }, []);
 
+  // 2. Toggle Satelit Hybrid vs Vektor
   const toggleMapMode = () => {
     if (!mapInstanceRef.current || !leafletRef.current || !tileLayerRef.current) return;
     const Lf = leafletRef.current;
@@ -359,20 +316,19 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
     setIsSatellite(nextMode);
 
     if (nextMode) {
-      tileLayerRef.current = Lf.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+      tileLayerRef.current = Lf.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
         maxZoom: 20,
-        subdomains: ['0', '1', '2', '3']
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
       });
     } else {
       tileLayerRef.current = Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        subdomains: ['a', 'b', 'c']
       });
     }
     tileLayerRef.current.addTo(map);
-    map.invalidateSize();
   };
 
+  // 3. Recenter to all nodes
   const handleRecenterMap = useCallback(() => {
     if (!mapInstanceRef.current) return;
     const validNodes = nodes.filter(n => n.latitude && n.longitude && parseFloat(n.latitude) !== 0);
@@ -380,24 +336,20 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
 
     const bounds = validNodes.map(n => [parseFloat(n.latitude), parseFloat(n.longitude)]);
     if (bounds.length === 1) {
-      mapInstanceRef.current.setView(bounds[0], 15);
+      mapInstanceRef.current.setView(bounds[0], 16);
     } else {
-      mapInstanceRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+      mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
     }
   }, [nodes]);
 
-  const topologyKey = useMemo(() => {
-    return nodes.map(n => `${n.id}:${n.latitude}:${n.longitude}:${n.parent_node_id}`).join('|');
-  }, [nodes]);
-
-  // Render Animated Cable Lines with SVG stroke-dashoffset
+  // 4. Synchronously Render Markers & Connecting Lines via LayerGroup (Fast 0ms)
   useEffect(() => {
-    if (!mapInstanceRef.current || !leafletRef.current) return;
+    if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current || !layersGroupRef.current) return;
     const Lf = leafletRef.current;
     const map = mapInstanceRef.current;
+    const layerGroup = layersGroupRef.current;
 
-    linesRef.current.forEach(l => l.remove());
-    linesRef.current = [];
+    layerGroup.clearLayers();
 
     const nodeMap = new Map();
     nodes.forEach(n => {
@@ -406,104 +358,75 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
       }
     });
 
-    let cancelled = false;
-
-    const renderLines = async () => {
-      for (const node of nodes) {
-        if (cancelled) break;
-        if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) continue;
-
-        let parent = null;
-        if (node.parent_node_id && nodeMap.has(node.parent_node_id)) {
-          parent = nodeMap.get(node.parent_node_id);
-        } else if (node.node_type === 'ODP') {
-          const potentialOdcs = nodes.filter(n => n.node_type === 'ODC' && n.latitude && n.longitude);
-          if (potentialOdcs.length > 0) parent = potentialOdcs[0];
-        }
-
-        if (parent && parent.latitude && parent.longitude) {
-          const pLat = parseFloat(parent.latitude);
-          const pLng = parseFloat(parent.longitude);
-          const nLat = parseFloat(node.latitude);
-          const nLng = parseFloat(node.longitude);
-
-          const isOdpLine = node.node_type === 'ODP';
-
-          // Warna Garis Fiber Dinamis Berdasarkan Kualitas Redaman Nyata
-          let strokeColor = '#1d4ed8'; // Feeder Backbone (Biru)
-
-          if (isOdpLine) {
-            const bestPower = node.best_rx_power != null 
-              ? parseFloat(node.best_rx_power) 
-              : (node.optical_power_dbm != null ? parseFloat(node.optical_power_dbm) : null);
-
-            const isLossLine = node.status === 'damaged' 
-              || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')))
-              || (bestPower != null && bestPower <= -27.5);
-
-            if (isLossLine) {
-              // Kritis / Loss Total -> Garis Merah
-              strokeColor = '#ef4444';
-            } else if (bestPower != null && bestPower <= -25.9) {
-              // Kurang Baik / Waspada -> Garis Kuning / Amber
-              strokeColor = '#f59e0b';
-            } else if (bestPower != null && bestPower <= -23.9) {
-              // Optimal -> Garis Biru
-              strokeColor = '#3b82f6';
-            } else if (bestPower != null && bestPower > -23.9) {
-              // Prima / Bagus -> Garis Hijau Emerald
-              strokeColor = '#10b981';
-            } else {
-              // Belum ada klien / ODP aktif standar -> Garis Hijau
-              strokeColor = '#059669';
-            }
-          }
-
-          const lineCoords = [[pLat, pLng], [nLat, nLng]];
-
-          if (cancelled) break;
-
-          const polyline = Lf.polyline(lineCoords, {
-            color: strokeColor,
-            weight: isOdpLine ? 4.5 : 5.5,
-            opacity: 0.95,
-            dashArray: '12, 8',
-            className: 'animated-fiber-line',
-          }).addTo(map);
-
-          linesRef.current.push(polyline);
-        }
-      }
-    };
-
-    renderLines();
-
-    return () => { cancelled = true; };
-  }, [topologyKey, followRoads]);
-
-  // Render Markers
-  useEffect(() => {
-    if (!mapInstanceRef.current || !leafletRef.current) return;
-    const Lf = leafletRef.current;
-    const map = mapInstanceRef.current;
-
-    markersRef.current.forEach(m => m.remove());
-    markersRef.current = [];
-
     const bounds = [];
 
+    // Draw Cable Lines between Parent & Child
     nodes.forEach(node => {
       if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
 
+      let parent = null;
+      if (node.parent_node_id && nodeMap.has(node.parent_node_id)) {
+        parent = nodeMap.get(node.parent_node_id);
+      } else if (node.node_type === 'ODP') {
+        const potentialOdcs = nodes.filter(n => n.node_type === 'ODC' && n.latitude && n.longitude);
+        if (potentialOdcs.length > 0) parent = potentialOdcs[0];
+      }
+
+      if (parent && parent.latitude && parent.longitude) {
+        const pLat = parseFloat(parent.latitude);
+        const pLng = parseFloat(parent.longitude);
+        const nLat = parseFloat(node.latitude);
+        const nLng = parseFloat(node.longitude);
+
+        const isOdpLine = node.node_type === 'ODP';
+        let strokeColor = '#1d4ed8'; // Feeder Backbone (Biru)
+
+        if (isOdpLine) {
+          const bestPower = node.best_rx_power != null 
+            ? parseFloat(node.best_rx_power) 
+            : (node.optical_power_dbm != null ? parseFloat(node.optical_power_dbm) : null);
+
+          const isLossLine = node.status === 'damaged' 
+            || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')))
+            || (bestPower != null && bestPower <= -27.5);
+
+          if (isLossLine) {
+            strokeColor = '#ef4444'; // Kritis Loss
+          } else if (bestPower != null && bestPower <= -25.9) {
+            strokeColor = '#f59e0b'; // Waspada
+          } else if (bestPower != null && bestPower <= -23.9) {
+            strokeColor = '#3b82f6'; // Optimal
+          } else if (bestPower != null && bestPower > -23.9) {
+            strokeColor = '#10b981'; // Bagus
+          } else {
+            strokeColor = '#059669';
+          }
+        }
+
+        Lf.polyline([[pLat, pLng], [nLat, nLng]], {
+          color: strokeColor,
+          weight: isOdpLine ? 4 : 5,
+          opacity: 0.9,
+          dashArray: '8, 6',
+        }).addTo(layerGroup);
+      }
+    });
+
+    // Draw Node Markers
+    nodes.forEach(node => {
+      if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
+
+      const lat = parseFloat(node.latitude);
+      const lng = parseFloat(node.longitude);
+      bounds.push([lat, lng]);
+
       const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
-      const statusMeta = STATUS_META[node.status] ?? STATUS_META.active;
       const isSelected = selectedNode?.id === node.id;
       const isOdp = node.node_type === 'ODP';
-      // Deteksi Kualitas Optik Terbaik (Best Rx Power)
       const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
       const isLossRange = node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS'));
       const optMeta = isLossRange 
-        ? { label: 'Loss / Kritis', color: '#ef4444', border: '#b91c1c' } 
+        ? { label: 'Loss / Kritis', color: '#ef4444' } 
         : getOpticalQuality(effectiveBestPower);
       const opticalDbmText = node.rx_power_range ? node.rx_power_range : (effectiveBestPower != null ? `${effectiveBestPower} dBm` : '—');
 
@@ -512,7 +435,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
       const icon = Lf.divIcon({
         className: `custom-gis-node-marker ${isSelected ? 'is-selected' : ''}`,
         html: `
-          <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+          <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
             ${(isOdp && node.used_ports > 0 && (node.optical_power_dbm != null || node.rx_power_range != null)) ? `
               <div style="
                 background: ${optMeta.color};
@@ -564,60 +487,38 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
             </div>
           </div>
         `,
-        iconSize: [220, size * 2 + 55],
-        iconAnchor: [110, size * 2 + 30],
+        iconSize: [180, size * 2 + 55],
+        iconAnchor: [90, size * 2 + 30],
       });
 
-      const marker = Lf.marker([parseFloat(node.latitude), parseFloat(node.longitude)], { icon })
-        .addTo(map);
-
+      const marker = Lf.marker([lat, lng], { icon }).addTo(layerGroup);
       marker.on('click', () => onSelectNode(node));
-      markersRef.current.push(marker);
-      bounds.push([parseFloat(node.latitude), parseFloat(node.longitude)]);
     });
 
     if (bounds.length > 0) {
-      map.invalidateSize();
       if (isFirstRenderRef.current) {
         if (bounds.length === 1) {
           map.setView(bounds[0], 16);
-        } else if (bounds.length > 1) {
+        } else {
           try {
-            map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
           } catch { }
         }
         isFirstRenderRef.current = false;
       }
     }
-  }, [nodes, selectedNode, onSelectNode]);
+  }, [mapLoaded, nodes, selectedNode, onSelectNode]);
 
   return (
     <div className="relative w-full h-full">
-      {/* CSS Animation specifically targeting Leaflet SVG path elements */}
-      <style>{`
-        @keyframes fiberFlowMovement {
-          0% {
-            stroke-dashoffset: 40;
-          }
-          100% {
-            stroke-dashoffset: 0;
-          }
-        }
-        .leaflet-overlay-pane svg path.animated-fiber-line,
-        path.animated-fiber-line {
-          stroke-dasharray: 12 8 !important;
-          animation: fiberFlowMovement 0.8s linear infinite !important;
-        }
-      `}</style>
-
       <div
         ref={mapRef}
         className="w-full h-full rounded-2xl overflow-hidden shadow-inner"
-        style={{ minHeight: '560px' }}
+        style={{ minHeight: '580px' }}
       />
 
-      {/* Floating Controls */}
-      <div className="absolute top-4 right-4 z-10 flex flex-wrap items-center justify-end gap-2">
+      {/* Floating Mode Controls */}
+      <div className="absolute top-4 right-4 z-[999] flex flex-wrap items-center justify-end gap-2">
         <button
           onClick={toggleMapMode}
           className="px-3.5 py-2 bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-bold rounded-xl border border-slate-700 shadow-lg backdrop-blur-xs transition-all flex items-center gap-1.5"
@@ -637,7 +538,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
 
       <button
         onClick={handleRecenterMap}
-        className="absolute bottom-4 left-4 z-10 px-3.5 py-2 bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-bold rounded-xl border border-slate-700 shadow-lg backdrop-blur-xs flex items-center gap-1.5 transition-all"
+        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-bold rounded-xl border border-slate-700 shadow-lg backdrop-blur-xs flex items-center gap-1.5 transition-all"
         title="Pusatkan Peta ke Lokasi Node"
       >
         <span>Fokus Lokasi Node</span>
@@ -696,7 +597,6 @@ export default function GisTopologyMap() {
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [followRoads, setFollowRoads] = useState(true);
   const [livePolling, setLivePolling] = useState(true);
   const [activeView, setActiveView] = useState('map');
   const [streetViewTarget, setStreetViewTarget] = useState(null);
@@ -768,7 +668,6 @@ export default function GisTopologyMap() {
           <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
             Peta POP-ODC-ODP
           </h3>
-
         </div>
 
         <div className="flex items-center gap-2">
@@ -832,17 +731,6 @@ export default function GisTopologyMap() {
 
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => setFollowRoads(!followRoads)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${followRoads
-              ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300'
-              : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-              }`}
-            title="Snap garis kabel mengikuti rute jalan asli (OSRM)"
-          >
-            <span>{followRoads ? '🛣️ Ikuti Rute Jalan' : '📏 Garis Lurus'}</span>
-          </button>
-
-          <button
             onClick={() => setLivePolling(!livePolling)}
             className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${livePolling
               ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
@@ -858,129 +746,105 @@ export default function GisTopologyMap() {
       {/* Main Content Area */}
       {loading ? (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center text-slate-400 dark:text-slate-500 text-xs animate-pulse">
-          Memuat spasial peta satelit &amp; telemetry redaman optik ODP...
+          Memuat topologi spasial GIS &amp; data redaman...
         </div>
       ) : activeView === 'map' ? (
-        <div className="space-y-4">
-          <div className="w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden h-[540px] sm:h-[620px] lg:h-[700px]">
-            {nodesWithCoords.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
-                <p className="text-base font-bold text-slate-800 dark:text-slate-200">Belum Ada Node dengan Koordinat GPS</p>
-              </div>
-            ) : (
-              <LeafletMap
-                nodes={nodesWithCoords}
-                selectedNode={selectedNode}
-                onSelectNode={setSelectedNode}
-                followRoads={followRoads}
-                onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
-              />
-            )}
-          </div>
-
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden relative transition-colors duration-300 min-h-[580px]">
           <NodeDetailPanel
             node={selectedNode}
             onClose={() => setSelectedNode(null)}
             onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
           />
+
+          <LeafletMap
+            nodes={nodesWithCoords}
+            selectedNode={selectedNode}
+            onSelectNode={node => setSelectedNode(node)}
+            onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
+          />
         </div>
       ) : (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden transition-colors duration-300">
-          <div className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 px-4 py-3">
-            <div className="grid grid-cols-12 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              <div className="col-span-3">Node</div>
-              <div className="col-span-2">Tipe / Status</div>
-              <div className="col-span-3">Redaman Modem (ODP Only)</div>
-              <div className="col-span-2">Koordinat GPS</div>
-              <div className="col-span-2 text-right">Kapasitas Port</div>
-            </div>
-          </div>
+        /* Tabel Telemetry Redaman */
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden transition-colors duration-300">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="px-5 py-3.5">Node &amp; Kode</th>
+                  <th className="px-4 py-3.5">Tipe</th>
+                  <th className="px-4 py-3.5">Status</th>
+                  <th className="px-4 py-3.5">Port Terpakai</th>
+                  <th className="px-4 py-3.5">Kualitas Redaman (Rx)</th>
+                  <th className="px-4 py-3.5">Koordinat GPS</th>
+                  <th className="px-4 py-3.5 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
+                {filteredNodes.map(node => {
+                  const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
+                  const statusMeta = STATUS_META[node.status] ?? STATUS_META.active;
+                  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+                  const isLoss = node.status === 'damaged' || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')));
+                  const optMeta = isLoss 
+                    ? { label: 'Loss / Kritis', color: '#ef4444', badge: 'bg-rose-950/80 text-rose-300 border-rose-800' }
+                    : getOpticalQuality(effectivePower);
 
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {filteredNodes.length === 0 ? (
-              <div className="p-10 text-center text-slate-400 dark:text-slate-500 text-xs">Tidak ada node ditemukan</div>
-            ) : (
-              filteredNodes.map(node => {
-                const meta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
-                const statusMeta = STATUS_META[node.status] ?? STATUS_META.active;
-                const isOdp = node.node_type === 'ODP';
-                const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
-                const optMeta = getOpticalQuality(effectiveBestPower);
-                const p = pct(node.used_ports, node.total_ports);
-                const hasCoords = node.latitude && node.longitude && parseFloat(node.latitude) !== 0;
-
-                return (
-                  <div
-                    key={node.id}
-                    onClick={() => { setSelectedNode(node); setActiveView('map'); }}
-                    className={`grid grid-cols-12 px-4 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors items-center ${selectedNode?.id === node.id ? 'bg-blue-50/70 dark:bg-blue-950/40' : ''
-                      }`}
-                  >
-                    <div className="col-span-3 min-w-0">
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase truncate">{node.name}</p>
-                    </div>
-
-                    <div className="col-span-2 flex flex-col items-start gap-1">
-                      <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded border ${meta.bg}`}>
-                        {node.node_type}
-                      </span>
-                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded border ${statusMeta.badge}`}>
-                        {statusMeta.label}
-                      </span>
-                    </div>
-
-                    <div className="col-span-3">
-                      {isOdp ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-extrabold" style={{ color: optMeta.color }}>
-                            {node.rx_power_range ? node.rx_power_range : (node.optical_power_dbm != null ? `${node.optical_power_dbm} dBm` : '—')}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${optMeta.badge}`}>
-                            {optMeta.label}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-400 font-mono">—</span>
-                      )}
-                    </div>
-
-                    <div className="col-span-2">
-                      {hasCoords ? (
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[10px] font-mono text-slate-700 dark:text-slate-300">
-                            {parseFloat(node.latitude).toFixed(5)}, {parseFloat(node.longitude).toFixed(5)}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setStreetViewTarget({ lat: node.latitude, lng: node.longitude, title: node.name });
-                            }}
-                            className="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 rounded font-bold text-[9px]"
-                            title="Buka Google Street View 360°"
-                          >
-                            👁️ SV
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md">
-                          Tanpa GPS
+                  return (
+                    <tr key={node.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="px-5 py-3">
+                        <span className="font-bold text-slate-800 dark:text-slate-200 block">{node.name}</span>
+                        <span className="text-[10px] font-mono text-slate-400">{node.code}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${typeMeta.bg}`}>
+                          {node.node_type}
                         </span>
-                      )}
-                    </div>
-
-                    <div className="col-span-2 text-right">
-                      {node.total_ports > 0 ? (
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
-                          {node.used_ports}/{node.total_ports} ({p}%)
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${statusMeta.badge}`}>
+                          {statusMeta.label}
                         </span>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
+                      </td>
+                      <td className="px-4 py-3 font-mono font-semibold text-slate-600 dark:text-slate-400">
+                        {node.total_ports > 0 ? `${node.used_ports}/${node.total_ports} Port` : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {node.node_type === 'ODP' ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold" style={{ color: optMeta.color }}>
+                              {node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${effectivePower} dBm` : '—')}
+                            </span>
+                            <span className={`text-[9px] px-1.5 py-0.2 rounded ${optMeta.badge}`}>
+                              {optMeta.label}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 font-mono text-[10px]">Headend/Distribution</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-slate-500">
+                        {node.latitude && node.longitude ? (
+                          <span>{parseFloat(node.latitude).toFixed(5)}, {parseFloat(node.longitude).toFixed(5)}</span>
+                        ) : (
+                          <span className="text-slate-400 italic">Belum diset</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => {
+                            setSelectedNode(node);
+                            setActiveView('map');
+                          }}
+                          className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 rounded-lg text-xs font-bold transition-all border border-indigo-200 dark:border-indigo-800"
+                        >
+                          Lihat Peta
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
