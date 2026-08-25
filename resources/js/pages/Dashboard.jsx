@@ -450,7 +450,7 @@ export default function Dashboard() {
           <div className="flex items-center flex-wrap gap-2 mb-1">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
-              NOC Enterprise Monitoring Center
+              FIBER-UNMS Monitoring Center
             </span>
             <span className="text-slate-300 dark:text-slate-600">|</span>
             {currentDateTime && (
@@ -488,10 +488,19 @@ export default function Dashboard() {
               {customerStats.active_customers} Aktif ({customerStats.active_percentage}%)
             </span>
           </div>
-          <div className="pt-2 border-t border-slate-100 dark:border-[#1f1f1f] text-[10px] text-slate-400 flex items-center justify-between">
-            <span>{customerStats.isolated_customers} Isolir</span>
-            <span>{customerStats.suspended_customers} Suspend</span>
-            <span>{customerStats.terminated_customers} Off</span>
+          <div className="pt-2 border-t border-slate-100 dark:border-[#1f1f1f] text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between font-medium">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span className="font-bold text-amber-600 dark:text-amber-400">{customerStats.isolated_customers}</span> Isolir
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+              <span className="font-bold text-purple-600 dark:text-purple-400">{customerStats.suspended_customers}</span> Suspend
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+              <span className="font-bold text-rose-600 dark:text-rose-400">{customerStats.terminated_customers}</span> Off
+            </span>
           </div>
         </div>
 
@@ -559,8 +568,8 @@ export default function Dashboard() {
           </div>
           <div className="my-2.5 flex items-baseline justify-between">
             <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">{totalPop + totalOdc + totalOdp}</span>
-            <span className="text-[10px] font-mono font-bold text-purple-600 dark:text-purple-400">
-              {totalPop}P · {totalOdc}C · {totalOdp}D
+            <span className="text-xs sm:text-[11px] font-mono font-bold text-purple-600 dark:text-purple-400">
+              POP : {totalPop} - ODC : {totalOdc} · ODP : {totalOdp}
             </span>
           </div>
           <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate pt-2 border-t border-slate-100 dark:border-[#1f1f1f]">
@@ -600,7 +609,7 @@ export default function Dashboard() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Peta Miniatur Sebaran Jaringan (Live GIS Preview)
+                  Peta Sebaran Jaringan
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                   {metrics?.gis_preview?.nodes?.length ?? 0} Nodes Terpasang
@@ -797,77 +806,79 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── SECTION 4: STATUS GATEWAY & SERVER HEALTH SYSTEM ─────────────────────────────── */}
-      <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-5 shadow-2xs">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              Status Gateway &amp; Kesehatan Server UNMS
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Infrastruktur server daemon, service dispatch audio, dan utilitas disk storage
-            </p>
+      {/* ── SECTION 4: STATUS GATEWAY & SERVER HEALTH SYSTEM (KHUSUS SUPER ADMINISTRATOR) ── */}
+      {isSuperAdmin && (
+        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-5 shadow-2xs">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Status Gateway &amp; Kesehatan Server UNMS
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Infrastruktur server daemon, service dispatch audio, dan utilitas disk storage
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Service 1: SNMP Poller */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.snmp_daemon.name}</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
+                  {serverHealth.snmp_daemon.status}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">{serverHealth.snmp_daemon.detail}</p>
+              <p className="text-[10px] font-mono text-slate-400 truncate">{serverHealth.snmp_daemon.driver}</p>
+            </div>
+
+            {/* Service 2: WebRTC Dispatch */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.webrtc_gateway.name}</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
+                  {serverHealth.webrtc_gateway.status}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">{serverHealth.webrtc_gateway.detail}</p>
+              <p className="text-[10px] font-mono text-slate-400">Channel Ready / Standby</p>
+            </div>
+
+            {/* Service 3: Database & Telemetry */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.database.name}</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
+                  {serverHealth.database.status}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Ukuran DB: {serverHealth.database.size_mb} MB</p>
+              <p className="text-[10px] font-mono text-slate-400">Driver: {serverHealth.database.driver}</p>
+            </div>
+
+            {/* Service 4: VPS SSD Disk Storage */}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.disk_storage.name}</span>
+                <span className="font-mono text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                  {serverHealth.disk_storage.used_gb} GB / {serverHealth.disk_storage.total_gb} GB
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 dark:bg-neutral-900 rounded-full h-2 overflow-hidden my-1">
+                <div
+                  className={`h-2 rounded-full ${serverHealth.disk_storage.used_pct > 85 ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                  style={{ width: `${Math.max(5, serverHealth.disk_storage.used_pct)}%` }}
+                ></div>
+              </div>
+              <p className="text-[10px] text-slate-400 flex justify-between">
+                <span>Tersedia: {serverHealth.disk_storage.free_gb} GB</span>
+                <span className="font-bold">{serverHealth.disk_storage.used_pct}% Terpakai</span>
+              </p>
+            </div>
           </div>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Service 1: SNMP Poller */}
-          <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.snmp_daemon.name}</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
-                {serverHealth.snmp_daemon.status}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">{serverHealth.snmp_daemon.detail}</p>
-            <p className="text-[10px] font-mono text-slate-400 truncate">{serverHealth.snmp_daemon.driver}</p>
-          </div>
-
-          {/* Service 2: WebRTC Dispatch */}
-          <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.webrtc_gateway.name}</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
-                {serverHealth.webrtc_gateway.status}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">{serverHealth.webrtc_gateway.detail}</p>
-            <p className="text-[10px] font-mono text-slate-400">Channel Ready / Standby</p>
-          </div>
-
-          {/* Service 3: Database & Telemetry */}
-          <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.database.name}</span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
-                {serverHealth.database.status}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">Ukuran DB: {serverHealth.database.size_mb} MB</p>
-            <p className="text-[10px] font-mono text-slate-400">Driver: {serverHealth.database.driver}</p>
-          </div>
-
-          {/* Service 4: VPS SSD Disk Storage */}
-          <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.disk_storage.name}</span>
-              <span className="font-mono text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                {serverHealth.disk_storage.used_gb} GB / {serverHealth.disk_storage.total_gb} GB
-              </span>
-            </div>
-            <div className="w-full bg-slate-200 dark:bg-neutral-900 rounded-full h-2 overflow-hidden my-1">
-              <div
-                className={`h-2 rounded-full ${serverHealth.disk_storage.used_pct > 85 ? 'bg-rose-500' : 'bg-emerald-500'}`}
-                style={{ width: `${Math.max(5, serverHealth.disk_storage.used_pct)}%` }}
-              ></div>
-            </div>
-            <p className="text-[10px] text-slate-400 flex justify-between">
-              <span>Tersedia: {serverHealth.disk_storage.free_gb} GB</span>
-              <span className="font-bold">{serverHealth.disk_storage.used_pct}% Terpakai</span>
-            </p>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* ── SECTION 5: INCIDENT ALERTS & REAL-TIME AUDIT ACTIVITIES ──────────────────────── */}
       <div className={`grid grid-cols-1 ${isSuperAdmin ? 'lg:grid-cols-2' : ''} gap-5`}>
