@@ -108,6 +108,10 @@ export default function OltManagement() {
 
   // Live Polling Interval (0 = Manual, 5 = 5s, 10 = 10s, 30 = 30s)
   const [pollingInterval, setPollingInterval] = useState(0);
+  const [countdown, setCountdown] = useState(60);
+  const [isAutoPollingPaused, setIsAutoPollingPaused] = useState(false);
+  const [lastPolledAt, setLastPolledAt] = useState(new Date());
+  const [isPollingLive, setIsPollingLive] = useState(false);
 
   // Fetch OLT Topology (ODCs & ODPs connected to this OLT)
   const fetchOltTopology = (oltId) => {
@@ -256,13 +260,19 @@ export default function OltManagement() {
   }, [pollingInterval, activeOlt]);
 
   // ─── Fetch OLT Hardware Telemetry via SNMP ──────────────────────────────────
-  const fetchOltHardware = (vendorKey, deviceId) => {
-    setLoading(true);
+  const fetchOltHardware = (vendorKey, deviceId, silent = false) => {
+    if (!silent) setLoading(true);
     const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}`;
     fetch(url)
       .then(r => { if (!r.ok) throw new Error('API ' + r.status); return r.json(); })
-      .then(data => { setOltData(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(data => {
+        setOltData(data);
+        if (!silent) setLoading(false);
+        setLastPolledAt(new Date());
+      })
+      .catch(() => {
+        if (!silent) setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -733,20 +743,47 @@ export default function OltManagement() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
-          {/* Live Polling Interval Selector */}
-          <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-xs font-bold shadow-xs">
-            <span className={`w-2 h-2 rounded-full ${pollingInterval > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-            <span className="text-slate-600 dark:text-slate-400">Polling:</span>
-            <select
-              value={pollingInterval}
-              onChange={(e) => setPollingInterval(Number(e.target.value))}
-              className="bg-transparent border-none text-xs font-bold text-indigo-600 dark:text-indigo-400 focus:outline-none cursor-pointer pr-1"
+          {/* Live Real-Time Request Countdown Ticker Widget */}
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-slate-900 shadow-2xs">
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${
+                  isPollingLive
+                    ? 'bg-blue-400 opacity-90'
+                    : isAutoPollingPaused
+                    ? 'bg-amber-400 opacity-60'
+                    : 'bg-emerald-400 opacity-75'
+                }`}></span>
+                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                  isPollingLive
+                    ? 'bg-blue-600 animate-spin'
+                    : isAutoPollingPaused
+                    ? 'bg-amber-500'
+                    : 'bg-emerald-500'
+                }`}></span>
+              </span>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                {isPollingLive ? 'Requesting OLT...' : isAutoPollingPaused ? 'Polling Dijeda' : 'Next Request:'}
+              </span>
+            </div>
+
+            {!isAutoPollingPaused && (
+              <div className="flex items-center gap-1 font-mono text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800/60">
+                <span>⏱️ {countdown}s</span>
+              </div>
+            )}
+
+            <span className="text-[10px] text-slate-400 hidden sm:inline font-mono">
+              ({activeOlt?.polling_interval_seconds || 60}s)
+            </span>
+
+            <button
+              onClick={() => setIsAutoPollingPaused(!isAutoPollingPaused)}
+              className="px-1.5 py-0.5 rounded-md hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all text-xs font-bold"
+              title={isAutoPollingPaused ? 'Lanjutkan Auto-Polling' : 'Jeda Auto-Polling'}
             >
-              <option value={0}>Manual</option>
-              <option value={5}>Setiap 5 Detik</option>
-              <option value={10}>Setiap 10 Detik</option>
-              <option value={30}>Setiap 30 Detik</option>
-            </select>
+              {isAutoPollingPaused ? '▶️ Lanjut' : '⏸️ Jeda'}
+            </button>
           </div>
 
           <RefreshButton
