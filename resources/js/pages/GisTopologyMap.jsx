@@ -420,7 +420,11 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
               ? parseFloat(node.best_rx_power) 
               : (node.optical_power_dbm != null ? parseFloat(node.optical_power_dbm) : null);
 
-            if (node.status === 'damaged' || (bestPower != null && bestPower <= -27.5)) {
+            const isLossLine = node.status === 'damaged' 
+              || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')))
+              || (bestPower != null && bestPower <= -27.5);
+
+            if (isLossLine) {
               // Kritis / Loss Total -> Garis Merah
               strokeColor = '#ef4444';
             } else if (bestPower != null && bestPower <= -25.9) {
@@ -484,7 +488,10 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
       const isOdp = node.node_type === 'ODP';
       // Deteksi Kualitas Optik Terbaik (Best Rx Power)
       const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
-      const optMeta = getOpticalQuality(effectiveBestPower);
+      const isLossRange = node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS'));
+      const optMeta = isLossRange 
+        ? { label: 'Loss / Kritis', color: '#ef4444', border: '#b91c1c' } 
+        : getOpticalQuality(effectiveBestPower);
       const opticalDbmText = node.rx_power_range ? node.rx_power_range : (effectiveBestPower != null ? `${effectiveBestPower} dBm` : '—');
 
       const size = isSelected ? typeMeta.size + 4 : typeMeta.size;
@@ -493,7 +500,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
         className: `custom-gis-node-marker ${isSelected ? 'is-selected' : ''}`,
         html: `
           <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
-            ${(isOdp && node.used_ports > 0 && node.optical_power_dbm != null) ? `
+            ${(isOdp && node.used_ports > 0 && (node.optical_power_dbm != null || node.rx_power_range != null)) ? `
               <div style="
                 background: ${optMeta.color};
                 color: #ffffff;

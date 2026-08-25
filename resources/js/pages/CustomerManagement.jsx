@@ -521,13 +521,17 @@ export default function CustomerManagement() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {paginated.map(c => {
-                    const rx = c.rx_power != null ? parseFloat(c.rx_power) : null;
+                    const isOffline = c.status !== 'active' || c.onu_status === 'Offline' || c.onu_status === 'LOS (Dying Gasp)' || c.rx_power === null || parseFloat(c.rx_power) <= -40;
+                    const rx = isOffline ? null : (c.rx_power != null ? parseFloat(c.rx_power) : null);
                     let rxBadge = 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200';
                     let rxLabel = '—';
-                    if (rx !== null) {
+                    if (isOffline) {
+                      rxLabel = 'Loss (-∞ dBm)';
+                      rxBadge = 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 font-bold';
+                    } else if (rx !== null) {
                       rxLabel = `${rx.toFixed(1)} dBm`;
-                      if (rx >= -22.5) rxBadge = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
-                      else if (rx >= -26.5) rxBadge = 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800';
+                      if (rx >= -24.0) rxBadge = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 font-bold';
+                      else if (rx >= -27.0) rxBadge = 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 font-bold';
                       else rxBadge = 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 font-bold animate-pulse';
                     }
 
@@ -674,13 +678,17 @@ export default function CustomerManagement() {
           <div className="block md:hidden space-y-4">
             {paginated.map((c, idx) => {
               const globalIndex = (currentPage - 1) * perPage + idx + 1;
-              const rx = c.rx_power != null ? parseFloat(c.rx_power) : null;
+              const isOffline = c.status !== 'active' || c.onu_status === 'Offline' || c.onu_status === 'LOS (Dying Gasp)' || c.rx_power === null || parseFloat(c.rx_power) <= -40;
+              const rx = isOffline ? null : (c.rx_power != null ? parseFloat(c.rx_power) : null);
               let rxBadge = 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200';
               let rxLabel = '—';
-              if (rx !== null) {
+              if (isOffline) {
+                rxLabel = 'Loss (-∞ dBm)';
+                rxBadge = 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 font-bold';
+              } else if (rx !== null) {
                 rxLabel = `${rx.toFixed(1)} dBm`;
-                if (rx >= -22.5) rxBadge = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
-                else if (rx >= -26.5) rxBadge = 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800';
+                if (rx >= -24.0) rxBadge = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 font-bold';
+                else if (rx >= -27.0) rxBadge = 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 font-bold';
                 else rxBadge = 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 font-bold animate-pulse';
               }
 

@@ -74,57 +74,74 @@ class NetworkNodeResource extends JsonResource
     private function getClientRxPowers(): array
     {
         if ($this->node_type !== 'ODP') {
-            return [];
+            return ['powers' => [], 'total' => 0, 'has_loss' => false];
         }
 
-        return \App\Models\OntRegistration::whereHas('customerService.networkPort', function ($q) {
+        $onts = \App\Models\OntRegistration::whereHas('customerService.networkPort', function ($q) {
             $q->where('node_id', $this->id);
-        })
-        ->whereNotNull('rx_power')
-        ->pluck('rx_power')
-        ->map(fn($v) => (float)$v)
-        ->values()
-        ->toArray();
+        })->get();
+
+        if ($onts->isEmpty()) {
+            return ['powers' => [], 'total' => 0, 'has_loss' => false];
+        }
+
+        $powers = [];
+        $hasLoss = false;
+        foreach ($onts as $ont) {
+            if ($ont->status === 'active' && $ont->rx_power !== null && (float)$ont->rx_power > -40) {
+                $powers[] = (float)$ont->rx_power;
+            } else {
+                $hasLoss = true;
+            }
+        }
+
+        return ['powers' => $powers, 'total' => $onts->count(), 'has_loss' => $hasLoss];
     }
 
     private function getOpticalPowerDbm(): ?float
     {
-        $powers = $this->getClientRxPowers();
-        if (empty($powers)) {
+        $data = $this->getClientRxPowers();
+        if (empty($data['powers'])) {
             return null;
         }
-        // Nilai paling kritis (sinyal paling lemah / redaman terburuk)
-        return min($powers);
+        return min($data['powers']);
     }
 
     private function getBestRxPower(): ?float
     {
-        $powers = $this->getClientRxPowers();
-        if (empty($powers)) {
+        $data = $this->getClientRxPowers();
+        if (empty($data['powers'])) {
             return null;
         }
-        // Nilai sinyal terkuat (misal: -18.5 dBm)
-        return max($powers);
+        return max($data['powers']);
     }
 
     private function getWorstRxPower(): ?float
     {
-        $powers = $this->getClientRxPowers();
-        if (empty($powers)) {
+        $data = $this->getClientRxPowers();
+        if (empty($data['powers'])) {
             return null;
         }
-        // Nilai sinyal terlemah / redaman tertinggi (misal: -24.8 dBm)
-        return min($powers);
+        return min($data['powers']);
     }
 
     private function getRxPowerRange(): ?string
     {
-        $powers = $this->getClientRxPowers();
-        if (empty($powers)) {
+        $data = $this->getClientRxPowers();
+        if (empty($data['total'])) {
             return null;
         }
-        $best = max($powers);
-        $worst = min($powers);
+
+        if (empty($data['powers'])) {
+            return "Loss (-∞ dBm)";
+        }
+
+        $best = max($data['powers']);
+        $worst = min($data['powers']);
+
+        if ($data['has_loss']) {
+            return "{$best} dBm (Ada LOS)";
+        }
 
         if ($best === $worst) {
             return "{$best} dBm";

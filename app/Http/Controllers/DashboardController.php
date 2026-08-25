@@ -39,25 +39,25 @@ class DashboardController extends Controller
         $totalPowerSum = 0;
         $powerCount = 0;
 
-        // 1. Check ont_registrations table
-        $ontPowers = \Illuminate\Support\Facades\DB::table('ont_registrations')
-            ->whereNotNull('rx_power')
-            ->pluck('rx_power');
+        // 1. Check active and inactive ont_registrations
+        $onts = \Illuminate\Support\Facades\DB::table('ont_registrations')->get();
+        foreach ($onts as $ont) {
+            $isOnline = ($ont->status === 'active' && $ont->rx_power !== null && (float)$ont->rx_power > -35.0);
+            if (!$isOnline) {
+                $losSignal++;
+                continue;
+            }
 
-        foreach ($ontPowers as $rx) {
-            if (!is_numeric($rx)) continue;
-            $p = (float) $rx;
+            $p = (float) $ont->rx_power;
             $totalPowerSum += $p;
             $powerCount++;
 
-            if ($p >= -22.0) {
+            if ($p >= -24.0) {
                 $goodSignal++;
-            } elseif ($p >= -26.0) {
+            } elseif ($p >= -27.0) {
                 $modSignal++;
-            } elseif ($p >= -30.0) {
-                $warnSignal++;
             } else {
-                $losSignal++;
+                $warnSignal++;
             }
         }
 
