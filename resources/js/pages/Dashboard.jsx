@@ -321,7 +321,8 @@ export default function Dashboard() {
       // Render Cable Polyline
       cables.forEach(c => {
         try {
-          const coords = typeof c.coordinates === 'string' ? JSON.parse(c.coordinates) : c.coordinates;
+          const rawCoords = c.route_coordinates || c.coordinates;
+          const coords = typeof rawCoords === 'string' ? JSON.parse(rawCoords) : rawCoords;
           if (Array.isArray(coords) && coords.length >= 2) {
             const latLngs = coords.map(pt => [pt.lat || pt[0], pt.lng || pt[1]]);
             const isDamaged = c.status === 'damaged';
@@ -331,6 +332,14 @@ export default function Dashboard() {
               opacity: 0.8,
               dashArray: isDamaged ? '6, 6' : undefined,
             }).addTo(map);
+
+            coords.forEach(pt => {
+              const pLat = parseFloat(pt.lat || pt[0]);
+              const pLng = parseFloat(pt.lng || pt[1]);
+              if (!isNaN(pLat) && !isNaN(pLng)) {
+                markerBounds.push([pLat, pLng]);
+              }
+            });
           }
         } catch {
           // ignore parsing error

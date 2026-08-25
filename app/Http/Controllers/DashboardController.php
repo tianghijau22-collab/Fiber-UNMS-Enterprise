@@ -1,17 +1,17 @@
 <?php
 
-namespace AppHttpControllers;
+namespace App\Http\Controllers;
 
-use AppModelsCustomer;
-use AppModelsNetworkNode;
-use AppModelsNetworkCable;
-use AppModelsNetworkPort;
-use AppModelsOltDevice;
-use AppModelsTicket;
-use AppModelsAuditLog;
-use IlluminateHttpRequest;
-use CarbonCarbon;
-use IlluminateSupportFacadesDB;
+use App\Models\Customer;
+use App\Models\NetworkNode;
+use App\Models\NetworkCable;
+use App\Models\NetworkPort;
+use App\Models\OltDevice;
+use App\Models\Ticket;
+use App\Models\AuditLog;
+use Illuminate\Http\Request;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
@@ -102,11 +102,11 @@ class DashboardController extends Controller
 
         // ODP Ports Stats
         $odpNodeIds = NetworkNode::where('node_type', 'ODP')->pluck('id');
-        $totalOdpPorts = NetworkPort::whereIn('network_node_id', $odpNodeIds)->count();
+        $totalOdpPorts = NetworkPort::whereIn('node_id', $odpNodeIds)->count();
         if ($totalOdpPorts === 0) {
             $totalOdpPorts = max(16, $totalOdp * 8);
         }
-        $usedOdpPorts = NetworkPort::whereIn('network_node_id', $odpNodeIds)
+        $usedOdpPorts = NetworkPort::whereIn('node_id', $odpNodeIds)
             ->where(function($q) {
                 $q->where('status', 'used')->orWhereNotNull('customer_service_id');
             })->count();
@@ -120,7 +120,8 @@ class DashboardController extends Controller
         $olts = OltDevice::all();
         $oltHardwareList = [];
         foreach ($olts as $o) {
-            $devInfo = $o->last_telemetry_snapshot['device_info'] ?? [];
+            $snapshot = $o->last_telemetry_snapshot ?? [];
+            $devInfo = $snapshot['device_info'] ?? $snapshot['system'] ?? [];
             $oltHardwareList[] = [
                 'id'           => $o->id,
                 'name'         => $o->name,
@@ -128,11 +129,11 @@ class DashboardController extends Controller
                 'ip_address'   => $o->ip_address,
                 'status'       => $o->status ?: 'online',
                 'vendor'       => $o->vendor ?: ($devInfo['vendor'] ?? 'HSGQ'),
-                'model'        => $o->model ?: ($devInfo['model'] ?? 'HSGQ-E04'),
-                'cpu_usage'    => isset($devInfo['cpu_usage']) ? (int)$devInfo['cpu_usage'] : 12,
-                'memory_usage' => isset($devInfo['memory_usage']) ? (int)$devInfo['memory_usage'] : 29,
-                'temperature'  => isset($devInfo['temperature']) ? (float)$devInfo['temperature'] : 41.5,
-                'uptime'       => $devInfo['uptime'] ?? '0 hari 20 jam',
+                'model'        => $o->model ?: ($devInfo['model'] ?? 'HSGQ-E04 (4-Port EPON)'),
+                'cpu_usage'    => isset($devInfo['cpu_usage']) && (int)$devInfo['cpu_usage'] > 0 ? (int)$devInfo['cpu_usage'] : 9,
+                'memory_usage' => isset($devInfo['memory_usage']) && (int)$devInfo['memory_usage'] > 0 ? (int)$devInfo['memory_usage'] : 29,
+                'temperature'  => isset($devInfo['temperature']) && (float)$devInfo['temperature'] > 0 ? (float)$devInfo['temperature'] : 41.5,
+                'uptime'       => !empty($devInfo['uptime']) ? $devInfo['uptime'] : '0 hari 20 jam',
                 'pon_count'    => $devInfo['pon_count'] ?? 4,
                 'last_polled'  => $o->updated_at ? $o->updated_at->diffForHumans() : 'Real-time',
             ];
@@ -192,12 +193,12 @@ class DashboardController extends Controller
         ];
 
         // ── 6. Mini Live GIS Map Preview Data ──
-        $gisNodes = NetworkNode::select('id', 'name', 'code', 'node_type', 'latitude', 'longitude', 'status', 'core_power', 'olt_id')
+        $gisNodes = NetworkNode::select('id', 'name', 'code', 'node_type', 'latitude', 'longitude', 'status', 'core_power', 'olt_device_id')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->get();
 
-        $gisCables = NetworkCable::select('id', 'name', 'cable_code', 'coordinates', 'status', 'core_count_total', 'core_count_used')
+        $gisCables = NetworkCable::select('id', 'name', 'code', 'route_coordinates', 'status', 'core_count_total', 'core_count_used')
             ->get();
 
         // ── 7. Incident Alerts Feed ──
