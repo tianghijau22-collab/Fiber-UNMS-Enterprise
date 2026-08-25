@@ -307,10 +307,17 @@ export default function Dashboard() {
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
         : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-      Lf.tileLayer(tileUrl, { maxZoom: 19 }).addTo(map);
+      Lf.tileLayer(tileUrl, { maxZoom: 19, subdomains: isDark ? ['a', 'b', 'c', 'd'] : ['a', 'b', 'c'] }).addTo(map);
 
       // Add Zoom Control at bottom right
       Lf.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      miniMapInstanceRef.current = map;
+
+      // Invalidate size immediately and on intervals to guarantee full tile spread
+      map.invalidateSize();
+      const t1 = setTimeout(() => map.invalidateSize(), 150);
+      const t2 = setTimeout(() => map.invalidateSize(), 400);
 
       // Add Node Markers & Polylines from GIS preview data
       const nodes = metrics?.gis_preview?.nodes ?? [];

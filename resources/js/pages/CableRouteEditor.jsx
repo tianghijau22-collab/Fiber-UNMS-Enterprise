@@ -80,15 +80,27 @@ function RouteDrawerMap({ fromNode, toNode, waypoints, setWaypoints, activeCable
         });
 
         // Satelit Google Hybrid vs Street Standard
-        const satUrl = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+        const satUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
         tileLayerRef.current = Lf.tileLayer(satUrl, {
           maxZoom: 20,
-          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+          subdomains: ['0', '1', '2', '3'],
         }).addTo(map);
 
         layersGroupRef.current = Lf.layerGroup().addTo(map);
         mapInstanceRef.current = map;
         setMapLoaded(true);
+
+        map.invalidateSize();
+        setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, 150);
+        setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, 450);
       }
     }).catch(err => console.error('Failed to load Leaflet map:', err));
 
@@ -113,12 +125,19 @@ function RouteDrawerMap({ fromNode, toNode, waypoints, setWaypoints, activeCable
 
     if (nextMode) {
       // Satelit Google Hybrid
-      tileLayerRef.current = Lf.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
+      tileLayerRef.current = Lf.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['0', '1', '2', '3']
+      });
     } else {
       // Vektor OpenStreetMap
-      tileLayerRef.current = Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+      tileLayerRef.current = Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        subdomains: ['a', 'b', 'c']
+      });
     }
     tileLayerRef.current.addTo(map);
+    map.invalidateSize();
   };
 
   // Handle map click to add waypoints

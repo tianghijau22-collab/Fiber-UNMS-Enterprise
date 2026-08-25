@@ -278,10 +278,10 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
           scrollWheelZoom: true,
         });
 
-        const satUrl = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+        const satUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
         tileLayerRef.current = Lf.tileLayer(satUrl, {
           maxZoom: 20,
-          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+          subdomains: ['0', '1', '2', '3'],
         }).addTo(map);
 
         layersGroupRef.current = Lf.layerGroup().addTo(map);
@@ -294,6 +294,11 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
             mapInstanceRef.current.invalidateSize();
           }
         }, 150);
+        setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, 500);
       }
     }).catch(err => console.warn('Leaflet load failed:', err));
 
@@ -316,16 +321,18 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
     setIsSatellite(nextMode);
 
     if (nextMode) {
-      tileLayerRef.current = Lf.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+      tileLayerRef.current = Lf.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
         maxZoom: 20,
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+        subdomains: ['0', '1', '2', '3'],
       });
     } else {
       tileLayerRef.current = Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
+        subdomains: ['a', 'b', 'c'],
       });
     }
     tileLayerRef.current.addTo(map);
+    map.invalidateSize();
   };
 
   // 3. Recenter to all nodes
@@ -496,6 +503,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
     });
 
     if (bounds.length > 0) {
+      map.invalidateSize();
       if (isFirstRenderRef.current) {
         if (bounds.length === 1) {
           map.setView(bounds[0], 16);
@@ -513,8 +521,8 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
     <div className="relative w-full h-full">
       <div
         ref={mapRef}
-        className="w-full h-full rounded-2xl overflow-hidden shadow-inner"
-        style={{ minHeight: '580px' }}
+        className="w-full rounded-2xl overflow-hidden shadow-inner relative z-0"
+        style={{ height: '620px', minHeight: '620px' }}
       />
 
       {/* Floating Mode Controls */}

@@ -334,3 +334,37 @@ article[class*="rounded-"] {
 .stagger-enter > *:nth-child(7) { animation: pageEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1) 0.20s backwards; }
 .stagger-enter > *:nth-child(8) { animation: pageEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1) 0.23s backwards; }
 
+/* ── Leaflet Full Dimensions & Tile Positioning Fix ──────────────────────────────── */
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  position: relative !important;
+  font-family: inherit !important;
+}
+
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+  position: absolute !important;
+  left: 0;
+  top: 0;
+}
+
+.leaflet-tile {
+  visibility: inherit !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.leaflet-tile-container {
+  pointer-events: none;
+}
+
+
