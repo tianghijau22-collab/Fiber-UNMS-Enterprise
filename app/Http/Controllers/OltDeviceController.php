@@ -228,15 +228,16 @@ class OltDeviceController extends Controller
         ]);
 
         $updateData = [
-            'deployment_mode'      => $validated['deployment_mode'],
-            'snmp_version'         => $validated['snmp_version'],
-            'snmp_community_type'  => $validated['snmp_community_type'] ?? 'public',
-            'snmp_port'            => $validated['snmp_port'] ?? 161,
-            'snmp_timeout'         => $validated['snmp_timeout'] ?? 5,
-            'cli_protocol'         => $validated['cli_protocol'] ?? 'telnet',
-            'cli_username'         => $validated['cli_username'] ?? null,
-            'cli_port'             => $validated['cli_port'] ?? 23,
-            'probe_agent_url'      => $validated['probe_agent_url'] ?? null,
+            'deployment_mode'          => $validated['deployment_mode'],
+            'snmp_version'             => $validated['snmp_version'],
+            'snmp_community_type'      => $validated['snmp_community_type'] ?? 'public',
+            'snmp_port'                => $validated['snmp_port'] ?? 161,
+            'snmp_timeout'             => $validated['snmp_timeout'] ?? 5,
+            'polling_interval_seconds' => isset($validated['polling_interval_seconds']) ? (int)$validated['polling_interval_seconds'] : ($device->polling_interval_seconds ?: 60),
+            'cli_protocol'             => $validated['cli_protocol'] ?? 'telnet',
+            'cli_username'             => $validated['cli_username'] ?? null,
+            'cli_port'                 => $validated['cli_port'] ?? 23,
+            'probe_agent_url'          => $validated['probe_agent_url'] ?? null,
         ];
 
         // v2c custom community
@@ -310,6 +311,7 @@ class OltDeviceController extends Controller
             'deployment_mode' => 'nullable|in:direct,vpn,probe',
             'snmp_version'        => 'nullable|in:v2c,v3',
             'snmp_community_type' => 'nullable|in:public,custom',
+            'polling_interval_seconds' => 'nullable|integer|min:10|max:3600',
         ]);
 
         $oldValues = [
@@ -332,6 +334,7 @@ class OltDeviceController extends Controller
             'deployment_mode'     => $validated['deployment_mode'] ?? $device->deployment_mode,
             'snmp_version'        => $validated['snmp_version'] ?? $device->snmp_version,
             'snmp_community_type' => $validated['snmp_community_type'] ?? $device->snmp_community_type,
+            'polling_interval_seconds' => isset($validated['polling_interval_seconds']) ? (int)$validated['polling_interval_seconds'] : ($device->polling_interval_seconds ?: 60),
         ]);
 
         AuditLog::record(

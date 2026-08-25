@@ -247,17 +247,31 @@ export default function OltManagement() {
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchOlts);
   const activeOlt = olts.find(o => o.id === selectedOltId);
 
-  // Live Polling Interval Effect
+  // Live Real-Time Polling Countdown & Auto-Sync
   useEffect(() => {
-    if (!pollingInterval || pollingInterval <= 0) return;
+    if (!activeOlt) return;
+    const intervalSec = activeOlt.polling_interval_seconds || 60;
+    setCountdown(intervalSec);
+  }, [activeOlt?.id, activeOlt?.polling_interval_seconds]);
+
+  useEffect(() => {
+    if (!activeOlt || isAutoPollingPaused) return;
+
     const timer = setInterval(() => {
-      if (activeOlt) {
-        const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
-        fetchOltHardware(vk, activeOlt.id);
-      }
-    }, pollingInterval * 1000);
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
+          setIsPollingLive(true);
+          fetchOltHardware(vk, activeOlt.id, true);
+          setTimeout(() => setIsPollingLive(false), 1500);
+          return activeOlt.polling_interval_seconds || 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
     return () => clearInterval(timer);
-  }, [pollingInterval, activeOlt]);
+  }, [activeOlt?.id, activeOlt?.polling_interval_seconds, isAutoPollingPaused]);
 
   // ─── Fetch OLT Hardware Telemetry via SNMP ──────────────────────────────────
   const fetchOltHardware = (vendorKey, deviceId, silent = false) => {
@@ -300,7 +314,7 @@ export default function OltManagement() {
       setLoading(false);
       setOltData(null);
     }
-  }, [activeOlt?.id, activeOlt?.connection_mode, activeOlt?.ip_address]);
+  }, [activeOlt?.id, activeOlt?.connection_mode, activeOlt?.ip_address, activeOlt?.polling_interval_seconds]);
 
   // ─── Test SNMP Connection ────────────────────────────────────────────────────
   const handleTestConnection = () => {
@@ -325,8 +339,7 @@ export default function OltManagement() {
         snmp_timeout: configForm.snmp_timeout,
         probe_agent_url: configForm.probe_agent_url || undefined,
         probe_agent_token: configForm.probe_agent_token || undefined,
-        polling_interval_seconds: configForm.polling_interval_seconds || 60,
-        polling_interval_seconds: configForm.polling_interval_seconds || 60,
+        polling_interval_seconds: parseInt(configForm.polling_interval_seconds) || 60,
       }),
     })
       .then(r => r.json())
@@ -366,12 +379,13 @@ export default function OltManagement() {
         snmp_timeout: configForm.snmp_timeout,
         probe_agent_url: configForm.probe_agent_url || undefined,
         probe_agent_token: configForm.probe_agent_token || undefined,
+        polling_interval_seconds: parseInt(configForm.polling_interval_seconds) || 60,
       }),
     })
       .then(r => r.json())
       .then(() => {
         setSavingConfig(false);
-        showNotif('Konfigurasi SNMP berhasil disimpan.', 'success');
+        showNotif('Konfigurasi SNMP & Interval Polling berhasil disimpan.', 'success');
         setShowConfigModal(false);
         fetchOlts();
       })
