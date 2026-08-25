@@ -3,14 +3,35 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\DB;
 
 class NetworkNodeResource extends JsonResource
 {
+    protected ?array $_cachedClientRxPowers = null;
+
     /**
      * Transform the resource into an array.
      */
     public function toArray($request)
     {
+        $opticalData = $this->getClientRxPowers();
+        $bestPower = !empty($opticalData['powers']) ? max($opticalData['powers']) : null;
+        $worstPower = !empty($opticalData['powers']) ? min($opticalData['powers']) : null;
+        $opticalDbm = $worstPower;
+
+        $rangeStr = null;
+        if (!empty($opticalData['total'])) {
+            if (empty($opticalData['powers'])) {
+                $rangeStr = "Loss (-∞ dBm)";
+            } elseif ($opticalData['has_loss']) {
+                $rangeStr = "{$bestPower} dBm (Ada LOS)";
+            } elseif ($bestPower === $worstPower) {
+                $rangeStr = "{$bestPower} dBm";
+            } else {
+                $rangeStr = "{$bestPower} s/d {$worstPower} dBm";
+            }
+        }
+
         return [
             'id'                     => $this->id,
             'name'                   => $this->name,
@@ -64,25 +85,33 @@ class NetworkNodeResource extends JsonResource
                 'ratio'        => $this->splitterType->ratio,
                 'output_ports' => $this->splitterType->output_ports,
             ]),
-            'optical_power_dbm'      => $this->getOpticalPowerDbm(),
-            'best_rx_power'          => $this->getBestRxPower(),
-            'worst_rx_power'         => $this->getWorstRxPower(),
-            'rx_power_range'         => $this->getRxPowerRange(),
+            'optical_power_dbm'      => $opticalDbm,
+            'best_rx_power'          => $bestPower,
+            'worst_rx_power'         => $worstPower,
+            'rx_power_range'         => $rangeStr,
         ];
     }
 
     private function getClientRxPowers(): array
     {
-        if ($this->node_type !== 'ODP') {
-            return ['powers' => [], 'total' => 0, 'has_loss' => false];
+        if ($this->_cachedClientRxPowers !== null) {
+            return $this->_cachedClientRxPowers;
         }
 
-        $onts = \App\Models\OntRegistration::whereHas('customerService.networkPort', function ($q) {
-            $q->where('node_id', $this->id);
-        })->get();
+        if ($this->node_type !== 'ODP') {
+            return $this->_cachedClientRxPowers = ['powers' => [], 'total' => 0, 'has_loss' => false];
+        }
+
+        // Single optimized JOIN query
+        $onts = DB::table('ont_registrations')
+            ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
+            ->join('network_ports', 'network_ports.id', '=', 'customer_services.network_port_id')
+            ->where('network_ports.node_id', $this->id)
+            ->select('ont_registrations.status', 'ont_registrations.rx_power')
+            ->get();
 
         if ($onts->isEmpty()) {
-            return ['powers' => [], 'total' => 0, 'has_loss' => false];
+            return $this->_cachedClientRxPowers = ['powers' => [], 'total' => 0, 'has_loss' => false];
         }
 
         $powers = [];
@@ -95,57 +124,10 @@ class NetworkNodeResource extends JsonResource
             }
         }
 
-        return ['powers' => $powers, 'total' => $onts->count(), 'has_loss' => $hasLoss];
-    }
-
-    private function getOpticalPowerDbm(): ?float
-    {
-        $data = $this->getClientRxPowers();
-        if (empty($data['powers'])) {
-            return null;
-        }
-        return min($data['powers']);
-    }
-
-    private function getBestRxPower(): ?float
-    {
-        $data = $this->getClientRxPowers();
-        if (empty($data['powers'])) {
-            return null;
-        }
-        return max($data['powers']);
-    }
-
-    private function getWorstRxPower(): ?float
-    {
-        $data = $this->getClientRxPowers();
-        if (empty($data['powers'])) {
-            return null;
-        }
-        return min($data['powers']);
-    }
-
-    private function getRxPowerRange(): ?string
-    {
-        $data = $this->getClientRxPowers();
-        if (empty($data['total'])) {
-            return null;
-        }
-
-        if (empty($data['powers'])) {
-            return "Loss (-∞ dBm)";
-        }
-
-        $best = max($data['powers']);
-        $worst = min($data['powers']);
-
-        if ($data['has_loss']) {
-            return "{$best} dBm (Ada LOS)";
-        }
-
-        if ($best === $worst) {
-            return "{$best} dBm";
-        }
-        return "{$best} s/d {$worst} dBm";
+        return $this->_cachedClientRxPowers = [
+            'powers'   => $powers,
+            'total'    => $onts->count(),
+            'has_loss' => $hasLoss
+        ];
     }
 }

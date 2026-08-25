@@ -293,14 +293,6 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
   useEffect(() => {
     if (mapInstanceRef.current) return;
 
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
-
     import('leaflet').then(L => {
       leafletRef.current = L.default || L;
       const Lf = leafletRef.current;
@@ -442,11 +434,7 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
             }
           }
 
-          let lineCoords = [[pLat, pLng], [nLat, nLng]];
-
-          if (followRoads) {
-            lineCoords = await fetchRoadRouteWithFallback(pLat, pLng, nLat, nLng);
-          }
+          const lineCoords = [[pLat, pLng], [nLat, nLng]];
 
           if (cancelled) break;
 
