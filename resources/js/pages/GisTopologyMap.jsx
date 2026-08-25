@@ -307,20 +307,38 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
       // SVG Renderer explicitly set to support animated stroke-dashoffset SVG polylines
       const map = Lf.map(mapRef.current, {
         center: [-0.785, 100.654],
-        zoom: 13,
+        zoom: 14,
         zoomControl: true,
         scrollWheelZoom: true,
         preferCanvas: false,
         renderer: Lf.svg(),
       });
 
-      const satUrl = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+      const satUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
       tileLayerRef.current = Lf.tileLayer(satUrl, {
         maxZoom: 20,
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+        subdomains: ['0', '1', '2', '3'],
       }).addTo(map);
 
       mapInstanceRef.current = map;
+
+      // Ensure full viewport coverage immediately and after layout paint
+      map.invalidateSize();
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, 150);
+
+      // ResizeObserver to handle container / viewport resize instantly
+      if (window.ResizeObserver && mapRef.current) {
+        const ro = new ResizeObserver(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        });
+        ro.observe(mapRef.current);
+      }
     }).catch(err => console.warn('Leaflet load failed:', err));
 
     return () => {
@@ -341,11 +359,18 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
     setIsSatellite(nextMode);
 
     if (nextMode) {
-      tileLayerRef.current = Lf.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
+      tileLayerRef.current = Lf.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        subdomains: ['0', '1', '2', '3']
+      });
     } else {
-      tileLayerRef.current = Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+      tileLayerRef.current = Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        subdomains: ['a', 'b', 'c']
+      });
     }
     tileLayerRef.current.addTo(map);
+    map.invalidateSize();
   };
 
   const handleRecenterMap = useCallback(() => {
@@ -551,15 +576,18 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, followRoads, onOpenStre
       bounds.push([parseFloat(node.latitude), parseFloat(node.longitude)]);
     });
 
-    if (isFirstRenderRef.current && bounds.length > 0) {
-      if (bounds.length === 1) {
-        map.setView(bounds[0], 15);
-      } else if (bounds.length > 1) {
-        try {
-          map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
-        } catch { }
+    if (bounds.length > 0) {
+      map.invalidateSize();
+      if (isFirstRenderRef.current) {
+        if (bounds.length === 1) {
+          map.setView(bounds[0], 16);
+        } else if (bounds.length > 1) {
+          try {
+            map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+          } catch { }
+        }
+        isFirstRenderRef.current = false;
       }
-      isFirstRenderRef.current = false;
     }
   }, [nodes, selectedNode, onSelectNode]);
 
