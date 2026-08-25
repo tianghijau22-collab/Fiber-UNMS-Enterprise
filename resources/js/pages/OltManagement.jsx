@@ -247,15 +247,25 @@ export default function OltManagement() {
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchOlts);
   const activeOlt = olts.find(o => o.id === selectedOltId);
 
-  // Live Real-Time Polling Countdown & Auto-Sync
+  // Live Real-Time Server-Synchronized Polling Countdown & Auto-Sync
   useEffect(() => {
     if (!activeOlt) return;
     const intervalSec = activeOlt.polling_interval_seconds || 60;
-    setCountdown(intervalSec);
-  }, [activeOlt?.id, activeOlt?.polling_interval_seconds]);
+
+    if (activeOlt.last_connected_at) {
+      const lastPollMs = new Date(activeOlt.last_connected_at).getTime();
+      const nowMs = Date.now();
+      const elapsedSec = Math.max(0, Math.floor((nowMs - lastPollMs) / 1000));
+      const rem = Math.max(1, intervalSec - (elapsedSec % intervalSec));
+      setCountdown(rem);
+    } else {
+      setCountdown(intervalSec);
+    }
+  }, [activeOlt?.id, activeOlt?.polling_interval_seconds, activeOlt?.last_connected_at]);
 
   useEffect(() => {
     if (!activeOlt || isAutoPollingPaused) return;
+    const intervalSec = activeOlt.polling_interval_seconds || 60;
 
     const timer = setInterval(() => {
       setCountdown((prev) => {
@@ -263,8 +273,9 @@ export default function OltManagement() {
           const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
           setIsPollingLive(true);
           fetchOltHardware(vk, activeOlt.id, true);
+          fetchOlts(true);
           setTimeout(() => setIsPollingLive(false), 1500);
-          return activeOlt.polling_interval_seconds || 60;
+          return intervalSec;
         }
         return prev - 1;
       });

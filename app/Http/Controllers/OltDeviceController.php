@@ -47,6 +47,7 @@ class OltDeviceController extends Controller
 
         return response()->json([
             'status'        => 'success',
+            'server_time'   => now()->toIso8601String(),
             'capabilities'  => ConnectionManager::getSystemCapabilities(),
             'data'          => $data,
         ]);
