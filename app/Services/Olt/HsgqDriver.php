@@ -244,9 +244,11 @@ class HsgqDriver implements OltDeviceDriverInterface
             $mac = strtolower($reg->onu_mac ?: $reg->onu_serial);
             $phys = $physicalOnusByMac[$mac] ?? null;
 
-            $rxPower = $phys ? (float)$phys['rx_power'] : (float)($reg->rx_power ?? -16.63);
-            $txPower = $phys && isset($phys['tx_power']) ? (float)$phys['tx_power'] : (float)($reg->tx_power ?? 1.95);
-            $status = $phys ? ($phys['status'] === 'Online' ? 'Online' : 'LOS (Dying Gasp)') : ($reg->status === 'active' ? 'Online' : 'LOS (Dying Gasp)');
+            $isOnline = $phys ? ($phys['status'] === 'Online') : ($reg->status === 'active');
+            $status = $isOnline ? 'Online' : 'LOS (Dying Gasp)';
+
+            $rxPower = $isOnline ? ($phys && isset($phys['rx_power']) && $phys['rx_power'] !== null ? (float)$phys['rx_power'] : (float)($reg->rx_power ?? -16.63)) : null;
+            $txPower = $isOnline ? ($phys && isset($phys['tx_power']) && $phys['tx_power'] !== null ? (float)$phys['tx_power'] : (float)($reg->tx_power ?? 1.95)) : null;
 
             return [
                 '_source'         => $phys ? 'live_olt_api' : 'database',
@@ -257,7 +259,7 @@ class HsgqDriver implements OltDeviceDriverInterface
                 'status'          => $status,
                 'rx_power'        => $rxPower,
                 'tx_power'        => $txPower,
-                'distance_meters' => (int)($reg->distance_meters ?? 8),
+                'distance_meters' => $isOnline ? (int)($reg->distance_meters ?? 8) : 0,
                 'ip_address'      => $reg->customerService?->ip_address ?: ($reg->customerService?->pppoe_username ?: '—'),
             ];
         })->toArray();
@@ -340,34 +342,36 @@ class HsgqDriver implements OltDeviceDriverInterface
 
         foreach ($liveApi['onus'] ?? [] as $po) {
             if (strtolower($po['mac_address']) === $targetMac || strtolower($po['serial_number']) === $targetMac) {
-                $rx = (float)$po['rx_power'];
+                $isOnline = ($po['status'] === 'Online');
+                $rx = $isOnline ? (isset($po['rx_power']) && $po['rx_power'] !== null ? (float)$po['rx_power'] : -16.63) : null;
                 return [
                     'serial_number'    => $serialNumber,
                     'rx_power_dbm'     => $rx,
-                    'tx_power_dbm'     => (float)($po['tx_power'] ?? 1.95),
-                    'olt_rx_power_dbm' => $rx + 0.4,
-                    'distance_meters'  => 8,
-                    'voltage_v'        => (float)($po['voltage_v'] ?? 3.30),
-                    'bias_current_ma'  => (float)($po['bias_current_ma'] ?? 18.0),
-                    'temperature_c'    => (float)($po['temperature_c'] ?? 64.0),
-                    'status'           => ($rx < -27) ? 'Critical' : (($rx < -24) ? 'Warning' : 'Normal'),
+                    'tx_power_dbm'     => $isOnline ? (float)($po['tx_power'] ?? 1.95) : null,
+                    'olt_rx_power_dbm' => $rx !== null ? round($rx + 0.4, 2) : null,
+                    'distance_meters'  => $isOnline ? 8 : 0,
+                    'voltage_v'        => $isOnline ? (float)($po['voltage_v'] ?? 3.30) : 0,
+                    'bias_current_ma'  => $isOnline ? (float)($po['bias_current_ma'] ?? 18.0) : 0,
+                    'temperature_c'    => $isOnline ? (float)($po['temperature_c'] ?? 64.0) : 0,
+                    'status'           => !$isOnline ? 'LOS (Dying Gasp)' : (($rx < -27) ? 'Critical' : (($rx < -24) ? 'Warning' : 'Normal')),
                 ];
             }
         }
 
         $reg = OntRegistration::where('onu_serial', $serialNumber)->first();
-        $rx = $reg ? (float)($reg->rx_power ?? -16.63) : -16.63;
+        $isOnline = ($reg && $reg->status === 'active');
+        $rx = $isOnline ? (float)($reg->rx_power ?? -16.63) : null;
 
         return [
             'serial_number'    => $serialNumber,
             'rx_power_dbm'     => $rx,
-            'tx_power_dbm'     => 1.95,
-            'olt_rx_power_dbm' => $rx + 0.4,
-            'distance_meters'  => 8,
-            'voltage_v'        => 3.30,
-            'bias_current_ma'  => 18.0,
-            'temperature_c'    => 64.0,
-            'status'           => ($rx < -27) ? 'Critical' : (($rx < -24) ? 'Warning' : 'Normal'),
+            'tx_power_dbm'     => $isOnline ? 1.95 : null,
+            'olt_rx_power_dbm' => $rx !== null ? round($rx + 0.4, 2) : null,
+            'distance_meters'  => $isOnline ? 8 : 0,
+            'voltage_v'        => $isOnline ? 3.30 : 0,
+            'bias_current_ma'  => $isOnline ? 18.0 : 0,
+            'temperature_c'    => $isOnline ? 64.0 : 0,
+            'status'           => !$isOnline ? 'LOS (Dying Gasp)' : (($rx < -27) ? 'Critical' : (($rx < -24) ? 'Warning' : 'Normal')),
         ];
     }
 
@@ -472,18 +476,26 @@ class HsgqDriver implements OltDeviceDriverInterface
                             $optData = $onuOptMap[$macClean] ?? null;
                             $verData = $verMap[$macClean] ?? null;
 
+                            $isOnline = (($onu['status'] ?? '') === 'Online');
+
                             // Parse live optical values
-                            $rxVal = -16.63;
-                            if ($optData && !empty($optData['receive_power'])) {
+                            $rxVal = null;
+                            if ($isOnline && $optData && !empty($optData['receive_power'])) {
                                 if (preg_match('/([-\d\.]+)\s*dBm/i', $optData['receive_power'], $m)) {
-                                    $rxVal = (float)$m[1];
+                                    $val = (float)$m[1];
+                                    if (!is_infinite($val) && $val > -50) {
+                                        $rxVal = $val;
+                                    }
                                 }
                             }
 
-                            $txVal = 1.95;
-                            if ($optData && !empty($optData['transmit_power'])) {
+                            $txVal = null;
+                            if ($isOnline && $optData && !empty($optData['transmit_power'])) {
                                 if (preg_match('/([-\d\.]+)\s*dBm/i', $optData['transmit_power'], $m)) {
-                                    $txVal = (float)$m[1];
+                                    $val = (float)$m[1];
+                                    if (!is_infinite($val) && $val > -50) {
+                                        $txVal = $val;
+                                    }
                                 }
                             }
 
@@ -516,13 +528,13 @@ class HsgqDriver implements OltDeviceDriverInterface
                                 'onu_name'         => $onu['onu_name'] ?? ($verData['onu_name'] ?? ('ONU ' . $p . '/' . ($onu['onu_id'] ?? 1))),
                                 'mac_address'      => $macClean,
                                 'serial_number'    => $macClean,
-                                'status'           => ($onu['status'] ?? '') === 'Online' ? 'Online' : 'Offline',
+                                'status'           => $isOnline ? 'Online' : 'Offline',
                                 'auth_state'       => ($onu['auth_state'] ?? 0) == 1 ? 'Authorized' : 'Unauthorized',
-                                'rx_power'         => round($rxVal, 2),
-                                'tx_power'         => round($txVal, 2),
-                                'temperature_c'    => round($tempVal, 1),
-                                'voltage_v'        => round($voltVal, 2),
-                                'bias_current_ma'  => round($biasVal, 1),
+                                'rx_power'         => $isOnline ? ($rxVal !== null ? round($rxVal, 2) : -16.63) : null,
+                                'tx_power'         => $isOnline ? ($txVal !== null ? round($txVal, 2) : 1.95) : null,
+                                'temperature_c'    => $isOnline ? round($tempVal, 1) : null,
+                                'voltage_v'        => $isOnline ? round($voltVal, 2) : null,
+                                'bias_current_ma'  => $isOnline ? round($biasVal, 1) : null,
                                 'device_type'      => $verData['dev_type'] ?? ($onu['dev_type'] ?? 'HGU'),
                                 'vendor_model'     => ($verData['vendor'] ?? 'OEMT') . ' ' . ($verData['sn_model'] ?? '212X'),
                                 'software_ver'     => $verData['software_ver'] ?? null,

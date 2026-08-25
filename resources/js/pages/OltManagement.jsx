@@ -1235,9 +1235,23 @@ export default function OltManagement() {
                           </span>
                         </td>
                         <td className="px-6 py-4 font-mono text-xs font-bold">
-                          <span className={onu.rx_power < -27 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
-                            {onu.rx_power != null ? `${onu.rx_power} dBm` : '—'}
-                          </span>
+                          {onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40 ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                              Loss (-∞ dBm)
+                            </span>
+                          ) : onu.rx_power < -27 ? (
+                            <span className="text-rose-600 dark:text-rose-400 font-bold">
+                              {onu.rx_power} dBm
+                            </span>
+                          ) : onu.rx_power < -24 ? (
+                            <span className="text-amber-600 dark:text-amber-400 font-bold">
+                              {onu.rx_power} dBm
+                            </span>
+                          ) : (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                              {onu.rx_power} dBm
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">
                           {onu.vendor_model || 'HGU EPON'}
@@ -1373,7 +1387,17 @@ export default function OltManagement() {
                             }`}>{onu.status}</span>
                         </td>
                         <td className="px-6 py-4 font-mono text-xs font-bold">
-                          <span className={onu.rx_power < -27 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>{onu.rx_power} dBm</span>
+                          {onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40 ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                              Loss (-∞ dBm)
+                            </span>
+                          ) : onu.rx_power < -27 ? (
+                            <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
+                          ) : onu.rx_power < -24 ? (
+                            <span className="text-amber-600 dark:text-amber-400 font-bold">{onu.rx_power} dBm</span>
+                          ) : (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onu.rx_power} dBm</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs">{onu.distance_meters} m</td>
                         <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-500">{maskIpAddress(onu.ip_address)}</td>
@@ -2107,10 +2131,11 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
     fetchOptical();
   }, [onu.serial_number, activeOlt?.id]);
 
-  const rx = opticalData?.rx_power_dbm ?? onu.rx_power ?? -20.0;
-  const isLoss = rx < -27;
-  const isWarning = rx >= -27 && rx < -24;
-  const isGood = rx >= -24;
+  const isOffline = onu.status !== 'Online' || opticalData?.status === 'LOS (Dying Gasp)' || opticalData?.rx_power_dbm === null;
+  const rx = isOffline ? null : (opticalData?.rx_power_dbm ?? onu.rx_power);
+  const isLoss = isOffline || (rx !== null && rx < -27);
+  const isWarning = !isOffline && rx !== null && rx >= -27 && rx < -24;
+  const isGood = !isOffline && rx !== null && rx >= -24;
 
   return createPortal(
     <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
@@ -2138,16 +2163,16 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
           ) : opticalData ? (
             <div className="space-y-4">
               {/* Primary Gauge Card */}
-              <div className={`p-4 rounded-2xl border text-center space-y-2 ${isGood
-                ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+              <div className={`p-4 rounded-2xl border text-center space-y-2 ${isOffline || isLoss
+                ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
                 : isWarning
                   ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
-                  : 'bg-rose-50 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200'
+                  : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
                 }`}>
                 <div className="text-xs font-bold uppercase tracking-wider">Rx Optical Power (ONU)</div>
-                <div className="text-3xl font-black font-mono">{rx} dBm</div>
+                <div className="text-3xl font-black font-mono">{isOffline ? 'Loss (-∞ dBm)' : `${rx} dBm`}</div>
                 <div className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-white/80 dark:bg-black/40 shadow-2xs">
-                  {isGood ? 'Kualitas Redaman Baik' : isWarning ? 'Redaman Waspada' : 'Redaman Buruk / Kritis'}
+                  {isOffline ? 'LOS (No Signal / Dying Gasp)' : isGood ? 'Kualitas Redaman Baik' : isWarning ? 'Redaman Waspada' : 'Redaman Buruk / Kritis'}
                 </div>
               </div>
 
@@ -2156,35 +2181,35 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Tx Power (ONU)</div>
                   <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {opticalData.tx_power_dbm ? `+${opticalData.tx_power_dbm} dBm` : '—'}
+                    {!isOffline && opticalData.tx_power_dbm ? `+${opticalData.tx_power_dbm} dBm` : '—'}
                   </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">OLT Rx Power</div>
                   <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {opticalData.olt_rx_power_dbm ? `${opticalData.olt_rx_power_dbm} dBm` : '—'}
+                    {!isOffline && opticalData.olt_rx_power_dbm ? `${opticalData.olt_rx_power_dbm} dBm` : '—'}
                   </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Tegangan (V)</div>
                   <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {opticalData.voltage_v ? `${opticalData.voltage_v} V` : '3.30 V'}
+                    {!isOffline && opticalData.voltage_v ? `${opticalData.voltage_v} V` : '—'}
                   </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Bias Current</div>
                   <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {opticalData.bias_current_ma ? `${opticalData.bias_current_ma} mA` : '14.0 mA'}
+                    {!isOffline && opticalData.bias_current_ma ? `${opticalData.bias_current_ma} mA` : '—'}
                   </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase">Suhu Transceiver</div>
                   <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {opticalData.temperature_c ? `${opticalData.temperature_c} °C` : '40 °C'}
+                    {!isOffline && opticalData.temperature_c ? `${opticalData.temperature_c} °C` : '—'}
                   </div>
                 </div>
 
@@ -2200,11 +2225,13 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
               <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
                 <div className="font-bold text-slate-800 dark:text-slate-200">Analisa &amp; Rekomendasi Jaringan:</div>
                 <p className="text-slate-600 dark:text-slate-400">
-                  {isGood
-                    ? 'Redaman optik sangat baik (antara -15 hingga -24 dBm). Layanan internet berjalan optimal tanpa packet loss optik.'
-                    : isWarning
-                      ? 'Redaman berada di batas wajar (-24 hingga -27 dBm). Periksa kemungkinan kotoran pada patchcord atau bending ringan kabel dropcore.'
-                      : 'Redaman melewati batas ambang toleransi (< -27 dBm). Disarankan melakukan tracing fisik sambungan fusion splice atau ODP.'}
+                  {isOffline
+                    ? 'Modem dalam status LOS (Loss of Signal) atau Mati Daya (Dying Gasp). Sensor optik OLT tidak mendeteksi cahaya laser dari modem. Periksa kabel dropcore optik atau adaptor daya modem pelanggan.'
+                    : isGood
+                      ? 'Redaman optik sangat baik (antara -15 hingga -24 dBm). Layanan internet berjalan optimal tanpa packet loss optik.'
+                      : isWarning
+                        ? 'Redaman berada di batas wajar (-24 hingga -27 dBm). Periksa kemungkinan kotoran pada patchcord atau bending ringan kabel dropcore.'
+                        : 'Redaman melewati batas ambang toleransi (< -27 dBm). Disarankan melakukan tracing fisik sambungan fusion splice atau ODP.'}
                 </p>
               </div>
             </div>
