@@ -284,6 +284,29 @@ export default function CustomerManagement() {
     fetchOdpPorts(odpId);
   };
 
+  // ─── Auto-open Add Customer modal if navigated from OLT Belum Terdaftar ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === '1' || params.get('onu_sn')) {
+      const onuSn = params.get('onu_sn') || '';
+      const onuName = params.get('onu_name') || '';
+      setEditingCustomer(null);
+      setForm({
+        customer_number: '',
+        name: onuName && !onuName.startsWith('ONU ') ? onuName : '',
+        address: '',
+        status: 'active',
+        odp_id: '',
+        odp_port_number: '',
+        onu_serial: onuSn,
+        rx_power: '-18.5',
+      });
+      setOdpPorts([]);
+      setFormErr(null);
+      setShowModal(true);
+    }
+  }, []);
+
   const openAddModal = () => {
     setEditingCustomer(null);
     setForm({

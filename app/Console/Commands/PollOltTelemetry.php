@@ -49,13 +49,7 @@ class PollOltTelemetry extends Command
                 $onuList    = $driver->getOnuList();
                 $uncfg      = $driver->getUnconfiguredOnus();
 
-                $snapshot = [
-                    'device_info'       => $deviceInfo,
-                    'pon_ports'         => $ponPorts,
-                    'onu_list'          => $onuList,
-                    'unconfigured_onus' => $uncfg,
-                    'polled_at'         => now()->toIso8601String(),
-                ];
+                $snapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, $onuList, $uncfg);
 
                 $device->update([
                     'last_telemetry_snapshot' => $snapshot,

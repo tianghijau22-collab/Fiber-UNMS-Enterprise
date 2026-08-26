@@ -27,7 +27,7 @@ class OltController extends Controller
         $community = $device ? $device->getEffectiveCommunity() : 'public';
         $snmpVersion = $device ? ($device->snmp_version ?? 'v2c') : 'v2c';
 
-        $v = strtolower($vendor);
+        $v = strtolower(str_replace(' ', '-', $vendor));
         if (str_contains($v, 'huawei')) {
             return new HuaweiDriver(
                 ip: $ip,
@@ -46,9 +46,17 @@ class OltController extends Controller
             );
         }
 
+        if (str_contains($v, 'c320')) {
+            return new ZteC320Driver(
+                ip: $ip,
+                community: $community,
+                snmpVersion: $snmpVersion,
+                isLive: $isLive,
+                port: $port
+            );
+        }
+
         switch ($v) {
-            case 'zte-c320':
-                return new ZteC320Driver();
             case 'hioso':
                 return new HiosoDriver();
             case 'hsgq':
@@ -80,12 +88,18 @@ class OltController extends Controller
 
         $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
 
-        // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh, sajikan INSTAN dari database (< 5ms)
+        // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh, selalu partisi ulang dengan data customer database UNMS terbaru
         if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
-            $snapshot = $device->last_telemetry_snapshot;
-            if (!isset($snapshot['orphaned_onus'])) {
-                $snapshot['orphaned_onus'] = $this->computeOrphanedOnus($device, $snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
-            }
+            $rawSnapshot = $device->last_telemetry_snapshot;
+            $rawOnus = array_merge($rawSnapshot['onu_list'] ?? [], $rawSnapshot['unconfigured_onus'] ?? []);
+            $snapshot = $this->processAndPartitionTelemetry(
+                $device,
+                $rawSnapshot['device_info'] ?? [],
+                $rawSnapshot['pon_ports'] ?? [],
+                $rawOnus,
+                []
+            );
+            $snapshot['polled_at'] = $rawSnapshot['polled_at'] ?? now()->toIso8601String();
             return response()->json($snapshot);
         }
 
@@ -96,16 +110,8 @@ class OltController extends Controller
         $driverPonPorts   = $driver->getPonPorts();
         $driverOnuList    = $driver->getOnuList();
         $driverUncfg      = $driver->getUnconfiguredOnus();
-        $driverOrphaned   = $this->computeOrphanedOnus($device, $driverOnuList, $driverUncfg);
 
-        $snapshot = [
-            'device_info'       => $driverDeviceInfo,
-            'pon_ports'         => $driverPonPorts,
-            'onu_list'          => $driverOnuList,
-            'unconfigured_onus' => $driverUncfg,
-            'orphaned_onus'     => $driverOrphaned,
-            'polled_at'         => now()->toIso8601String(),
-        ];
+        $snapshot = $this->processAndPartitionTelemetry($device, $driverDeviceInfo, $driverPonPorts, $driverOnuList, $driverUncfg);
 
         if ($device) {
             $device->update([
@@ -116,6 +122,181 @@ class OltController extends Controller
         }
 
         return response()->json($snapshot);
+    }
+
+    /**
+     * Mempartisi ONU dari OLT menjadi 3 kategori UNMS yang presisi:
+     * 1. onu_list: ONU yang terdaftar di database UNMS (OntRegistration & Customer)
+     * 2. unconfigured_onus: ONU fisik yang terdeteksi di OLT namun BELUM terdaftar di database UNMS
+     * 3. orphaned_onus: ONU di database UNMS yang sudah tidak terdeteksi di OLT fisik
+     */
+    public function processAndPartitionTelemetry(?OltDevice $device, array $driverDeviceInfo, array $driverPonPorts, array $driverOnuList, array $driverUncfg): array
+    {
+        // 1. Ambil seluruh data ONT di database UNMS yang sudah terhubung ke Pelanggan
+        $query = OntRegistration::with([
+            'customerService.customer',
+            'customerService.networkPort.node',
+            'customerService.servicePackage',
+            'oltPort.node'
+        ])
+        ->whereNotNull('customer_service_id')
+        ->whereHas('customerService.customer');
+
+        if ($device) {
+            $query->whereHas('customerService.networkPort.node', function ($q) use ($device) {
+                $q->where('olt_device_id', $device->id);
+            });
+        }
+
+        $dbOnts = $query->get();
+
+        // Buat map pencarian berdasarkan Serial Number & MAC Address
+        $registeredMap = [];
+        foreach ($dbOnts as $ont) {
+            $sn  = strtoupper(trim((string)$ont->onu_serial));
+            $mac = strtoupper(trim((string)$ont->onu_mac));
+            if (!empty($sn)) $registeredMap[$sn] = $ont;
+            if (!empty($mac)) $registeredMap[$mac] = $ont;
+        }
+
+        $registeredOnus   = [];
+        $unregisteredOnus = [];
+        $matchedOntIds    = [];
+
+        // 2. Partisi ONU dari OLT driver
+        foreach ($driverOnuList as $onu) {
+            $sn  = strtoupper(trim((string)($onu['serial_number'] ?? '')));
+            $mac = strtoupper(trim((string)($onu['mac_address'] ?? ($onu['onu_mac'] ?? ''))));
+
+            $regOnt = null;
+            if (!empty($sn) && isset($registeredMap[$sn])) {
+                $regOnt = $registeredMap[$sn];
+            } elseif (!empty($mac) && isset($registeredMap[$mac])) {
+                $regOnt = $registeredMap[$mac];
+            }
+
+            if ($regOnt) {
+                // Kategori 1: Terdaftar di UNMS (Customer)
+                $matchedOntIds[] = $regOnt->id;
+                $customerName = $regOnt->customerService?->customer?->name ?: ('Pelanggan #' . $regOnt->id);
+                $customerCode = $regOnt->customerService?->customer?->customer_number ?: ('CUST-' . $regOnt->id);
+                $nodePort     = $regOnt->oltPort?->node?->olt_port_ref ?: ($onu['port'] ?? 'epon_0/1');
+                $portClean    = str_replace('gpon_olt_', 'gpon-olt_', $nodePort);
+
+                $registeredOnus[] = [
+                    '_source'         => 'live_snmp',
+                    'ont_id'          => $regOnt->id,
+                    'onu_id'          => $onu['onu_id'] ?? ($onu['onu_index'] ?? (string)$regOnt->id),
+                    'port'            => explode(',', $portClean)[0] ?? ($onu['port'] ?? 'epon_0/1'),
+                    'customer_id'     => $regOnt->customerService?->customer?->id,
+                    'customer_name'   => $customerName,
+                    'customer_number' => $customerCode,
+                    'serial_number'   => $onu['serial_number'] ?? $regOnt->onu_serial,
+                    'mac_address'     => $onu['mac_address'] ?? $regOnt->onu_mac,
+                    'status'          => $onu['status'] ?? 'Online',
+                    'rx_power'        => isset($onu['rx_power']) ? (float)$onu['rx_power'] : (float)($regOnt->rx_power ?? -19.5),
+                    'tx_power'        => isset($onu['tx_power']) ? (float)$onu['tx_power'] : (float)($regOnt->tx_power ?? 2.1),
+                    'distance_meters' => $onu['distance_meters'] ?? 850,
+                    'ip_address'      => $regOnt->customerService?->ip_address ?: ($onu['ip_address'] ?? '—'),
+                    'onu_type'        => $regOnt->onu_type ?: ($onu['vendor_model'] ?? 'HGU EPON/GPON'),
+                ];
+            } else {
+                // Kategori 2: Belum Terdaftar di UNMS (Muncul di tab Belum Terdaftar)
+                $unregisteredOnus[] = [
+                    '_source'                  => 'live_snmp',
+                    'onu_name'                 => $onu['onu_name'] ?? ($onu['customer_name'] ?? ('ONU ' . ($onu['serial_number'] ?? ''))),
+                    'serial_number'            => $onu['serial_number'] ?? null,
+                    'mac_address'              => $onu['mac_address'] ?? ($onu['onu_mac'] ?? ($onu['serial_number'] ?? null)),
+                    'detected_port'            => $onu['port'] ?? ($onu['detected_port'] ?? 'epon_0/1'),
+                    'onu_index'                => $onu['onu_id'] ?? ($onu['onu_index'] ?? '1'),
+                    'onu_id'                   => $onu['onu_id'] ?? ($onu['onu_index'] ?? '1'),
+                    'vendor_model'             => $onu['vendor_model'] ?? ($onu['onu_type'] ?? 'HGU EPON/GPON'),
+                    'status'                   => $onu['status'] ?? 'Online',
+                    'rx_power'                 => isset($onu['rx_power']) ? (float)$onu['rx_power'] : null,
+                    'tx_power'                 => isset($onu['tx_power']) ? (float)$onu['tx_power'] : null,
+                    'distance_meters'          => $onu['distance_meters'] ?? null,
+                    'detected_at'              => $onu['detected_at'] ?? 'Terdeteksi Aktif di OLT',
+                    'is_unregistered_physical' => true,
+                ];
+            }
+        }
+
+        // 3. Gabungkan unconfigured / autofind ONUs dari driver
+        $existingUncfgSns = collect($unregisteredOnus)->pluck('serial_number')->filter()->map(fn($s) => strtoupper(trim((string)$s)))->toArray();
+        foreach ($driverUncfg as $uncfg) {
+            $uSn = strtoupper(trim((string)($uncfg['serial_number'] ?? '')));
+            if (!empty($uSn) && in_array($uSn, $existingUncfgSns)) {
+                continue;
+            }
+            if (!empty($uSn) && isset($registeredMap[$uSn])) {
+                continue;
+            }
+            $unregisteredOnus[] = $uncfg;
+        }
+
+        // 4. Kategori 3: Orphaned ONUs (Ada di UNMS tapi tidak ditemukan di OLT fisik)
+        $orphanedOnus = [];
+        foreach ($dbOnts as $ont) {
+            if (!in_array($ont->id, $matchedOntIds)) {
+                $customerName = $ont->customerService?->customer?->name ?: ('Pelanggan #' . $ont->id);
+                $customerCode = $ont->customerService?->customer?->customer_number ?: ('CUST-' . $ont->id);
+                $node         = $ont->customerService?->networkPort?->node ?: $ont->oltPort?->node;
+                $portNumber   = $ont->customerService?->networkPort?->port_number;
+                $oltName      = $device?->name ?: ($node?->oltDevice?->name ?: 'OLT Utama');
+                $oltPortRef   = $node?->olt_port_ref ?: 'epon_0/1';
+
+                $orphanedOnus[] = [
+                    'id'                  => $ont->id,
+                    'customer_id'         => $ont->customerService?->customer?->id,
+                    'customer_name'       => $customerName,
+                    'customer_number'     => $customerCode,
+                    'service_id'          => $ont->customerService?->id,
+                    'onu_serial'          => $ont->onu_serial,
+                    'onu_mac'             => $ont->onu_mac,
+                    'onu_type'            => $ont->onu_type ?: 'HGU EPON/GPON',
+                    'odp_name'            => $node?->name ?: 'ODP Tidak Diketahui',
+                    'odp_port'            => $portNumber ? "Port {$portNumber}" : '—',
+                    'olt_name'            => $oltName,
+                    'olt_port'            => $oltPortRef,
+                    'registered_at'       => $ont->registered_at?->format('d M Y H:i') ?: ($ont->created_at?->format('d M Y H:i') ?: '—'),
+                    'last_online_at'      => $ont->last_online_at?->format('d M Y H:i') ?: 'Tidak Pernah Online',
+                    'unms_status'         => $ont->status ?: 'inactive',
+                    'orphan_reason'       => 'Tidak Ditemukan di OLT (Telah Dihapus dari Perangkat OLT / Putus Berlangganan)',
+                ];
+            }
+        }
+
+        // 5. Perbarui hitungan port PON
+        $updatedPonPorts = array_map(function ($port) use ($registeredOnus) {
+            $portId = $port['port_id'] ?? '';
+            $regCount = 0;
+            $onCount = 0;
+            foreach ($registeredOnus as $ro) {
+                if (($ro['port'] ?? '') === $portId || str_contains($portId, $ro['port'] ?? '###')) {
+                    $regCount++;
+                    if (($ro['status'] ?? '') === 'Online') $onCount++;
+                }
+            }
+            if ($regCount > 0) {
+                $port['registered_onus'] = $regCount;
+                $port['online_onus']     = $onCount;
+                $port['los_onus']        = max(0, $regCount - $onCount);
+            } else {
+                $port['registered_onus'] = 0;
+                $port['online_onus']     = 0;
+                $port['los_onus']        = 0;
+            }
+            return $port;
+        }, $driverPonPorts);
+
+        return [
+            'device_info'       => $driverDeviceInfo,
+            'pon_ports'         => $updatedPonPorts,
+            'onu_list'          => $registeredOnus,
+            'unconfigured_onus' => $unregisteredOnus,
+            'orphaned_onus'     => $orphanedOnus,
+            'polled_at'         => now()->toIso8601String(),
+        ];
     }
 
     public function syncOntRegistrations(OltDevice $device, array $onuList): void
