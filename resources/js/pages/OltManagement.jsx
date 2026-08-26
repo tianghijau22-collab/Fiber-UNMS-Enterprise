@@ -272,7 +272,7 @@ export default function OltManagement() {
         if (prev <= 1) {
           const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
           setIsPollingLive(true);
-          fetchOltHardware(vk, activeOlt.id, true);
+          fetchOltHardware(vk, activeOlt.id, true, true);
           fetchOlts(true);
           setTimeout(() => setIsPollingLive(false), 1500);
           return intervalSec;
@@ -285,9 +285,9 @@ export default function OltManagement() {
   }, [activeOlt?.id, activeOlt?.polling_interval_seconds, isAutoPollingPaused]);
 
   // ─── Fetch OLT Hardware Telemetry via SNMP ──────────────────────────────────
-  const fetchOltHardware = (vendorKey, deviceId, silent = false) => {
+  const fetchOltHardware = (vendorKey, deviceId, silent = false, fresh = false) => {
     if (!silent) setLoading(true);
-    const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}`;
+    const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}${fresh ? '&fresh=1' : ''}`;
     fetch(url)
       .then(r => { if (!r.ok) throw new Error('API ' + r.status); return r.json(); })
       .then(data => {
@@ -813,7 +813,13 @@ export default function OltManagement() {
 
           <RefreshButton
             isRefreshing={isRefreshing}
-            onRefresh={triggerRefresh}
+            onRefresh={() => {
+              triggerRefresh();
+              if (activeOlt) {
+                const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
+                fetchOltHardware(vk, activeOlt.id, false, true);
+              }
+            }}
             lastUpdatedText={timeAgoText}
             label="Segarkan OLT"
           />

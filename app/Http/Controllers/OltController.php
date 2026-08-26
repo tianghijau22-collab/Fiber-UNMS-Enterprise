@@ -112,9 +112,34 @@ class OltController extends Controller
                 'last_telemetry_snapshot' => $snapshot,
                 'last_connected_at'       => now(),
             ]);
+            $this->syncOntRegistrations($device, $driverOnuList);
         }
 
         return response()->json($snapshot);
+    }
+
+    public function syncOntRegistrations(OltDevice $device, array $onuList): void
+    {
+        foreach ($onuList as $onuData) {
+            $sn = $onuData['serial_number'] ?? null;
+            if (!$sn) continue;
+
+            $newStatus = ($onuData['status'] === 'Online') ? 'active' : 'inactive';
+            $newRx     = isset($onuData['rx_power']) ? (float)$onuData['rx_power'] : null;
+            $newTx     = isset($onuData['tx_power']) ? (float)$onuData['tx_power'] : null;
+
+            $ontReg = OntRegistration::where('onu_serial', $sn)
+                ->orWhere('onu_mac', $sn)
+                ->first();
+
+            if ($ontReg) {
+                $ontReg->update([
+                    'rx_power' => $newRx,
+                    'tx_power' => $newTx,
+                    'status'   => $newStatus,
+                ]);
+            }
+        }
     }
 
     private function buildRealCards(OltDevice $device): array
