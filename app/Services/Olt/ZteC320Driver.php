@@ -339,6 +339,11 @@ class ZteC320Driver implements OltDeviceDriverInterface
             }
         }
 
+        if ($this->isLive) {
+            $this->cachedOnuList = [];
+            return [];
+        }
+
         // Fallback simulation
         $simOnus = [
             [
