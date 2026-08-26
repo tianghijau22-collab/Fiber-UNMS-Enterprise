@@ -75,7 +75,8 @@ class OltController extends Controller
                     ip: $ip,
                     community: $community,
                     snmpVersion: $snmpVersion,
-                    isLive: $isLive
+                    isLive: $isLive,
+                    port: $port
                 );
         }
     }
