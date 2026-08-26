@@ -1,6 +1,6 @@
 <?php
 
-namespace AppServicesOlt;
+namespace App\Services\Olt;
 
 /**
  * ZteC300Driver — Driver for ZTE ZXAN C300 Large Chassis OLT.
