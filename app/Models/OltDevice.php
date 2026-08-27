@@ -37,17 +37,15 @@ class OltDevice extends Model
      */
     public function getEffectiveCommunity(): string
     {
-        if ($this->snmp_community_type === 'public') {
-            return 'public';
+        if ($this->snmp_community_type === 'public' || empty($this->snmp_community_string)) {
+            return !empty($this->snmp_community) ? $this->snmp_community : 'public';
         }
-        if ($this->snmp_community_string) {
-            try {
-                return Crypt::decryptString($this->snmp_community_string);
-            } catch (\Exception $e) {
-                return $this->snmp_community_string; // fallback if not encrypted
-            }
+        try {
+            $dec = Crypt::decryptString($this->snmp_community_string);
+            return !empty($dec) ? $dec : 'public';
+        } catch (\Exception $e) {
+            return !empty($this->snmp_community) ? $this->snmp_community : 'public';
         }
-        return 'public';
     }
 
     /**
