@@ -201,7 +201,7 @@ class OltController extends Controller
                 '_source'         => $liveOnu ? 'live_snmp' : 'database',
                 'ont_id'          => $ont->id,
                 'onu_id'          => $liveOnu['onu_id'] ?? ($liveOnu['onu_index'] ?? (string)$ont->id),
-                'port'            => explode(',', $portClean)[0] ?? 'gpon-olt_1/1/1',
+                'port'            => $liveOnu['port'] ?? (explode(',', $portClean)[0] ?? $nodePort),
                 'customer_id'     => $ont->customerService?->customer?->id,
                 'customer_name'   => $customerName,
                 'customer_number' => $customerCode,

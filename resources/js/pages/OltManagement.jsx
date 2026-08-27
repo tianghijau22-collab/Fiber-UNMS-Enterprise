@@ -96,10 +96,10 @@ export default function OltManagement() {
   const [selectedPortFilter, setSelectedPortFilter] = useState(null);
   const [oltTopology, setOltTopology] = useState([]);
 
-  // Helper Format Short Port (misal: gpon-olt_1/3/6 -> 1/3/6)
+  // Helper Format Port Interface (menampilkan format interface otentik dari OLT)
   const formatShortPort = (portStr) => {
     if (!portStr) return '—';
-    return String(portStr).replace(/^(gpon[-_]olt[-_]|epon[-_]olt[-_]|gpon[-_]|epon[-_])/i, '');
+    return String(portStr);
   };
 
   // ONU Search & Filter
