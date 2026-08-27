@@ -1323,6 +1323,20 @@ export default function OltManagement() {
                             </div>
                           </div>
 
+                          {port.tx_power_dbm !== null && port.tx_power_dbm !== undefined && (
+                            <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/80 dark:border-slate-700">
+                              <span>TX Optical SFP:</span>
+                              <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5">
+                                <span>+{port.tx_power_dbm} dBm</span>
+                                {port.sfp_class && (
+                                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-sans font-semibold">
+                                    {port.sfp_class}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          )}
+
 
                           {/* Info ODC & ODP Terhubung */}
                           {odcCount > 0 && (
