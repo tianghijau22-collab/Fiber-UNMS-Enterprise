@@ -49,8 +49,8 @@ class ZteC320Driver implements OltDeviceDriverInterface
                 snmpVersion: $snmpVersion,
                 community: $community,
                 port: $port,
-                timeout: 3,
-                retries: 0
+                timeout: 5,
+                retries: 2
             );
         }
     }
