@@ -186,23 +186,25 @@ class ZteC320Driver implements OltDeviceDriverInterface
             }
         }
 
-        // Fallback simulation
-        $ports = [];
-        for ($port = 1; $port <= 8; $port++) {
-            $ports[] = [
-                '_source'         => 'simulation',
-                'port_id'         => "gpon-olt_1/1/{$port}",
-                'slot'            => 1,
-                'port'            => $port,
-                'status'          => 'Up',
-                'tx_power_dbm'    => 5.0,
-                'registered_onus' => 32,
-                'online_onus'     => 30,
-                'los_onus'        => 2,
-            ];
+        if ($this->isLive) {
+            $ports = [];
+            for ($port = 1; $port <= 16; $port++) {
+                $ports[] = [
+                    '_source'         => 'live_snmp',
+                    'port_id'         => "gpon-olt_1/1/{$port}",
+                    'slot'            => 1,
+                    'port'            => $port,
+                    'status'          => 'Up',
+                    'tx_power_dbm'    => 5.0,
+                    'sfp_class'       => 'Class C+',
+                    'registered_onus' => 0,
+                    'online_onus'     => 0,
+                    'los_onus'        => 0,
+                ];
+            }
+            $this->cachedPonPorts = $ports;
+            return $ports;
         }
-        $this->cachedPonPorts = $ports;
-        return $ports;
     }
 
     public function getOnuList(): array
@@ -224,22 +226,25 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     }
                 }
 
-                // 2. Query tabel ONU GPON ZTE V2.x / V1.x (Hanya query tabel penting)
-                $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3');
+                // 2. Query tabel ONU GPON ZTE V2.x / V1.x (Prioritas OID 1012.3.28.1.1.5)
+                $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5');
                 if (empty($snHexList)) {
-                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.1.1.2');
+                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1');
+                }
+                if (empty($snHexList)) {
+                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3');
                 }
 
                 $stateList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.4');
                 $descList  = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.2');
                 $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.9');
 
-                // Optical Table
-                $onuRxList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.10');
+                // Optical Table (Prioritas OID 1012.3.50.12.1.1.14)
+                $onuRxList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14');
                 if (empty($onuRxList)) {
                     $onuRxList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.18');
                 }
-                $onuTxList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14');
+                $onuTxList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.10.2.1.6.1.4.1.1');
 
                 // Build lookup maps
                 $stateMap = [];
@@ -479,11 +484,27 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     protected function parseZteSerialNumber(string $raw): string
     {
-        $clean = trim(str_replace(['"', 'Hex-STRING:', 'STRING:', ' '], '', $raw));
+        $val = SnmpConnector::parseValue($raw);
+        if (str_contains($val, 'Hex-STRING:')) {
+            $hex = str_replace(['Hex-STRING:', ' '], '', $val);
+            if (strlen($hex) >= 16) {
+                $vendor = @hex2bin(substr($hex, 0, 8));
+                if ($vendor && ctype_print($vendor)) {
+                    return strtoupper($vendor) . strtoupper(substr($hex, 8));
+                }
+                return strtoupper($hex);
+            }
+        }
+        if (str_starts_with($val, 'ZTEG') && strlen($val) >= 8) {
+            $vendor = substr($val, 0, 4);
+            $serial = bin2hex(substr($val, 4));
+            return strtoupper($vendor . $serial);
+        }
+        $clean = trim(str_replace(['"', 'Hex-STRING:', 'STRING:', ' '], '', $val));
         if (preg_match('/^[0-9A-Fa-f]{16}$/', $clean)) {
             $vendor = @hex2bin(substr($clean, 0, 8));
             if ($vendor && ctype_print($vendor)) {
-                return $vendor . strtoupper(substr($clean, 8));
+                return strtoupper($vendor) . strtoupper(substr($clean, 8));
             }
         }
         return strtoupper($clean);
