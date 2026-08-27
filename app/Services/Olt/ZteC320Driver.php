@@ -396,6 +396,9 @@ class ZteC320Driver implements OltDeviceDriverInterface
         if ($this->snmp && $this->isLive) {
             try {
                 $uncfgTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.15.1.1.3');
+                if (empty($uncfgTable)) {
+                    $uncfgTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.3.1.2');
+                }
                 if (!empty($uncfgTable)) {
                     $unconfigured = [];
                     foreach ($uncfgTable as $oid => $val) {

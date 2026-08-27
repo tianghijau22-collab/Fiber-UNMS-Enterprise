@@ -770,16 +770,36 @@ class OltController extends Controller
 
                     $status = ($statusStr === 'OFFLINE' || str_contains(strtoupper($rxPower), 'OFFLINE')) ? 'inactive' : 'active';
 
-                    $custNum = 'CUST-' . sprintf('%05d', $idx + 1);
-                    $customer = Customer::firstOrCreate(['name' => $name], ['customer_number' => $custNum, 'status' => 'active', 'address' => $device->location ?: 'Kota Solok']);
+                    $customer = Customer::where('name', $name)->first();
+                    if (!$customer) {
+                        $nextId = (Customer::max('id') ?: 0) + 1;
+                        $custNum = 'CUST-' . sprintf('%05d', $nextId);
+                        $customer = Customer::create([
+                            'name'            => $name,
+                            'customer_number' => $custNum,
+                            'status'          => 'active',
+                            'address'         => $device->location ?: 'Kota Solok',
+                        ]);
+                    }
 
                     $nodeCode = 'NODE-' . strtoupper(str_replace(['gpon-olt_', '/'], ['', '-'], $portRef));
                     $node = NetworkNode::firstOrCreate(['olt_device_id' => $device->id, 'olt_port_ref' => $portRef], ['name' => "PON Port {$portRef}", 'code' => $nodeCode, 'node_type' => 'olt_port', 'status' => 'active']);
 
                     $netPort = NetworkPort::firstOrCreate(['node_id' => $node->id, 'port_number' => '1'], ['status' => 'used', 'port_type' => 'PON']);
 
-                    $svcNum = 'SVC-' . sprintf('%05d', $idx + 1);
-                    $service = CustomerService::firstOrCreate(['customer_id' => $customer->id], ['service_number' => $svcNum, 'service_package_id' => 1, 'network_port_id' => $netPort->id, 'status' => 'active', 'ip_address' => '10.11.11.' . rand(2, 254)]);
+                    $service = CustomerService::where('customer_id', $customer->id)->first();
+                    if (!$service) {
+                        $nextSvcId = (CustomerService::max('id') ?: 0) + 1;
+                        $svcNum = 'SVC-' . sprintf('%05d', $nextSvcId);
+                        $service = CustomerService::create([
+                            'customer_id'        => $customer->id,
+                            'service_number'     => $svcNum,
+                            'service_package_id' => 1,
+                            'network_port_id'    => $netPort->id,
+                            'status'             => 'active',
+                            'ip_address'         => '10.11.11.' . rand(2, 254),
+                        ]);
+                    }
 
                     $ontReg = OntRegistration::where('onu_serial', $sn)->first();
                     if (!$ontReg) {

@@ -50,8 +50,15 @@ class HsgqDriver implements OltDeviceDriverInterface
 
     protected function getSnmp(): ?SnmpConnector
     {
-        if ($this->snmp === null && function_exists('snmp2_get')) {
-            $this->snmp = new SnmpConnector($this->ip, $this->community, $this->snmpVersion, $this->port, 1000000, 1);
+        if ($this->snmp === null && SnmpConnector::isAvailable()) {
+            $this->snmp = new SnmpConnector(
+                ip: $this->ip,
+                snmpVersion: $this->snmpVersion ?: 'v2c',
+                community: $this->community ?: 'public',
+                port: $this->port ?: 161,
+                timeout: 2,
+                retries: 1
+            );
         }
         return $this->snmp;
     }
@@ -245,7 +252,7 @@ class HsgqDriver implements OltDeviceDriverInterface
             $phys = $physicalOnusByMac[$mac] ?? null;
 
             $isOnline = $phys ? ($phys['status'] === 'Online') : ($reg->status === 'active');
-            $status = $isOnline ? 'Online' : 'LOS (Dying Gasp)';
+            $status = $isOnline ? 'Online' : 'Offline';
 
             $rxPower = $isOnline ? ($phys && isset($phys['rx_power']) && $phys['rx_power'] !== null ? (float)$phys['rx_power'] : (float)($reg->rx_power ?? -16.63)) : null;
             $txPower = $isOnline ? ($phys && isset($phys['tx_power']) && $phys['tx_power'] !== null ? (float)$phys['tx_power'] : (float)($reg->tx_power ?? 1.95)) : null;

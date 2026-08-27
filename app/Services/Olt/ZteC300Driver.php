@@ -143,13 +143,19 @@ class ZteC300Driver extends ZteC320Driver
                     $portMap[$idx] = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $name);
                 }
 
-                // Query Serial Number ONU via MIB 1082 & MIB 500
+                // Query Serial Number ONU via MIB 1082, MIB 500 & MIB 28
                 $snList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1');
+                if (empty($snList)) {
+                    $snList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5');
+                }
                 $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.4.1.1');
                 $statusList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.5.1.1');
 
                 // Query Telemetri Redaman Optical Power riil
                 $oltRxList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.10.2.1.6.1.3.1.1');
+                if (empty($oltRxList)) {
+                    $oltRxList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14');
+                }
                 $onuTxList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.10.2.1.6.1.4.1.1');
 
                 if (!empty($snList)) {
