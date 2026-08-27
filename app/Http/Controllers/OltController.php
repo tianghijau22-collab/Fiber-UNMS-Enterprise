@@ -293,9 +293,10 @@ class OltController extends Controller
             $regCount = 0;
             $onCount = 0;
             foreach ($registeredOnus as $ro) {
-                if (($ro['port'] ?? '') === $portId || str_contains($portId, $ro['port'] ?? '###')) {
+                $roPort = $ro['port'] ?? '';
+                if ($this->portsMatch($portId, $roPort)) {
                     $regCount++;
-                    if (($ro['status'] ?? '') === 'Online') $onCount++;
+                    if (strcasecmp($ro['status'] ?? '', 'Online') === 0) $onCount++;
                 }
             }
             if ($regCount > 0) {
@@ -303,9 +304,9 @@ class OltController extends Controller
                 $port['online_onus']     = $onCount;
                 $port['los_onus']        = max(0, $regCount - $onCount);
             } else {
-                $port['registered_onus'] = 0;
-                $port['online_onus']     = 0;
-                $port['los_onus']        = 0;
+                $port['registered_onus'] = $port['registered_onus'] ?? 0;
+                $port['online_onus']     = $port['online_onus'] ?? 0;
+                $port['los_onus']        = $port['los_onus'] ?? 0;
             }
             return $port;
         }, $driverPonPorts);
@@ -994,10 +995,32 @@ class OltController extends Controller
 
         return response()->json([
             'success'  => true,
-            'message'  => "Berhasil mengimpor 1.628 ONU dari REGIS ZTE: {$imported} baru ditambahkan, {$updated} diperbarui.",
+            'message'  => "Berhasil mengimpor {$imported} baru dan memperbarui {$updated} data ONU dari REGIS ZTE.",
             'imported' => $imported,
             'updated'  => $updated,
-            'total'    => count($snapshot['onu_list'] ?? []),
+            'total'    => count($items),
         ]);
+    }
+
+    private function portsMatch(string $p1, string $p2): bool
+    {
+        if (empty($p1) || empty($p2)) return false;
+        if ($p1 === $p2) return true;
+
+        $c1 = strtolower(preg_replace('/^(gpon|epon)[-_]?(olt)?[-_]?/i', '', trim($p1)));
+        $c2 = strtolower(preg_replace('/^(gpon|epon)[-_]?(olt)?[-_]?/i', '', trim($p2)));
+
+        if ($c1 === $c2) return true;
+
+        $parts1 = explode('/', $c1);
+        $parts2 = explode('/', $c2);
+        $last1 = end($parts1);
+        $last2 = end($parts2);
+
+        if ($last1 !== '' && $last1 === $last2) {
+            return true;
+        }
+
+        return str_contains($c1, $c2) || str_contains($c2, $c1);
     }
 }
