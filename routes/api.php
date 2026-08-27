@@ -71,6 +71,8 @@ Route::get('/olt/optical-power/{serialNumber}', [OltController::class, 'opticalP
 Route::get('/olt/orphaned-onus', [OltController::class, 'getOrphanedOnus']);
 Route::delete('/olt/orphaned-onus/{id}', [OltController::class, 'deleteOrphanedOnu']);
 Route::post('/olt/orphaned-onus/bulk-delete', [OltController::class, 'bulkDeleteOrphanedOnus']);
+Route::post('/olt/sync-external', [OltController::class, 'syncExternal']);
+Route::post('/olt/import-1628-onus', [OltController::class, 'import1628Onus']);
 
 // VPS & MikroTik/OLT Bridge Setup Wizard
 Route::get('/vps-bridge/detect-environment', [VpsBridgeController::class, 'detectEnvironment']);

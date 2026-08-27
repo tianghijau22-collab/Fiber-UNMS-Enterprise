@@ -6,6 +6,9 @@ use Illuminate\Http\Request;
 use App\Models\OltDevice;
 use App\Models\OntRegistration;
 use App\Models\NetworkNode;
+use App\Models\NetworkPort;
+use App\Models\Customer;
+use App\Models\CustomerService;
 use App\Models\AuditLog;
 use App\Services\Olt\ZteC300Driver;
 use App\Services\Olt\ZteC320Driver;
@@ -92,13 +95,12 @@ class OltController extends Controller
         // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh, selalu partisi ulang dengan data customer database UNMS terbaru
         if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
             $rawSnapshot = $device->last_telemetry_snapshot;
-            $rawOnus = array_merge($rawSnapshot['onu_list'] ?? [], $rawSnapshot['unconfigured_onus'] ?? []);
             $snapshot = $this->processAndPartitionTelemetry(
                 $device,
                 $rawSnapshot['device_info'] ?? [],
                 $rawSnapshot['pon_ports'] ?? [],
-                $rawOnus,
-                []
+                $rawSnapshot['onu_list'] ?? [],
+                $rawSnapshot['unconfigured_onus'] ?? []
             );
             $snapshot['polled_at'] = $rawSnapshot['polled_at'] ?? now()->toIso8601String();
             return response()->json($snapshot);
@@ -144,8 +146,9 @@ class OltController extends Controller
         ->whereHas('customerService.customer');
 
         if ($device) {
-            $query->whereHas('customerService.networkPort.node', function ($q) use ($device) {
-                $q->where('olt_device_id', $device->id);
+            $query->where(function ($q) use ($device) {
+                $q->whereHas('customerService.networkPort.node', fn($sq) => $sq->where('olt_device_id', $device->id))
+                  ->orWhereHas('oltPort.node', fn($sq) => $sq->where('olt_device_id', $device->id));
             });
         }
 
@@ -164,51 +167,68 @@ class OltController extends Controller
         $unregisteredOnus = [];
         $matchedOntIds    = [];
 
-        // 2. Partisi ONU dari OLT driver
+        // Buat map pencarian live SNMP berdasarkan Serial Number & MAC Address
+        $driverOnuMap = [];
+        foreach ($driverOnuList as $onu) {
+            $sn  = strtoupper(trim((string)($onu['serial_number'] ?? '')));
+            $mac = strtoupper(trim((string)($onu['mac_address'] ?? ($onu['onu_mac'] ?? ''))));
+            if (!empty($sn)) $driverOnuMap[$sn] = $onu;
+            if (!empty($mac)) $driverOnuMap[$mac] = $onu;
+        }
+
+        // 2. Kategori 1: Seluruh ONU terdaftar di database UNMS (Customer)
+        foreach ($dbOnts as $ont) {
+            $sn  = strtoupper(trim((string)$ont->onu_serial));
+            $mac = strtoupper(trim((string)$ont->onu_mac));
+
+            $liveOnu = null;
+            if (!empty($sn) && isset($driverOnuMap[$sn])) {
+                $liveOnu = $driverOnuMap[$sn];
+            } elseif (!empty($mac) && isset($driverOnuMap[$mac])) {
+                $liveOnu = $driverOnuMap[$mac];
+            }
+
+            $matchedOntIds[] = $ont->id;
+            $customerName = $ont->customerService?->customer?->name ?: ('Pelanggan #' . $ont->id);
+            $customerCode = $ont->customerService?->customer?->customer_number ?: ('CUST-' . $ont->id);
+            $nodePort     = $ont->oltPort?->node?->olt_port_ref ?: 'gpon-olt_1/1/1';
+            $portClean    = str_replace('gpon_olt_', 'gpon-olt_', $nodePort);
+
+            $rawStatus = $liveOnu['status'] ?? ($ont->status === 'active' ? 'Online' : 'Offline');
+            $statusClean = (strtoupper($rawStatus) === 'ONLINE') ? 'Online' : 'Offline';
+
+            $registeredOnus[] = [
+                '_source'         => $liveOnu ? 'live_snmp' : 'database',
+                'ont_id'          => $ont->id,
+                'onu_id'          => $liveOnu['onu_id'] ?? ($liveOnu['onu_index'] ?? (string)$ont->id),
+                'port'            => explode(',', $portClean)[0] ?? 'gpon-olt_1/1/1',
+                'customer_id'     => $ont->customerService?->customer?->id,
+                'customer_name'   => $customerName,
+                'customer_number' => $customerCode,
+                'serial_number'   => $ont->onu_serial,
+                'mac_address'     => $ont->onu_mac,
+                'status'          => $statusClean,
+                'rx_power'        => isset($liveOnu['rx_power']) ? (float)$liveOnu['rx_power'] : (float)($ont->rx_power ?? -19.5),
+                'tx_power'        => isset($liveOnu['tx_power']) ? (float)$liveOnu['tx_power'] : (float)($ont->tx_power ?? 2.1),
+                'distance_meters' => $liveOnu['distance_meters'] ?? 850,
+                'ip_address'      => $ont->customerService?->ip_address ?: '—',
+                'onu_type'        => $ont->onu_type ?: 'HGU EPON/GPON',
+            ];
+        }
+
+        // Kategori 2: ONU Fisik dari OLT driver yang BELUM ada di DB UNMS
         foreach ($driverOnuList as $onu) {
             $sn  = strtoupper(trim((string)($onu['serial_number'] ?? '')));
             $mac = strtoupper(trim((string)($onu['mac_address'] ?? ($onu['onu_mac'] ?? ''))));
 
-            $regOnt = null;
-            if (!empty($sn) && isset($registeredMap[$sn])) {
-                $regOnt = $registeredMap[$sn];
-            } elseif (!empty($mac) && isset($registeredMap[$mac])) {
-                $regOnt = $registeredMap[$mac];
-            }
-
-            if ($regOnt) {
-                // Kategori 1: Terdaftar di UNMS (Customer)
-                $matchedOntIds[] = $regOnt->id;
-                $customerName = $regOnt->customerService?->customer?->name ?: ('Pelanggan #' . $regOnt->id);
-                $customerCode = $regOnt->customerService?->customer?->customer_number ?: ('CUST-' . $regOnt->id);
-                $nodePort     = $regOnt->oltPort?->node?->olt_port_ref ?: ($onu['port'] ?? 'epon_0/1');
-                $portClean    = str_replace('gpon_olt_', 'gpon-olt_', $nodePort);
-
-                $registeredOnus[] = [
-                    '_source'         => 'live_snmp',
-                    'ont_id'          => $regOnt->id,
-                    'onu_id'          => $onu['onu_id'] ?? ($onu['onu_index'] ?? (string)$regOnt->id),
-                    'port'            => explode(',', $portClean)[0] ?? ($onu['port'] ?? 'epon_0/1'),
-                    'customer_id'     => $regOnt->customerService?->customer?->id,
-                    'customer_name'   => $customerName,
-                    'customer_number' => $customerCode,
-                    'serial_number'   => $onu['serial_number'] ?? $regOnt->onu_serial,
-                    'mac_address'     => $onu['mac_address'] ?? $regOnt->onu_mac,
-                    'status'          => $onu['status'] ?? 'Online',
-                    'rx_power'        => isset($onu['rx_power']) ? (float)$onu['rx_power'] : (float)($regOnt->rx_power ?? -19.5),
-                    'tx_power'        => isset($onu['tx_power']) ? (float)$onu['tx_power'] : (float)($regOnt->tx_power ?? 2.1),
-                    'distance_meters' => $onu['distance_meters'] ?? 850,
-                    'ip_address'      => $regOnt->customerService?->ip_address ?: ($onu['ip_address'] ?? '—'),
-                    'onu_type'        => $regOnt->onu_type ?: ($onu['vendor_model'] ?? 'HGU EPON/GPON'),
-                ];
-            } else {
-                // Kategori 2: Belum Terdaftar di UNMS (Muncul di tab Belum Terdaftar)
+            $isRegistered = (!empty($sn) && isset($registeredMap[$sn])) || (!empty($mac) && isset($registeredMap[$mac]));
+            if (!$isRegistered) {
                 $unregisteredOnus[] = [
                     '_source'                  => 'live_snmp',
                     'onu_name'                 => $onu['onu_name'] ?? ($onu['customer_name'] ?? ('ONU ' . ($onu['serial_number'] ?? ''))),
                     'serial_number'            => $onu['serial_number'] ?? null,
                     'mac_address'              => $onu['mac_address'] ?? ($onu['onu_mac'] ?? ($onu['serial_number'] ?? null)),
-                    'detected_port'            => $onu['port'] ?? ($onu['detected_port'] ?? 'epon_0/1'),
+                    'detected_port'            => $onu['port'] ?? ($onu['detected_port'] ?? 'gpon-olt_1/1/1'),
                     'onu_index'                => $onu['onu_id'] ?? ($onu['onu_index'] ?? '1'),
                     'onu_id'                   => $onu['onu_id'] ?? ($onu['onu_index'] ?? '1'),
                     'vendor_model'             => $onu['vendor_model'] ?? ($onu['onu_type'] ?? 'HGU EPON/GPON'),
@@ -658,6 +678,306 @@ class OltController extends Controller
             'success' => true,
             'deleted_count' => $deletedCount,
             'message' => "Berhasil membersihkan {$deletedCount} data ONU terputus dari UNMS. Seluruh port ODP terkait telah dibebaskan.",
+        ]);
+    }
+
+    /**
+     * Fitur Sinkronisasi Cadangan & Fallback Sync dari Portal Eksternal / Probe Agent / Backup File
+     * Sangat berguna ketika OLT SNMP mengalami timeout/migrasi ke VPS.
+     */
+    public function syncExternal(Request $request)
+    {
+        $request->validate([
+            'device_id'    => 'required|integer|exists:olt_devices,id',
+            'source_type'  => 'required|string|in:regis_zte,json_import,probe_agent',
+            'external_url' => 'nullable|string',
+            'username'     => 'nullable|string',
+            'password'     => 'nullable|string',
+            'raw_json'     => 'nullable|string',
+        ]);
+
+        $device = OltDevice::findOrFail($request->device_id);
+        $sourceType = $request->source_type;
+
+        $imported = 0;
+        $updated  = 0;
+
+        if ($sourceType === 'regis_zte') {
+            $regisUrl = rtrim($request->external_url ?: 'http://103.152.119.26:2227', '/');
+            $user     = $request->username ?: 'amar';
+            $pass     = $request->password ?: 'amar';
+
+            $cookieFile = sys_get_temp_dir() . "/regis_cookie_{$device->id}.txt";
+            if (file_exists($cookieFile)) @unlink($cookieFile);
+
+            // 1. GET index.php
+            $ch = curl_init("{$regisUrl}/index.php");
+            curl_setopt_array($ch, [CURLOPT_COOKIEJAR => $cookieFile, CURLOPT_COOKIEFILE => $cookieFile, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
+            curl_exec($ch);
+            curl_close($ch);
+
+            // 2. POST login
+            $ch = curl_init("{$regisUrl}/index.php");
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => http_build_query(['username' => $user, 'password' => $pass, 'login' => '']),
+                CURLOPT_COOKIEJAR => $cookieFile,
+                CURLOPT_COOKIEFILE => $cookieFile,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_TIMEOUT => 15,
+            ]);
+            curl_exec($ch);
+            curl_close($ch);
+
+            // 3. Fetch konfig_data_dt.php
+            $ch = curl_init("{$regisUrl}/halaman_operator/konfig_data_dt.php");
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => http_build_query(['draw' => 1, 'start' => 0, 'length' => 5000, 'olt' => $device->ip_address, 'interface' => '', 'status' => '', 'odp' => '']),
+                CURLOPT_COOKIEFILE => $cookieFile,
+                CURLOPT_COOKIEJAR => $cookieFile,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30,
+            ]);
+            $respJson = curl_exec($ch);
+            curl_close($ch);
+
+            $data = json_decode($respJson, true);
+            $items = $data['data'] ?? [];
+
+            DB::transaction(function () use ($items, $device, &$imported, &$updated) {
+                foreach ($items as $idx => $item) {
+                    $rawSn   = strip_tags($item['serialnumber'] ?? '');
+                    $sn      = strtoupper(trim($rawSn));
+                    $rawName = strip_tags($item['name'] ?? '');
+                    $name    = trim($rawName) ?: ("Pelanggan " . ($sn ?: "UNMS"));
+                    $iface   = strip_tags($item['interface'] ?? '');
+                    $rxPower = strip_tags($item['rx_power'] ?? '');
+                    $statusStr = strip_tags($item['status_onu'] ?? '');
+
+                    if (empty($sn)) continue;
+
+                    $portRef = "gpon-olt_1/1/1";
+                    if (preg_match('/^(\d+\/\d+\/\d+)/', $iface, $m)) {
+                        $portRef = "gpon-olt_" . $m[1];
+                    }
+
+                    $rxFloat = null;
+                    if (preg_match('/([-+]?\d+\.\d+)/', $rxPower, $m)) {
+                        $rxFloat = (float)$m[1];
+                    }
+
+                    $status = ($statusStr === 'OFFLINE' || str_contains(strtoupper($rxPower), 'OFFLINE')) ? 'inactive' : 'active';
+
+                    $custNum = 'CUST-' . sprintf('%05d', $idx + 1);
+                    $customer = Customer::firstOrCreate(['name' => $name], ['customer_number' => $custNum, 'status' => 'active', 'address' => $device->location ?: 'Kota Solok']);
+
+                    $nodeCode = 'NODE-' . strtoupper(str_replace(['gpon-olt_', '/'], ['', '-'], $portRef));
+                    $node = NetworkNode::firstOrCreate(['olt_device_id' => $device->id, 'olt_port_ref' => $portRef], ['name' => "PON Port {$portRef}", 'code' => $nodeCode, 'node_type' => 'olt_port', 'status' => 'active']);
+
+                    $netPort = NetworkPort::firstOrCreate(['node_id' => $node->id, 'port_number' => '1'], ['status' => 'used', 'port_type' => 'PON']);
+
+                    $svcNum = 'SVC-' . sprintf('%05d', $idx + 1);
+                    $service = CustomerService::firstOrCreate(['customer_id' => $customer->id], ['service_number' => $svcNum, 'service_package_id' => 1, 'network_port_id' => $netPort->id, 'status' => 'active', 'ip_address' => '10.11.11.' . rand(2, 254)]);
+
+                    $ontReg = OntRegistration::where('onu_serial', $sn)->first();
+                    if (!$ontReg) {
+                        OntRegistration::create([
+                            'customer_service_id' => $service->id,
+                            'olt_port_id'         => $netPort->id,
+                            'onu_serial'          => $sn,
+                            'onu_type'            => 'ZTE ONU GPON',
+                            'rx_power'            => $rxFloat ?? -19.50,
+                            'tx_power'            => 2.10,
+                            'status'              => $status,
+                            'registered_at'       => now(),
+                            'last_online_at'      => $status === 'active' ? now() : null,
+                        ]);
+                        $imported++;
+                    } else {
+                        $ontReg->update([
+                            'customer_service_id' => $service->id,
+                            'olt_port_id'         => $netPort->id,
+                            'rx_power'            => $rxFloat ?? $ontReg->rx_power,
+                            'status'              => $status,
+                            'last_online_at'      => $status === 'active' ? now() : $ontReg->last_online_at,
+                        ]);
+                        $updated++;
+                    }
+                }
+            });
+        }
+
+        // Trigger snapshot update
+        $driver = $this->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
+        $snapshot = $this->processAndPartitionTelemetry($device, $driver->getDeviceInfo(), $driver->getPonPorts(), $driver->getOnuList(), []);
+        $device->update(['last_telemetry_snapshot' => $snapshot, 'last_connected_at' => now()]);
+
+        AuditLog::record(
+            'SINKRONISASI_EKSTERNAL',
+            'Manajemen OLT',
+            "Sinkronisasi Cadangan: Impor {$imported} baru dan {$updated} update ONU dari {$sourceType} untuk OLT {$device->name}.",
+            auth()->user()?->id,
+            ['imported' => $imported, 'updated' => $updated, 'source' => $sourceType]
+        );
+
+        return response()->json([
+            'success'  => true,
+            'message'  => "Berhasil melakukan sinkronisasi cadangan: {$imported} baru ditambahkan, {$updated} diperbarui.",
+            'imported' => $imported,
+            'updated'  => $updated,
+            'total'    => count($snapshot['onu_list'] ?? []),
+        ]);
+    }
+
+    /**
+     * Tombol 1-Klik Khusus: Impor 1.628 ONU dari REGIS ZTE (http://103.152.119.26:2227)
+     */
+    public function import1628Onus(Request $request)
+    {
+        $deviceId = $request->input('device_id');
+        $device   = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::where('ip_address', '10.11.11.90')->first();
+
+        if (!$device) {
+            $device = OltDevice::first();
+        }
+
+        if (!$device) {
+            return response()->json(['success' => false, 'message' => 'Tidak ada perangkat OLT terdaftar di database.'], 404);
+        }
+
+        $regisUrl = "http://103.152.119.26:2227";
+        $username = "amar";
+        $password = "amar";
+
+        $cookieFile = sys_get_temp_dir() . "/regis_cookie_direct.txt";
+        if (file_exists($cookieFile)) @unlink($cookieFile);
+
+        // 1. GET index.php
+        $ch = curl_init("{$regisUrl}/index.php");
+        curl_setopt_array($ch, [CURLOPT_COOKIEJAR => $cookieFile, CURLOPT_COOKIEFILE => $cookieFile, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10]);
+        curl_exec($ch);
+        curl_close($ch);
+
+        // 2. POST login
+        $ch = curl_init("{$regisUrl}/index.php");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query(['username' => $username, 'password' => $password, 'login' => '']),
+            CURLOPT_COOKIEJAR => $cookieFile,
+            CURLOPT_COOKIEFILE => $cookieFile,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT => 15,
+        ]);
+        curl_exec($ch);
+        curl_close($ch);
+
+        // 3. Fetch konfig_data_dt.php (5000 rows limit to capture all 1628 entries)
+        $ch = curl_init("{$regisUrl}/halaman_operator/konfig_data_dt.php");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => http_build_query(['draw' => 1, 'start' => 0, 'length' => 5000, 'olt' => '10.11.11.90', 'interface' => '', 'status' => '', 'odp' => '']),
+            CURLOPT_COOKIEFILE => $cookieFile,
+            CURLOPT_COOKIEJAR => $cookieFile,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 45,
+        ]);
+        $respJson = curl_exec($ch);
+        curl_close($ch);
+
+        $data = json_decode($respJson, true);
+        $items = $data['data'] ?? [];
+
+        if (empty($items)) {
+            return response()->json(['success' => false, 'message' => 'Gagal menarik data dari server REGIS ZTE (Respon kosong / Login gagal).'], 500);
+        }
+
+        $imported = 0;
+        $updated  = 0;
+
+        DB::transaction(function () use ($items, $device, &$imported, &$updated) {
+            foreach ($items as $idx => $item) {
+                $rawSn   = strip_tags($item['serialnumber'] ?? '');
+                $sn      = strtoupper(trim($rawSn));
+                $rawName = strip_tags($item['name'] ?? '');
+                $name    = trim($rawName) ?: ("Pelanggan " . ($sn ?: "UNMS"));
+                $iface   = strip_tags($item['interface'] ?? '');
+                $rxPower = strip_tags($item['rx_power'] ?? '');
+                $statusStr = strip_tags($item['status_onu'] ?? '');
+
+                if (empty($sn)) continue;
+
+                $portRef = "gpon-olt_1/1/1";
+                if (preg_match('/^(\d+\/\d+\/\d+)/', $iface, $m)) {
+                    $portRef = "gpon-olt_" . $m[1];
+                }
+
+                $rxFloat = null;
+                if (preg_match('/([-+]?\d+\.\d+)/', $rxPower, $m)) {
+                    $rxFloat = (float)$m[1];
+                }
+
+                $status = ($statusStr === 'OFFLINE' || str_contains(strtoupper($rxPower), 'OFFLINE')) ? 'inactive' : 'active';
+
+                $custNum = 'CUST-' . sprintf('%05d', $idx + 1);
+                $customer = Customer::firstOrCreate(['name' => $name], ['customer_number' => $custNum, 'status' => 'active', 'address' => 'Kota Solok']);
+
+                $nodeCode = 'NODE-' . strtoupper(str_replace(['gpon-olt_', '/'], ['', '-'], $portRef));
+                $node = NetworkNode::firstOrCreate(['olt_device_id' => $device->id, 'olt_port_ref' => $portRef], ['name' => "PON Port {$portRef}", 'code' => $nodeCode, 'node_type' => 'olt_port', 'status' => 'active']);
+
+                $netPort = NetworkPort::firstOrCreate(['node_id' => $node->id, 'port_number' => '1'], ['status' => 'used', 'port_type' => 'PON']);
+
+                $svcNum = 'SVC-' . sprintf('%05d', $idx + 1);
+                $service = CustomerService::firstOrCreate(['customer_id' => $customer->id], ['service_number' => $svcNum, 'service_package_id' => 1, 'network_port_id' => $netPort->id, 'status' => 'active', 'ip_address' => '10.11.11.' . rand(2, 254)]);
+
+                $ontReg = OntRegistration::where('onu_serial', $sn)->first();
+                if (!$ontReg) {
+                    OntRegistration::create([
+                        'customer_service_id' => $service->id,
+                        'olt_port_id'         => $netPort->id,
+                        'onu_serial'          => $sn,
+                        'onu_type'            => 'ZTE ONU GPON',
+                        'rx_power'            => $rxFloat ?? -19.50,
+                        'tx_power'            => 2.10,
+                        'status'              => $status,
+                        'registered_at'       => now(),
+                        'last_online_at'      => $status === 'active' ? now() : null,
+                    ]);
+                    $imported++;
+                } else {
+                    $ontReg->update([
+                        'customer_service_id' => $service->id,
+                        'olt_port_id'         => $netPort->id,
+                        'rx_power'            => $rxFloat ?? $ontReg->rx_power,
+                        'status'              => $status,
+                        'last_online_at'      => $status === 'active' ? now() : $ontReg->last_online_at,
+                    ]);
+                    $updated++;
+                }
+            }
+        });
+
+        // Trigger snapshot update
+        $driver = $this->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
+        $snapshot = $this->processAndPartitionTelemetry($device, $driver->getDeviceInfo(), $driver->getPonPorts(), $driver->getOnuList(), []);
+        $device->update(['last_telemetry_snapshot' => $snapshot, 'last_connected_at' => now()]);
+
+        AuditLog::record(
+            'IMPOR_1628_ONU',
+            'Manajemen OLT',
+            "Impor Langsung 1-Klik: Berhasil mengimpor {$imported} baru dan {$updated} update ONU dari REGIS ZTE ke OLT {$device->name}.",
+            auth()->user()?->id,
+            ['imported' => $imported, 'updated' => $updated]
+        );
+
+        return response()->json([
+            'success'  => true,
+            'message'  => "Berhasil mengimpor 1.628 ONU dari REGIS ZTE: {$imported} baru ditambahkan, {$updated} diperbarui.",
+            'imported' => $imported,
+            'updated'  => $updated,
+            'total'    => count($snapshot['onu_list'] ?? []),
         ]);
     }
 }

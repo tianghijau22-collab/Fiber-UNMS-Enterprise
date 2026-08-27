@@ -147,7 +147,7 @@ class LiveMonitorController extends Controller
             // Gunakan driver vendor OLT terkait
             try {
                 $oltCtrl = new OltController();
-                $driver = $oltCtrl->getDriver($olt->vendor, $olt->ip_address, $olt->snmp_community ?? 'public');
+                $driver = $oltCtrl->getDriver($olt->vendor_key ?: $olt->vendor, $olt->id);
                 $devInfo = $driver->getDeviceInfo();
                 $ponPorts = $driver->getPonPorts();
                 $onus = $driver->getOnuList();

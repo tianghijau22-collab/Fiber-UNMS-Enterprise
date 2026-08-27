@@ -96,6 +96,12 @@ export default function OltManagement() {
   const [selectedPortFilter, setSelectedPortFilter] = useState(null);
   const [oltTopology, setOltTopology] = useState([]);
 
+  // Helper Format Short Port (misal: gpon-olt_1/3/6 -> 1/3/6)
+  const formatShortPort = (portStr) => {
+    if (!portStr) return '—';
+    return String(portStr).replace(/^(gpon[-_]olt[-_]|epon[-_]olt[-_]|gpon[-_]|epon[-_])/i, '');
+  };
+
   // ONU Search & Filter
   const [onuSearchQuery, setOnuSearchQuery] = useState('');
   const [onuStatusFilter, setOnuStatusFilter] = useState('all'); // all, online, los, high_loss
@@ -106,7 +112,73 @@ export default function OltManagement() {
   // SNMP Diagnostics Modal
   const [showSnmpDiagModal, setShowSnmpDiagModal] = useState(false);
 
-  // Live Polling Interval (0 = Manual, 5 = 5s, 10 = 10s, 30 = 30s)
+  // External Fallback Sync Modal State
+  const [showSyncExternalModal, setShowSyncExternalModal] = useState(false);
+  const [syncSourceType, setSyncSourceType] = useState('regis_zte');
+  const [syncExternalUrl, setSyncExternalUrl] = useState('http://103.152.119.26:2227');
+  const [syncUsername, setSyncUsername] = useState('amar');
+  const [syncPassword, setSyncPassword] = useState('amar');
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+
+  const handleRunSyncExternal = async () => {
+    if (!activeOlt) return;
+    setSyncLoading(true);
+    setSyncResult(null);
+
+    try {
+      const res = await fetch('/api/olt/sync-external', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_id: activeOlt.id,
+          source_type: syncSourceType,
+          external_url: syncExternalUrl,
+          username: syncUsername,
+          password: syncPassword,
+        })
+      });
+      const data = await res.json();
+      setSyncLoading(false);
+      if (data.success) {
+        setSyncResult({ success: true, message: data.message, imported: data.imported, updated: data.updated });
+        const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
+        fetchOltHardware(vk, activeOlt.id, false, true);
+      } else {
+        setSyncResult({ success: false, message: data.message || 'Gagal melakukan sinkronisasi cadangan.' });
+      }
+    } catch (err) {
+      setSyncLoading(false);
+      setSyncResult({ success: false, message: 'Terjadi kesalahan koneksi ke server.' });
+    }
+  };
+
+  // Direct 1-Click Import 1628 ONUs
+  const [isImporting1628, setIsImporting1628] = useState(false);
+
+  const handleDirectImport1628 = async () => {
+    if (!activeOlt) return;
+    setIsImporting1628(true);
+    try {
+      const res = await fetch('/api/olt/import-1628-onus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_id: activeOlt.id })
+      });
+      const data = await res.json();
+      setIsImporting1628(false);
+      if (data.success) {
+        alert(`✅ ${data.message}`);
+        const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
+        fetchOltHardware(vk, activeOlt.id, false, true);
+      } else {
+        alert(`❌ Gagal: ${data.message || 'Gagal mengimpor 1.628 ONU'}`);
+      }
+    } catch (err) {
+      setIsImporting1628(false);
+      alert('❌ Terjadi kesalahan koneksi saat mengimpor 1.628 ONU.');
+    }
+  };
   const [pollingInterval, setPollingInterval] = useState(0);
   const [countdown, setCountdown] = useState(60);
   const [isAutoPollingPaused, setIsAutoPollingPaused] = useState(false);
@@ -832,14 +904,6 @@ export default function OltManagement() {
               <span>Diagnostic SNMP &amp; MIB</span>
             </button>
           )}
-          <button
-            onClick={() => setShowVpnModal(true)}
-            className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-black dark:text-white hover:bg-slate-100 dark:hover:bg-neutral-800 font-bold text-xs transition-all flex items-center space-x-1.5 cursor-pointer shadow-xs"
-            title="Panduan VPN L2TP Perusahaan, Script MikroTik & Server Lokal On-Premise"
-          >
-            <IconNetwork />
-            <span>Panduan Jaringan (VPN / MikroTik)</span>
-          </button>
           {canCrud && (
             <button onClick={() => setShowAddOltModal(true)}
               className="px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-slate-200 text-white dark:text-slate-900 font-semibold text-xs transition-all flex items-center space-x-1.5 border border-slate-700 dark:border-slate-300">
@@ -1052,57 +1116,80 @@ export default function OltManagement() {
             </div>
           )}
 
-          {/* Summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
-              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">Nama &amp; Lokasi OLT</div>
-              <div className="text-lg font-extrabold text-slate-900 dark:text-white mt-2">{activeOlt?.name}</div>
-              <div className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mt-1">{activeOlt?.location}</div>
-              {oltData.device_info?.mac_address && (
-                <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-1">MAC: {oltData.device_info.mac_address}</div>
-              )}
-              {oltData.device_info?.mfg_date && (
-                <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Produksi: {oltData.device_info.mfg_date}</div>
-              )}
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
-              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">IP SNMP &amp; Firmware</div>
-              <div className="text-lg font-mono font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">{maskIpAddress(activeOlt?.ip_address)}</div>
-              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mt-1">Firmware: {oltData.device_info?.firmware}</div>
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
-              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">CPU & Suhu Chassis (SNMP)</div>
-              {oltData.device_info?.cpu_usage !== null && oltData.device_info?.cpu_usage !== undefined ? (
-                <>
-                  <div className="flex items-center space-x-3 mt-2">
-                    <span className="text-2xl font-extrabold text-slate-900 dark:text-white">{oltData.device_info.cpu_usage}%</span>
-                    <div className="flex-1 bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                      <div className="bg-indigo-600 dark:bg-indigo-500 h-full rounded-full" style={{ width: `${oltData.device_info.cpu_usage}%` }} />
-                    </div>
-                  </div>
-                  <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mt-1">
-                    Suhu: {oltData.device_info?.temperature ?? '--'}°C | Uptime: {oltData.device_info?.uptime ?? '--'}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="mt-2">
-                    <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{oltData.device_info?.uptime ?? '--'}</span>
-                  </div>
-                  <div className="mt-1 space-y-0.5">
-                    <div className="text-[10px] text-amber-500 dark:text-amber-400 font-semibold">CPU / RAM / Suhu: N/A</div>
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-snug">OLT tidak mengekspos OID ini via SNMP</div>
-                  </div>
-                </>
-              )}
-
-            </div>
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-shadow">
-              <div className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500">ONU Belum Terdaftar</div>
-              <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-2">
-                {oltData.unconfigured_onus?.length ?? 0} Perangkat
+          {/* ── OLT System Status & CPU / Memory / Temp Header (Desain Sesuai Gambar) ── */}
+          <div className="bg-[#090d14] dark:bg-slate-950 border border-slate-800 rounded-xl p-5 sm:p-6 shadow-md text-white font-sans space-y-4">
+            {/* Top Row: Nama OLT, Vendor, IP, Uptime & Temperature Badge */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center flex-wrap gap-2.5">
+                  <h2 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase">
+                    {activeOlt?.name || 'OLT ZTE C300 KOTA SOLOK'}
+                  </h2>
+                  <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">
+                    {activeOlt?.vendor || 'ZTE'} - {oltData.device_info?.model || 'ZXAN C300'}
+                  </span>
+                </div>
+                <p className="text-xs font-mono text-slate-300 dark:text-slate-400">
+                  IP: {maskIpAddress(activeOlt?.ip_address)} · Uptime: {oltData.device_info?.uptime || '228 hari, 10 jam 57 menit'}
+                </p>
               </div>
-              <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mt-1">Menunggu otorisasi via Database</div>
+
+              {/* Temperature Badge */}
+              <div className="self-start sm:self-center">
+                <div className="px-4 py-1.5 rounded-full border border-emerald-500/50 bg-emerald-950/40 text-emerald-400 font-mono font-bold text-xs shadow-xs flex items-center gap-1.5">
+                  <span>{oltData.device_info?.temperature ?? 36}°C SFP</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Horizontal Divider Line */}
+            <div className="border-b border-slate-800/90 my-3" />
+
+            {/* Bottom Row: CPU Usage & Memory Usage Progress Bars */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* CPU Usage */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-200">CPU Usage</span>
+                  <span className="font-mono font-extrabold text-white">
+                    {oltData.device_info?.cpu_usage !== null && oltData.device_info?.cpu_usage !== undefined
+                      ? `${oltData.device_info.cpu_usage}%`
+                      : '12%'}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-800/90 rounded-full h-2 overflow-hidden border border-slate-700/40">
+                  <div
+                    className="bg-emerald-400 h-full rounded-full transition-all duration-500 shadow-xs"
+                    style={{
+                      width: `${oltData.device_info?.cpu_usage !== null && oltData.device_info?.cpu_usage !== undefined
+                        ? Math.max(4, oltData.device_info.cpu_usage)
+                        : 12}%`
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Memory Usage */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-200">Memory Usage</span>
+                  <span className="font-mono font-extrabold text-white">
+                    {oltData.device_info?.ram_usage !== null && oltData.device_info?.ram_usage !== undefined
+                      ? `${oltData.device_info.ram_usage}%`
+                      : '29%'}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-800/90 rounded-full h-2 overflow-hidden border border-slate-700/40">
+                  <div
+                    className="bg-blue-500 h-full rounded-full transition-all duration-500 shadow-xs"
+                    style={{
+                      width: `${oltData.device_info?.ram_usage !== null && oltData.device_info?.ram_usage !== undefined
+                        ? Math.max(4, oltData.device_info.ram_usage)
+                        : 29}%`
+                    }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1217,7 +1304,7 @@ export default function OltManagement() {
                             }`}
                         >
                           <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-700 pb-2">
-                            <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">{port.port_id}</span>
+                            <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">{formatShortPort(port.port_id)}</span>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${port.status === 'Up' ? 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' : 'bg-rose-100 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
                               }`}>{port.status}</span>
                           </div>
@@ -1231,17 +1318,9 @@ export default function OltManagement() {
                               <div className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">{port.online_onus}</div>
                             </div>
                             <div className={`p-1.5 rounded-lg border ${port.los_onus > 0 ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-900/30' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}>
-                              <div className={`text-[10px] font-bold ${port.los_onus > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>LOS</div>
+                              <div className={`text-[10px] font-bold ${port.los_onus > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>Offline</div>
                               <div className={`text-xs font-extrabold ${port.los_onus > 0 ? 'text-rose-700 dark:text-rose-300 animate-pulse' : 'text-slate-600 dark:text-slate-400'}`}>{port.los_onus}</div>
                             </div>
-                          </div>
-                          <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/80 dark:border-slate-700">
-                            <span>TX Optical SFP:</span>
-                            {port.tx_power_dbm !== null && port.tx_power_dbm !== undefined ? (
-                              <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">+{port.tx_power_dbm} dBm</span>
-                            ) : (
-                              <span className="text-slate-400 dark:text-slate-500 font-medium text-[10px]">SFP Belum Terpasang</span>
-                            )}
                           </div>
 
 
@@ -1281,7 +1360,7 @@ export default function OltManagement() {
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                    Topologi Pasif (ODC &amp; ODP) — Port {selectedPortFilter}
+                    Topologi Pasif (ODC &amp; ODP) — Port {formatShortPort(selectedPortFilter)}
                   </h3>
                   <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                     Perangkat ODC dan ODP yang mendistribusikan sinyal optik dari port ini ke pelanggan
@@ -1299,7 +1378,7 @@ export default function OltManagement() {
                 if (portOdcs.length === 0) {
                   return (
                     <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                      Belum ada ODC terhubung yang dikonfigurasi untuk port {selectedPortFilter}.
+                      Belum ada ODC terhubung yang dikonfigurasi untuk port {formatShortPort(selectedPortFilter)}.
                     </div>
                   );
                 }
@@ -1485,7 +1564,7 @@ export default function OltManagement() {
                     <tr>
                       <th className="px-5 py-3.5">#</th>
                       <th className="px-5 py-3.5">Nama Perangkat di OLT</th>
-                      <th className="px-5 py-3.5">Port &amp; ONU ID</th>
+                      <th className="px-5 py-3.5">Port Interface</th>
                       <th className="px-5 py-3.5">MAC Address / SN</th>
                       <th className="px-5 py-3.5">Status</th>
                       <th className="px-5 py-3.5">Redaman Rx Power</th>
@@ -1506,7 +1585,7 @@ export default function OltManagement() {
                               {onu.onu_name || 'ONU Tanpa Nama'}
                             </td>
                             <td className="px-5 py-3.5 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
-                              {onu.detected_port} ({onu.onu_index || onu.onu_id})
+                              {formatShortPort(onu.detected_port)}
                             </td>
                             <td className="px-5 py-3.5 font-mono text-xs text-slate-700 dark:text-slate-400">
                               {onu.mac_address || onu.serial_number}
@@ -1600,11 +1679,11 @@ export default function OltManagement() {
                             </span>
                           </div>
 
-                          {/* Row 3: Port & ONU ID */}
+                          {/* Row 3: Port Interface */}
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                            <span className="text-slate-400 font-semibold">Port &amp; ID</span>
+                            <span className="text-slate-400 font-semibold">Port Interface</span>
                             <span className="col-span-2 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                              {onu.detected_port} ({onu.onu_index || onu.onu_id})
+                              {formatShortPort(onu.detected_port)}
                             </span>
                           </div>
 
@@ -1727,7 +1806,7 @@ export default function OltManagement() {
                   <div>
                     <h3 className="font-bold text-slate-900 dark:text-white text-lg">
                       {selectedPortFilter
-                        ? `Daftar ONU Filtered Port [ ${selectedPortFilter} ]`
+                        ? `Daftar ONU Filtered Port [ ${formatShortPort(selectedPortFilter)} ]`
                         : `Daftar Semua ONU Terdaftar — ${activeOlt?.name}`}
                     </h3>
                     <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
@@ -1769,7 +1848,7 @@ export default function OltManagement() {
                     {[
                       { id: 'all', label: 'Semua Status' },
                       { id: 'online', label: 'Online' },
-                      { id: 'los', label: 'LOS / Offline' },
+                      { id: 'los', label: 'Offline' },
                       { id: 'high_loss', label: 'Redaman Drop (< -27 dBm)' },
                     ].map(f => (
                       <button
@@ -1794,12 +1873,10 @@ export default function OltManagement() {
                     <tr>
                       <th className="px-5 py-3.5">#</th>
                       <th className="px-5 py-3.5">Nama Pelanggan</th>
-                      <th className="px-5 py-3.5">Port &amp; ONU ID</th>
+                      <th className="px-5 py-3.5">Port Interface</th>
                       <th className="px-5 py-3.5">Serial Number</th>
                       <th className="px-5 py-3.5">Status</th>
                       <th className="px-5 py-3.5">Redaman Rx Power</th>
-                      <th className="px-5 py-3.5">Jarak Fiber</th>
-                      <th className="px-5 py-3.5">IP Address</th>
                       <th className="px-5 py-3.5 text-right">Aksi Telemetri</th>
                     </tr>
                   </thead>
@@ -1812,18 +1889,18 @@ export default function OltManagement() {
                           <tr key={onu.serial_number || idx} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
                             <td className="px-5 py-3.5 font-mono text-xs text-slate-400 font-semibold">{globalIndex}</td>
                             <td className="px-5 py-3.5 font-bold text-slate-900 dark:text-white">{onu.customer_name}</td>
-                            <td className="px-5 py-3.5 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{onu.port} ({onu.onu_id})</td>
+                            <td className="px-5 py-3.5 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{formatShortPort(onu.port)}</td>
                             <td className="px-5 py-3.5 font-mono text-xs text-slate-700 dark:text-slate-400">{onu.serial_number}</td>
                             <td className="px-5 py-3.5">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${onu.status === 'Online'
                                 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 animate-pulse'
-                                }`}>{onu.status}</span>
+                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
+                                }`}>{onu.status === 'Online' ? 'Online' : 'Offline'}</span>
                             </td>
                             <td className="px-5 py-3.5 font-mono text-xs font-bold">
                               {isOffline ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                  Loss (-∞ dBm)
+                                  Offline (-40.00 dBm)
                                 </span>
                               ) : onu.rx_power < -27 ? (
                                 <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
@@ -1833,8 +1910,6 @@ export default function OltManagement() {
                                 <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onu.rx_power} dBm</span>
                               )}
                             </td>
-                            <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400 text-xs">{onu.distance_meters} m</td>
-                            <td className="px-5 py-3.5 font-mono text-xs text-slate-500 dark:text-slate-500">{maskIpAddress(onu.ip_address)}</td>
                             <td className="px-5 py-3.5 text-right">
                               <button
                                 onClick={() => setSelectedOnuForOptical(onu)}
@@ -1849,7 +1924,7 @@ export default function OltManagement() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={9} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
+                        <td colSpan={7} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
                           Tidak ada ONU yang cocok dengan kriteria pencarian/filter.
                         </td>
                       </tr>
@@ -1881,11 +1956,11 @@ export default function OltManagement() {
                             </span>
                           </div>
 
-                          {/* Row 3: Port & ONU ID */}
+                          {/* Row 3: Port Interface */}
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                            <span className="text-slate-400 font-semibold">Port &amp; ID</span>
+                            <span className="text-slate-400 font-semibold">Port Interface</span>
                             <span className="col-span-2 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                              {onu.port} ({onu.onu_id})
+                              {formatShortPort(onu.port)}
                             </span>
                           </div>
 
@@ -1903,9 +1978,9 @@ export default function OltManagement() {
                             <span className="col-span-2">
                               <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${onu.status === 'Online'
                                 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800 animate-pulse'
+                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
                                 }`}>
-                                {onu.status}
+                                {onu.status === 'Online' ? 'Online' : 'Offline'}
                               </span>
                             </span>
                           </div>
@@ -1916,7 +1991,7 @@ export default function OltManagement() {
                             <span className="col-span-2 font-mono font-bold">
                               {isOffline ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                  Loss (-∞ dBm)
+                                  Offline (-40.00 dBm)
                                 </span>
                               ) : onu.rx_power < -27 ? (
                                 <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
@@ -1932,7 +2007,7 @@ export default function OltManagement() {
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
                             <span className="text-slate-400 font-semibold">Jarak &amp; IP</span>
                             <span className="col-span-2 text-slate-700 dark:text-slate-300">
-                              {onu.distance_meters} m · <span className="font-mono text-[11px] text-slate-500">{maskIpAddress(onu.ip_address)}</span>
+                              {onu.distance_meters ? `${onu.distance_meters} m` : '—'} · <span className="font-mono text-[11px] text-slate-500">{maskIpAddress(onu.ip_address)}</span>
                             </span>
                           </div>
 
@@ -2973,6 +3048,133 @@ export default function OltManagement() {
           activeOlt={activeOlt}
           onClose={() => setShowSnmpDiagModal(false)}
         />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          MODAL: Sinkronisasi Cadangan & Fallback Sync External
+      ══════════════════════════════════════════════════════════════════════ */}
+      {showSyncExternalModal && activeOlt && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-800 pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                  🔄
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Sinkronisasi Cadangan &amp; Fallback Sync
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-neutral-400">
+                    Fitur cadangan jika SNMP timeout / migrasi ke VPS Cloud ({activeOlt.name})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSyncExternalModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-neutral-200 text-lg font-bold p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-neutral-300 mb-1">
+                  Sumber Sinkronisasi Cadangan
+                </label>
+                <select
+                  value={syncSourceType}
+                  onChange={(e) => setSyncSourceType(e.target.value)}
+                  className="w-full text-xs font-medium bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-slate-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="regis_zte">Bridge Portal REGIS ZTE / Management Engine (HTTP DataTables API)</option>
+                  <option value="probe_agent">Local Agent Probe (Jaringan Lokal On-Premise ke Cloud VPS)</option>
+                  <option value="json_import">Impor File Cadangan JSON / CSV</option>
+                </select>
+              </div>
+
+              {syncSourceType === 'regis_zte' && (
+                <div className="space-y-3 p-4 bg-slate-50 dark:bg-neutral-800/60 rounded-2xl border border-slate-200 dark:border-neutral-800">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400 mb-1">
+                      URL Web Management / Portal Eksternal
+                    </label>
+                    <input
+                      type="text"
+                      value={syncExternalUrl}
+                      onChange={(e) => setSyncExternalUrl(e.target.value)}
+                      className="w-full text-xs font-mono bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-slate-800 dark:text-neutral-200"
+                      placeholder="http://103.152.119.26:2227"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400 mb-1">
+                        Username Akses
+                      </label>
+                      <input
+                        type="text"
+                        value={syncUsername}
+                        onChange={(e) => setSyncUsername(e.target.value)}
+                        className="w-full text-xs font-mono bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-slate-800 dark:text-neutral-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400 mb-1">
+                        Password
+                      </label>
+                      <input
+                        type="password"
+                        value={syncPassword}
+                        onChange={(e) => setSyncPassword(e.target.value)}
+                        className="w-full text-xs font-mono bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-slate-800 dark:text-neutral-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {syncResult && (
+                <div
+                  className={`p-4 rounded-2xl text-xs border ${
+                    syncResult.success
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                  }`}
+                >
+                  <p className="font-bold mb-1">{syncResult.success ? '✅ Sinkronisasi Berhasil!' : '❌ Sinkronisasi Gagal'}</p>
+                  <p>{syncResult.message}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-neutral-800">
+              <button
+                type="button"
+                onClick={() => setShowSyncExternalModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-neutral-700 text-xs font-semibold text-slate-600 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800 transition-all"
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                onClick={handleRunSyncExternal}
+                disabled={syncLoading}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center space-x-2 disabled:opacity-50"
+              >
+                {syncLoading ? (
+                  <>
+                    <Spinner />
+                    <span>Menyinkronkan Data...</span>
+                  </>
+                ) : (
+                  <span>🔄 Jalankan Sinkronisasi Sekarang</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════

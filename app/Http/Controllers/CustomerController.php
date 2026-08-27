@@ -398,6 +398,7 @@ class CustomerController extends Controller
 
         // 1. Query registered ONUs from ont_registrations table that are not yet assigned to any customer
         $registeredOnus = OntRegistration::with('oltPort.node')
+            ->whereNull('customer_service_id')
             ->whereNotIn('onu_serial', $assignedSerials)
             ->get();
 
