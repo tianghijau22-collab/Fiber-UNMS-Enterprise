@@ -217,12 +217,22 @@ class OltController extends Controller
         }
 
         // Kategori 2: ONU Fisik dari OLT driver yang BELUM ada di DB UNMS
+        $seenUnregSns = [];
         foreach ($driverOnuList as $onu) {
             $sn  = strtoupper(trim((string)($onu['serial_number'] ?? '')));
             $mac = strtoupper(trim((string)($onu['mac_address'] ?? ($onu['onu_mac'] ?? ''))));
 
+            if (empty($sn) || $sn === '00000000' || $sn === '0000000000000000' || preg_match('/^0+$/', $sn)) {
+                continue;
+            }
+
+            if (isset($seenUnregSns[$sn])) {
+                continue;
+            }
+
             $isRegistered = (!empty($sn) && isset($registeredMap[$sn])) || (!empty($mac) && isset($registeredMap[$mac]));
             if (!$isRegistered) {
+                $seenUnregSns[$sn] = true;
                 $unregisteredOnus[] = [
                     '_source'                  => 'live_snmp',
                     'onu_name'                 => $onu['onu_name'] ?? ($onu['customer_name'] ?? ('ONU ' . ($onu['serial_number'] ?? ''))),

@@ -226,12 +226,14 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     }
                 }
 
-                // 2. Query seluruh tabel ONU GPON ZTE V2.x / V1.x tanpa terlewat (gunakan + agar OID key terjaga)
-                $w1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
-                $w2 = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1') ?: [];
-                $w3 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
-                $w4 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.3.1.2') ?: [];
-                $snHexList = $w1 + $w2 + $w3 + $w4;
+                // 2. Query tabel ONU GPON ZTE V2.x / V1.x (Prioritas OID 1012.3.28.1.1.5)
+                $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
+                if (empty($snHexList)) {
+                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
+                }
+                if (empty($snHexList)) {
+                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1') ?: [];
+                }
 
                 $stateList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.4');
                 $descList  = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.2');
@@ -293,6 +295,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
                 if (!empty($snHexList)) {
                     $onus = [];
+                    $seenSns = [];
                     foreach ($snHexList as $oid => $hexVal) {
                         $parts = explode('.', $oid);
                         $onuId = end($parts);
@@ -300,9 +303,15 @@ class ZteC320Driver implements OltDeviceDriverInterface
                         $compositeKey = "{$portIfIndex}_{$onuId}";
 
                         $sn = $this->parseZteSerialNumber((string)$hexVal);
-                        if (empty($sn) || $sn === '00000000' || strlen($sn) < 6) {
+                        if (empty($sn) || $sn === '00000000' || $sn === '0000000000000000' || strlen($sn) < 6 || preg_match('/^0+$/', $sn)) {
                             continue;
                         }
+
+                        // Deduplikasi Serial Number agar tidak ganda
+                        if (isset($seenSns[$sn])) {
+                            continue;
+                        }
+                        $seenSns[$sn] = true;
 
                         $portName = $portMap[$portIfIndex] ?? $this->parseIfIndexToPortName($portIfIndex);
                         $stateCode = $stateMap[$compositeKey] ?? 3;
