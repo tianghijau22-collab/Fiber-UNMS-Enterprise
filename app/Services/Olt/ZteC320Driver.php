@@ -226,24 +226,21 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     }
                 }
 
-                // 2. Query tabel ONU GPON ZTE V2.x / V1.x (Prioritas OID 1012.3.28.1.1.5)
-                $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5');
-                if (empty($snHexList)) {
-                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1');
-                }
-                if (empty($snHexList)) {
-                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3');
-                }
+                // 2. Query seluruh tabel ONU GPON ZTE V2.x / V1.x tanpa terlewat
+                $w1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
+                $w2 = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1') ?: [];
+                $w3 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
+                $w4 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.3.1.2') ?: [];
+                $snHexList = array_merge($w1, $w2, $w3, $w4);
 
                 $stateList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.4');
                 $descList  = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.2');
                 $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.9');
 
-                // Optical Table (Prioritas OID 1012.3.50.12.1.1.14)
-                $onuRxList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14');
-                if (empty($onuRxList)) {
-                    $onuRxList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.18');
-                }
+                // Optical Table
+                $rx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14') ?: [];
+                $rx2 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.18') ?: [];
+                $onuRxList = array_merge($rx1, $rx2);
                 $onuTxList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.10.2.1.6.1.4.1.1');
 
                 // Build lookup maps
