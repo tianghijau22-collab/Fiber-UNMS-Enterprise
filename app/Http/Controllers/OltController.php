@@ -125,9 +125,51 @@ class OltController extends Controller
         $driverPonPorts   = $driver->getPonPorts();
 
         if ($summaryOnly) {
+            // Perkaya driverPonPorts dengan data status & ONU dari database / snapshot sebelumnya
+            $dbOnts = $device ? OntRegistration::where(function ($q) use ($device) {
+                $q->whereHas('customerService.networkPort.node', fn($sq) => $sq->where('olt_id', $device->id))
+                  ->orWhereHas('oltPort.node', fn($sq) => $sq->where('olt_id', $device->id));
+            })->get() : collect();
+
+            $dbOntsCountByPort = [];
+            foreach ($dbOnts as $ont) {
+                $p = $ont->customerService?->networkPort?->node?->olt_port_ref ?: ($ont->oltPort?->node?->olt_port_ref ?: 'gpon-olt_1/1/1');
+                $dbOntsCountByPort[$p] = ($dbOntsCountByPort[$p] ?? 0) + 1;
+            }
+
+            $snapshotPorts = $device?->last_telemetry_snapshot['pon_ports'] ?? [];
+            $snapshotPortMap = [];
+            foreach ($snapshotPorts as $sp) {
+                $snapshotPortMap[$sp['port_id'] ?? ''] = $sp;
+            }
+
+            $enrichedPorts = array_map(function ($port) use ($dbOntsCountByPort, $snapshotPortMap) {
+                $portId = $port['port_id'] ?? '';
+                $dbCount = 0;
+                foreach ($dbOntsCountByPort as $pKey => $c) {
+                    if ($this->portsMatch($portId, $pKey)) {
+                        $dbCount += $c;
+                    }
+                }
+                $snap = $snapshotPortMap[$portId] ?? null;
+                $snapReg = $snap['registered_onus'] ?? 0;
+                $snapUncfg = $snap['unconfigured_onus'] ?? 0;
+                $snapTotal = $snapReg + $snapUncfg;
+
+                $totalCount = max($port['registered_onus'] ?? 0, $dbCount, $snapTotal);
+                $isUp = ($port['status'] === 'Up') || (($snap['status'] ?? '') === 'Up') || $totalCount > 0;
+
+                return array_merge($port, [
+                    'status'            => $isUp ? 'Up' : 'Down',
+                    'registered_onus'   => max($port['registered_onus'] ?? 0, $dbCount, $snapReg),
+                    'unconfigured_onus' => $port['unconfigured_onus'] ?? $snapUncfg,
+                    'online_onus'       => $isUp ? max($port['online_onus'] ?? 0, $totalCount, $snap['online_onus'] ?? 0) : 0,
+                ]);
+            }, $driverPonPorts);
+
             return response()->json([
                 'device_info'       => $driverDeviceInfo,
-                'pon_ports'         => $driverPonPorts,
+                'pon_ports'         => $enrichedPorts,
                 'onu_list'          => [],
                 'unconfigured_onus' => [],
                 'orphaned_onus'     => [],
