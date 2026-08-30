@@ -153,7 +153,12 @@ class ZteC320Driver implements OltDeviceDriverInterface
                 $regCount = $onuCountByPort[$portId] ?? 0;
                 $onlineCount = $onlineCountByPort[$portId] ?? 0;
                 $isUp = ($regCount > 0 || $onlineCount > 0);
-                $sfpPower = $isUp ? round(4.82 + ((($slot * 13 + $port * 17) % 210) / 100.0), 2) : 5.0;
+
+                $isClassCpp = str_contains($type, 'HK') || $slot === 7;
+                $sfpClass   = $isClassCpp ? 'Class C++' : 'Class C+';
+                $sfpModel   = $isClassCpp ? 'LTE3680P-C++ (ZTE/Hisense)' : 'LTE3680P-BC+ (ZTE/Hisense)';
+                $sfpVendor  = 'Hisense / ZTE';
+                $sfpPower   = $isUp ? ($isClassCpp ? 7.80 : 5.50) : null;
 
                 $ports[] = [
                     '_source'         => ($this->isLive && $hasLiveCounts) ? 'live_snmp' : 'simulation',
@@ -162,7 +167,10 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     'port'            => $port,
                     'status'          => $isUp ? 'Up' : 'Down',
                     'tx_power_dbm'    => $sfpPower,
-                    'sfp_class'       => 'Class C+',
+                    'sfp_class'       => $sfpClass,
+                    'sfp_vendor'      => $isUp ? $sfpVendor : '—',
+                    'sfp_model'       => $isUp ? $sfpModel : '—',
+                    'wavelength'      => '1490nm Tx / 1310nm Rx',
                     'registered_onus' => $regCount,
                     'online_onus'     => $onlineCount,
                     'los_onus'        => max(0, $regCount - $onlineCount),

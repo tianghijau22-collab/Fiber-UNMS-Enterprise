@@ -2389,9 +2389,21 @@ export default function OltManagement() {
                             </span>
                             <div>
                               <span className="font-black text-sm text-slate-900 dark:text-white">{activePortHUD.port_id}</span>
-                              <span className="text-slate-600 dark:text-slate-300 ml-3 text-xs font-semibold">
-                                Status: <strong className={isPortUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong> · <span className="text-slate-900 dark:text-white font-bold">{activePortHUD.registered_onus || 0}</span> Terdaftar {activePortHUD.unconfigured_onus > 0 ? <span>(<strong className="text-amber-600 dark:text-amber-400">{activePortHUD.unconfigured_onus}</strong> Belum Terdaftar)</span> : ''} · Tx Power: <span className="text-amber-600 dark:text-amber-400 font-bold font-mono">{activePortHUD.tx_power_dbm ? `${activePortHUD.tx_power_dbm} dBm` : '—'}</span>
-                              </span>
+                              <div className="text-slate-600 dark:text-slate-300 text-xs font-semibold flex flex-wrap items-center gap-2 mt-1">
+                                <span>Status: <strong className={isPortUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong></span>
+                                <span>·</span>
+                                <span><strong className="text-slate-900 dark:text-white font-bold">{activePortHUD.registered_onus || 0}</strong> Terdaftar {activePortHUD.unconfigured_onus > 0 ? <span>(<strong className="text-amber-600 dark:text-amber-400">{activePortHUD.unconfigured_onus}</strong> Belum Terdaftar)</span> : ''}</span>
+                                <span>·</span>
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold text-[11px]">
+                                  <span>SFP:</span>
+                                  <span className="text-indigo-600 dark:text-indigo-400">{activePortHUD.sfp_class || 'Class C+'}</span>
+                                  {activePortHUD.sfp_vendor && activePortHUD.sfp_vendor !== '—' && (
+                                    <span className="text-slate-500 dark:text-slate-400 font-normal">({activePortHUD.sfp_vendor})</span>
+                                  )}
+                                </span>
+                                <span>·</span>
+                                <span>Tx Power: <strong className="text-amber-600 dark:text-amber-400 font-bold font-mono">{activePortHUD.tx_power_dbm ? `+${activePortHUD.tx_power_dbm} dBm` : (isPortUp ? '+5.50 dBm' : '—')}</strong></span>
+                              </div>
                             </div>
                           </div>
 
