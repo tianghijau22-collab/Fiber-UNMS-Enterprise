@@ -96,6 +96,9 @@ class OltController extends Controller
         // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh
         if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
             $rawSnapshot = $device->last_telemetry_snapshot;
+            $rawPonPorts = !empty($rawSnapshot['pon_ports']) ? $rawSnapshot['pon_ports'] : $this->getDriver($vendor, $device?->id)->getPonPorts();
+            $rawDevInfo  = !empty($rawSnapshot['device_info']) ? $rawSnapshot['device_info'] : $this->getDriver($vendor, $device?->id)->getDeviceInfo();
+
             if ($summaryOnly) {
                 // Perkaya pon_ports dengan unconfigured_onus yang ada di snapshot database
                 $allUncfg = $rawSnapshot['unconfigured_onus'] ?? [];
@@ -119,10 +122,10 @@ class OltController extends Controller
                         'unconfigured_onus' => $uncfgCount,
                         'online_onus'       => $isUp ? max($port['online_onus'] ?? 0, ($port['registered_onus'] ?? 0) + $uncfgCount) : 0,
                     ]);
-                }, $rawSnapshot['pon_ports'] ?? []);
+                }, $rawPonPorts);
 
                 return response()->json([
-                    'device_info'       => $rawSnapshot['device_info'] ?? [],
+                    'device_info'       => $rawDevInfo,
                     'pon_ports'         => $enrichedPorts,
                     'onu_list'          => [],
                     'unconfigured_onus' => [],
@@ -133,8 +136,8 @@ class OltController extends Controller
 
             $snapshot = $this->processAndPartitionTelemetry(
                 $device,
-                $rawSnapshot['device_info'] ?? [],
-                $rawSnapshot['pon_ports'] ?? [],
+                $rawDevInfo,
+                $rawPonPorts,
                 $rawSnapshot['onu_list'] ?? [],
                 $rawSnapshot['unconfigured_onus'] ?? []
             );
@@ -286,6 +289,14 @@ class OltController extends Controller
         // Update database registrations & snapshot
         if ($device) {
             $this->syncOntRegistrations($device, $driverOnuList);
+
+            $currentSnapshot = $device->last_telemetry_snapshot ?: [];
+            if (empty($currentSnapshot['pon_ports'])) {
+                $currentSnapshot['pon_ports'] = $driver->getPonPorts();
+            }
+            if (empty($currentSnapshot['device_info'])) {
+                $currentSnapshot['device_info'] = $driver->getDeviceInfo();
+            }
 
             // Merge unconfigured onus ke snapshot
             $existingUncfg = $currentSnapshot['unconfigured_onus'] ?? [];
