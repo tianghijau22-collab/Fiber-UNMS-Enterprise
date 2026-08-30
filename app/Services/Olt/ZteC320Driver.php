@@ -150,15 +150,9 @@ class ZteC320Driver implements OltDeviceDriverInterface
             $portCount = (str_contains($type, 'GTGO') || str_contains($type, 'ETGO') || str_contains($type, '8P')) ? 8 : (str_contains($type, '4P') ? 4 : 16);
             for ($port = 1; $port <= $portCount; $port++) {
                 $portId = "gpon-olt_1/{$slot}/{$port}";
-                if ($hasLiveCounts) {
-                    $regCount = $onuCountByPort[$portId] ?? 0;
-                    $onlineCount = $onlineCountByPort[$portId] ?? 0;
-                    $isUp = $regCount > 0 || $onlineCount > 0;
-                } else {
-                    $isUp = true;
-                    $regCount = 12 + (($slot * 7 + $port * 3) % 15);
-                    $onlineCount = $regCount;
-                }
+                $regCount = $onuCountByPort[$portId] ?? 0;
+                $onlineCount = $onlineCountByPort[$portId] ?? 0;
+                $isUp = ($regCount > 0 || $onlineCount > 0);
                 $sfpPower = $isUp ? round(4.82 + ((($slot * 13 + $port * 17) % 210) / 100.0), 2) : 5.0;
 
                 $ports[] = [

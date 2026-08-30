@@ -116,11 +116,12 @@ class OltController extends Controller
                             $uncfgCount += $c;
                         }
                     }
-                    $isUp = ($port['status'] === 'Up') || (($port['registered_onus'] ?? 0) > 0) || ($uncfgCount > 0);
+                    $totalOnus = ($port['registered_onus'] ?? 0) + $uncfgCount;
+                    $isUp = $totalOnus > 0;
                     return array_merge($port, [
                         'status'            => $isUp ? 'Up' : 'Down',
                         'unconfigured_onus' => $uncfgCount,
-                        'online_onus'       => $isUp ? max($port['online_onus'] ?? 0, ($port['registered_onus'] ?? 0) + $uncfgCount) : 0,
+                        'online_onus'       => $isUp ? max($port['online_onus'] ?? 0, $totalOnus) : 0,
                     ]);
                 }, $rawPonPorts);
 

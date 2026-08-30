@@ -153,12 +153,14 @@ const SignalStrengthMeter = ({ rxPower, status }) => {
   );
 };
 
-// Helper: Menentukan apakah sebuah port berstatus Up (Hijau) jika ada SFP / ONU aktif / terdeteksi
+// Helper: Menentukan apakah sebuah port berstatus Up (Hijau) HANYA JIKA ada ONU fisik/terdaftar terhubung
 const checkIsPortUp = (port, oltDataRef) => {
   if (!port) return false;
-  const statusStr = String(port.status || '').toLowerCase();
-  if (statusStr === 'up' || statusStr === 'online') return true;
-  if ((port.registered_onus || 0) > 0 || (port.online_onus || 0) > 0 || (port.unconfigured_onus || 0) > 0) return true;
+  const regCount = Number(port.registered_onus || 0);
+  const uncfgCount = Number(port.unconfigured_onus || 0);
+  const onCount = Number(port.online_onus || 0);
+
+  if (regCount > 0 || uncfgCount > 0 || onCount > 0) return true;
 
   if (!oltDataRef) return false;
   const portId = port.port_id || '';
@@ -169,14 +171,14 @@ const checkIsPortUp = (port, oltDataRef) => {
   // Cek apakah ada unconfigured ONUs pada port ini
   const hasUncfg = (oltDataRef.unconfigured_onus || []).some(o => {
     const p = (o.detected_port || o.port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-    return p === clean || p === portId || p.startsWith(clean + '/') || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}` || p.startsWith(`1/${slotNum}/${portNum}/`)));
+    return p === clean || p === portId || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}`));
   });
   if (hasUncfg) return true;
 
   // Cek apakah ada registered ONUs pada port ini
   const hasOnu = (oltDataRef.onu_list || []).some(o => {
     const p = (o.port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-    return p === clean || p === portId || p.startsWith(clean + '/') || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}` || p.startsWith(`1/${slotNum}/${portNum}/`)));
+    return p === clean || p === portId || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}`));
   });
   return hasOnu;
 };
