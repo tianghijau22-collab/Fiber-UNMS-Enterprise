@@ -472,10 +472,11 @@ class OltController extends Controller
         }
 
         // 5. Perbarui hitungan port PON
-        $updatedPonPorts = array_map(function ($port) use ($registeredOnus) {
+        $updatedPonPorts = array_map(function ($port) use ($registeredOnus, $unregisteredOnus) {
             $portId = $port['port_id'] ?? '';
             $regCount = 0;
             $onCount = 0;
+            $uncfgCount = 0;
             foreach ($registeredOnus as $ro) {
                 $roPort = $ro['port'] ?? '';
                 if ($this->portsMatch($portId, $roPort)) {
@@ -483,14 +484,25 @@ class OltController extends Controller
                     if (strcasecmp($ro['status'] ?? '', 'Online') === 0) $onCount++;
                 }
             }
-            if ($regCount > 0) {
-                $port['registered_onus'] = $regCount;
-                $port['online_onus']     = $onCount;
-                $port['los_onus']        = max(0, $regCount - $onCount);
+            foreach ($unregisteredOnus as $uo) {
+                $uoPort = $uo['detected_port'] ?? ($uo['port'] ?? '');
+                if ($this->portsMatch($portId, $uoPort)) {
+                    $uncfgCount++;
+                    if (strcasecmp($uo['status'] ?? '', 'Online') === 0) $onCount++;
+                }
+            }
+            $totalPhysicalOnus = $regCount + $uncfgCount;
+            if ($totalPhysicalOnus > 0) {
+                $port['status']            = 'Up';
+                $port['registered_onus']   = $regCount;
+                $port['unconfigured_onus'] = $uncfgCount;
+                $port['online_onus']       = $onCount;
+                $port['los_onus']          = max(0, $totalPhysicalOnus - $onCount);
             } else {
-                $port['registered_onus'] = $port['registered_onus'] ?? 0;
-                $port['online_onus']     = $port['online_onus'] ?? 0;
-                $port['los_onus']        = $port['los_onus'] ?? 0;
+                $port['registered_onus']   = $port['registered_onus'] ?? 0;
+                $port['unconfigured_onus'] = $port['unconfigured_onus'] ?? 0;
+                $port['online_onus']       = $port['online_onus'] ?? 0;
+                $port['los_onus']          = $port['los_onus'] ?? 0;
             }
             return $port;
         }, $driverPonPorts);

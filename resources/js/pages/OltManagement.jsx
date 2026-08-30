@@ -153,6 +153,34 @@ const SignalStrengthMeter = ({ rxPower, status }) => {
   );
 };
 
+// Helper: Menentukan apakah sebuah port berstatus Up (Hijau) jika ada SFP / ONU aktif / terdeteksi
+const checkIsPortUp = (port, oltDataRef) => {
+  if (!port) return false;
+  const statusStr = String(port.status || '').toLowerCase();
+  if (statusStr === 'up' || statusStr === 'online') return true;
+  if ((port.registered_onus || 0) > 0 || (port.online_onus || 0) > 0 || (port.unconfigured_onus || 0) > 0) return true;
+
+  if (!oltDataRef) return false;
+  const portId = port.port_id || '';
+  const clean = portId.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
+  const slotNum = port.slot;
+  const portNum = port.port || port.portNum;
+
+  // Cek apakah ada unconfigured ONUs pada port ini
+  const hasUncfg = (oltDataRef.unconfigured_onus || []).some(o => {
+    const p = (o.detected_port || o.port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
+    return p === clean || p === portId || p.startsWith(clean + '/') || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}` || p.startsWith(`1/${slotNum}/${portNum}/`)));
+  });
+  if (hasUncfg) return true;
+
+  // Cek apakah ada registered ONUs pada port ini
+  const hasOnu = (oltDataRef.onu_list || []).some(o => {
+    const p = (o.port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
+    return p === clean || p === portId || p.startsWith(clean + '/') || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}` || p.startsWith(`1/${slotNum}/${portNum}/`)));
+  });
+  return hasOnu;
+};
+
 // ─── Deployment Mode Options ──────────────────────────────────────────────────
 const DEPLOYMENT_MODES = [
   {
@@ -502,14 +530,32 @@ export default function OltManagement() {
             const targetClean = portId.replace(/^gpon[-_]olt_/i, '').replace(/^epon[-_]olt_/i, '');
             const otherOnus = (prev.onu_list || []).filter(o => {
               const p = (o.port || '').replace(/^gpon[-_]olt_/i, '').replace(/^epon[-_]olt_/i, '');
-              return p !== targetClean && !p.startsWith(targetClean);
+              return p !== targetClean && !p.startsWith(targetClean + '/');
             });
             const otherUncfg = (prev.unconfigured_onus || []).filter(o => {
               const p = (o.detected_port || o.port || '').replace(/^gpon[-_]olt_/i, '').replace(/^epon[-_]olt_/i, '');
-              return p !== targetClean && !p.startsWith(targetClean);
+              return p !== targetClean && !p.startsWith(targetClean + '/');
             });
+            const totalFoundOnPort = (res.onu_list || []).length + (res.unconfigured_onus || []).length;
+            const onlineFoundOnPort = (res.onu_list || []).filter(o => o.status === 'Online').length + (res.unconfigured_onus || []).filter(o => o.status === 'Online').length;
+
+            const updatedPonPorts = (prev.pon_ports || []).map(p => {
+              const pClean = (p.port_id || '').replace(/^gpon[-_]olt_/i, '').replace(/^epon[-_]olt_/i, '');
+              if (p.port_id === portId || pClean === targetClean || `1/${p.port}` === targetClean || (p.slot && p.port && `1/${p.slot}/${p.port}` === targetClean)) {
+                return {
+                  ...p,
+                  status: (totalFoundOnPort > 0 || p.status === 'Up') ? 'Up' : 'Down',
+                  registered_onus: (res.onu_list || []).length,
+                  unconfigured_onus: (res.unconfigured_onus || []).length,
+                  online_onus: onlineFoundOnPort,
+                };
+              }
+              return p;
+            });
+
             return {
               ...prev,
+              pon_ports: updatedPonPorts,
               onu_list: [...otherOnus, ...(res.onu_list || [])],
               unconfigured_onus: [...otherUncfg, ...(res.unconfigured_onus || [])],
               orphaned_onus: res.orphaned_onus || prev.orphaned_onus,
@@ -2262,10 +2308,8 @@ export default function OltManagement() {
                         );
                       }
 
-                      const isPortUp = String(activePortHUD.status).toLowerCase() === 'up' ||
-                        String(activePortHUD.status).toLowerCase() === 'online' ||
-                        (activePortHUD.registered_onus > 0) ||
-                        (activePortHUD.online_onus > 0);
+                      const isPortUp = checkIsPortUp(activePortHUD, oltData);
+                      const totalOnusOnPort = (activePortHUD.registered_onus || 0) + (activePortHUD.unconfigured_onus || 0);
 
                       return (
                         <div className="p-4 sm:p-5 rounded-2xl bg-slate-850 border-2 border-indigo-500/80 shadow-2xl flex flex-wrap items-center justify-between gap-4 text-xs text-white animate-in fade-in duration-100">
@@ -2276,7 +2320,7 @@ export default function OltManagement() {
                             <div>
                               <span className="font-black text-sm text-white">{activePortHUD.port_id}</span>
                               <span className="text-slate-200 ml-3 text-xs font-semibold">
-                                Status: <strong className={isPortUp ? 'text-emerald-400' : 'text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong> · <span className="text-white font-bold">{activePortHUD.registered_onus || 0}</span> Terdaftar (<span className="text-emerald-400 font-bold">{activePortHUD.online_onus || 0} Online</span>) · Tx Power: <span className="text-amber-300 font-bold font-mono">{activePortHUD.tx_power_dbm ? `${activePortHUD.tx_power_dbm} dBm` : '—'}</span>
+                                Status: <strong className={isPortUp ? 'text-emerald-400' : 'text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong> · <span className="text-white font-bold">{activePortHUD.registered_onus || 0}</span> Terdaftar {activePortHUD.unconfigured_onus > 0 ? <span>(<strong className="text-amber-400">{activePortHUD.unconfigured_onus}</strong> Belum Terdaftar)</span> : ''} · Tx Power: <span className="text-amber-300 font-bold font-mono">{activePortHUD.tx_power_dbm ? `${activePortHUD.tx_power_dbm} dBm` : '—'}</span>
                               </span>
                             </div>
                           </div>
@@ -2373,7 +2417,7 @@ export default function OltManagement() {
               {/* PON Ports */}
               {(() => {
                 const displayPorts = selectedSlotFilter
-                  ? oltData.pon_ports?.filter(p => p.slot === selectedSlotFilter || p.port_id.includes(`/${selectedSlotFilter}/`))
+? oltData.pon_ports?.filter(p => p.slot === selectedSlotFilter || p.port_id.includes(`/${selectedSlotFilter}/`))
                   : oltData.pon_ports;
 
                 return (
@@ -2407,6 +2451,7 @@ export default function OltManagement() {
                       {displayPorts && displayPorts.length > 0 ? (
                         displayPorts.map(port => {
                           const isSelected = selectedPortFilter === port.port_id;
+                          const isPortUp = checkIsPortUp(port, oltData);
                           const matchedOdcs = oltTopology.filter(o => {
                             if (!o.olt_port_ref) return false;
                             const targetClean = port.port_id.replace(/^gpon[-_]olt_/i, '');
@@ -2447,11 +2492,11 @@ export default function OltManagement() {
                                     {isSelected && loadingPortOnus && <Spinner />}
                                   </span>
                                 </div>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${port.status === 'Up'
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${isPortUp
                                   ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                                   : 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                                   }`}>
-                                  {port.status}
+                                  {isPortUp ? 'Up' : 'Down'}
                                 </span>
                               </div>
 
