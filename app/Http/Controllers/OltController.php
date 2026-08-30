@@ -97,9 +97,33 @@ class OltController extends Controller
         if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
             $rawSnapshot = $device->last_telemetry_snapshot;
             if ($summaryOnly) {
+                // Perkaya pon_ports dengan unconfigured_onus yang ada di snapshot database
+                $allUncfg = $rawSnapshot['unconfigured_onus'] ?? [];
+                $uncfgCountByPort = [];
+                foreach ($allUncfg as $u) {
+                    $p = strtolower($u['detected_port'] ?? ($u['port'] ?? ''));
+                    $uncfgCountByPort[$p] = ($uncfgCountByPort[$p] ?? 0) + 1;
+                }
+
+                $enrichedPorts = array_map(function ($port) use ($uncfgCountByPort) {
+                    $portId = strtolower($port['port_id'] ?? '');
+                    $uncfgCount = 0;
+                    foreach ($uncfgCountByPort as $pKey => $c) {
+                        if ($this->portsMatch($portId, $pKey)) {
+                            $uncfgCount += $c;
+                        }
+                    }
+                    $isUp = ($port['status'] === 'Up') || (($port['registered_onus'] ?? 0) > 0) || ($uncfgCount > 0);
+                    return array_merge($port, [
+                        'status'            => $isUp ? 'Up' : 'Down',
+                        'unconfigured_onus' => $uncfgCount,
+                        'online_onus'       => $isUp ? max($port['online_onus'] ?? 0, ($port['registered_onus'] ?? 0) + $uncfgCount) : 0,
+                    ]);
+                }, $rawSnapshot['pon_ports'] ?? []);
+
                 return response()->json([
                     'device_info'       => $rawSnapshot['device_info'] ?? [],
-                    'pon_ports'         => $rawSnapshot['pon_ports'] ?? [],
+                    'pon_ports'         => $enrichedPorts,
                     'onu_list'          => [],
                     'unconfigured_onus' => [],
                     'orphaned_onus'     => [],
@@ -263,17 +287,31 @@ class OltController extends Controller
         if ($device) {
             $this->syncOntRegistrations($device, $driverOnuList);
 
-            // Merge ke snapshot OLT
-            $currentSnapshot = $device->last_telemetry_snapshot ?: [];
-            $existingOnus = $currentSnapshot['onu_list'] ?? [];
-            
-            // Hapus ONU lama di port ini, lalu masukkan yang baru
-            $filteredExisting = array_values(array_filter($existingOnus, function ($o) use ($normalizedPort) {
-                $p = strtolower($o['port'] ?? '');
+            // Merge unconfigured onus ke snapshot
+            $existingUncfg = $currentSnapshot['unconfigured_onus'] ?? [];
+            $filteredUncfg = array_values(array_filter($existingUncfg, function ($o) use ($normalizedPort) {
+                $p = strtolower($o['detected_port'] ?? ($o['port'] ?? ''));
                 return !str_contains($p, $normalizedPort) && !str_contains($normalizedPort, $p);
             }));
-            $mergedOnus = array_merge($filteredExisting, $driverOnuList);
-            $currentSnapshot['onu_list'] = $mergedOnus;
+            $currentSnapshot['unconfigured_onus'] = array_merge($filteredUncfg, $driverUncfg);
+
+            // Update status dan hitungan di pon_ports snapshot
+            $totalFound = count($driverOnuList) + count($driverUncfg);
+            $currentPorts = $currentSnapshot['pon_ports'] ?? [];
+            $currentSnapshot['pon_ports'] = array_map(function ($p) use ($normalizedPort, $driverOnuList, $driverUncfg, $totalFound) {
+                $pId = strtolower($p['port_id'] ?? '');
+                if ($this->portsMatch($pId, $normalizedPort)) {
+                    $isUp = $totalFound > 0 || ($p['status'] ?? '') === 'Up';
+                    return array_merge($p, [
+                        'status'            => $isUp ? 'Up' : 'Down',
+                        'registered_onus'   => count($driverOnuList),
+                        'unconfigured_onus' => count($driverUncfg),
+                        'online_onus'       => $isUp ? max($p['online_onus'] ?? 0, $totalFound) : 0,
+                    ]);
+                }
+                return $p;
+            }, $currentPorts);
+
             $currentSnapshot['polled_at'] = now()->toIso8601String();
 
             $device->update([
