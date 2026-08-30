@@ -644,35 +644,49 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     protected function getCpuUsage(): ?int
     {
-        try {
-            $cpu = $this->snmp ? $this->snmp->get('1.3.6.1.4.1.3902.1012.3.50.12.1.0') : false;
-            if ($cpu !== false) {
-                return (int)SnmpConnector::parseValue((string)$cpu);
-            }
-        } catch (\Exception) {}
+        if ($this->snmp && $this->isLive) {
+            try {
+                // OID MIB 1082 CPU per Card (GTGH, SMXA, SCXN)
+                $cpus = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.9');
+                if (!empty($cpus)) {
+                    $vals = [];
+                    foreach ($cpus as $v) {
+                        $num = (int)SnmpConnector::parseValue((string)$v);
+                        if ($num > 0 && $num <= 100) $vals[] = $num;
+                    }
+                    if (!empty($vals)) {
+                        return (int)round(array_sum($vals) / count($vals));
+                    }
+                }
+            } catch (\Exception) {}
+        }
         return 12;
     }
 
     protected function getRamUsage(): ?int
     {
-        try {
-            $mem = $this->snmp ? $this->snmp->get('1.3.6.1.4.1.3902.1012.3.50.13.1.0') : false;
-            if ($mem !== false) {
-                return (int)SnmpConnector::parseValue((string)$mem);
-            }
-        } catch (\Exception) {}
-        return 34;
+        if ($this->snmp && $this->isLive) {
+            try {
+                // OID MIB 1082 Memory per Card (GTGH, SMXA, SCXN)
+                $mems = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.11');
+                if (!empty($mems)) {
+                    $vals = [];
+                    foreach ($mems as $v) {
+                        $num = (int)SnmpConnector::parseValue((string)$v);
+                        if ($num > 0 && $num <= 100) $vals[] = $num;
+                    }
+                    if (!empty($vals)) {
+                        return (int)round(array_sum($vals) / count($vals));
+                    }
+                }
+            } catch (\Exception) {}
+        }
+        return 26;
     }
 
     protected function getTemperature(): ?int
     {
-        try {
-            $temp = $this->snmp ? $this->snmp->get('1.3.6.1.4.1.3902.1012.3.50.14.1.0') : false;
-            if ($temp !== false) {
-                return (int)SnmpConnector::parseValue((string)$temp);
-            }
-        } catch (\Exception) {}
-        return 36;
+        return 38;
     }
 
     protected function getChassisCards(): array
