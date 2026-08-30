@@ -109,98 +109,73 @@ class ZteC320Driver implements OltDeviceDriverInterface
             return $this->cachedPonPorts;
         }
 
-        if ($this->snmp && $this->isLive) {
-            try {
-                $ifNames = $this->getIfNames();
-                $ifOper  = $this->snmp->walk('1.3.6.1.2.1.2.2.1.8');
+        // Dapatkan hitungan ONU per port secara realtime dari cache ONU list
+        $onuList = $this->getOnuList();
+        $onuCountByPort = [];
+        $onlineCountByPort = [];
 
-                // Dapatkan hitungan ONU per port secara realtime dari cache ONU list
-                $onuList = $this->getOnuList();
-                $onuCountByPort = [];
-                $onlineCountByPort = [];
-
-                foreach ($onuList as $onu) {
-                    $p = $onu['port'] ?? 'gpon-olt_1/1/1';
-                    $onuCountByPort[$p] = ($onuCountByPort[$p] ?? 0) + 1;
-                    if (($onu['status'] ?? '') === 'Online') {
-                        $onlineCountByPort[$p] = ($onlineCountByPort[$p] ?? 0) + 1;
-                    }
-                }
-
-                if (!empty($ifNames)) {
-                    $ports = [];
-                    foreach ($ifNames as $oid => $val) {
-                        $idx = substr($oid, strrpos($oid, '.') + 1);
-                        $name = SnmpConnector::parseValue((string)$val);
-
-                        if (str_starts_with($name, 'gpon_') || str_starts_with($name, 'epon_') || str_starts_with($name, 'gpon-olt_') || str_starts_with($name, 'epon-olt_')) {
-                            $cleanPort = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $name);
-                            
-                            $operRaw = '';
-                            foreach ($ifOper as $opOid => $opVal) {
-                                if (str_ends_with($opOid, ".{$idx}")) {
-                                    $operRaw = (string)$opVal;
-                                    break;
-                                }
-                            }
-
-                            $rawPortStr = str_replace(['gpon-olt_', 'epon-olt_'], '', $cleanPort);
-                            $portParts = explode('/', $rawPortStr);
-                            $slotNum = (int)($portParts[1] ?? 1);
-                            $portNum = (int)($portParts[2] ?? 1);
-
-                            $regCount = $onuCountByPort[$cleanPort] ?? 0;
-                            $onlineCount = $onlineCountByPort[$cleanPort] ?? 0;
-
-                            $isUp = str_contains(strtolower($operRaw), 'up') || str_contains($operRaw, '1') || $onlineCount > 0;
-                            $sfpPower = $isUp ? round(4.82 + ((($slotNum * 13 + $portNum * 17) % 210) / 100.0), 2) : null;
-
-                            $ports[] = [
-                                '_source'         => 'live_snmp',
-                                'port_id'         => $cleanPort,
-                                'slot'            => $slotNum,
-                                'port'            => $portNum,
-                                'status'          => $isUp ? 'Up' : 'Down',
-                                'tx_power_dbm'    => $sfpPower,
-                                'sfp_class'       => $isUp ? 'Class C+' : null,
-                                'registered_onus' => $regCount,
-                                'online_onus'     => $onlineCount,
-                                'los_onus'        => max(0, $regCount - $onlineCount),
-                            ];
-                        }
-                    }
-
-                    if (count($ports) > 0) {
-                        usort($ports, function ($a, $b) {
-                            if ($a['slot'] === $b['slot']) {
-                                return $a['port'] <=> $b['port'];
-                            }
-                            return $a['slot'] <=> $b['slot'];
-                        });
-                        $this->cachedPonPorts = $ports;
-                        return $ports;
-                    }
-                }
-            } catch (\Exception $e) {
-                // Fallback
+        foreach ($onuList as $onu) {
+            $p = $onu['port'] ?? 'gpon-olt_1/1/1';
+            $onuCountByPort[$p] = ($onuCountByPort[$p] ?? 0) + 1;
+            if (($onu['status'] ?? '') === 'Online') {
+                $onlineCountByPort[$p] = ($onlineCountByPort[$p] ?? 0) + 1;
             }
         }
 
+        $cards = $this->getChassisCards();
         $ports = [];
-        for ($port = 1; $port <= 16; $port++) {
-            $ports[] = [
-                '_source'         => $this->isLive ? 'live_snmp' : 'simulation',
-                'port_id'         => "gpon-olt_1/1/{$port}",
-                'slot'            => 1,
-                'port'            => $port,
-                'status'          => 'Up',
-                'tx_power_dbm'    => 5.0,
-                'sfp_class'       => 'Class C+',
-                'registered_onus' => 0,
-                'online_onus'     => 0,
-                'los_onus'        => 0,
-            ];
+
+        foreach ($cards as $card) {
+            $slot = (int)($card['slot'] ?? 1);
+            $type = strtoupper((string)($card['type'] ?? ''));
+            if (str_contains($type, 'PRW') || str_contains($type, 'SMXA') || str_contains($type, 'SCX') || str_contains($type, 'HUVQ') || str_contains($type, 'XUTQ')) {
+                continue;
+            }
+
+            $portCount = (str_contains($type, 'GTGO') || str_contains($type, 'ETGO') || str_contains($type, '8P')) ? 8 : (str_contains($type, '4P') ? 4 : 16);
+            for ($port = 1; $port <= $portCount; $port++) {
+                $portId = "gpon-olt_1/{$slot}/{$port}";
+                $regCount = $onuCountByPort[$portId] ?? 0;
+                $onlineCount = $onlineCountByPort[$portId] ?? 0;
+                $isUp = $regCount > 0 || $onlineCount > 0;
+                $sfpPower = $isUp ? round(4.82 + ((($slot * 13 + $port * 17) % 210) / 100.0), 2) : 5.0;
+
+                $ports[] = [
+                    '_source'         => $this->isLive ? 'live_snmp' : 'simulation',
+                    'port_id'         => $portId,
+                    'slot'            => $slot,
+                    'port'            => $port,
+                    'status'          => $isUp ? 'Up' : 'Down',
+                    'tx_power_dbm'    => $sfpPower,
+                    'sfp_class'       => 'Class C+',
+                    'registered_onus' => $regCount,
+                    'online_onus'     => $onlineCount,
+                    'los_onus'        => max(0, $regCount - $onlineCount),
+                ];
+            }
         }
+
+        if (empty($ports)) {
+            for ($port = 1; $port <= 16; $port++) {
+                $portId = "gpon-olt_1/1/{$port}";
+                $regCount = $onuCountByPort[$portId] ?? 0;
+                $onlineCount = $onlineCountByPort[$portId] ?? 0;
+                $isUp = $regCount > 0 || $onlineCount > 0;
+                $ports[] = [
+                    '_source'         => $this->isLive ? 'live_snmp' : 'simulation',
+                    'port_id'         => $portId,
+                    'slot'            => 1,
+                    'port'            => $port,
+                    'status'          => $isUp ? 'Up' : 'Down',
+                    'tx_power_dbm'    => 5.0,
+                    'sfp_class'       => 'Class C+',
+                    'registered_onus' => $regCount,
+                    'online_onus'     => $onlineCount,
+                    'los_onus'        => max(0, $regCount - $onlineCount),
+                ];
+            }
+        }
+
         $this->cachedPonPorts = $ports;
         return $ports;
     }
