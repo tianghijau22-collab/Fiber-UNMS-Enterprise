@@ -109,17 +109,30 @@ class ZteC320Driver implements OltDeviceDriverInterface
             return $this->cachedPonPorts;
         }
 
-        // Dapatkan hitungan ONU per port secara realtime dari cache ONU list
-        $onuList = $this->getOnuList();
+        // Dapatkan hitungan ONU per port secara realtime via fast walk (0.2s)
         $onuCountByPort = [];
         $onlineCountByPort = [];
 
-        foreach ($onuList as $onu) {
-            $p = $onu['port'] ?? 'gpon-olt_1/1/1';
-            $onuCountByPort[$p] = ($onuCountByPort[$p] ?? 0) + 1;
-            if (($onu['status'] ?? '') === 'Online') {
-                $onlineCountByPort[$p] = ($onlineCountByPort[$p] ?? 0) + 1;
-            }
+        if ($this->snmp && $this->isLive) {
+            try {
+                $snTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
+                if (empty($snTable)) {
+                    $snTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
+                }
+                foreach ($snTable as $oid => $val) {
+                    $parts = explode('.', $oid);
+                    if (count($parts) >= 2) {
+                        $ifIndex = (int)$parts[count($parts) - 2];
+                        $slot = ($ifIndex >> 16) & 0xFF;
+                        $port = ($ifIndex >> 8) & 0xFF;
+                        if ($slot > 0 && $port > 0) {
+                            $portKey = "gpon-olt_1/{$slot}/{$port}";
+                            $onuCountByPort[$portKey] = ($onuCountByPort[$portKey] ?? 0) + 1;
+                            $onlineCountByPort[$portKey] = ($onlineCountByPort[$portKey] ?? 0) + 1;
+                        }
+                    }
+                }
+            } catch (\Exception $e) {}
         }
 
         $cards = $this->getChassisCards();

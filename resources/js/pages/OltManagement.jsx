@@ -2246,7 +2246,21 @@ export default function OltManagement() {
                         };
                       })() : null);
 
-                      if (!activePortHUD) return null;
+                      if (!activePortHUD) {
+                        return (
+                          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-850/90 border border-slate-700/80 shadow-lg flex flex-wrap items-center justify-between gap-3 text-xs text-white animate-in fade-in duration-150">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse" />
+                              <span className="text-slate-300 font-medium">
+                                Silakan <strong className="text-white">klik salah satu nomor Port PON (1–16)</strong> pada visual kartu blade di atas untuk melihat telemetri port &amp; memuat daftar ONU secara realtime.
+                              </span>
+                            </div>
+                            <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950/80 px-2.5 py-1 rounded-lg border border-indigo-800">
+                              Mode: On-Demand Lazy Loading
+                            </span>
+                          </div>
+                        );
+                      }
 
                       const isPortUp = String(activePortHUD.status).toLowerCase() === 'up' ||
                         String(activePortHUD.status).toLowerCase() === 'online' ||
