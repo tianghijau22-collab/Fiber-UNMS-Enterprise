@@ -1312,83 +1312,166 @@ export default function OltManagement() {
 
 
       {/* ── OLT Selector ────────────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Daftar Perangkat OLT
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-              Klik salah satu kartu OLT di bawah untuk memilih perangkat aktif
-            </p>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800 flex items-center justify-center">
+              <IconServer className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Daftar Perangkat OLT</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Pilih perangkat untuk memulai pemantauan telemetri</p>
+            </div>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-2">
+            {/* Live / Offline badges */}
+            <div className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-[11px] font-bold">
+                <span className="relative flex w-1.5 h-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full w-1.5 h-1.5 bg-emerald-500"></span>
+                </span>
+                {olts.filter(o => o.connection_mode === 'live').length} Live
+              </span>
+              <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-[11px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>
+                {olts.filter(o => o.connection_mode !== 'live').length} Offline
+              </span>
+            </div>
+            <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
             <button
               onClick={() => setShowSensitiveIp(!showSensitiveIp)}
-              className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${showSensitiveIp
-                ? 'bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-300'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all flex items-center gap-1.5 ${showSensitiveIp
+                ? 'bg-amber-500/10 border-amber-400 dark:border-amber-600 text-amber-700 dark:text-amber-300'
+                : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
               title="Hanya tim NOC / Administrator yang berhak melihat IP address"
             >
-              <span>{showSensitiveIp ? 'Sembunyikan IP' : 'Buka IP'}</span>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                {showSensitiveIp
+                  ? <><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>
+                  : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>}
+              </svg>
+              {showSensitiveIp ? 'Sembunyikan IP' : 'Tampilkan IP'}
             </button>
-            <div className="text-right">
-              <div className="text-xs text-slate-400 dark:text-slate-500 font-medium">Total OLT</div>
-              <div className="text-lg font-extrabold text-indigo-600 dark:text-indigo-400">{olts.length} OLT</div>
+            <div className="text-right hidden sm:block">
+              <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wide">Total</div>
+              <div className="text-base font-extrabold text-indigo-600 dark:text-indigo-400 leading-none">{olts.length} OLT</div>
             </div>
           </div>
         </div>
 
-        {/* Quick device cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {olts.map(o => {
-            const isActive = selectedOltId === o.id;
-            const isLive = o.connection_mode === 'live';
-            return (
-              <div key={o.id} className={`p-3 rounded-xl border text-left transition-all group relative ${isActive ? 'bg-indigo-600 border-indigo-600 shadow-md text-white' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-700'
-                }`}>
-                <button onClick={() => setSelectedOltId(o.id)} className="w-full text-left">
-                  <div className="flex items-center justify-between">
-                    <span className={`text-[10px] font-extrabold uppercase ${isActive ? 'text-indigo-200' : 'text-indigo-600 dark:text-indigo-400'}`}>{o.vendor}</span>
-                    <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-emerald-400' : 'bg-amber-400'}`} title={isLive ? 'Live SNMP' : 'Database UNMS'} />
+        {/* Device Cards Grid */}
+        <div className="p-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {olts.map(o => {
+              const isActive = selectedOltId === o.id;
+              const isLive = o.connection_mode === 'live';
+              return (
+                <div
+                  key={o.id}
+                  className={`relative rounded-xl border transition-all duration-200 group overflow-hidden cursor-pointer
+                    ${isActive
+                      ? 'bg-indigo-600 border-indigo-500 shadow-lg shadow-indigo-500/20 ring-2 ring-indigo-400/30'
+                      : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/80 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-white dark:hover:bg-slate-800 hover:shadow-md'
+                    }`}
+                >
+                  {/* Glow strip top for active */}
+                  {isActive && <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-300 via-white/60 to-indigo-300 opacity-60" />}
+
+                  <button onClick={() => setSelectedOltId(o.id)} className="w-full text-left p-3 pb-2.5">
+                    {/* Top row: vendor + status */}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md
+                        ${isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'}`}>
+                        {o.vendor}
+                      </span>
+                      {/* Status indicator with pulse */}
+                      <span className="relative flex items-center justify-center w-4 h-4" title={isLive ? 'Live SNMP' : 'Database UNMS'}>
+                        {isLive && (
+                          <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-emerald-400 opacity-50"></span>
+                        )}
+                        <span className={`relative inline-flex rounded-full w-2 h-2 ${isLive ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
+                      </span>
+                    </div>
+
+                    {/* OLT Name */}
+                    <div className={`font-bold text-xs leading-tight truncate mb-1.5 ${isActive ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                      {o.name}
+                    </div>
+
+                    {/* IP Address */}
+                    <div className={`text-[10px] font-mono leading-tight truncate ${isActive ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                      {maskIpAddress(o.ip_address)}
+                    </div>
+
+                    {/* Location */}
+                    <div className={`text-[10px] mt-1 truncate flex items-center gap-1 ${isActive ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>
+                      <svg className="w-2.5 h-2.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                        <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      </svg>
+                      <span className="truncate">{o.location || '—'}</span>
+                    </div>
+
+                    {/* Status label */}
+                    <div className="mt-2">
+                      <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md
+                        ${isLive
+                          ? (isActive ? 'bg-emerald-400/20 text-emerald-200' : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400')
+                          : (isActive ? 'bg-amber-400/20 text-amber-200' : 'bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400')
+                        }`}>
+                        {isLive ? 'Live SNMP' : 'DB UNMS'}
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Action buttons - appear on hover */}
+                  <div className="flex items-center justify-end gap-1 px-2 pb-2 opacity-0 group-hover:opacity-100 transition-all duration-150">
+                    {isLive && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDisconnectOlt(o); }}
+                        disabled={disconnectingId === o.id}
+                        className={`p-1 rounded-lg transition-colors ${isActive
+                          ? 'text-rose-200 hover:bg-white/15'
+                          : 'text-slate-400 dark:text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-500 dark:hover:text-rose-400'}`}
+                        title={`Hentikan SNMP ke ${o.name}`}>
+                        {disconnectingId === o.id ? <Spinner /> : (
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="6" width="12" height="12" rx="2" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
+                    {canCrud && (
+                      <>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleOpenEditModal(o); }}
+                          className={`p-1 rounded-lg transition-colors ${isActive
+                            ? 'text-indigo-200 hover:bg-white/15'
+                            : 'text-slate-400 dark:text-slate-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-500 dark:hover:text-indigo-400'}`}
+                          title="Edit OLT">
+                          <IconEdit />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteOlt(o)}
+                          disabled={deletingId === o.id}
+                          className={`p-1 rounded-lg transition-colors ${isActive
+                            ? 'text-indigo-200 hover:bg-white/15'
+                            : 'text-slate-400 dark:text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-500 dark:hover:text-rose-400'}`}
+                          title="Hapus OLT">
+                          {deletingId === o.id ? <Spinner /> : <IconTrash />}
+                        </button>
+                      </>
+                    )}
                   </div>
-                  <div className="font-bold text-xs mt-1 truncate">{o.name}</div>
-                  <div className={`text-[11px] font-mono mt-0.5 ${isActive ? 'text-indigo-100' : 'text-slate-600 dark:text-slate-400'}`}>{maskIpAddress(o.ip_address)}</div>
-                  <div className={`text-[10px] mt-0.5 truncate ${isActive ? 'text-indigo-200' : 'text-slate-400 dark:text-slate-500'}`}>{o.location}</div>
-                </button>
-                {/* Action buttons */}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                  {isLive && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDisconnectOlt(o); }}
-                      disabled={disconnectingId === o.id}
-                      className={`p-1 rounded-lg ${isActive ? 'text-rose-200 hover:bg-white/20' : 'text-slate-400 dark:text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-600 dark:hover:text-rose-400'}`}
-                      title={`Hentikan koneksi SNMP ke ${o.name}`}>
-                      {disconnectingId === o.id ? <Spinner /> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>}
-                    </button>
-                  )}
-                  {canCrud && (
-                    <>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleOpenEditModal(o); }}
-                        className={`p-1 rounded-lg ${isActive ? 'text-indigo-200 hover:bg-white/20' : 'text-slate-400 dark:text-slate-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
-                        title="Edit OLT">
-                        <IconEdit />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteOlt(o)}
-                        disabled={deletingId === o.id}
-                        className={`p-1 rounded-lg ${isActive ? 'text-indigo-200 hover:bg-white/20' : 'text-slate-400 dark:text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 hover:text-rose-600 dark:hover:text-rose-400'}`}
-                        title="Hapus OLT">
-                        {deletingId === o.id ? <Spinner /> : <IconTrash />}
-                      </button>
-                    </>
-                  )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 
