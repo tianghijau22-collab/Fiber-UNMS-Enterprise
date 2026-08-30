@@ -1604,26 +1604,26 @@ export default function OltManagement() {
             return (
               <div className="space-y-6 animate-in fade-in duration-200">
                 {/* 1. Realistic Hardware Chassis Panel */}
-                <div className="bg-slate-100 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700/80 rounded-3xl p-5 sm:p-7 shadow-2xl overflow-x-auto">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-7 shadow-xs overflow-x-auto">
                   <div className="min-w-[1240px] space-y-5">
                     {/* Top Bar: Title & Specs & Model Profile Badge */}
-                    <div className="flex flex-wrap items-center justify-between text-xs font-mono text-slate-700 dark:text-slate-200 pb-3.5 border-b border-slate-300 dark:border-slate-800 gap-3">
+                    <div className="flex flex-wrap items-center justify-between text-xs font-mono text-slate-900 dark:text-slate-200 pb-3.5 border-b border-slate-100 dark:border-slate-800 gap-3">
                       <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 rounded-full bg-indigo-100 dark:bg-indigo-600/40 text-indigo-700 dark:text-indigo-200 font-black border border-indigo-300 dark:border-indigo-500/50 text-xs">
+                        <span className="px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800 text-xs">
                           {isHsgq ? '1U DESKTOP / RACK BOX' : isC300 ? 'RACK 19" 10U (VERTICAL BLADES)' : 'RACK 19" 2U (HORIZONTAL)'}
                         </span>
-                        <strong className="text-slate-900 dark:text-white text-base tracking-wide font-black">
+                        <strong className="text-slate-950 dark:text-white text-base tracking-wide font-black">
                           Virtual Chassis View — {activeOlt?.vendor || (isHsgq ? 'HSGQ' : 'ZTE')} {isHsgq ? (activeOlt?.model || 'HSGQ-E04M Gigabit Series') : isC300 ? 'ZXAN C300 Enterprise' : (activeOlt?.model || 'ZXAN C320')}
                         </strong>
-                        <span className="text-slate-500 dark:text-slate-300 font-bold">
+                        <span className="text-slate-600 dark:text-slate-400 font-medium">
                           · {isHsgq ? `${oltData.pon_ports?.length || 4} PON Ports + 4 Uplink` : isC300 ? '21 Slots Architecture' : '4 Slots Architecture'} / {oltData.pon_ports?.length || 16} Ports Active
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-4 text-xs font-bold text-slate-500 dark:text-slate-300">
+                      <div className="flex items-center gap-4 text-xs font-bold text-slate-700 dark:text-slate-300">
                         <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-emerald-500 shadow-xs shadow-emerald-500/50" /> Port Up / Active Laser</span>
                         <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-rose-500 shadow-xs shadow-rose-500/50" /> Port Down / Standby</span>
-                        <span className="flex items-center gap-2"><span className="w-3 h-3 rounded border-2 border-indigo-400 bg-indigo-100 dark:bg-indigo-900" /> Selected</span>
+                        <span className="flex items-center gap-2"><span className="w-3 h-3 rounded border-2 border-indigo-500 bg-indigo-50 dark:bg-indigo-900" /> Selected</span>
                       </div>
                     </div>
 
@@ -1631,32 +1631,32 @@ export default function OltManagement() {
                         LAYOUT C: HSGQ (1U COMPACT BOX-TYPE OLT — HSGQ-E04M / HSGQ-G08M)
                     ══════════════════════════════════════════════════════════════════ */}
                     {isHsgq ? (
-                      <div className="border-4 border-slate-300 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-950 shadow-2xl">
+                      <div className="border-2 border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-950 shadow-xs">
                         {/* Top Metal Body with "O L T" Grille Ventilation Cutouts */}
-                        <div className="bg-slate-200 dark:bg-slate-900 border-b border-slate-300 dark:border-slate-700 px-6 py-2.5 flex items-center justify-between text-xs font-mono select-none">
+                        <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-2.5 flex items-center justify-between text-xs font-mono select-none">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-black tracking-widest text-slate-600 dark:text-slate-300">HSGQ 1U GIGABIT EPON/GPON OLT</span>
+                            <span className="text-xs font-bold tracking-widest text-slate-800 dark:text-slate-200">HSGQ 1U GIGABIT EPON/GPON OLT</span>
                           </div>
 
                           {/* "O L T" Grille Ventilation Pattern */}
-                          <div className="flex items-center gap-6 text-slate-600 font-mono tracking-widest text-sm font-black select-none">
-                            <span className="tracking-[5px] border-b-2 border-dashed border-slate-750">||||||||  O</span>
-                            <span className="tracking-[5px] border-b-2 border-dashed border-slate-750">||||||||  L</span>
-                            <span className="tracking-[5px] border-b-2 border-dashed border-slate-750">||||||||  T</span>
+                          <div className="flex items-center gap-6 text-slate-400 dark:text-slate-600 font-mono tracking-widest text-sm font-black select-none">
+                            <span className="tracking-[5px] border-b-2 border-dashed border-slate-300 dark:border-slate-700">||||||||  O</span>
+                            <span className="tracking-[5px] border-b-2 border-dashed border-slate-300 dark:border-slate-700">||||||||  L</span>
+                            <span className="tracking-[5px] border-b-2 border-dashed border-slate-300 dark:border-slate-700">||||||||  T</span>
                           </div>
 
-                          <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" />
+                          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" />
                             <span>100-240V AC / DC-12V</span>
                           </div>
                         </div>
 
                         {/* Front Metallic Bezel Panel (Sesuai Foto Asli HSGQ-E04M) */}
-                        <div className="bg-gradient-to-b from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-900 border-y-2 border-slate-600 p-6 sm:p-7 flex flex-wrap items-center justify-between gap-6 font-mono select-none text-slate-950 dark:text-white">
+                        <div className="bg-slate-50/60 dark:bg-slate-900/90 border-y border-slate-200 dark:border-slate-700 p-6 sm:p-7 flex flex-wrap items-center justify-between gap-6 font-mono select-none text-slate-950 dark:text-white">
                           {/* 1. Left Brand & Model Section */}
                           <div className="flex items-center gap-5">
                             <div>
-                              <div className="text-2xl font-black text-rose-600 tracking-tighter flex items-center gap-1.5">
+                              <div className="text-2xl font-black text-rose-600 dark:text-rose-500 tracking-tighter flex items-center gap-1.5">
                                 <span>HSGQ</span>
                               </div>
                               <div className="text-sm font-black text-slate-950 dark:text-white mt-0.5 tracking-tight">
@@ -1665,9 +1665,9 @@ export default function OltManagement() {
                             </div>
 
                             {/* Reset Button */}
-                            <div className="flex flex-col items-center gap-1 pl-4 border-l-2 border-slate-400/40">
-                              <div className="w-3 h-3 rounded-full bg-slate-950 border border-slate-500 shadow-inner" title="Factory Reset Pinhole" />
-                              <span className="text-[9px] text-slate-700 dark:text-slate-300 font-sans uppercase font-black">Reset</span>
+                            <div className="flex flex-col items-center gap-1 pl-4 border-l border-slate-300 dark:border-slate-700">
+                              <div className="w-3 h-3 rounded-full bg-slate-300 dark:bg-slate-800 border border-slate-400 dark:border-slate-600 shadow-inner" title="Factory Reset Pinhole" />
+                              <span className="text-[9px] text-slate-600 dark:text-slate-400 font-sans uppercase font-bold">Reset</span>
                             </div>
                           </div>
 
@@ -1675,7 +1675,7 @@ export default function OltManagement() {
                           <div className="flex items-center gap-8">
                             {/* PON Ports Group */}
                             <div className="flex flex-col items-center">
-                              <div className="text-xs font-black text-slate-800 dark:text-slate-300 tracking-wider mb-1.5">
+                              <div className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-wider mb-1.5">
                                 ┌───── PON ─────┐
                               </div>
                               <div className="flex items-center gap-2">
@@ -1703,17 +1703,17 @@ export default function OltManagement() {
                                         onClick={() => handleSelectPort(matchedPort.port_id)}
                                         onMouseEnter={() => setHoveredPortInfo({ ...matchedPort, slot: 1, portNum })}
                                         onMouseLeave={() => setHoveredPortInfo(null)}
-                                        className={`w-11 sm:w-13 h-11 sm:h-13 rounded-lg border-2 flex flex-col items-center justify-center text-xs font-black transition-all shadow-md ${
+                                        className={`w-11 sm:w-13 h-11 sm:h-13 rounded-lg border-2 flex flex-col items-center justify-center text-xs font-black transition-all shadow-xs ${
                                           isSelected
-                                            ? 'bg-indigo-600 text-white border-white ring-4 ring-indigo-400 scale-110 z-20 shadow-xl'
+                                            ? 'bg-indigo-600 text-white border-white ring-4 ring-indigo-400 scale-110 z-20 shadow-lg'
                                             : isUp
                                               ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/40'
-                                              : 'bg-slate-950 hover:bg-rose-950 text-rose-400 border-rose-900 shadow-inner'
+                                              : 'bg-slate-100 dark:bg-slate-950 hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-900 shadow-inner'
                                         }`}
                                         title={`PON Port ${portNum}: ${isUp ? `Up (${matchedPort.online_onus || 0} Online)` : 'Down'}`}
                                       >
-                                        <div className="w-5 h-3.5 bg-slate-900 border border-slate-600 rounded-xs flex items-center justify-center">
-                                          <span className={`w-2.5 h-1.5 rounded-2xs ${isUp ? 'bg-emerald-400 shadow-xs shadow-emerald-400' : 'bg-rose-600'}`} />
+                                        <div className="w-5 h-3.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xs flex items-center justify-center">
+                                          <span className={`w-2.5 h-1.5 rounded-2xs ${isUp ? 'bg-emerald-500 shadow-xs shadow-emerald-500' : 'bg-rose-500'}`} />
                                         </div>
                                       </button>
                                     </div>
@@ -1724,7 +1724,7 @@ export default function OltManagement() {
 
                             {/* UP LINK Ports Group */}
                             <div className="flex flex-col items-center">
-                              <div className="text-xs font-black text-slate-800 dark:text-slate-300 tracking-wider mb-1.5">
+                              <div className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-wider mb-1.5">
                                 ┌──── UP LINK ────┐
                               </div>
                               <div className="flex items-center gap-2">
@@ -1732,7 +1732,7 @@ export default function OltManagement() {
                                   <div key={uNum} className="flex flex-col items-center gap-1">
                                     <span className="text-xs font-black text-slate-950 dark:text-white">{uNum}</span>
                                     <div
-                                      className="w-11 sm:w-13 h-11 sm:h-13 rounded-lg border-2 border-emerald-600 bg-emerald-500 flex flex-col items-center justify-center text-xs font-black text-slate-950 shadow-md"
+                                      className="w-11 sm:w-13 h-11 sm:h-13 rounded-lg border-2 border-emerald-600 bg-emerald-500 flex flex-col items-center justify-center text-xs font-black text-slate-950 shadow-xs"
                                       title={`Uplink GE/10GE Port ${uNum}: Active (1000M/10G Full-Duplex)`}
                                     >
                                       <div className="w-5 h-3.5 bg-slate-950 border border-emerald-700 rounded-xs flex items-center justify-center">
@@ -1750,70 +1750,70 @@ export default function OltManagement() {
                             {/* Dual Stacked RJ45 (CONSOLE & NMS) */}
                             <div className="flex flex-col items-center gap-1.5">
                               <div className="flex flex-col items-center">
-                                <span className="text-[8px] font-black text-slate-700 dark:text-slate-300">CONSOLE</span>
-                                <div className="w-9 h-6 rounded-xs bg-slate-950 border border-slate-600 flex items-center justify-center shadow-inner">
-                                  <span className="w-4 h-3 bg-slate-800 border border-slate-700 rounded-2xs" />
+                                <span className="text-[8px] font-bold text-slate-600 dark:text-slate-400">CONSOLE</span>
+                                <div className="w-9 h-6 rounded-xs bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 flex items-center justify-center shadow-inner">
+                                  <span className="w-4 h-3 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xs" />
                                 </div>
                               </div>
                               <div className="flex flex-col items-center">
-                                <div className="w-9 h-6 rounded-xs bg-slate-950 border border-slate-600 flex items-center justify-center shadow-inner">
-                                  <span className="w-4 h-3 bg-slate-800 border border-slate-700 rounded-2xs" />
+                                <div className="w-9 h-6 rounded-xs bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 flex items-center justify-center shadow-inner">
+                                  <span className="w-4 h-3 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xs" />
                                 </div>
-                                <span className="text-[8px] font-black text-slate-700 dark:text-slate-300">NMS</span>
+                                <span className="text-[8px] font-bold text-slate-600 dark:text-slate-400">NMS</span>
                               </div>
                             </div>
 
                             {/* LED Matrix Columns (PON1..4, GE1..4, PWR, SYS, NMS) */}
-                            <div className="grid grid-cols-3 gap-x-3 gap-y-1.5 text-[8px] font-black text-slate-900 dark:text-slate-200 border-l-2 border-slate-400/40 pl-4">
+                            <div className="grid grid-cols-3 gap-x-3 gap-y-1.5 text-[8px] font-bold text-slate-800 dark:text-slate-200 border-l border-slate-300 dark:border-slate-700 pl-4">
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>PON1</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>GE1</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>PWR</span>
                               </div>
 
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>PON2</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>GE2</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" />
                                 <span>SYS</span>
                               </div>
 
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>PON3</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>GE3</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>NMS</span>
                               </div>
 
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>PON4</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                 <span>GE4</span>
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-slate-500" />
+                                <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500" />
                                 <span>ALM</span>
                               </div>
                             </div>
@@ -1821,59 +1821,59 @@ export default function OltManagement() {
                         </div>
                       </div>
                     ) : isC300 ? (
-                      <div className="border-4 border-slate-300 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-900 shadow-2xl">
+                      <div className="border-2 border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-xs">
                         {/* Top Large Fan Tray Bar with 2 Orange Latch Handles */}
-                        <div className="bg-slate-200 dark:bg-slate-800 border-b-4 border-slate-300 dark:border-slate-700 px-6 py-3 flex items-center justify-between text-xs font-mono select-none">
+                        <div className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-3 flex items-center justify-between text-xs font-mono select-none">
                           <div className="flex items-center gap-3">
-                            <span className="text-slate-800 dark:text-white font-black tracking-wider text-xs flex items-center gap-1.5">
-                              <IconActivity className="w-4 h-4 text-emerald-400" />
+                            <span className="text-slate-900 dark:text-white font-black tracking-wider text-xs flex items-center gap-1.5">
+                              <IconActivity className="w-4 h-4 text-emerald-500" />
                               <span>FAN UNIT MODULE</span>
                             </span>
                             <div className="flex items-center gap-2">
-                              <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN TRAY 1: Normal" />
-                              <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN TRAY 2: Normal" />
-                              <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN TRAY 3: Normal" />
+                              <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" title="FAN TRAY 1: Normal" />
+                              <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" title="FAN TRAY 2: Normal" />
+                              <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" title="FAN TRAY 3: Normal" />
                             </div>
                           </div>
 
                           {/* 2 Orange Release Latch Handles (Persis Foto ZTE C300) */}
                           <div className="flex items-center gap-16">
-                            <div className="w-20 h-4 rounded bg-orange-600 border border-orange-400 shadow-inner flex items-center justify-center text-[8px] text-white font-black">LATCH 1</div>
-                            <div className="w-20 h-4 rounded bg-orange-600 border border-orange-400 shadow-inner flex items-center justify-center text-[8px] text-white font-black">LATCH 2</div>
+                            <div className="w-20 h-4 rounded bg-orange-600 border border-orange-500 shadow-inner flex items-center justify-center text-[8px] text-white font-black">LATCH 1</div>
+                            <div className="w-20 h-4 rounded bg-orange-600 border border-orange-500 shadow-inner flex items-center justify-center text-[8px] text-white font-black">LATCH 2</div>
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/40 flex items-center gap-1">
-                              <IconZap className="w-3.5 h-3.5 text-amber-400" />
+                            <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-bold border border-amber-200 dark:border-amber-700 flex items-center gap-1">
+                              <IconZap className="w-3.5 h-3.5 text-amber-500" />
                               <span>48V DC / 220V AC</span>
                             </span>
-                            <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="MAIN POWER OK" />
+                            <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" title="MAIN POWER OK" />
                           </div>
                         </div>
 
                         {/* 21 Vertical Blade Card Slots (Side-by-Side Horizontal Chain) */}
-                        <div className="grid grid-cols-21 divide-x-2 divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-950 font-mono text-xs min-h-[500px]">
+                        <div className="grid grid-cols-21 divide-x divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-950 font-mono text-xs min-h-[500px]">
                           {/* Slot 1: PRWG (Power Blade) */}
-                          <div className="flex flex-col items-center justify-between p-2 bg-slate-50 dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-850 transition-colors">
+                          <div className="flex flex-col items-center justify-between p-2 bg-slate-50/50 dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-850 transition-colors">
                             <div className="flex flex-col items-center gap-1">
-                              <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-300 font-black">|</div>
-                              <span className="font-black text-[10px] text-slate-800 dark:text-white tracking-tighter">PRWG</span>
-                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                              <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-300 font-bold">|</div>
+                              <span className="font-black text-[10px] text-slate-900 dark:text-white tracking-tighter">PRWG</span>
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                             </div>
 
                             {/* Power Connector Visuals */}
                             <div className="space-y-4 py-3 flex flex-col items-center">
-                              <div className="w-7 h-12 rounded bg-slate-950 border border-slate-700 flex flex-col items-center justify-center gap-1.5 shadow-inner">
-                                <span className="w-2 h-2 rounded-full bg-slate-400" />
-                                <span className="w-2 h-2 rounded-full bg-slate-400" />
-                                <span className="w-2 h-2 rounded-full bg-slate-400" />
+                              <div className="w-7 h-12 rounded bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-1.5 shadow-inner">
+                                <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500" />
+                                <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500" />
+                                <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500" />
                               </div>
-                              <div className="w-5 h-5 rounded-full bg-amber-600 border border-amber-400 flex items-center justify-center text-xs text-white font-black shadow-xs">⚡</div>
+                              <div className="w-5 h-5 rounded-full bg-amber-500 border border-amber-400 flex items-center justify-center text-xs text-white font-black shadow-xs">⚡</div>
                             </div>
 
                             <div className="flex flex-col items-center gap-1">
-                              <div className="w-5 h-5 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-black text-white">1</div>
-                              <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-300 font-black">|</div>
+                              <div className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-xs font-black text-slate-900 dark:text-white">1</div>
+                              <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-300 font-bold">|</div>
                             </div>
                           </div>
 
@@ -1902,22 +1902,22 @@ export default function OltManagement() {
                               <div
                                 key={slotNum}
                                 className={`flex flex-col items-center justify-between p-1.5 transition-colors ${isCenterControl
-                                  ? 'bg-slate-100 dark:bg-slate-900 border-x border-indigo-300 dark:border-indigo-500/40 shadow-inner'
+                                  ? 'bg-indigo-50/50 dark:bg-slate-900 border-x border-indigo-200 dark:border-indigo-500/40 shadow-inner'
                                   : isUplinkBlade
-                                    ? 'bg-slate-100/80 dark:bg-slate-900/80'
+                                    ? 'bg-slate-50/60 dark:bg-slate-900/80'
                                     : isLineCard
-                                      ? 'bg-slate-50 dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-850'
-                                      : 'bg-slate-200/60 dark:bg-slate-950/60 opacity-60'
+                                      ? 'bg-white dark:bg-slate-900/90 hover:bg-slate-50 dark:hover:bg-slate-850'
+                                      : 'bg-slate-50/30 dark:bg-slate-950/60 opacity-60'
                                   }`}
                               >
                                 {/* Top Screw & Card Label */}
                                 <div className="flex flex-col items-center gap-1">
-                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-300 font-bold">|</div>
-                                  <span className="font-black text-[10px] sm:text-[11px] text-slate-800 dark:text-white truncate max-w-[40px]">
+                                  <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-300 font-bold">|</div>
+                                  <span className="font-black text-[10px] sm:text-[11px] text-slate-900 dark:text-white truncate max-w-[40px]">
                                     {isCenterControl ? 'SCXN' : isUplinkBlade ? (cardInfo?.type || 'HUVQ') : isLineCard ? cardType : '—'}
                                   </span>
                                   {(isLineCard || isCenterControl || isUplinkBlade) && (
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" />
                                   )}
                                 </div>
 
@@ -1954,7 +1954,7 @@ export default function OltManagement() {
                                               ? 'bg-indigo-600 text-white border-white ring-2 ring-indigo-400 scale-125 z-20 shadow-lg'
                                               : isUp
                                                 ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
-                                                : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/20'
+                                                : 'bg-slate-100 dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 shadow-inner'
                                               }`}
                                             title={`Port 1/${slotNum}/${portNum} (${cardType}): ${isUp ? `Up / Active Laser` : 'Down / Standby'} (Tx: ${matchedPort.tx_power_dbm || '—'} dBm, ${matchedPort.online_onus || 0} Online)`}
                                           >
@@ -1968,7 +1968,7 @@ export default function OltManagement() {
                                     <div className="space-y-2 flex flex-col items-center py-1">
                                       <div className="space-y-1">
                                         {[1, 2, 3, 4].map(uN => (
-                                          <div key={uN} className="w-7 h-5 rounded bg-indigo-900 border border-indigo-400 flex items-center justify-center text-[8px] text-white font-black shadow-xs" title={`SCXN 10GE Uplink ${uN}: Up`}>
+                                          <div key={uN} className="w-7 h-5 rounded bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-600 flex items-center justify-center text-[8px] text-indigo-700 dark:text-indigo-200 font-bold shadow-xs" title={`SCXN 10GE Uplink ${uN}: Up`}>
                                             X{uN}
                                           </div>
                                         ))}
@@ -1976,7 +1976,7 @@ export default function OltManagement() {
                                       <div className="w-5 h-2 bg-orange-500 rounded-xs shadow-inner" title="Release Latch" />
                                       <div className="space-y-1">
                                         {['C', 'M', 'B'].map((l, i) => (
-                                          <div key={i} className="w-5 h-4 rounded bg-slate-800 border border-slate-600 flex items-center justify-center text-[7px] text-slate-200 font-black shadow-xs" title={l === 'C' ? 'Console' : l === 'M' ? 'MGMT' : 'BITS'}>
+                                          <div key={i} className="w-5 h-4 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-[7px] text-slate-700 dark:text-slate-300 font-bold shadow-xs" title={l === 'C' ? 'Console' : l === 'M' ? 'MGMT' : 'BITS'}>
                                             {l}
                                           </div>
                                         ))}
@@ -1986,7 +1986,7 @@ export default function OltManagement() {
                                     /* HUVQ Uplink Blade: 4x 10GE SFP+ */
                                     <div className="space-y-2 flex flex-col items-center py-2">
                                       {[1, 2, 3, 4].map(uN => (
-                                        <div key={uN} className="w-7 h-7 rounded border border-emerald-600 bg-emerald-500 flex items-center justify-center text-[10px] text-slate-950 font-black shadow-sm" title={`HUVQ 10GE SFP+ ${uN}: Up`}>
+                                        <div key={uN} className="w-7 h-7 rounded border border-emerald-600 bg-emerald-500 flex items-center justify-center text-[10px] text-slate-950 font-black shadow-xs" title={`HUVQ 10GE SFP+ ${uN}: Up`}>
                                           U{uN}
                                         </div>
                                       ))}
@@ -1994,18 +1994,18 @@ export default function OltManagement() {
                                   ) : (
                                     /* Empty Slot: Metal Blank Plate with Vertical Grooves */
                                     <div className="h-full flex items-center justify-center gap-1 py-4 opacity-30">
-                                      <div className="w-1 h-64 bg-slate-500 rounded-full" />
-                                      <div className="w-1 h-64 bg-slate-500 rounded-full" />
+                                      <div className="w-1 h-64 bg-slate-300 dark:bg-slate-700 rounded-full" />
+                                      <div className="w-1 h-64 bg-slate-300 dark:bg-slate-700 rounded-full" />
                                     </div>
                                   )}
                                 </div>
 
                                 {/* Bottom Slot Number & Screw */}
                                 <div className="flex flex-col items-center gap-1">
-                                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-black text-white shadow-xs">
+                                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-xs font-black text-slate-900 dark:text-white shadow-xs">
                                     {slotNum}
                                   </div>
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-300 font-bold">|</div>
+                                  <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-300 font-bold">|</div>
                                 </div>
                               </div>
                             );
@@ -2016,31 +2016,31 @@ export default function OltManagement() {
                       /* ══════════════════════════════════════════════════════════════════
                           LAYOUT B: ZTE C320 (2U HORIZONTAL COMPACT CHASSIS)
                       ══════════════════════════════════════════════════════════════════ */
-                      <div className="flex border-4 border-slate-300 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800/90 shadow-inner">
+                      <div className="flex border-2 border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-900 shadow-xs">
                         {/* Left Vertical Column: FAN TRAY */}
-                        <div className="w-16 sm:w-20 bg-slate-200 dark:bg-slate-800 border-r-2 border-slate-300 dark:border-slate-700 p-3 flex flex-col items-center justify-between text-center select-none">
-                          <div className="text-xs font-mono font-black text-slate-700 dark:text-white tracking-wider">FAN</div>
+                        <div className="w-16 sm:w-20 bg-slate-50 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 p-3 flex flex-col items-center justify-between text-center select-none">
+                          <div className="text-xs font-mono font-black text-slate-900 dark:text-white tracking-wider">FAN</div>
                           <div className="space-y-2.5 py-3">
-                            <div className="w-9 h-4 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN 1 OK" />
-                            <div className="w-9 h-4 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN 2 OK" />
-                            <div className="w-9 h-4 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN 3 OK" />
+                            <div className="w-9 h-4 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" title="FAN 1 OK" />
+                            <div className="w-9 h-4 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" title="FAN 2 OK" />
+                            <div className="w-9 h-4 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse" title="FAN 3 OK" />
                           </div>
-                          <div className="w-8 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full" />
+                          <div className="w-8 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-full" />
                         </div>
 
                         {/* Right Main Column: Slots 1, 2, 3 & 4 */}
-                        <div className="flex-1 divide-y-2 divide-slate-200 dark:divide-slate-700 bg-slate-50 dark:bg-slate-900/60 font-mono">
+                        <div className="flex-1 divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-900/60 font-mono">
                           {/* ROW 1: SLOT 1 */}
                           {(() => {
                             const card1 = discoveredCards.find(c => Number(c.slot) === 1) || { type: 'GTGHG' };
                             const portCount1 = getCardPortCount(card1.type) || 16;
 
                             return (
-                              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-850 hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
+                              <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                                 <div className="flex items-center gap-3 w-36 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-black shadow-xs">|</div>
-                                  <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="RUN LED: Active" />
-                                  <span className="text-sm font-black text-slate-800 dark:text-white">{card1.type}</span>
+                                  <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                  <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" title="RUN LED: Active" />
+                                  <span className="text-sm font-black text-slate-900 dark:text-white">{card1.type}</span>
                                 </div>
 
                                 <div className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 overflow-x-auto">
@@ -2072,20 +2072,20 @@ export default function OltManagement() {
                                           ? 'bg-indigo-600 text-white border-white ring-2 ring-indigo-400 scale-110 z-20 shadow-md'
                                           : isUp
                                             ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
-                                            : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/20'
+                                            : 'bg-slate-100 dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 shadow-inner'
                                           }`}
                                         title={`Port 1/1/${portNum}: ${isUp ? `Up (${matchedPort.online_onus || 0} Online)` : 'Down'}`}
                                       >
                                         <span>{portNum}</span>
-                                        <span className={`w-2 h-2 rounded-full mt-1 ${isSelected ? 'bg-white' : isUp ? 'bg-emerald-950' : 'bg-rose-200'}`} />
+                                        <span className={`w-2 h-2 rounded-full mt-1 ${isSelected ? 'bg-white' : isUp ? 'bg-emerald-950' : 'bg-rose-400'}`} />
                                       </button>
                                     );
                                   })}
                                 </div>
 
                                 <div className="flex items-center justify-end gap-3 w-20 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-black shadow-xs">|</div>
-                                  <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-500 flex items-center justify-center text-xs font-black text-slate-800 dark:text-white shadow-xs">1</div>
+                                  <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                  <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-xs font-black text-slate-900 dark:text-white shadow-xs">1</div>
                                 </div>
                               </div>
                             );
@@ -2099,29 +2099,29 @@ export default function OltManagement() {
 
                             if (!hasCard2) {
                               return (
-                                <div className="flex items-center justify-between p-3.5 bg-slate-100 dark:bg-slate-900/50 text-slate-400 dark:text-slate-500">
+                                <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400">
                                   <div className="flex items-center gap-3 w-36 shrink-0">
-                                    <div className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-500 dark:text-slate-400 font-bold">|</div>
-                                    <span className="text-xs font-bold text-slate-400">SLOT 2 (EMPTY)</span>
+                                    <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-400 font-bold">|</div>
+                                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">SLOT 2 (EMPTY)</span>
                                   </div>
                                   <div className="flex-1 flex items-center justify-center gap-3 opacity-30">
-                                    <div className="w-40 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full" />
+                                    <div className="w-40 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-full" />
                                     <span className="text-xs font-mono">EXPANSION BLANK PANEL</span>
-                                    <div className="w-40 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full" />
+                                    <div className="w-40 h-1.5 bg-slate-300 dark:bg-slate-600 rounded-full" />
                                   </div>
                                   <div className="flex items-center justify-end gap-3 w-20 shrink-0">
-                                    <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-xs font-black text-slate-400">2</div>
+                                    <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-xs font-black text-slate-600 dark:text-slate-400">2</div>
                                   </div>
                                 </div>
                               );
                             }
 
                             return (
-                              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-850 hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
+                              <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                                 <div className="flex items-center gap-3 w-36 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
-                                  <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="RUN LED: Active" />
-                                  <span className="text-sm font-black text-slate-800 dark:text-white">{card2.type}</span>
+                                  <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                  <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" title="RUN LED: Active" />
+                                  <span className="text-sm font-black text-slate-900 dark:text-white">{card2.type}</span>
                                 </div>
 
                                 <div className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 overflow-x-auto">
@@ -2153,56 +2153,56 @@ export default function OltManagement() {
                                           ? 'bg-indigo-600 text-white border-white ring-2 ring-indigo-400 scale-110 z-20 shadow-md'
                                           : isUp
                                             ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
-                                            : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/20'
+                                            : 'bg-slate-100 dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 shadow-inner'
                                           }`}
                                         title={`Port 1/2/${portNum}: ${isUp ? `Up (${matchedPort.online_onus || 0} Online)` : 'Down'}`}
                                       >
                                         <span>{portNum}</span>
-                                        <span className={`w-2 h-2 rounded-full mt-1 ${isSelected ? 'bg-white' : isUp ? 'bg-emerald-950' : 'bg-rose-200'}`} />
+                                        <span className={`w-2 h-2 rounded-full mt-1 ${isSelected ? 'bg-white' : isUp ? 'bg-emerald-950' : 'bg-rose-400'}`} />
                                       </button>
                                     );
                                   })}
                                 </div>
 
                                 <div className="flex items-center justify-end gap-3 w-20 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
-                                  <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-500 flex items-center justify-center text-xs font-black text-slate-800 dark:text-white shadow-xs">2</div>
+                                  <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                  <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-xs font-black text-slate-900 dark:text-white shadow-xs">2</div>
                                 </div>
                               </div>
                             );
                           })()}
 
                           {/* ROW 3: SLOT 3 (PRAM) & SLOT 4 (SMXA) */}
-                          <div className="grid grid-cols-2 divide-x-2 divide-slate-200 dark:divide-slate-700">
+                          <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-slate-700">
                             {/* Slot 3: PRAM */}
-                            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-850 hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
+                            <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                               <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
-                                <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="POWER LED: Active" />
-                                <span className="text-sm font-black text-slate-800 dark:text-white">PRAM</span>
+                                <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" title="POWER LED: Active" />
+                                <span className="text-sm font-black text-slate-900 dark:text-white">PRAM</span>
                               </div>
 
                               <div className="flex items-center gap-2.5 px-3">
-                                <div className="w-12 h-7 rounded bg-slate-200 dark:bg-slate-950 border border-slate-300 dark:border-slate-600 flex items-center justify-center gap-1.5 shadow-inner">
+                                <div className="w-12 h-7 rounded bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-600 flex items-center justify-center gap-1.5 shadow-inner">
                                   <span className="w-1.5 h-4 bg-slate-400 rounded-2xs" />
                                   <span className="w-1.5 h-4 bg-slate-400 rounded-2xs" />
                                   <span className="w-1.5 h-4 bg-slate-400 rounded-2xs" />
                                 </div>
-                                <span className="text-xs text-slate-500 dark:text-slate-300 font-bold hidden sm:inline">220V AC / -48V DC</span>
+                                <span className="text-xs text-slate-600 dark:text-slate-300 font-bold hidden sm:inline">220V AC / -48V DC</span>
                               </div>
 
                               <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
-                                <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-500 flex items-center justify-center text-xs font-black text-slate-800 dark:text-white shadow-xs">3</div>
+                                <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-xs font-black text-slate-900 dark:text-white shadow-xs">3</div>
                               </div>
                             </div>
 
                             {/* Slot 4: SMXA */}
-                            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-850 hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
+                            <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                               <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
-                                <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="CTRL LED: Active" />
-                                <span className="text-sm font-black text-slate-800 dark:text-white">SMXA</span>
+                                <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" title="CTRL LED: Active" />
+                                <span className="text-sm font-black text-slate-900 dark:text-white">SMXA</span>
                               </div>
 
                               <div className="flex items-center gap-2 px-3">
@@ -2219,8 +2219,8 @@ export default function OltManagement() {
                               </div>
 
                               <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
-                                <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-500 flex items-center justify-center text-xs font-black text-slate-800 dark:text-white shadow-xs">4</div>
+                                <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 flex items-center justify-center text-xs font-black text-slate-900 dark:text-white shadow-xs">4</div>
                               </div>
                             </div>
                           </div>
@@ -2246,14 +2246,14 @@ export default function OltManagement() {
 
                       if (!activePortHUD) {
                         return (
-                          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-100 dark:bg-slate-850/90 border border-slate-200 dark:border-slate-700/80 shadow-lg flex flex-wrap items-center justify-between gap-3 text-xs text-slate-800 dark:text-white animate-in fade-in duration-150">
+                          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs text-slate-800 dark:text-white animate-in fade-in duration-150">
                             <div className="flex items-center gap-2.5">
-                              <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse" />
+                              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
                               <span className="text-slate-600 dark:text-slate-300 font-medium">
                                 Silakan <strong className="text-slate-900 dark:text-white">klik salah satu nomor Port PON (1–16)</strong> pada visual kartu blade di atas untuk melihat telemetri port &amp; memuat daftar ONU secara realtime.
                               </span>
                             </div>
-                            <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/80 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                            <span className="text-[11px] font-mono font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/80 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800">
                               Mode: On-Demand Lazy Loading
                             </span>
                           </div>
@@ -2264,15 +2264,15 @@ export default function OltManagement() {
                       const totalOnusOnPort = (activePortHUD.registered_onus || 0) + (activePortHUD.unconfigured_onus || 0);
 
                       return (
-                        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-850 border-2 border-indigo-400 dark:border-indigo-500/80 shadow-2xl flex flex-wrap items-center justify-between gap-4 text-xs text-slate-800 dark:text-white animate-in fade-in duration-100">
+                        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border-2 border-indigo-500 dark:border-indigo-500/80 shadow-md flex flex-wrap items-center justify-between gap-4 text-xs text-slate-900 dark:text-white animate-in fade-in duration-100">
                           <div className="flex items-center gap-3">
                             <span className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-black font-mono shadow-xs text-xs sm:text-sm">
                               PORT {activePortHUD.slot ? `1/${activePortHUD.slot}/${activePortHUD.portNum || activePortHUD.port || 1}` : activePortHUD.port_id}
                             </span>
                             <div>
                               <span className="font-black text-sm text-slate-900 dark:text-white">{activePortHUD.port_id}</span>
-                              <span className="text-slate-600 dark:text-slate-200 ml-3 text-xs font-semibold">
-                                Status: <strong className={isPortUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong> · <span className="text-slate-800 dark:text-white font-bold">{activePortHUD.registered_onus || 0}</span> Terdaftar {activePortHUD.unconfigured_onus > 0 ? <span>(<strong className="text-amber-600 dark:text-amber-400">{activePortHUD.unconfigured_onus}</strong> Belum Terdaftar)</span> : ''} · Tx Power: <span className="text-amber-600 dark:text-amber-300 font-bold font-mono">{activePortHUD.tx_power_dbm ? `${activePortHUD.tx_power_dbm} dBm` : '—'}</span>
+                              <span className="text-slate-600 dark:text-slate-300 ml-3 text-xs font-semibold">
+                                Status: <strong className={isPortUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong> · <span className="text-slate-900 dark:text-white font-bold">{activePortHUD.registered_onus || 0}</span> Terdaftar {activePortHUD.unconfigured_onus > 0 ? <span>(<strong className="text-amber-600 dark:text-amber-400">{activePortHUD.unconfigured_onus}</strong> Belum Terdaftar)</span> : ''} · Tx Power: <span className="text-amber-600 dark:text-amber-400 font-bold font-mono">{activePortHUD.tx_power_dbm ? `${activePortHUD.tx_power_dbm} dBm` : '—'}</span>
                               </span>
                             </div>
                           </div>
@@ -2282,7 +2282,7 @@ export default function OltManagement() {
                               <button
                                 type="button"
                                 onClick={() => handleSelectPort(null)}
-                                className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-bold text-xs shadow-xs border border-slate-300 dark:border-slate-500 transition-colors flex items-center gap-2"
+                                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold text-xs shadow-xs border border-slate-200 dark:border-slate-700 transition-colors flex items-center gap-2"
                               >
                                 <IconX />
                                 <span>Tampilkan Semua Port</span>
@@ -2291,7 +2291,7 @@ export default function OltManagement() {
                               <button
                                 type="button"
                                 onClick={() => handleSelectPort(activePortHUD.port_id)}
-                                className="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-2"
+                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-2"
                               >
                                 <span>Buka &amp; Filter Port Ini</span>
                                 <span>→</span>
