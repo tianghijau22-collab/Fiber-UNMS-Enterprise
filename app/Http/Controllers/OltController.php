@@ -89,7 +89,7 @@ class OltController extends Controller
         $vendor       = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
         $deviceId     = $request->input('device_id') ?: ($request->query('device_id') ?: null);
         $isFresh      = $request->boolean('fresh') || $request->boolean('force');
-        $summaryOnly  = $request->boolean('summary_only');
+        $summaryOnly  = $request->has('summary_only') ? $request->boolean('summary_only') : true;
 
         $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
 
@@ -98,9 +98,12 @@ class OltController extends Controller
             $rawSnapshot = $device->last_telemetry_snapshot;
             if ($summaryOnly) {
                 return response()->json([
-                    'device_info' => $rawSnapshot['device_info'] ?? [],
-                    'pon_ports'   => $rawSnapshot['pon_ports'] ?? [],
-                    'polled_at'   => $rawSnapshot['polled_at'] ?? now()->toIso8601String(),
+                    'device_info'       => $rawSnapshot['device_info'] ?? [],
+                    'pon_ports'         => $rawSnapshot['pon_ports'] ?? [],
+                    'onu_list'          => [],
+                    'unconfigured_onus' => [],
+                    'orphaned_onus'     => [],
+                    'polled_at'         => $rawSnapshot['polled_at'] ?? now()->toIso8601String(),
                 ]);
             }
 
@@ -123,9 +126,12 @@ class OltController extends Controller
 
         if ($summaryOnly) {
             return response()->json([
-                'device_info' => $driverDeviceInfo,
-                'pon_ports'   => $driverPonPorts,
-                'polled_at'   => now()->toIso8601String(),
+                'device_info'       => $driverDeviceInfo,
+                'pon_ports'         => $driverPonPorts,
+                'onu_list'          => [],
+                'unconfigured_onus' => [],
+                'orphaned_onus'     => [],
+                'polled_at'         => now()->toIso8601String(),
             ]);
         }
 

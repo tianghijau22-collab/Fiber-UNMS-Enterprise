@@ -462,10 +462,10 @@ export default function OltManagement() {
     return () => clearInterval(timer);
   }, [activeOlt?.id, activeOlt?.polling_interval_seconds, isAutoPollingPaused]);
 
-  // ─── Fetch OLT Hardware Telemetry via SNMP ──────────────────────────────────
+  // ─── Fetch OLT Hardware Telemetry via SNMP (Summary Only - Super Ringan) ───
   const fetchOltHardware = (vendorKey, deviceId, silent = false, fresh = false) => {
     if (!silent) setLoading(true);
-    const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}${fresh ? '&fresh=1' : ''}`;
+    const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}&summary_only=1${fresh ? '&fresh=1' : ''}`;
     fetch(url)
       .then(r => { if (!r.ok) throw new Error('API ' + r.status); return r.json(); })
       .then(data => {
@@ -507,7 +507,7 @@ export default function OltManagement() {
             };
           });
           if (fresh) {
-            showNotif(`Berhasil menyegarkan data Port ${formatShortPort(portId)} via SNMP.`, 'success');
+            showNotif(`Berhasil memuat data Port ${formatShortPort(portId)} via SNMP.`, 'success');
           }
         }
       })
@@ -524,8 +524,8 @@ export default function OltManagement() {
       setSelectedPortFilter(null);
     } else {
       setSelectedPortFilter(portId);
-      // Panggil data khusus port ini untuk memastikan selalu up-to-date
-      fetchPortOnus(portId, false);
+      // Panggil data khusus port ini langsung secara on-demand via SNMP
+      fetchPortOnus(portId, true);
     }
   };
 
@@ -2918,10 +2918,34 @@ export default function OltManagement() {
                           </tr>
                         );
                       })
+                    ) : loadingPortOnus ? (
+                      <tr>
+                        <td colSpan={9} className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center justify-center gap-3">
+                            <div className="w-7 h-7 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                            <div className="text-sm font-bold text-slate-800 dark:text-white">Memuat Data ONU Port {selectedPortFilter ? formatShortPort(selectedPortFilter) : ''}...</div>
+                            <div className="text-xs text-slate-400">Mengambil data telemetri optik via SNMP On-Demand</div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : !selectedPortFilter ? (
+                      <tr>
+                        <td colSpan={9} className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-1">
+                              <IconRouter />
+                            </div>
+                            <div className="text-sm font-bold text-slate-800 dark:text-white">Pilih Port PON untuk Memuat ONU</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                              Klik salah satu port PON pada visual chassis OLT di atas untuk memuat daftar ONU secara realtime (*On-Demand Lazy Loading*).
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     ) : (
                       <tr>
                         <td colSpan={9} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
-                          Semua ONU fisik pada OLT sudah terdaftar di Fiber UNMS.
+                          Tidak ada ONU belum terdaftar pada Port {formatShortPort(selectedPortFilter)}.
                         </td>
                       </tr>
                     )}
@@ -3033,9 +3057,19 @@ export default function OltManagement() {
                       </div>
                     );
                   })
+                ) : loadingPortOnus ? (
+                  <div className="p-8 text-center flex flex-col items-center justify-center gap-2">
+                    <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Memuat data Port {selectedPortFilter ? formatShortPort(selectedPortFilter) : ''}...</span>
+                  </div>
+                ) : !selectedPortFilter ? (
+                  <div className="p-6 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+                    <span className="font-bold text-slate-700 dark:text-slate-300">Pilih Port PON</span>
+                    <span>Klik salah satu port PON di atas untuk memuat daftar ONU secara realtime.</span>
+                  </div>
                 ) : (
                   <div className="p-6 text-center text-slate-400 text-xs">
-                    Semua ONU fisik pada OLT sudah terdaftar di Fiber UNMS.
+                    Tidak ada ONU belum terdaftar pada Port {formatShortPort(selectedPortFilter)}.
                   </div>
                 )}
               </div>
@@ -3247,10 +3281,34 @@ export default function OltManagement() {
                           </tr>
                         );
                       })
+                    ) : loadingPortOnus ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center justify-center gap-3">
+                            <div className="w-7 h-7 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                            <div className="text-sm font-bold text-slate-800 dark:text-white">Memuat Data Pelanggan Port {selectedPortFilter ? formatShortPort(selectedPortFilter) : ''}...</div>
+                            <div className="text-xs text-slate-400">Mengambil data telemetri optik via SNMP On-Demand</div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : !selectedPortFilter ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center">
+                          <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-1">
+                              <IconRouter />
+                            </div>
+                            <div className="text-sm font-bold text-slate-800 dark:text-white">Pilih Port PON untuk Memuat ONU</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                              Klik salah satu port PON pada visual chassis OLT di atas untuk memuat daftar ONU pelanggan secara realtime (*On-Demand Lazy Loading*).
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     ) : (
                       <tr>
                         <td colSpan={7} className="px-6 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">
-                          Tidak ada ONU yang cocok dengan kriteria pencarian/filter.
+                          Tidak ada ONU terdaftar pada Port {formatShortPort(selectedPortFilter)}.
                         </td>
                       </tr>
                     )}
@@ -3343,9 +3401,19 @@ export default function OltManagement() {
                       </div>
                     );
                   })
+                ) : loadingPortOnus ? (
+                  <div className="p-8 text-center flex flex-col items-center justify-center gap-2">
+                    <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Memuat data Port {selectedPortFilter ? formatShortPort(selectedPortFilter) : ''}...</span>
+                  </div>
+                ) : !selectedPortFilter ? (
+                  <div className="p-6 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+                    <span className="font-bold text-slate-700 dark:text-slate-300">Pilih Port PON</span>
+                    <span>Klik salah satu port PON di atas untuk memuat daftar ONU pelanggan secara realtime.</span>
+                  </div>
                 ) : (
                   <div className="p-6 text-center text-slate-400 text-xs">
-                    Tidak ada ONU yang cocok dengan kriteria pencarian/filter.
+                    Tidak ada ONU terdaftar pada Port {formatShortPort(selectedPortFilter)}.
                   </div>
                 )}
               </div>

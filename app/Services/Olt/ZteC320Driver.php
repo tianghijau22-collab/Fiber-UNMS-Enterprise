@@ -369,7 +369,96 @@ class ZteC320Driver implements OltDeviceDriverInterface
         $cleanPortId = strtolower(trim($portId));
         $normalizedPort = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $cleanPortId);
 
-        // Ambil daftar seluruh ONU (otomatis memanfaatkan caching pada lifecycle request)
+        // Ekstrak slot dan port number
+        $rawPortStr = str_replace(['gpon-olt_', 'epon-olt_'], '', $normalizedPort);
+        $portParts = explode('/', $rawPortStr);
+        $slotNum = (int)($portParts[1] ?? 1);
+        $portNum = (int)($portParts[2] ?? 1);
+
+        if ($this->snmp && $this->isLive) {
+            try {
+                $ifIndex = (0x10 << 24) | ($slotNum << 16) | ($portNum << 8);
+
+                $snHexList = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.3.{$ifIndex}") ?: [];
+                if (empty($snHexList)) {
+                    $snHexList = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.28.1.1.5.{$ifIndex}") ?: [];
+                }
+
+                if (!empty($snHexList)) {
+                    $stateList = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.{$ifIndex}") ?: [];
+                    $modelList = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.9.{$ifIndex}") ?: [];
+                    $rxList    = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.12.1.1.14.{$ifIndex}") ?: [];
+                    $txList    = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.12.1.1.18.{$ifIndex}") ?: [];
+
+                    $stateMap = [];
+                    foreach ($stateList as $o => $v) {
+                        $p = explode('.', $o);
+                        $stateMap[end($p)] = (int)SnmpConnector::parseValue((string)$v);
+                    }
+
+                    $modelMap = [];
+                    foreach ($modelList as $o => $v) {
+                        $p = explode('.', $o);
+                        $modelMap[end($p)] = SnmpConnector::parseValue((string)$v);
+                    }
+
+                    $rxMap = [];
+                    foreach ($rxList as $o => $v) {
+                        $p = explode('.', $o);
+                        $onuIdPart = (end($p) === '1' && count($p) >= 3) ? $p[count($p)-2] : end($p);
+                        $rxMap[$onuIdPart] = (int)SnmpConnector::parseValue((string)$v);
+                    }
+
+                    $txMap = [];
+                    foreach ($txList as $o => $v) {
+                        $p = explode('.', $o);
+                        $onuIdPart = (end($p) === '1' && count($p) >= 3) ? $p[count($p)-2] : end($p);
+                        $txMap[$onuIdPart] = (int)SnmpConnector::parseValue((string)$v);
+                    }
+
+                    $onus = [];
+                    foreach ($snHexList as $oid => $hexVal) {
+                        $parts = explode('.', $oid);
+                        $onuId = end($parts);
+
+                        $sn = $this->parseZteSerialNumber((string)$hexVal);
+                        if (empty($sn) || $sn === '00000000' || strlen($sn) < 6 || preg_match('/^0+$/', $sn)) {
+                            continue;
+                        }
+
+                        $stateCode = $stateMap[$onuId] ?? 3;
+                        $model = $modelMap[$onuId] ?? 'F670L';
+                        $rxRaw = $rxMap[$onuId] ?? null;
+                        $txRaw = $txMap[$onuId] ?? null;
+
+                        $rxPower = $this->formatOpticalPower($rxRaw);
+                        $txPower = $this->formatOpticalPower($txRaw);
+
+                        $status = ($stateCode === 3 && ($rxPower === null || $rxPower > -35.0)) ? 'Online' : 'LOS (Dying Gasp)';
+
+                        $onus[] = [
+                            '_source'         => 'live_snmp',
+                            'onu_id'          => $onuId,
+                            'port'            => $normalizedPort,
+                            'customer_name'   => "ONU {$sn}",
+                            'serial_number'   => $sn,
+                            'vendor_model'    => $model,
+                            'status'          => $status,
+                            'rx_power'        => $rxPower,
+                            'tx_power'        => $txPower,
+                            'distance_meters' => 850,
+                            'ip_address'      => '—',
+                        ];
+                    }
+
+                    return $onus;
+                }
+            } catch (\Exception $e) {
+                // Fallback
+            }
+        }
+
+        // Fallback filter
         $all = $this->getOnuList();
         return array_values(array_filter($all, function ($onu) use ($normalizedPort) {
             $p = strtolower($onu['port'] ?? '');
