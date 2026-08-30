@@ -1526,33 +1526,7 @@ export default function OltManagement() {
             </div>
           )}
 
-          {/* ── OLT System Status & CPU / Memory / Temp Header (Desain Sesuai Gambar) ── */}
-          <div className="bg-[#090d14] dark:bg-slate-950 border border-slate-800 rounded-xl p-5 sm:p-6 shadow-md text-white font-sans space-y-4">
-            {/* Top Row: Nama OLT, Vendor, IP, Uptime & Temperature Badge */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center flex-wrap gap-2.5">
-                  <h2 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase">
-                    {activeOlt?.name || 'OLT ZTE C300 KOTA SOLOK'}
-                  </h2>
-                  <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">
-                    {activeOlt?.vendor || 'ZTE'} - {oltData.device_info?.model || 'ZXAN C300'}
-                  </span>
-                </div>
-                <p className="text-xs font-mono text-slate-300 dark:text-slate-400">
-                  IP: {maskIpAddress(activeOlt?.ip_address)} · Uptime: {oltData.device_info?.uptime || '228 hari, 10 jam 57 menit'}
-                </p>
-              </div>
 
-              {/* Temperature Badge */}
-              <div className="self-start sm:self-center">
-                <div className="px-4 py-1.5 rounded-full border border-emerald-500/50 bg-emerald-950/40 text-emerald-400 font-mono font-bold text-xs shadow-xs flex items-center gap-1.5">
-                  <span>{oltData.device_info?.temperature ?? 36}°C SFP</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
 
           {/* ══════════════════════════════════════════════════════════════════
               TOOLBAR MODE TAMPILAN: VIRTUAL CHASSIS vs GRID KARTU
