@@ -600,13 +600,21 @@ class ZteC320Driver implements OltDeviceDriverInterface
         if ($val === null || $val === 0 || $val === 65535 || $val === 2147483647 || $val === 655355) {
             return null;
         }
-        if ($val > 1000 && $val < 60000) {
-            return round(($val * 0.002) - 30.0, 2);
-        }
-        if ($val < -1000 || $val > -5000) {
+
+        // Jika bernilai negatif (signed integer dari vendor/MIB lain)
+        if ($val < 0) {
+            if ($val <= -10000) {
+                return round($val / 1000.0, 2);
+            }
             return round($val / 100.0, 2);
         }
-        return round(($val * 0.002) - 30.0, 2);
+
+        // Rumus standar resmi ZTE GPON MIB: (RAW * 0.002) - 30.0 dBm
+        if ($val > 0 && $val < 65535) {
+            return round(($val * 0.002) - 30.0, 2);
+        }
+
+        return null;
     }
 
     protected function extractFirmware(string $sysDescr): string
