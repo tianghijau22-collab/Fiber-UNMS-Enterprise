@@ -43,7 +43,7 @@ class ZteC300Driver extends ZteC320Driver
     }
     public function getDeviceInfo(): array
     {
-        if ($this->snmp && $this->isLive) {
+        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 $sysDescr  = $this->snmp->get('1.3.6.1.2.1.1.1.0');
                 $sysUpTime = $this->snmp->get('1.3.6.1.2.1.1.3.0');
@@ -87,7 +87,7 @@ class ZteC300Driver extends ZteC320Driver
 
     public function getChassisCards(): array
     {
-        if ($this->snmp && $this->isLive) {
+        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 // OID MIB 1082 Card Types
                 $cardTypes = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.4.1.1');
