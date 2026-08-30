@@ -50,56 +50,6 @@ const IconNetwork = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
   </svg>
 );
-const IconServer = ({ className = "w-4 h-4" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <rect x="2" y="2" width="20" height="8" rx="2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <rect x="2" y="14" width="20" height="8" rx="2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <line x1="6" y1="6" x2="6.01" y2="6" strokeWidth={2.5} strokeLinecap="round" />
-    <line x1="6" y1="18" x2="6.01" y2="18" strokeWidth={2.5} strokeLinecap="round" />
-  </svg>
-);
-const IconLayers = ({ className = "w-4 h-4" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <polygon points="12 2 2 7 12 12 22 7 12 2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <polyline points="2 17 12 22 22 17" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <polyline points="2 12 12 17 22 12" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-const IconZap = ({ className = "w-3.5 h-3.5" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-const IconRefresh = ({ className = "w-3.5 h-3.5" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-  </svg>
-);
-const IconActivity = ({ className = "w-4 h-4" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-const IconCpu = ({ className = "w-4 h-4" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <rect x="4" y="4" width="16" height="16" rx="2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <rect x="9" y="9" width="6" height="6" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <line x1="9" y1="1" x2="9" y2="4" strokeWidth={2} strokeLinecap="round" />
-    <line x1="15" y1="1" x2="15" y2="4" strokeWidth={2} strokeLinecap="round" />
-    <line x1="9" y1="20" x2="9" y2="23" strokeWidth={2} strokeLinecap="round" />
-    <line x1="15" y1="20" x2="15" y2="23" strokeWidth={2} strokeLinecap="round" />
-    <line x1="20" y1="9" x2="23" y2="9" strokeWidth={2} strokeLinecap="round" />
-    <line x1="20" y1="15" x2="23" y2="15" strokeWidth={2} strokeLinecap="round" />
-    <line x1="1" y1="9" x2="4" y2="9" strokeWidth={2} strokeLinecap="round" />
-    <line x1="1" y1="15" x2="4" y2="15" strokeWidth={2} strokeLinecap="round" />
-  </svg>
-);
-const IconSearch = ({ className = "w-4 h-4" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <circle cx="11" cy="11" r="8" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-    <line x1="21" y1="21" x2="16.65" y2="16.65" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
 const Spinner = () => (
   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />
 );
@@ -294,10 +244,6 @@ export default function OltManagement() {
     results: [],
     canceled: false,
   });
-
-  // Tampilan Chassis Rack vs Grid Kartu Port ('chassis' | 'cards')
-  const [chassisViewMode, setChassisViewMode] = useState('chassis');
-  const [hoveredPortInfo, setHoveredPortInfo] = useState(null);
 
   // Modals
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -1508,1018 +1454,302 @@ export default function OltManagement() {
             </div>
           </div>
 
-          {/* ══════════════════════════════════════════════════════════════════
-              TOOLBAR MODE TAMPILAN: VIRTUAL CHASSIS vs GRID KARTU
-          ══════════════════════════════════════════════════════════════════ */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-            <div>
-              <h3 className="font-bold text-slate-950 dark:text-white text-base flex items-center gap-2">
-                <IconServer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <span>Visualisasi Perangkat &amp; Port Fisik OLT</span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                  {activeOlt?.vendor || 'ZTE'} {oltData.device_info?.model || 'ZXAN C320 / C300'}
-                </span>
-              </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                Pilih mode visualisasi rak fisik chassis atau mode grid kartu port interaktif.
-              </p>
+          {/* Chassis cards */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-lg">Slot & Card — {activeOlt?.name}</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Klik salah satu Slot Card di bawah untuk memfilter daftar Port PON</p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">Total {oltData.device_info?.cards?.length ?? 0} Slot</span>
+                {selectedSlotFilter && (
+                  <button onClick={() => { setSelectedSlotFilter(null); setSelectedPortFilter(null); }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs transition-colors">
+                    Reset Filter Slot
+                  </button>
+                )}
+              </div>
             </div>
-
-            {/* View Switcher Buttons with SVG Icons */}
-            <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700/80">
-              <button
-                type="button"
-                onClick={() => setChassisViewMode('chassis')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${chassisViewMode === 'chassis'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/60'
-                  }`}
-              >
-                <IconServer className="w-4 h-4" />
-                <span>Virtual Chassis Rack</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setChassisViewMode('cards')}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${chassisViewMode === 'cards'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/60'
-                  }`}
-              >
-                <IconLayers className="w-4 h-4" />
-                <span>Grid Kartu Port (Legacy)</span>
-              </button>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {oltData.device_info?.cards?.map((card, i) => {
+                const isSelected = selectedSlotFilter === card.slot;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSlotFilter(isSelected ? null : card.slot);
+                      setSelectedPortFilter(null);
+                    }}
+                    className={`p-4 rounded-xl space-y-2 text-left transition-all relative ${isSelected
+                      ? 'bg-indigo-600 border-2 border-indigo-600 shadow-md text-white ring-2 ring-indigo-500/20'
+                      : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-700'
+                      }`}
+                  >
+                    <div className="flex items-center justify-between text-xs font-bold">
+                      <span>Slot {card.slot} ({card.type})</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${isSelected
+                        ? 'bg-white/20 text-white border-white/30'
+                        : 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                        }`}>{card.status}</span>
+                    </div>
+                    <div className={`text-xs ${isSelected ? 'text-indigo-100' : 'text-slate-600 dark:text-slate-400'}`}>
+                      Kapasitas: <span className="font-bold">{card.ports} Port</span>
+                    </div>
+                    {isSelected && (
+                      <div className="absolute -top-2 -right-2 bg-emerald-400 dark:bg-emerald-500 text-slate-950 dark:text-white rounded-full p-0.5 shadow-md">
+                        <IconCheck size="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* ══════════════════════════════════════════════════════════════════
-              VIEW MODE 1: REALISTIC VIRTUAL CHASSIS RACK VIEW (HSGQ / ZTE C300 / ZTE C320)
-          ══════════════════════════════════════════════════════════════════ */}
-          {chassisViewMode === 'chassis' && (() => {
-            const isHsgq = (activeOlt?.vendor || '').toLowerCase().includes('hsgq') ||
-              (activeOlt?.model || '').toLowerCase().includes('hsgq') ||
-              (activeOlt?.name || '').toLowerCase().includes('hsgq') ||
-              (activeOlt?.vendor_key || '').includes('hsgq');
-
-            const isC300 = !isHsgq && (
-              activeOlt?.model?.toLowerCase().includes('300') ||
-              activeOlt?.name?.toLowerCase().includes('c300') ||
-              activeOlt?.vendor_key?.includes('c300') ||
-              (oltData.device_info?.model || '').toLowerCase().includes('300')
-            );
-
-            // Helper menghitung kapasitas port berdasarkan tipe kartu
-            const getCardPortCount = (cardType) => {
-              if (!cardType) return 0;
-              const type = String(cardType).toUpperCase();
-              if (type.startsWith('GTGO') || type.startsWith('ETGO') || type.includes('8P')) return 8;
-              if (type.startsWith('GTGH') || type.startsWith('GFGH') || type.startsWith('GTGK') || type.includes('16P')) return 16;
-              if (type.startsWith('GTXO') || type.includes('4P')) return 4;
-              if (type.startsWith('HUVQ') || type.startsWith('XUTQ') || type.startsWith('SMXA') || type.startsWith('SCXN') || type.startsWith('SCTM')) return 4;
-              return 16;
-            };
-
-            const discoveredCards = oltData.device_info?.cards || [];
+          {/* PON Ports */}
+          {(() => {
+            const displayPorts = selectedSlotFilter
+              ? oltData.pon_ports?.filter(p => p.slot === selectedSlotFilter || p.port_id.includes(`/${selectedSlotFilter}/`))
+              : oltData.pon_ports;
 
             return (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                {/* 1. Realistic Hardware Chassis Panel */}
-                <div className="bg-slate-900 dark:bg-slate-950 border-2 border-slate-700/80 rounded-3xl p-5 sm:p-7 shadow-2xl overflow-x-auto">
-                  <div className="min-w-[1240px] space-y-5">
-                    {/* Top Bar: Title & Specs & Model Profile Badge */}
-                    <div className="flex flex-wrap items-center justify-between text-xs font-mono text-slate-200 pb-3.5 border-b border-slate-800 gap-3">
-                      <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 rounded-full bg-indigo-600/40 text-indigo-200 font-black border border-indigo-500/50 text-xs">
-                          {isHsgq ? '1U DESKTOP / RACK BOX' : isC300 ? 'RACK 19" 10U (VERTICAL BLADES)' : 'RACK 19" 2U (HORIZONTAL)'}
-                        </span>
-                        <strong className="text-white text-base tracking-wide font-black">
-                          Virtual Chassis View — {activeOlt?.vendor || (isHsgq ? 'HSGQ' : 'ZTE')} {isHsgq ? (activeOlt?.model || 'HSGQ-E04M Gigabit Series') : isC300 ? 'ZXAN C300 Enterprise' : (activeOlt?.model || 'ZXAN C320')}
-                        </strong>
-                        <span className="text-slate-300 font-bold">
-                          · {isHsgq ? `${oltData.pon_ports?.length || 4} PON Ports + 4 Uplink` : isC300 ? '21 Slots Architecture' : '4 Slots Architecture'} / {oltData.pon_ports?.length || 16} Ports Active
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-4 text-xs font-bold text-slate-300">
-                        <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-emerald-500 shadow-xs shadow-emerald-500/50" /> Port Up / Active Laser</span>
-                        <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-rose-500 shadow-xs shadow-rose-500/50" /> Port Down / Standby</span>
-                        <span className="flex items-center gap-2"><span className="w-3 h-3 rounded border-2 border-indigo-400 bg-indigo-900" /> Selected</span>
-                      </div>
-                    </div>
-
-                    {/* ══════════════════════════════════════════════════════════════════
-                        LAYOUT C: HSGQ (1U COMPACT BOX-TYPE OLT — HSGQ-E04M / HSGQ-G08M)
-                    ══════════════════════════════════════════════════════════════════ */}
-                    {isHsgq ? (
-                      <div className="border-4 border-slate-700 rounded-2xl overflow-hidden bg-slate-950 shadow-2xl">
-                        {/* Top Metal Body with "O L T" Grille Ventilation Cutouts */}
-                        <div className="bg-slate-900 border-b border-slate-700 px-6 py-2.5 flex items-center justify-between text-xs font-mono select-none">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-black tracking-widest text-slate-300">HSGQ 1U GIGABIT EPON/GPON OLT</span>
-                          </div>
-
-                          {/* "O L T" Grille Ventilation Pattern */}
-                          <div className="flex items-center gap-6 text-slate-600 font-mono tracking-widest text-sm font-black select-none">
-                            <span className="tracking-[5px] border-b-2 border-dashed border-slate-750">||||||||  O</span>
-                            <span className="tracking-[5px] border-b-2 border-dashed border-slate-750">||||||||  L</span>
-                            <span className="tracking-[5px] border-b-2 border-dashed border-slate-750">||||||||  T</span>
-                          </div>
-
-                          <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" />
-                            <span>100-240V AC / DC-12V</span>
-                          </div>
-                        </div>
-
-                        {/* Front Metallic Bezel Panel (Sesuai Foto Asli HSGQ-E04M) */}
-                        <div className="bg-gradient-to-b from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-900 border-y-2 border-slate-600 p-6 sm:p-7 flex flex-wrap items-center justify-between gap-6 font-mono select-none text-slate-950 dark:text-white">
-                          {/* 1. Left Brand & Model Section */}
-                          <div className="flex items-center gap-5">
-                            <div>
-                              <div className="text-2xl font-black text-rose-600 tracking-tighter flex items-center gap-1.5">
-                                <span>HSGQ</span>
-                              </div>
-                              <div className="text-sm font-black text-slate-950 dark:text-white mt-0.5 tracking-tight">
-                                {activeOlt?.model || 'HSGQ-E04M'}
-                              </div>
-                            </div>
-
-                            {/* Reset Button */}
-                            <div className="flex flex-col items-center gap-1 pl-4 border-l-2 border-slate-400/40">
-                              <div className="w-3 h-3 rounded-full bg-slate-950 border border-slate-500 shadow-inner" title="Factory Reset Pinhole" />
-                              <span className="text-[9px] text-slate-700 dark:text-slate-300 font-sans uppercase font-black">Reset</span>
-                            </div>
-                          </div>
-
-                          {/* 2. Middle Section: PON Ports & UPLINK Ports */}
-                          <div className="flex items-center gap-8">
-                            {/* PON Ports Group */}
-                            <div className="flex flex-col items-center">
-                              <div className="text-xs font-black text-slate-800 dark:text-slate-300 tracking-wider mb-1.5">
-                                ┌───── PON ─────┐
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {Array.from({ length: Math.max(oltData.pon_ports?.length || 4, 4) }).map((_, idx) => {
-                                  const portNum = idx + 1;
-                                  const targetPortId = `1/${portNum}`;
-                                  const matchedPort = (oltData.pon_ports || []).find(p => {
-                                    const clean = p.port_id.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-                                    return clean === targetPortId || clean === `${portNum}` || p.port_id.endsWith(`/${portNum}`) || Number(p.port) === portNum;
-                                  }) || {
-                                    port_id: `pon_1/${portNum}`,
-                                    status: 'Down',
-                                    registered_onus: 0,
-                                    online_onus: 0,
-                                  };
-
-                                  const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === targetPortId;
-                                  const isUp = String(matchedPort.status).toLowerCase() === 'up' ||
-                                    String(matchedPort.status).toLowerCase() === 'online' ||
-                                    matchedPort.registered_onus > 0 ||
-                                    matchedPort.online_onus > 0;
-
-                                  return (
-                                    <div key={idx} className="flex flex-col items-center gap-1">
-                                      <span className="text-xs font-black text-slate-950 dark:text-white">{portNum}</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSelectPort(matchedPort.port_id)}
-                                        onMouseEnter={() => setHoveredPortInfo({ ...matchedPort, slot: 1, portNum })}
-                                        onMouseLeave={() => setHoveredPortInfo(null)}
-                                        className={`w-11 sm:w-13 h-11 sm:h-13 rounded-lg border-2 flex flex-col items-center justify-center text-xs font-black transition-all shadow-md ${
-                                          isSelected
-                                            ? 'bg-indigo-600 text-white border-white ring-4 ring-indigo-400 scale-110 z-20 shadow-xl'
-                                            : isUp
-                                              ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/40'
-                                              : 'bg-slate-950 hover:bg-rose-950 text-rose-400 border-rose-900 shadow-inner'
-                                        }`}
-                                        title={`PON Port ${portNum}: ${isUp ? `Up (${matchedPort.online_onus || 0} Online)` : 'Down'}`}
-                                      >
-                                        <div className="w-5 h-3.5 bg-slate-900 border border-slate-600 rounded-xs flex items-center justify-center">
-                                          <span className={`w-2.5 h-1.5 rounded-2xs ${isUp ? 'bg-emerald-400 shadow-xs shadow-emerald-400' : 'bg-rose-600'}`} />
-                                        </div>
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-
-                            {/* UP LINK Ports Group */}
-                            <div className="flex flex-col items-center">
-                              <div className="text-xs font-black text-slate-800 dark:text-slate-300 tracking-wider mb-1.5">
-                                ┌──── UP LINK ────┐
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {[1, 2, 3, 4].map(uNum => (
-                                  <div key={uNum} className="flex flex-col items-center gap-1">
-                                    <span className="text-xs font-black text-slate-950 dark:text-white">{uNum}</span>
-                                    <div
-                                      className="w-11 sm:w-13 h-11 sm:h-13 rounded-lg border-2 border-emerald-600 bg-emerald-500 flex flex-col items-center justify-center text-xs font-black text-slate-950 shadow-md"
-                                      title={`Uplink GE/10GE Port ${uNum}: Active (1000M/10G Full-Duplex)`}
-                                    >
-                                      <div className="w-5 h-3.5 bg-slate-950 border border-emerald-700 rounded-xs flex items-center justify-center">
-                                        <span className="w-2.5 h-1.5 rounded-2xs bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* 3. Right Section: Dual RJ45 Management & Status LED Matrix */}
-                          <div className="flex items-center gap-6">
-                            {/* Dual Stacked RJ45 (CONSOLE & NMS) */}
-                            <div className="flex flex-col items-center gap-1.5">
-                              <div className="flex flex-col items-center">
-                                <span className="text-[8px] font-black text-slate-700 dark:text-slate-300">CONSOLE</span>
-                                <div className="w-9 h-6 rounded-xs bg-slate-950 border border-slate-600 flex items-center justify-center shadow-inner">
-                                  <span className="w-4 h-3 bg-slate-800 border border-slate-700 rounded-2xs" />
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-center">
-                                <div className="w-9 h-6 rounded-xs bg-slate-950 border border-slate-600 flex items-center justify-center shadow-inner">
-                                  <span className="w-4 h-3 bg-slate-800 border border-slate-700 rounded-2xs" />
-                                </div>
-                                <span className="text-[8px] font-black text-slate-700 dark:text-slate-300">NMS</span>
-                              </div>
-                            </div>
-
-                            {/* LED Matrix Columns (PON1..4, GE1..4, PWR, SYS, NMS) */}
-                            <div className="grid grid-cols-3 gap-x-3 gap-y-1.5 text-[8px] font-black text-slate-900 dark:text-slate-200 border-l-2 border-slate-400/40 pl-4">
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>PON1</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>GE1</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>PWR</span>
-                              </div>
-
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>PON2</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>GE2</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" />
-                                <span>SYS</span>
-                              </div>
-
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>PON3</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>GE3</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>NMS</span>
-                              </div>
-
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>PON4</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                <span>GE4</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-slate-500" />
-                                <span>ALM</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : isC300 ? (
-                      <div className="border-4 border-slate-700 rounded-2xl overflow-hidden bg-slate-900 shadow-2xl">
-                        {/* Top Large Fan Tray Bar with 2 Orange Latch Handles */}
-                        <div className="bg-slate-800 border-b-4 border-slate-700 px-6 py-3 flex items-center justify-between text-xs font-mono select-none">
-                          <div className="flex items-center gap-3">
-                            <span className="text-white font-black tracking-wider text-xs flex items-center gap-1.5">
-                              <IconActivity className="w-4 h-4 text-emerald-400" />
-                              <span>FAN UNIT MODULE</span>
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN TRAY 1: Normal" />
-                              <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN TRAY 2: Normal" />
-                              <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN TRAY 3: Normal" />
-                            </div>
-                          </div>
-
-                          {/* 2 Orange Release Latch Handles (Persis Foto ZTE C300) */}
-                          <div className="flex items-center gap-16">
-                            <div className="w-20 h-4 rounded bg-orange-600 border border-orange-400 shadow-inner flex items-center justify-center text-[8px] text-white font-black">LATCH 1</div>
-                            <div className="w-20 h-4 rounded bg-orange-600 border border-orange-400 shadow-inner flex items-center justify-center text-[8px] text-white font-black">LATCH 2</div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/40 flex items-center gap-1">
-                              <IconZap className="w-3.5 h-3.5 text-amber-400" />
-                              <span>48V DC / 220V AC</span>
-                            </span>
-                            <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="MAIN POWER OK" />
-                          </div>
-                        </div>
-
-                        {/* 21 Vertical Blade Card Slots (Side-by-Side Horizontal Chain) */}
-                        <div className="grid grid-cols-21 divide-x-2 divide-slate-700 bg-slate-950 font-mono text-xs min-h-[500px]">
-                          {/* Slot 1: PRWG (Power Blade) */}
-                          <div className="flex flex-col items-center justify-between p-2 bg-slate-900/90 hover:bg-slate-850 transition-colors">
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-300 font-black">|</div>
-                              <span className="font-black text-[10px] text-white tracking-tighter">PRWG</span>
-                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                            </div>
-
-                            {/* Power Connector Visuals */}
-                            <div className="space-y-4 py-3 flex flex-col items-center">
-                              <div className="w-7 h-12 rounded bg-slate-950 border border-slate-700 flex flex-col items-center justify-center gap-1.5 shadow-inner">
-                                <span className="w-2 h-2 rounded-full bg-slate-400" />
-                                <span className="w-2 h-2 rounded-full bg-slate-400" />
-                                <span className="w-2 h-2 rounded-full bg-slate-400" />
-                              </div>
-                              <div className="w-5 h-5 rounded-full bg-amber-600 border border-amber-400 flex items-center justify-center text-xs text-white font-black shadow-xs">⚡</div>
-                            </div>
-
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="w-5 h-5 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-black text-white">1</div>
-                              <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-300 font-black">|</div>
-                            </div>
-                          </div>
-
-                          {/* Slots 2 to 21 (Line Cards & Control Blades & Uplink) */}
-                          {Array.from({ length: 20 }).map((_, sIdx) => {
-                            const slotNum = sIdx + 2; // Slot 2..21
-                            const isCenterControl = slotNum === 10 || slotNum === 11; // SCXN
-
-                            // Ambil info kartu riil dari data OLT
-                            const cardInfo = discoveredCards.find(c => Number(c.slot) === slotNum);
-                            const cardTypeUpper = (cardInfo?.type || '').toUpperCase();
-                            const isUplinkBlade = cardTypeUpper.startsWith('HUVQ') || cardTypeUpper.startsWith('XUTQ') || (!cardInfo && (slotNum === 19 || slotNum === 20));
-                            const isLineCard = !isCenterControl && !isUplinkBlade && (!!cardInfo || slotNum <= 7);
-
-                            // Dapatkan jumlah port yang presisi sesuai tipe kartu (GTGH: 16 port, GTGO: 8 port)
-                            const cardType = cardInfo?.type || (slotNum === 3 || slotNum === 4 ? 'GTGOG' : slotNum === 7 ? 'GTGHK' : 'GTGHG');
-                            const portCount = isLineCard ? getCardPortCount(cardType) : 0;
-
-                            // Filter port-port PON untuk slot ini
-                            const slotPorts = (oltData.pon_ports || []).filter(p => {
-                              const clean = p.port_id.replace(/^gpon[-_]olt_/i, '');
-                              return Number(p.slot) === slotNum || clean.startsWith(`1/${slotNum}/`) || clean.startsWith(`${slotNum}/`);
-                            });
-
-                            return (
-                              <div
-                                key={slotNum}
-                                className={`flex flex-col items-center justify-between p-1.5 transition-colors ${isCenterControl
-                                  ? 'bg-slate-900 border-x border-indigo-500/40 shadow-inner'
-                                  : isUplinkBlade
-                                    ? 'bg-slate-900/80'
-                                    : isLineCard
-                                      ? 'bg-slate-900/90 hover:bg-slate-850'
-                                      : 'bg-slate-950/60 opacity-60'
-                                  }`}
-                              >
-                                {/* Top Screw & Card Label */}
-                                <div className="flex flex-col items-center gap-1">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-300 font-bold">|</div>
-                                  <span className="font-black text-[10px] sm:text-[11px] text-white truncate max-w-[40px]">
-                                    {isCenterControl ? 'SCXN' : isUplinkBlade ? (cardInfo?.type || 'HUVQ') : isLineCard ? cardType : '—'}
-                                  </span>
-                                  {(isLineCard || isCenterControl || isUplinkBlade) && (
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
-                                  )}
-                                </div>
-
-                                {/* Center Area: Vertical Ports Array / Vent Grooves */}
-                                <div className="py-1 flex-1 flex flex-col items-center justify-center w-full">
-                                  {/* Line Card: Menyesuaikan jumlah port riil (GTGH = 16 port, GTGO = 8 port) */}
-                                  {isLineCard ? (
-                                    <div className="space-y-1 w-full flex flex-col items-center">
-                                      {Array.from({ length: portCount }).map((_, pIdx) => {
-                                        const portNum = pIdx + 1;
-                                        const targetPortId = `1/${slotNum}/${portNum}`;
-                                        const matchedPort = slotPorts.find(p => {
-                                          const clean = p.port_id.replace(/^gpon[-_]olt_/i, '');
-                                          return clean === targetPortId || clean === `${slotNum}/${portNum}` || (Number(p.slot) === slotNum && Number(p.port) === portNum);
-                                        }) || {
-                                          port_id: `gpon-olt_1/${slotNum}/${portNum}`,
-                                          status: 'Down',
-                                          registered_onus: 0,
-                                          online_onus: 0,
-                                          los_onus: 0,
-                                        };
-
-                                        const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === `gpon-olt_${targetPortId}` || selectedPortFilter === targetPortId;
-                                        // Status Up real: jika status Up/Online dari SNMP atau terdapat ONU aktif/terdaftar
-                                        const isUp = String(matchedPort.status).toLowerCase() === 'up' ||
-                                          String(matchedPort.status).toLowerCase() === 'online' ||
-                                          (matchedPort.registered_onus > 0) ||
-                                          (matchedPort.online_onus > 0);
-
-                                        return (
-                                          <button
-                                            key={pIdx}
-                                            type="button"
-                                            onClick={() => handleSelectPort(matchedPort.port_id)}
-                                            onMouseEnter={() => setHoveredPortInfo({ ...matchedPort, slot: slotNum, portNum })}
-                                            onMouseLeave={() => setHoveredPortInfo(null)}
-                                            className={`w-full max-w-[32px] h-5 sm:h-5.5 rounded border flex items-center justify-center text-[9px] sm:text-[10px] font-black transition-all ${isSelected
-                                              ? 'bg-indigo-600 text-white border-white ring-2 ring-indigo-400 scale-125 z-20 shadow-lg'
-                                              : isUp
-                                                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
-                                                : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/20'
-                                              }`}
-                                            title={`Port 1/${slotNum}/${portNum} (${cardType}): ${isUp ? `Up / Active Laser` : 'Down / Standby'} (Tx: ${matchedPort.tx_power_dbm || '—'} dBm, ${matchedPort.online_onus || 0} Online)`}
-                                          >
-                                            {portNum}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : isCenterControl ? (
-                                    /* SCXN Control Blade: 4x 10GE SFP+ & 3x RJ45 Ports */
-                                    <div className="space-y-2 flex flex-col items-center py-1">
-                                      <div className="space-y-1">
-                                        {[1, 2, 3, 4].map(uN => (
-                                          <div key={uN} className="w-7 h-5 rounded bg-indigo-900 border border-indigo-400 flex items-center justify-center text-[8px] text-white font-black shadow-xs" title={`SCXN 10GE Uplink ${uN}: Up`}>
-                                            X{uN}
-                                          </div>
-                                        ))}
-                                      </div>
-                                      <div className="w-5 h-2 bg-orange-500 rounded-xs shadow-inner" title="Release Latch" />
-                                      <div className="space-y-1">
-                                        {['C', 'M', 'B'].map((l, i) => (
-                                          <div key={i} className="w-5 h-4 rounded bg-slate-800 border border-slate-600 flex items-center justify-center text-[7px] text-slate-200 font-black shadow-xs" title={l === 'C' ? 'Console' : l === 'M' ? 'MGMT' : 'BITS'}>
-                                            {l}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ) : isUplinkBlade ? (
-                                    /* HUVQ Uplink Blade: 4x 10GE SFP+ */
-                                    <div className="space-y-2 flex flex-col items-center py-2">
-                                      {[1, 2, 3, 4].map(uN => (
-                                        <div key={uN} className="w-7 h-7 rounded border border-emerald-600 bg-emerald-500 flex items-center justify-center text-[10px] text-slate-950 font-black shadow-sm" title={`HUVQ 10GE SFP+ ${uN}: Up`}>
-                                          U{uN}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    /* Empty Slot: Metal Blank Plate with Vertical Grooves */
-                                    <div className="h-full flex items-center justify-center gap-1 py-4 opacity-30">
-                                      <div className="w-1 h-64 bg-slate-500 rounded-full" />
-                                      <div className="w-1 h-64 bg-slate-500 rounded-full" />
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Bottom Slot Number & Screw */}
-                                <div className="flex flex-col items-center gap-1">
-                                  <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-black text-white shadow-xs">
-                                    {slotNum}
-                                  </div>
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-300 font-bold">|</div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                      /* ══════════════════════════════════════════════════════════════════
-                          LAYOUT B: ZTE C320 (2U HORIZONTAL COMPACT CHASSIS)
-                      ══════════════════════════════════════════════════════════════════ */
-                      <div className="flex border-4 border-slate-700 rounded-2xl overflow-hidden bg-slate-800/90 shadow-inner">
-                        {/* Left Vertical Column: FAN TRAY */}
-                        <div className="w-16 sm:w-20 bg-slate-800 border-r-2 border-slate-700 p-3 flex flex-col items-center justify-between text-center select-none">
-                          <div className="text-xs font-mono font-black text-white tracking-wider">FAN</div>
-                          <div className="space-y-2.5 py-3">
-                            <div className="w-9 h-4 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN 1 OK" />
-                            <div className="w-9 h-4 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN 2 OK" />
-                            <div className="w-9 h-4 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN 3 OK" />
-                          </div>
-                          <div className="w-8 h-1.5 bg-slate-600 rounded-full" />
-                        </div>
-
-                        {/* Right Main Column: Slots 1, 2, 3 & 4 */}
-                        <div className="flex-1 divide-y-2 divide-slate-700 bg-slate-900/60 font-mono">
-                          {/* ROW 1: SLOT 1 */}
-                          {(() => {
-                            const card1 = discoveredCards.find(c => Number(c.slot) === 1) || { type: 'GTGHG' };
-                            const portCount1 = getCardPortCount(card1.type) || 16;
-
-                            return (
-                              <div className="flex items-center justify-between p-3.5 bg-slate-850 hover:bg-slate-800/80 transition-colors">
-                                <div className="flex items-center gap-3 w-36 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-black shadow-xs">|</div>
-                                  <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="RUN LED: Active" />
-                                  <span className="text-sm font-black text-white">{card1.type}</span>
-                                </div>
-
-                                <div className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 overflow-x-auto">
-                                  {Array.from({ length: portCount1 }).map((_, idx) => {
-                                    const portNum = idx + 1;
-                                    const targetPortId = `1/1/${portNum}`;
-                                    const matchedPort = (oltData.pon_ports || []).find(p => {
-                                      const clean = p.port_id.replace(/^gpon[-_]olt_/i, '');
-                                      return clean === targetPortId || clean === `1/${portNum}` || (Number(p.slot) === 1 && Number(p.port) === portNum);
-                                    }) || {
-                                      port_id: `gpon-olt_1/1/${portNum}`,
-                                      status: 'Down',
-                                      registered_onus: 0,
-                                      online_onus: 0,
-                                      los_onus: 0,
-                                    };
-
-                                    const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === `gpon-olt_${targetPortId}` || selectedPortFilter === targetPortId;
-                                    const isUp = String(matchedPort.status).toLowerCase() === 'up' ||
-                                      String(matchedPort.status).toLowerCase() === 'online' ||
-                                      matchedPort.registered_onus > 0 ||
-                                      matchedPort.online_onus > 0;
-
-                                    return (
-                                      <button
-                                        key={idx}
-                                        type="button"
-                                        onClick={() => handleSelectPort(matchedPort.port_id)}
-                                        onMouseEnter={() => setHoveredPortInfo({ ...matchedPort, slot: 1, portNum })}
-                                        onMouseLeave={() => setHoveredPortInfo(null)}
-                                        className={`w-10 sm:w-11 h-11 sm:h-12 rounded-lg border flex flex-col items-center justify-center text-xs font-black transition-all shadow-xs shrink-0 ${isSelected
-                                          ? 'bg-indigo-600 text-white border-white ring-2 ring-indigo-400 scale-110 z-20 shadow-md'
-                                          : isUp
-                                            ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
-                                            : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/20'
-                                          }`}
-                                        title={`Port 1/1/${portNum}: ${isUp ? `Up (${matchedPort.online_onus || 0} Online)` : 'Down'}`}
-                                      >
-                                        <span>{portNum}</span>
-                                        <span className={`w-2 h-2 rounded-full mt-1 ${isSelected ? 'bg-white' : isUp ? 'bg-emerald-950' : 'bg-rose-200'}`} />
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-
-                                <div className="flex items-center justify-end gap-3 w-20 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-black shadow-xs">|</div>
-                                  <div className="w-6 h-6 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center text-xs font-black text-white shadow-xs">1</div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* ROW 2: SLOT 2 */}
-                          {(() => {
-                            const card2 = discoveredCards.find(c => Number(c.slot) === 2);
-                            const hasCard2 = !!card2;
-                            const portCount2 = hasCard2 ? (getCardPortCount(card2.type) || 16) : 0;
-
-                            if (!hasCard2) {
-                              return (
-                                <div className="flex items-center justify-between p-3.5 bg-slate-900/50 text-slate-500">
-                                  <div className="flex items-center gap-3 w-36 shrink-0">
-                                    <div className="w-4 h-4 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-[9px] text-slate-400 font-bold">|</div>
-                                    <span className="text-xs font-bold text-slate-400">SLOT 2 (EMPTY)</span>
-                                  </div>
-                                  <div className="flex-1 flex items-center justify-center gap-3 opacity-30">
-                                    <div className="w-40 h-1.5 bg-slate-600 rounded-full" />
-                                    <span className="text-xs font-mono">EXPANSION BLANK PANEL</span>
-                                    <div className="w-40 h-1.5 bg-slate-600 rounded-full" />
-                                  </div>
-                                  <div className="flex items-center justify-end gap-3 w-20 shrink-0">
-                                    <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-black text-slate-400">2</div>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div className="flex items-center justify-between p-3.5 bg-slate-850 hover:bg-slate-800/80 transition-colors">
-                                <div className="flex items-center gap-3 w-36 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
-                                  <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="RUN LED: Active" />
-                                  <span className="text-sm font-black text-white">{card2.type}</span>
-                                </div>
-
-                                <div className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 overflow-x-auto">
-                                  {Array.from({ length: portCount2 }).map((_, idx) => {
-                                    const portNum = idx + 1;
-                                    const targetPortId = `1/2/${portNum}`;
-                                    const matchedPort = (oltData.pon_ports || []).find(p => {
-                                      const clean = p.port_id.replace(/^gpon[-_]olt_/i, '');
-                                      return clean === targetPortId || clean === `2/${portNum}` || (Number(p.slot) === 2 && Number(p.port) === portNum);
-                                    }) || {
-                                      port_id: `gpon-olt_1/2/${portNum}`,
-                                      status: 'Down',
-                                      registered_onus: 0,
-                                      online_onus: 0,
-                                      los_onus: 0,
-                                    };
-
-                                    const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === `gpon-olt_${targetPortId}` || selectedPortFilter === targetPortId;
-                                    const isUp = String(matchedPort.status).toLowerCase() === 'up' ||
-                                      String(matchedPort.status).toLowerCase() === 'online' ||
-                                      matchedPort.registered_onus > 0 ||
-                                      matchedPort.online_onus > 0;
-
-                                    return (
-                                      <button
-                                        key={idx}
-                                        type="button"
-                                        onClick={() => handleSelectPort(matchedPort.port_id)}
-                                        onMouseEnter={() => setHoveredPortInfo({ ...matchedPort, slot: 2, portNum })}
-                                        onMouseLeave={() => setHoveredPortInfo(null)}
-                                        className={`w-10 sm:w-11 h-11 sm:h-12 rounded-lg border flex flex-col items-center justify-center text-xs font-black transition-all shadow-xs shrink-0 ${isSelected
-                                          ? 'bg-indigo-600 text-white border-white ring-2 ring-indigo-400 scale-110 z-20 shadow-md'
-                                          : isUp
-                                            ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
-                                            : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/20'
-                                          }`}
-                                        title={`Port 1/2/${portNum}: ${isUp ? `Up (${matchedPort.online_onus || 0} Online)` : 'Down'}`}
-                                      >
-                                        <span>{portNum}</span>
-                                        <span className={`w-2 h-2 rounded-full mt-1 ${isSelected ? 'bg-white' : isUp ? 'bg-emerald-950' : 'bg-rose-200'}`} />
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-
-                                <div className="flex items-center justify-end gap-3 w-20 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
-                                  <div className="w-6 h-6 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center text-xs font-black text-white shadow-xs">2</div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* ROW 3: SLOT 3 (PRAM) & SLOT 4 (SMXA) */}
-                          <div className="grid grid-cols-2 divide-x-2 divide-slate-700">
-                            {/* Slot 3: PRAM */}
-                            <div className="flex items-center justify-between p-3.5 bg-slate-850 hover:bg-slate-800/80 transition-colors">
-                              <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
-                                <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="POWER LED: Active" />
-                                <span className="text-sm font-black text-white">PRAM</span>
-                              </div>
-
-                              <div className="flex items-center gap-2.5 px-3">
-                                <div className="w-12 h-7 rounded bg-slate-950 border border-slate-600 flex items-center justify-center gap-1.5 shadow-inner">
-                                  <span className="w-1.5 h-4 bg-slate-400 rounded-2xs" />
-                                  <span className="w-1.5 h-4 bg-slate-400 rounded-2xs" />
-                                  <span className="w-1.5 h-4 bg-slate-400 rounded-2xs" />
-                                </div>
-                                <span className="text-xs text-slate-300 font-bold hidden sm:inline">220V AC / -48V DC</span>
-                              </div>
-
-                              <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
-                                <div className="w-6 h-6 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center text-xs font-black text-white shadow-xs">3</div>
-                              </div>
-                            </div>
-
-                            {/* Slot 4: SMXA */}
-                            <div className="flex items-center justify-between p-3.5 bg-slate-850 hover:bg-slate-800/80 transition-colors">
-                              <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
-                                <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="CTRL LED: Active" />
-                                <span className="text-sm font-black text-white">SMXA</span>
-                              </div>
-
-                              <div className="flex items-center gap-2 px-3">
-                                {[1, 2, 3, 4].map(uNum => (
-                                  <div
-                                    key={uNum}
-                                    className="w-9 h-9 rounded-lg border border-emerald-600 bg-emerald-500 flex flex-col items-center justify-center text-[10px] font-black text-slate-950 shadow-xs"
-                                    title={`Uplink Port ${uNum} (10GE XGE): Up`}
-                                  >
-                                    <span>U{uNum}</span>
-                                    <span className="w-2 h-2 rounded-full bg-emerald-950 mt-0.5" />
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
-                                <div className="w-6 h-6 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center text-xs font-black text-white shadow-xs">4</div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-2">
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-lg">
+                      {selectedSlotFilter
+                        ? `Status Port PON & Power Optical (SFP) — Filtered [ Slot ${selectedSlotFilter} ]`
+                        : `Status Port PON & Power Optical (SFP) — ${activeOlt?.name}`}
+                    </h3>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                      {selectedSlotFilter
+                        ? `Menampilkan ${displayPorts?.length ?? 0} Port PON pada Slot ${selectedSlotFilter}. Klik salah satu kartu port untuk memfilter tabel ONU.`
+                        : `Klik Slot Card di atas atau klik salah satu kartu Port PON di bawah untuk memfilter tabel ONU.`}
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">Total {displayPorts?.length ?? 0} Port</span>
+                    {selectedSlotFilter && (
+                      <button onClick={() => { setSelectedSlotFilter(null); setSelectedPortFilter(null); }}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center space-x-1">
+                        <IconX />
+                        <span>Tampilkan Semua Slot ({oltData.pon_ports?.length ?? 0})</span>
+                      </button>
                     )}
+                  </div>
+                </div>
 
-                    {/* Persistent Active/Selected & Hovered Port Telemetry HUD (Untuk Semua Model OLT: HSGQ, ZTE C300, ZTE C320, dll) */}
-                    {(() => {
-                      const activePortHUD = hoveredPortInfo || (selectedPortFilter ? (() => {
-                        const matched = (oltData.pon_ports || []).find(p => {
-                          const clean = p.port_id.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-                          return p.port_id === selectedPortFilter || clean === selectedPortFilter || `1/${p.port}` === selectedPortFilter || clean === selectedPortFilter.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-                        });
-                        if (matched) return matched;
-                        return {
-                          port_id: selectedPortFilter,
-                          status: 'Up',
-                          registered_onus: (oltData.onus || []).filter(o => o.port_id === selectedPortFilter).length,
-                          online_onus: (oltData.onus || []).filter(o => o.port_id === selectedPortFilter && (o.status === 'online' || o.status === 'Working')).length,
-                        };
-                      })() : null);
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  {displayPorts && displayPorts.length > 0 ? (
+                    displayPorts.map(port => {
+                      const isSelected = selectedPortFilter === port.port_id;
+                      const matchedOdcs = oltTopology.filter(o => {
+                        if (!o.olt_port_ref) return false;
+                        const targetClean = port.port_id.replace(/^gpon[-_]olt_/i, '');
+                        const refs = o.olt_port_ref.split(',').map(r => r.trim().replace(/^gpon[-_]olt_/i, ''));
+                        return refs.some(r => r === targetClean || r === port.port_id || `gpon-olt_${r}` === port.port_id);
+                      });
+                      const odcCount = matchedOdcs.length;
+                      const odpCount = matchedOdcs.reduce((acc, o) => acc + (o.odps?.length || 0), 0);
 
-                      if (!activePortHUD) return null;
-
-                      const isPortUp = String(activePortHUD.status).toLowerCase() === 'up' ||
-                        String(activePortHUD.status).toLowerCase() === 'online' ||
-                        (activePortHUD.registered_onus > 0) ||
-                        (activePortHUD.online_onus > 0);
+                      // Kalkulasi Redaman Rata-rata & Utilisasi Kapasitas
+                      const portOnusList = (oltData.onu_list || []).filter(o => {
+                        const p = (o.port || '').replace(/^gpon[-_]olt_/i, '');
+                        const target = port.port_id.replace(/^gpon[-_]olt_/i, '');
+                        return p === target || p.startsWith(target + '/');
+                      });
+                      const activeOnus = portOnusList.filter(o => o.status === 'Online' && o.rx_power !== null && o.rx_power > -40);
+                      const avgRx = activeOnus.length > 0
+                        ? (activeOnus.reduce((acc, o) => acc + parseFloat(o.rx_power), 0) / activeOnus.length).toFixed(1)
+                        : null;
+                      const maxCapacity = 64; // Standar Splitter GPON 1:64
+                      const currentRegistered = port.registered_onus || portOnusList.length;
+                      const capPercent = Math.min(100, Math.round((currentRegistered / maxCapacity) * 100));
 
                       return (
-                        <div className="p-4 sm:p-5 rounded-2xl bg-slate-850 border-2 border-indigo-500/80 shadow-2xl flex flex-wrap items-center justify-between gap-4 text-xs text-white animate-in fade-in duration-100">
-                          <div className="flex items-center gap-3">
-                            <span className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-black font-mono shadow-xs text-xs sm:text-sm">
-                              PORT {activePortHUD.slot ? `1/${activePortHUD.slot}/${activePortHUD.portNum || activePortHUD.port || 1}` : activePortHUD.port_id}
-                            </span>
-                            <div>
-                              <span className="font-black text-sm text-white">{activePortHUD.port_id}</span>
-                              <span className="text-slate-200 ml-3 text-xs font-semibold">
-                                Status: <strong className={isPortUp ? 'text-emerald-400' : 'text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong> · <span className="text-white font-bold">{activePortHUD.registered_onus || 0}</span> Terdaftar (<span className="text-emerald-400 font-bold">{activePortHUD.online_onus || 0} Online</span>) · Tx Power: <span className="text-amber-300 font-bold font-mono">{activePortHUD.tx_power_dbm ? `${activePortHUD.tx_power_dbm} dBm` : '—'}</span>
+                        <button
+                          key={port.port_id}
+                          type="button"
+                          onClick={() => handleSelectPort(port.port_id)}
+                          className={`p-4 rounded-2xl space-y-3 text-left transition-all relative group ${isSelected
+                            ? 'bg-indigo-50/90 dark:bg-indigo-900/30 border-2 border-indigo-600 dark:border-indigo-500 shadow-md ring-2 ring-indigo-500/20'
+                            : 'bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-800 shadow-2xs'
+                            }`}
+                        >
+                          <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-700/70 pb-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${port.status === 'Up' ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50 animate-pulse' : 'bg-rose-500'}`} />
+                              <span className="text-xs font-mono font-extrabold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                                <span>{formatShortPort(port.port_id)}</span>
+                                {isSelected && loadingPortOnus && <Spinner />}
                               </span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${port.status === 'Up'
+                              ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                              : 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                              }`}>
+                              {port.status}
+                            </span>
+                          </div>
+
+                          {/* Quick Counters */}
+                          <div className="grid grid-cols-3 gap-1.5 text-center">
+                            <div className="bg-white dark:bg-slate-900/80 p-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/70">
+                              <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500">Total</div>
+                              <div className="text-xs font-extrabold text-slate-900 dark:text-white">{currentRegistered}</div>
+                            </div>
+                            <div className="bg-emerald-50/80 dark:bg-emerald-950/30 p-1.5 rounded-xl border border-emerald-200/80 dark:border-emerald-900/40">
+                              <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Online</div>
+                              <div className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">{port.online_onus}</div>
+                            </div>
+                            <div className={`p-1.5 rounded-xl border ${port.los_onus > 0 ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/40' : 'bg-white dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-700/70'}`}>
+                              <div className={`text-[10px] font-bold ${port.los_onus > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>Offline</div>
+                              <div className={`text-xs font-extrabold ${port.los_onus > 0 ? 'text-rose-700 dark:text-rose-300 animate-pulse' : 'text-slate-600 dark:text-slate-400'}`}>{port.los_onus}</div>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            {selectedPortFilter === activePortHUD.port_id ? (
-                              <button
-                                type="button"
-                                onClick={() => handleSelectPort(null)}
-                                className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs shadow-xs border border-slate-500 transition-colors flex items-center gap-2"
-                              >
-                                <IconX />
-                                <span>Tampilkan Semua Port</span>
-                              </button>
+                          {/* Capacity Progress Bar */}
+                          <div className="space-y-1 pt-0.5">
+                            <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                              <span>Kapasitas ({currentRegistered}/{maxCapacity})</span>
+                              <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{capPercent}%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${capPercent > 90 ? 'bg-rose-500' : capPercent > 70 ? 'bg-amber-500' : 'bg-indigo-500'}`}
+                                style={{ width: `${Math.max(4, capPercent)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Optical Power Telemetry & Avg Rx */}
+                          <div className="pt-1.5 border-t border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
+                            {avgRx ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-slate-400 font-semibold">Avg Rx:</span>
+                                <span className={`font-mono font-extrabold px-1.5 py-0.5 rounded text-[10px] ${parseFloat(avgRx) >= -23 ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : parseFloat(avgRx) >= -27 ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'}`}>
+                                  {avgRx} dBm
+                                </span>
+                              </div>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleSelectPort(activePortHUD.port_id)}
-                                className="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-2"
-                              >
-                                <span>Buka &amp; Filter Port Ini</span>
-                                <span>→</span>
-                              </button>
+                              <span className="text-[10px] text-slate-400 italic">No Optical Data</span>
+                            )}
+
+                            {port.tx_power_dbm !== null && port.tx_power_dbm !== undefined && (
+                              <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-[10px] flex items-center gap-1">
+                                <span>TX +{port.tx_power_dbm} dBm</span>
+                                {port.sfp_class && (
+                                  <span className="px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[9px] font-sans">
+                                    {port.sfp_class}
+                                  </span>
+                                )}
+                              </span>
                             )}
                           </div>
-                        </div>
+
+                          {/* Info ODC & ODP Terhubung */}
+                          {odcCount > 0 && (
+                            <div className="pt-1.5 border-t border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
+                              <span className="text-blue-700 dark:text-blue-400 font-semibold truncate max-w-[130px]" title={matchedOdcs.map(o => o.name).join(', ')}>
+                                {matchedOdcs.map(o => o.name).join(', ')}
+                              </span>
+                              <span className="text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.2 rounded text-[10px]">
+                                {odpCount} ODP
+                              </span>
+                            </div>
+                          )}
+
+                          {isSelected && (
+                            <div className="absolute -top-2 -right-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-full p-0.5 shadow-md">
+                              <IconCheck size="w-3.5 h-3.5" />
+                            </div>
+                          )}
+                        </button>
                       );
-                    })()}
-                  </div>
+                    })
+                  ) : (
+                    <div className="col-span-4 p-8 text-center text-slate-400 dark:text-slate-500 text-sm bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                      Tidak ada port PON pada Slot {selectedSlotFilter}.
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })()}
 
-          {/* ══════════════════════════════════════════════════════════════════
-              VIEW MODE 2: GRID KARTU PORT (LEGACY MODERN CARDS)
-          ══════════════════════════════════════════════════════════════════ */}
-          {chassisViewMode === 'cards' && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Chassis cards */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div>
-                    <h3 className="font-bold text-slate-900 dark:text-white text-lg">Slot &amp; Card — {activeOlt?.name}</h3>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Klik salah satu Slot Card di bawah untuk memfilter daftar Port PON</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">Total {oltData.device_info?.cards?.length ?? 0} Slot</span>
-                    {selectedSlotFilter && (
-                      <button onClick={() => { setSelectedSlotFilter(null); setSelectedPortFilter(null); }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs transition-colors">
-                        Reset Filter Slot
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {oltData.device_info?.cards?.map((card, i) => {
-                    const isSelected = selectedSlotFilter === card.slot;
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => {
-                          setSelectedSlotFilter(isSelected ? null : card.slot);
-                          setSelectedPortFilter(null);
-                        }}
-                        className={`p-4 rounded-xl space-y-2 text-left transition-all relative ${isSelected
-                          ? 'bg-indigo-600 border-2 border-indigo-600 shadow-md text-white ring-2 ring-indigo-500/20'
-                          : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-700'
-                          }`}
-                      >
-                        <div className="flex items-center justify-between text-xs font-bold">
-                          <span>Slot {card.slot} ({card.type})</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${isSelected
-                            ? 'bg-white/20 text-white border-white/30'
-                            : 'bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                            }`}>{card.status}</span>
-                        </div>
-                        <div className={`text-xs ${isSelected ? 'text-indigo-100' : 'text-slate-600 dark:text-slate-400'}`}>
-                          Kapasitas: <span className="font-bold">{card.ports} Port</span>
-                        </div>
-                        {isSelected && (
-                          <div className="absolute -top-2 -right-2 bg-emerald-400 dark:bg-emerald-500 text-slate-950 dark:text-white rounded-full p-0.5 shadow-md">
-                            <IconCheck size="w-3.5 h-3.5" />
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
+          {/* Topologi Pasif (ODC & ODP) untuk Port Terpilih */}
+          {selectedPortFilter && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                    Topologi Pasif (ODC &amp; ODP) — Port {formatShortPort(selectedPortFilter)}
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                    Perangkat ODC dan ODP yang mendistribusikan sinyal optik dari port ini ke pelanggan
+                  </p>
                 </div>
               </div>
 
-              {/* PON Ports */}
               {(() => {
-                const displayPorts = selectedSlotFilter
-                  ? oltData.pon_ports?.filter(p => p.slot === selectedSlotFilter || p.port_id.includes(`/${selectedSlotFilter}/`))
-                  : oltData.pon_ports;
-
+                const portOdcs = oltTopology.filter(o => {
+                  if (!o.olt_port_ref) return false;
+                  const targetClean = selectedPortFilter.replace(/^gpon[-_]olt_/i, '');
+                  const refs = o.olt_port_ref.split(',').map(r => r.trim().replace(/^gpon[-_]olt_/i, ''));
+                  return refs.some(r => r === targetClean || r === selectedPortFilter || `gpon-olt_${r}` === selectedPortFilter);
+                });
+                if (portOdcs.length === 0) {
+                  return (
+                    <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                      Belum ada ODC terhubung yang dikonfigurasi untuk port {formatShortPort(selectedPortFilter)}.
+                    </div>
+                  );
+                }
                 return (
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-2">
-                      <div>
-                        <h3 className="font-bold text-slate-900 dark:text-white text-lg">
-                          {selectedSlotFilter
-                            ? `Status Port PON & Power Optical (SFP) — Filtered [ Slot ${selectedSlotFilter} ]`
-                            : `Status Port PON & Power Optical (SFP) — ${activeOlt?.name}`}
-                        </h3>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                          {selectedSlotFilter
-                            ? `Menampilkan ${displayPorts?.length ?? 0} Port PON pada Slot ${selectedSlotFilter}. Klik salah satu kartu port untuk memfilter tabel ONU.`
-                            : `Klik Slot Card di atas atau klik salah satu kartu Port PON di bawah untuk memfilter tabel ONU.`}
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">Total {displayPorts?.length ?? 0} Port</span>
-                        {selectedSlotFilter && (
-                          <button onClick={() => { setSelectedSlotFilter(null); setSelectedPortFilter(null); }}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 hover:bg-indigo-200 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 font-bold text-xs transition-colors flex items-center space-x-1">
-                            <IconX />
-                            <span>Tampilkan Semua Slot ({oltData.pon_ports?.length ?? 0})</span>
-                          </button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {portOdcs.map(odc => (
+                      <div key={odc.id} className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              {odc.name}
+                            </span>
+                          </div>
+                          <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                            {odc.used_ports}/{odc.total_ports} Port Terisi
+                          </span>
+                        </div>
+
+                        {odc.parent_node && (
+                          <p className="text-xs text-slate-600 dark:text-slate-400"> POP Induk: <strong className="text-slate-900 dark:text-white">{odc.parent_node.name}</strong></p>
+                        )}
+
+                        {odc.odps && odc.odps.length > 0 ? (
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1.5">
+                              ODP Terhubung ({odc.odps.length} ODP)
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {odc.odps.map(odp => (
+                                <div key={odp.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs">
+                                  <p className="font-bold text-slate-900 dark:text-white truncate">{odp.name}</p>
+                                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{odp.used_ports}/{odp.total_ports} Port</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 dark:text-slate-500 italic">Belum ada ODP di bawah ODC ini</p>
                         )}
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                      {displayPorts && displayPorts.length > 0 ? (
-                        displayPorts.map(port => {
-                          const isSelected = selectedPortFilter === port.port_id;
-                          const matchedOdcs = oltTopology.filter(o => {
-                            if (!o.olt_port_ref) return false;
-                            const targetClean = port.port_id.replace(/^gpon[-_]olt_/i, '');
-                            const refs = o.olt_port_ref.split(',').map(r => r.trim().replace(/^gpon[-_]olt_/i, ''));
-                            return refs.some(r => r === targetClean || r === port.port_id || `gpon-olt_${r}` === port.port_id);
-                          });
-                          const odcCount = matchedOdcs.length;
-                          const odpCount = matchedOdcs.reduce((acc, o) => acc + (o.odps?.length || 0), 0);
-
-                          const portOnusList = (oltData.onu_list || []).filter(o => {
-                            const p = (o.port || '').replace(/^gpon[-_]olt_/i, '');
-                            const target = port.port_id.replace(/^gpon[-_]olt_/i, '');
-                            return p === target || p.startsWith(target + '/');
-                          });
-                          const activeOnus = portOnusList.filter(o => o.status === 'Online' && o.rx_power !== null && o.rx_power > -40);
-                          const avgRx = activeOnus.length > 0
-                            ? (activeOnus.reduce((acc, o) => acc + parseFloat(o.rx_power), 0) / activeOnus.length).toFixed(1)
-                            : null;
-                          const maxCapacity = 64;
-                          const currentRegistered = port.registered_onus || portOnusList.length;
-                          const capPercent = Math.min(100, Math.round((currentRegistered / maxCapacity) * 100));
-
-                          return (
-                            <button
-                              key={port.port_id}
-                              type="button"
-                              onClick={() => handleSelectPort(port.port_id)}
-                              className={`p-4 rounded-2xl space-y-3 text-left transition-all relative group ${isSelected
-                                ? 'bg-indigo-50/90 dark:bg-indigo-900/30 border-2 border-indigo-600 dark:border-indigo-500 shadow-md ring-2 ring-indigo-500/20'
-                                : 'bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-800 shadow-2xs'
-                                }`}
-                            >
-                              <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-700/70 pb-2.5">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full ${port.status === 'Up' ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50 animate-pulse' : 'bg-rose-500'}`} />
-                                  <span className="text-xs font-mono font-extrabold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                                    <span>{formatShortPort(port.port_id)}</span>
-                                    {isSelected && loadingPortOnus && <Spinner />}
-                                  </span>
-                                </div>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${port.status === 'Up'
-                                  ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                  : 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                                  }`}>
-                                  {port.status}
-                                </span>
-                              </div>
-
-                              {/* Quick Counters */}
-                              <div className="grid grid-cols-3 gap-1.5 text-center">
-                                <div className="bg-white dark:bg-slate-900/80 p-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/70">
-                                  <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500">Total</div>
-                                  <div className="text-xs font-extrabold text-slate-900 dark:text-white">{currentRegistered}</div>
-                                </div>
-                                <div className="bg-emerald-50/80 dark:bg-emerald-950/30 p-1.5 rounded-xl border border-emerald-200/80 dark:border-emerald-900/40">
-                                  <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Online</div>
-                                  <div className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">{port.online_onus}</div>
-                                </div>
-                                <div className={`p-1.5 rounded-xl border ${port.los_onus > 0 ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/40' : 'bg-white dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-700/70'}`}>
-                                  <div className={`text-[10px] font-bold ${port.los_onus > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>Offline</div>
-                                  <div className={`text-xs font-extrabold ${port.los_onus > 0 ? 'text-rose-700 dark:text-rose-300 animate-pulse' : 'text-slate-600 dark:text-slate-400'}`}>{port.los_onus}</div>
-                                </div>
-                              </div>
-
-                              {/* Capacity Progress Bar */}
-                              <div className="space-y-1 pt-0.5">
-                                <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                                  <span>Kapasitas ({currentRegistered}/{maxCapacity})</span>
-                                  <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{capPercent}%</span>
-                                </div>
-                                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-500 ${capPercent > 90 ? 'bg-rose-500' : capPercent > 70 ? 'bg-amber-500' : 'bg-indigo-500'}`}
-                                    style={{ width: `${Math.max(4, capPercent)}%` }}
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Optical Power Telemetry & Avg Rx */}
-                              <div className="pt-1.5 border-t border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
-                                {avgRx ? (
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[10px] text-slate-400 font-semibold">Avg Rx:</span>
-                                    <span className={`font-mono font-extrabold px-1.5 py-0.5 rounded text-[10px] ${parseFloat(avgRx) >= -23 ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' : parseFloat(avgRx) >= -27 ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'}`}>
-                                      {avgRx} dBm
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-[10px] text-slate-400 italic">No Optical Data</span>
-                                )}
-
-                                {port.tx_power_dbm !== null && port.tx_power_dbm !== undefined && (
-                                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-[10px] flex items-center gap-1">
-                                    <span>TX +{port.tx_power_dbm} dBm</span>
-                                    {port.sfp_class && (
-                                      <span className="px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[9px] font-sans">
-                                        {port.sfp_class}
-                                      </span>
-                                    )}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Info ODC & ODP Terhubung */}
-                              {odcCount > 0 && (
-                                <div className="pt-1.5 border-t border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
-                                  <span className="text-blue-700 dark:text-blue-400 font-semibold truncate max-w-[130px]" title={matchedOdcs.map(o => o.name).join(', ')}>
-                                    {matchedOdcs.map(o => o.name).join(', ')}
-                                  </span>
-                                  <span className="text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.2 rounded text-[10px]">
-                                    {odpCount} ODP
-                                  </span>
-                                </div>
-                              )}
-
-                              {isSelected && (
-                                <div className="absolute -top-2 -right-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-full p-0.5 shadow-md">
-                                  <IconCheck size="w-3.5 h-3.5" />
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="col-span-4 p-8 text-center text-slate-400 dark:text-slate-500 text-sm bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                          Tidak ada port PON pada Slot {selectedSlotFilter}.
-                        </div>
-                      )}
-                    </div>
+                    ))}
                   </div>
                 );
               })()}
             </div>
           )}
-
-
 
           {/* ══════════════════════════════════════════════════════════════════
               WIDGET GRAFIK DISTRIBUSI KUALITAS REDAMAN OPTIK (ANALYTICS)
@@ -3686,81 +2916,6 @@ export default function OltManagement() {
                   </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* ══════════════════════════════════════════════════════════════════
-              BAGIAN PALING BAWAH: TOPOLOGI PASIF (ODC & ODP) UNTUK PORT TERPILIH
-          ══════════════════════════════════════════════════════════════════ */}
-          {selectedPortFilter && (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                <div>
-                  <h3 className="font-bold text-slate-950 dark:text-white text-base flex items-center gap-2">
-                    <IconNetwork />
-                    <span>Topologi Pasif (ODC &amp; ODP) — Port {formatShortPort(selectedPortFilter)}</span>
-                  </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                    Perangkat ODC dan ODP yang mendistribusikan sinyal optik dari port ini ke pelanggan
-                  </p>
-                </div>
-              </div>
-
-              {(() => {
-                const portOdcs = oltTopology.filter(o => {
-                  if (!o.olt_port_ref) return false;
-                  const targetClean = selectedPortFilter.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-                  const refs = o.olt_port_ref.split(',').map(r => r.trim().replace(/^gpon[-_]olt_|^epon[-_]olt_/i, ''));
-                  return refs.some(r => r === targetClean || r === selectedPortFilter || `gpon-olt_${r}` === selectedPortFilter || `epon-olt_${r}` === selectedPortFilter);
-                });
-                if (portOdcs.length === 0) {
-                  return (
-                    <div className="p-6 text-center text-slate-500 dark:text-slate-400 text-xs bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 font-medium">
-                      Belum ada ODC terhubung yang dikonfigurasi untuk port {formatShortPort(selectedPortFilter)}.
-                    </div>
-                  );
-                }
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {portOdcs.map(odc => (
-                      <div key={odc.id} className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                              {odc.name}
-                            </span>
-                          </div>
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                            {odc.used_ports}/{odc.total_ports} Port Terisi
-                          </span>
-                        </div>
-
-                        {odc.parent_node && (
-                          <p className="text-xs text-slate-600 dark:text-slate-400"> POP Induk: <strong className="text-slate-950 dark:text-white font-bold">{odc.parent_node.name}</strong></p>
-                        )}
-
-                        {odc.odps && odc.odps.length > 0 ? (
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                              ODP Terhubung ({odc.odps.length} ODP)
-                            </label>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              {odc.odps.map(odp => (
-                                <div key={odp.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs shadow-2xs">
-                                  <p className="font-bold text-slate-950 dark:text-white truncate">{odp.name}</p>
-                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">{odp.used_ports}/{odp.total_ports} Port</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 italic">Belum ada ODP di bawah ODC ini</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
             </div>
           )}
         </div>

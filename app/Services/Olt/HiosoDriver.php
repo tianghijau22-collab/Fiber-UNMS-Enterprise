@@ -41,6 +41,15 @@ class HiosoDriver implements OltDeviceDriverInterface {
         ];
     }
 
+    public function getOnuListByPort(string $portId): array {
+        $cleanPortId = strtolower(trim($portId));
+        $all = $this->getOnuList();
+        return array_values(array_filter($all, function ($onu) use ($cleanPortId) {
+            $p = strtolower($onu['port'] ?? '');
+            return str_contains($p, $cleanPortId) || str_contains($cleanPortId, $p);
+        }));
+    }
+
     public function getUnconfiguredOnus(): array {
         return [
             [

@@ -66,6 +66,8 @@ Route::post('/olts/{id}/snmp-diagnostic', [OltDeviceController::class, 'snmpDiag
 Route::delete('/olts/{id}', [OltDeviceController::class, 'destroy']);
 
 Route::get('/olt/hardware', [OltController::class, 'index']);
+Route::get('/olt/port-onus', [OltController::class, 'getPortOnus']);
+Route::post('/olt/sync-port', [OltController::class, 'syncPort']);
 Route::post('/olt/authorize-onu', [OltController::class, 'authorizeOnu']);
 Route::get('/olt/optical-power/{serialNumber}', [OltController::class, 'opticalPower']);
 Route::get('/olt/orphaned-onus', [OltController::class, 'getOrphanedOnus']);

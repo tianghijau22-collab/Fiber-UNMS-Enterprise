@@ -49,8 +49,8 @@ class ZteC320Driver implements OltDeviceDriverInterface
                 snmpVersion: $snmpVersion,
                 community: $community,
                 port: $port,
-                timeout: 5,
-                retries: 2
+                timeout: 1,
+                retries: 0
             );
         }
     }
@@ -226,24 +226,23 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     }
                 }
 
-                // 2. Query tabel ONU GPON ZTE V2.x / V1.x (Prioritas OID 1012.3.28.1.1.5)
+                // 2. Query tabel ONU GPON ZTE V2.x (Prioritas OID 1012.3.28.1.1.5 & 1012.3.50.11.2.1.3)
                 $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
                 if (empty($snHexList)) {
                     $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
                 }
-                if (empty($snHexList)) {
-                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1') ?: [];
-                }
 
-                $stateList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.4');
-                $descList  = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.2');
-                $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.9');
+                $stateList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.4') ?: [];
+                $descList  = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.2') ?: [];
+                $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.9') ?: [];
 
                 // Optical Table
-                $rx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14') ?: [];
-                $rx2 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.18') ?: [];
-                $onuRxList = $rx1 + $rx2;
-                $onuTxList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.10.2.1.6.1.4.1.1');
+                $rx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.18') ?: [];
+                if (empty($rx1)) {
+                    $rx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14') ?: [];
+                }
+                $onuRxList = $rx1;
+                $onuTxList = [];
 
                 // Build lookup maps
                 $stateMap = [];
@@ -402,6 +401,19 @@ class ZteC320Driver implements OltDeviceDriverInterface
         return $simOnus;
     }
 
+    public function getOnuListByPort(string $portId): array
+    {
+        $cleanPortId = strtolower(trim($portId));
+        $normalizedPort = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $cleanPortId);
+
+        // Ambil daftar seluruh ONU (otomatis memanfaatkan caching pada lifecycle request)
+        $all = $this->getOnuList();
+        return array_values(array_filter($all, function ($onu) use ($normalizedPort) {
+            $p = strtolower($onu['port'] ?? '');
+            return str_contains($p, $normalizedPort) || str_contains($normalizedPort, $p);
+        }));
+    }
+
     public function getUnconfiguredOnus(): array
     {
         if ($this->snmp && $this->isLive) {
@@ -556,10 +568,9 @@ class ZteC320Driver implements OltDeviceDriverInterface
     {
         $num = (int)$ifIndex;
         if ($num > 0) {
-            $rack = ($num >> 24) & 0xFF ?: 1;
             $slot = ($num >> 16) & 0xFF ?: 1;
             $port = ($num >> 8) & 0xFF ?: ($num & 0xFF ?: 1);
-            return "gpon-olt_{$rack}/{$slot}/{$port}";
+            return "gpon-olt_1/{$slot}/{$port}";
         }
         return "gpon-olt_1/1/1";
     }

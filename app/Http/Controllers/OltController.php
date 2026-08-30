@@ -86,15 +86,24 @@ class OltController extends Controller
 
     public function index(Request $request)
     {
-        $vendor   = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
-        $deviceId = $request->input('device_id') ?: ($request->query('device_id') ?: null);
-        $isFresh  = $request->boolean('fresh') || $request->boolean('force');
+        $vendor       = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
+        $deviceId     = $request->input('device_id') ?: ($request->query('device_id') ?: null);
+        $isFresh      = $request->boolean('fresh') || $request->boolean('force');
+        $summaryOnly  = $request->boolean('summary_only');
 
         $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
 
-        // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh, selalu partisi ulang dengan data customer database UNMS terbaru
+        // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh
         if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
             $rawSnapshot = $device->last_telemetry_snapshot;
+            if ($summaryOnly) {
+                return response()->json([
+                    'device_info' => $rawSnapshot['device_info'] ?? [],
+                    'pon_ports'   => $rawSnapshot['pon_ports'] ?? [],
+                    'polled_at'   => $rawSnapshot['polled_at'] ?? now()->toIso8601String(),
+                ]);
+            }
+
             $snapshot = $this->processAndPartitionTelemetry(
                 $device,
                 $rawSnapshot['device_info'] ?? [],
@@ -106,11 +115,20 @@ class OltController extends Controller
             return response()->json($snapshot);
         }
 
-        // 2. Jika dipaksa refresh atau snapshot belum ada, ambil live via Driver dan simpan ke Database
+        // 2. Jika dipaksa refresh atau snapshot belum ada
         $driver = $this->getDriver($vendor, $device?->id);
 
         $driverDeviceInfo = $driver->getDeviceInfo();
         $driverPonPorts   = $driver->getPonPorts();
+
+        if ($summaryOnly) {
+            return response()->json([
+                'device_info' => $driverDeviceInfo,
+                'pon_ports'   => $driverPonPorts,
+                'polled_at'   => now()->toIso8601String(),
+            ]);
+        }
+
         $driverOnuList    = $driver->getOnuList();
         $driverUncfg      = $driver->getUnconfiguredOnus();
 
@@ -125,6 +143,156 @@ class OltController extends Controller
         }
 
         return response()->json($snapshot);
+    }
+
+    /**
+     * Mengambil daftar ONU secara cepat dan spesifik pada 1 Port PON (Granular Lazy Loading).
+     */
+    public function getPortOnus(Request $request)
+    {
+        $vendor   = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
+        $deviceId = $request->input('device_id') ?: ($request->query('device_id') ?: null);
+        $port     = $request->input('port') ?: $request->query('port', 'gpon-olt_1/1/1');
+        $isFresh  = $request->boolean('fresh') || $request->boolean('force');
+
+        $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
+        $driver = $this->getDriver($vendor, $device?->id);
+
+        $cleanPort = strtolower(trim($port));
+        $normalizedPort = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $cleanPort);
+
+        // Jika tidak dipaksa fresh dan snapshot ada
+        if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
+            $rawSnapshot = $device->last_telemetry_snapshot;
+            $allOnus = $rawSnapshot['onu_list'] ?? [];
+            $allUncfg = $rawSnapshot['unconfigured_onus'] ?? [];
+
+            $portOnus = array_values(array_filter($allOnus, function ($o) use ($normalizedPort) {
+                $p = strtolower($o['port'] ?? ($o['detected_port'] ?? ''));
+                return str_contains($p, $normalizedPort) || str_contains($normalizedPort, $p);
+            }));
+
+            $portUncfg = array_values(array_filter($allUncfg, function ($o) use ($normalizedPort) {
+                $p = strtolower($o['detected_port'] ?? ($o['port'] ?? ''));
+                return str_contains($p, $normalizedPort) || str_contains($normalizedPort, $p);
+            }));
+
+            $partitioned = $this->processAndPartitionTelemetry(
+                $device,
+                $rawSnapshot['device_info'] ?? [],
+                $rawSnapshot['pon_ports'] ?? [],
+                $portOnus,
+                $portUncfg
+            );
+
+            return response()->json([
+                'status'            => 'success',
+                'port'              => $port,
+                'onu_list'          => $partitioned['onu_list'] ?? [],
+                'unconfigured_onus' => $partitioned['unconfigured_onus'] ?? [],
+                'orphaned_onus'     => $partitioned['orphaned_onus'] ?? [],
+                'polled_at'         => $rawSnapshot['polled_at'] ?? now()->toIso8601String(),
+            ]);
+        }
+
+        // Live Query khusus port ini
+        $driverOnuList = $driver->getOnuListByPort($port);
+        $allUncfg      = $driver->getUnconfiguredOnus();
+        $driverUncfg   = array_values(array_filter($allUncfg, function ($o) use ($normalizedPort) {
+            $p = strtolower($o['detected_port'] ?? ($o['port'] ?? ''));
+            return str_contains($p, $normalizedPort) || str_contains($normalizedPort, $p);
+        }));
+
+        $partitioned = $this->processAndPartitionTelemetry(
+            $device,
+            [],
+            [],
+            $driverOnuList,
+            $driverUncfg
+        );
+
+        // Update database registrations & snapshot
+        if ($device) {
+            $this->syncOntRegistrations($device, $driverOnuList);
+
+            // Merge ke snapshot OLT
+            $currentSnapshot = $device->last_telemetry_snapshot ?: [];
+            $existingOnus = $currentSnapshot['onu_list'] ?? [];
+            
+            // Hapus ONU lama di port ini, lalu masukkan yang baru
+            $filteredExisting = array_values(array_filter($existingOnus, function ($o) use ($normalizedPort) {
+                $p = strtolower($o['port'] ?? '');
+                return !str_contains($p, $normalizedPort) && !str_contains($normalizedPort, $p);
+            }));
+            $mergedOnus = array_merge($filteredExisting, $driverOnuList);
+            $currentSnapshot['onu_list'] = $mergedOnus;
+            $currentSnapshot['polled_at'] = now()->toIso8601String();
+
+            $device->update([
+                'last_telemetry_snapshot' => $currentSnapshot,
+                'last_connected_at'       => now(),
+            ]);
+        }
+
+        return response()->json([
+            'status'            => 'success',
+            'port'              => $port,
+            'onu_list'          => $partitioned['onu_list'] ?? [],
+            'unconfigured_onus' => $partitioned['unconfigured_onus'] ?? [],
+            'orphaned_onus'     => $partitioned['orphaned_onus'] ?? [],
+            'polled_at'         => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Sinkronisasi bertahap 1 Port PON ke database UNMS (untuk Progressive Batch Sync Wizard).
+     */
+    public function syncPort(Request $request)
+    {
+        $vendor   = $request->input('vendor') ?: 'zte-c300';
+        $deviceId = $request->input('device_id');
+        $port     = $request->input('port');
+
+        if (!$deviceId || !$port) {
+            return response()->json(['status' => 'error', 'message' => 'device_id dan port wajib diisi.'], 422);
+        }
+
+        $device = OltDevice::find((int)$deviceId);
+        if (!$device) {
+            return response()->json(['status' => 'error', 'message' => 'OLT Device tidak ditemukan.'], 404);
+        }
+
+        $driver = $this->getDriver($vendor, $device->id);
+        $driverOnuList = $driver->getOnuListByPort($port);
+
+        // Sync ke ont_registrations
+        $this->syncOntRegistrations($device, $driverOnuList);
+
+        // Update snapshot device
+        $normalizedPort = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], strtolower(trim($port)));
+        $currentSnapshot = $device->last_telemetry_snapshot ?: [];
+        $existingOnus = $currentSnapshot['onu_list'] ?? [];
+        
+        $filteredExisting = array_values(array_filter($existingOnus, function ($o) use ($normalizedPort) {
+            $p = strtolower($o['port'] ?? '');
+            return !str_contains($p, $normalizedPort) && !str_contains($normalizedPort, $p);
+        }));
+        $mergedOnus = array_merge($filteredExisting, $driverOnuList);
+        $currentSnapshot['onu_list'] = $mergedOnus;
+        $currentSnapshot['polled_at'] = now()->toIso8601String();
+
+        $device->update([
+            'last_telemetry_snapshot' => $currentSnapshot,
+            'last_connected_at'       => now(),
+        ]);
+
+        return response()->json([
+            'status'         => 'success',
+            'port'           => $port,
+            'count'          => count($driverOnuList),
+            'message'        => "Port {$port} berhasil disinkronisasi (" . count($driverOnuList) . " ONU).",
+            'onu_list'       => $driverOnuList,
+        ]);
     }
 
     /**

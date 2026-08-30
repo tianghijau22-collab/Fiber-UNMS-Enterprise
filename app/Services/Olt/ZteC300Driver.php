@@ -36,8 +36,8 @@ class ZteC300Driver extends ZteC320Driver
                 snmpVersion: $snmpVersion,
                 community: $community,
                 port: $port,
-                timeout: 5,
-                retries: 2
+                timeout: 1,
+                retries: 0
             );
         }
     }
@@ -125,89 +125,6 @@ class ZteC300Driver extends ZteC320Driver
             ['slot' => 19, 'type' => 'HUVQ',  'ports' => 4,  'status' => 'Uplink Module'],
             ['slot' => 20, 'type' => 'HUVQ',  'ports' => 4,  'status' => 'Uplink Module'],
         ];
-    }
-
-    public function getOnuList(): array
-    {
-        if ($this->cachedOnuList !== null) {
-            return $this->cachedOnuList;
-        }
-
-        if ($this->snmp && $this->isLive) {
-            try {
-                $ifNames = $this->getIfNames();
-                $portMap = [];
-                foreach ($ifNames as $oid => $val) {
-                    $idx = substr($oid, strrpos($oid, '.') + 1);
-                    $name = SnmpConnector::parseValue((string)$val);
-                    $portMap[$idx] = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $name);
-                }
-
-                // Query Serial Number ONU via MIB 1082, MIB 500 & MIB 28
-                $snList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1');
-                if (empty($snList)) {
-                    $snList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5');
-                }
-                $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.4.1.1');
-                $statusList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.5.1.1');
-
-                // Query Telemetri Redaman Optical Power riil
-                $oltRxList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.10.2.1.6.1.3.1.1');
-                if (empty($oltRxList)) {
-                    $oltRxList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14');
-                }
-                $onuTxList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.10.2.1.6.1.4.1.1');
-
-                if (!empty($snList)) {
-                    $onus = [];
-                    foreach ($snList as $oid => $rawSn) {
-                        $parts = explode('.', $oid);
-                        $onuIdx = end($parts);
-                        $sn = SnmpConnector::parseValue((string)$rawSn);
-
-                        if (empty($sn) || $sn === '0') continue;
-
-                        $rawTx = isset($onuTxList[$oid]) ? (int)SnmpConnector::parseValue((string)$onuTxList[$oid]) : 0;
-                        $rawRx = isset($oltRxList[$oid]) ? (int)SnmpConnector::parseValue((string)$oltRxList[$oid]) : 0;
-
-                        // Decoding Power ZTE C300: (raw - 50000) / 100
-                        $txPower = $rawTx > 0 ? round(($rawTx - 50000) / 100.0, 2) : 2.10;
-                        $rxPower = $rawRx > 0 ? round(($rawRx - 50000) / 100.0, 2) : -19.50;
-
-                        $statusCode = isset($statusList[$oid]) ? (int)SnmpConnector::parseValue((string)$statusList[$oid]) : 1;
-                        $modelName = isset($modelList[$oid]) ? SnmpConnector::parseValue((string)$modelList[$oid]) : 'ZTE-ONU';
-
-                        $portName = $portMap[$onuIdx] ?? "gpon-olt_1/2/1";
-
-                        $onus[] = [
-                            '_source'         => 'live_snmp',
-                            'onu_id'          => $onuIdx,
-                            'port'            => $portName,
-                            'customer_name'   => "ONU {$sn}",
-                            'serial_number'   => $sn,
-                            'vendor_model'    => $modelName,
-                            'status'          => ($statusCode === 1) ? 'Online' : 'LOS (Dying Gasp)',
-                            'rx_power'        => $rxPower,
-                            'tx_power'        => $txPower,
-                            'distance_meters' => 640,
-                            'ip_address'      => '—',
-                        ];
-                    }
-
-                    if (!empty($onus)) {
-                        $this->cachedOnuList = $onus;
-                        return $onus;
-                    }
-                }
-            } catch (\Exception $e) {}
-
-            if ($this->isLive) {
-                $this->cachedOnuList = [];
-                return [];
-            }
-        }
-
-        return parent::getOnuList();
     }
 }
 

@@ -222,6 +222,18 @@ class HuaweiDriver implements OltDeviceDriverInterface
         ];
     }
 
+    public function getOnuListByPort(string $portId): array
+    {
+        $cleanPortId = strtolower(trim($portId));
+        $normalizedPort = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $cleanPortId);
+
+        $all = $this->getOnuList();
+        return array_values(array_filter($all, function ($onu) use ($normalizedPort) {
+            $p = strtolower($onu['port'] ?? '');
+            return str_contains($p, $normalizedPort) || str_contains($normalizedPort, $p);
+        }));
+    }
+
     public function getUnconfiguredOnus(): array
     {
         return [];
