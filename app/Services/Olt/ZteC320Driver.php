@@ -223,8 +223,8 @@ class ZteC320Driver implements OltDeviceDriverInterface
                 $stateList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.4') ?: [];
                 $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.9') ?: [];
 
-                // Optical Table: .18 adalah ONU Rx Power (Redaman), .14 adalah ONU Tx Power (Daya Pancar)
-                $rx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.18') ?: [];
+                // Optical Table: .10 adalah ONU Rx Power (show pon power onu-rx), .14 adalah ONU Tx Power
+                $rx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.10') ?: [];
                 $tx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14') ?: [];
                 $onuRxList = $rx1;
                 $onuTxList = $tx1;
@@ -402,7 +402,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
                 if (!empty($snHexList)) {
                     $stateList = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.{$ifIndex}") ?: [];
                     $modelList = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.9.{$ifIndex}") ?: [];
-                    $rxList    = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.12.1.1.18.{$ifIndex}") ?: [];
+                    $rxList    = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.12.1.1.10.{$ifIndex}") ?: [];
                     $txList    = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.12.1.1.14.{$ifIndex}") ?: [];
 
                     $stateMap = [];

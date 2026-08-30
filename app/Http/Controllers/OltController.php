@@ -245,12 +245,12 @@ class OltController extends Controller
 
             $portOnus = array_values(array_filter($allOnus, function ($o) use ($normalizedPort) {
                 $p = strtolower($o['port'] ?? ($o['detected_port'] ?? ''));
-                return str_contains($p, $normalizedPort) || str_contains($normalizedPort, $p);
+                return $this->portsMatch($p, $normalizedPort);
             }));
 
             $portUncfg = array_values(array_filter($allUncfg, function ($o) use ($normalizedPort) {
                 $p = strtolower($o['detected_port'] ?? ($o['port'] ?? ''));
-                return str_contains($p, $normalizedPort) || str_contains($normalizedPort, $p);
+                return $this->portsMatch($p, $normalizedPort);
             }));
 
             $partitioned = $this->processAndPartitionTelemetry(
