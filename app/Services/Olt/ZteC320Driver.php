@@ -49,8 +49,8 @@ class ZteC320Driver implements OltDeviceDriverInterface
                 snmpVersion: $snmpVersion,
                 community: $community,
                 port: $port,
-                timeout: 5,
-                retries: 2
+                timeout: 3,
+                retries: 1
             );
         }
     }
@@ -238,12 +238,10 @@ class ZteC320Driver implements OltDeviceDriverInterface
                 $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.9') ?: [];
 
                 // Optical Table
-                $rx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.18') ?: [];
-                if (empty($rx1)) {
-                    $rx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14') ?: [];
-                }
+                $rx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.14') ?: [];
+                $tx1 = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.12.1.1.18') ?: [];
                 $onuRxList = $rx1;
-                $onuTxList = [];
+                $onuTxList = $tx1;
 
                 // Build lookup maps
                 $stateMap = [];
@@ -419,7 +417,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
     {
         if ($this->snmp && $this->isLive) {
             try {
-                $uncfgTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.15.1.1.3');
+                $uncfgTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.3.1.1');
                 if (empty($uncfgTable)) {
                     $uncfgTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.3.1.2');
                 }

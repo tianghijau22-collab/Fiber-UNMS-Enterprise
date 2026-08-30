@@ -36,8 +36,8 @@ class ZteC300Driver extends ZteC320Driver
                 snmpVersion: $snmpVersion,
                 community: $community,
                 port: $port,
-                timeout: 5,
-                retries: 2
+                timeout: 3,
+                retries: 1
             );
         }
     }
