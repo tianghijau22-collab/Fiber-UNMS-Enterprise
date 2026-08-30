@@ -1292,15 +1292,20 @@ class OltController extends Controller
 
         if ($c1 === $c2) return true;
 
-        $parts1 = explode('/', $c1);
-        $parts2 = explode('/', $c2);
-        $last1 = end($parts1);
-        $last2 = end($parts2);
+        $parts1 = array_values(array_filter(explode('/', $c1)));
+        $parts2 = array_values(array_filter(explode('/', $c2)));
 
-        if ($last1 !== '' && $last1 === $last2) {
-            return true;
+        // Cocokkan slot & port presisi (1/slot/port vs 1/slot/port atau slot/port vs 1/slot/port)
+        if (count($parts1) >= 2 && count($parts2) >= 2) {
+            $port1 = (int)end($parts1);
+            $slot1 = (int)$parts1[count($parts1) - 2];
+
+            $port2 = (int)end($parts2);
+            $slot2 = (int)$parts2[count($parts2) - 2];
+
+            return ($port1 === $port2) && ($slot1 === $slot2);
         }
 
-        return str_contains($c1, $c2) || str_contains($c2, $c1);
+        return false;
     }
 }
