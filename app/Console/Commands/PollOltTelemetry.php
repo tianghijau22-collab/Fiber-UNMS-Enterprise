@@ -46,10 +46,30 @@ class PollOltTelemetry extends Command
 
                 $deviceInfo = $driver->getDeviceInfo();
                 $ponPorts   = $driver->getPonPorts();
-                $onuList    = $driver->getOnuList();
-                $uncfg      = $driver->getUnconfiguredOnus();
+                
+                // Polling bertahap per port PON agar OLT tetap ringan dan tidak terjadi CPU spike
+                $allOnus = [];
+                foreach ($ponPorts as $port) {
+                    if (($port['status'] ?? '') === 'Up' || ($port['registered_onus'] ?? 0) > 0) {
+                        try {
+                            $portOnus = $driver->getOnuListByPort($port['port_id']);
+                            if (!empty($portOnus)) {
+                                $allOnus = array_merge($allOnus, $portOnus);
+                            }
+                        } catch (\Exception $e) {
+                            // Lewati jika terjadi timeout pada salah satu port
+                        }
+                    }
+                }
 
-                $snapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, $onuList, $uncfg);
+                // Fallback jika tidak ada data port yang didapat
+                if (empty($allOnus)) {
+                    $allOnus = $driver->getOnuList();
+                }
+
+                $uncfg = $driver->getUnconfiguredOnus();
+
+                $snapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, $allOnus, $uncfg);
 
                 $device->update([
                     'last_telemetry_snapshot' => $snapshot,
@@ -57,7 +77,7 @@ class PollOltTelemetry extends Command
                 ]);
 
                 // Sync live optical data directly to OntRegistration records & detect state transitions for instant alerts
-                foreach ($onuList as $onuData) {
+                foreach ($allOnus as $onuData) {
                     $sn = $onuData['serial_number'] ?? null;
                     if (!$sn) continue;
 
