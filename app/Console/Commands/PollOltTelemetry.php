@@ -50,7 +50,7 @@ class PollOltTelemetry extends Command
                 // Polling bertahap per port PON agar OLT tetap ringan dan tidak terjadi CPU spike
                 $allOnus = [];
                 foreach ($ponPorts as $port) {
-                    if (($port['status'] ?? '') === 'Up' || ($port['registered_onus'] ?? 0) > 0) {
+                    if (($port['status'] ?? '') === 'Up' || ($port['registered_onus'] ?? 0) > 0 || ($port['unconfigured_onus'] ?? 0) > 0) {
                         try {
                             $portOnus = $driver->getOnuListByPort($port['port_id']);
                             if (!empty($portOnus)) {
@@ -59,6 +59,9 @@ class PollOltTelemetry extends Command
                         } catch (\Exception $e) {
                             // Lewati jika terjadi timeout pada salah satu port
                         }
+
+                        // Jeda throttling 50 milidetik (0.05s) antar port agar CPU OLT tidak terbebani
+                        usleep(50000);
                     }
                 }
 
