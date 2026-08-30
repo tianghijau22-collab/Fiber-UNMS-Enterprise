@@ -1310,51 +1310,6 @@ export default function OltManagement() {
         </div>
       )}
 
-      {/* ── Architecture Pipeline Banner ───────────────────────────────── */}
-      <div className="bg-slate-50/80 dark:bg-neutral-950 border border-slate-200 dark:border-[#222222] p-4 sm:p-5 rounded-lg shadow-2xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                Alur Koneksi
-              </span>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                Arsitektur Telemetri OLT via VPN &amp; SNMP
-              </h2>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              Sistem UNMS mengambil data redaman &amp; status port OLT murni via query SNMP (UDP 161) melalui terowongan VPN router kantor Anda.
-            </p>
-          </div>
-
-          {/* 3-Hop Pipeline Map */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
-            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-2">
-              <span className="text-base"></span>
-              <div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">1. OLT Fisik</div>
-                <div className="font-bold text-slate-800 dark:text-slate-200">Port SNMP 161 (public)</div>
-              </div>
-            </div>
-
-            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-2">
-              <span className="text-base"></span>
-              <div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">2. VPN Gateway</div>
-                <div className="font-bold text-emerald-600 dark:text-emerald-400">MikroTik (10.254.0.2)</div>
-              </div>
-            </div>
-
-            <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-2">
-              <span className="text-base"></span>
-              <div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase font-sans">3. UNMS Cloud</div>
-                <div className="font-bold text-indigo-600 dark:text-indigo-400">Live Polling (103.89.6.125)</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ── OLT Selector ────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs space-y-4">
@@ -1514,55 +1469,6 @@ export default function OltManagement() {
               </div>
             </div>
 
-            {/* Horizontal Divider Line */}
-            <div className="border-b border-slate-800/90 my-3" />
-
-            {/* Bottom Row: CPU Usage & Memory Usage Progress Bars */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {/* CPU Usage */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-200">CPU Usage</span>
-                  <span className="font-mono font-extrabold text-white">
-                    {oltData.device_info?.cpu_usage !== null && oltData.device_info?.cpu_usage !== undefined
-                      ? `${oltData.device_info.cpu_usage}%`
-                      : '12%'}
-                  </span>
-                </div>
-                <div className="w-full bg-slate-800/90 rounded-full h-2 overflow-hidden border border-slate-700/40">
-                  <div
-                    className="bg-emerald-400 h-full rounded-full transition-all duration-500 shadow-xs"
-                    style={{
-                      width: `${oltData.device_info?.cpu_usage !== null && oltData.device_info?.cpu_usage !== undefined
-                        ? Math.max(4, oltData.device_info.cpu_usage)
-                        : 12}%`
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Memory Usage */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-200">Memory Usage</span>
-                  <span className="font-mono font-extrabold text-white">
-                    {oltData.device_info?.ram_usage !== null && oltData.device_info?.ram_usage !== undefined
-                      ? `${oltData.device_info.ram_usage}%`
-                      : '29%'}
-                  </span>
-                </div>
-                <div className="w-full bg-slate-800/90 rounded-full h-2 overflow-hidden border border-slate-700/40">
-                  <div
-                    className="bg-blue-500 h-full rounded-full transition-all duration-500 shadow-xs"
-                    style={{
-                      width: `${oltData.device_info?.ram_usage !== null && oltData.device_info?.ram_usage !== undefined
-                        ? Math.max(4, oltData.device_info.ram_usage)
-                        : 29}%`
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* ══════════════════════════════════════════════════════════════════
