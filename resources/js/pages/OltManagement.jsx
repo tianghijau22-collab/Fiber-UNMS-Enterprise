@@ -2742,7 +2742,6 @@ export default function OltManagement() {
                   <span className="text-2xl font-black text-emerald-900 dark:text-emerald-100">{opticalStats.excellent}</span>
                   <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 font-mono">{opticalStats.excellentPct}%</span>
                 </div>
-                <p className="text-[10px] text-emerald-700/80 dark:text-emerald-400/70 mt-1">Optik sangat prima</p>
               </button>
 
               {/* 2. Normal */}
@@ -2762,7 +2761,6 @@ export default function OltManagement() {
                   <span className="text-2xl font-black text-teal-900 dark:text-teal-100">{opticalStats.good}</span>
                   <span className="text-xs font-bold text-teal-700 dark:text-teal-400 font-mono">{opticalStats.goodPct}%</span>
                 </div>
-                <p className="text-[10px] text-teal-700/80 dark:text-teal-400/70 mt-1">Standar toleransi FTTH</p>
               </button>
 
               {/* 3. Warning */}
@@ -2782,7 +2780,6 @@ export default function OltManagement() {
                   <span className="text-2xl font-black text-amber-900 dark:text-amber-100">{opticalStats.warning}</span>
                   <span className="text-xs font-bold text-amber-700 dark:text-amber-400 font-mono">{opticalStats.warningPct}%</span>
                 </div>
-                <p className="text-[10px] text-amber-700/80 dark:text-amber-400/70 mt-1">Perlu pembersihan patchcord</p>
               </button>
 
               {/* 4. Kritis */}
@@ -2802,7 +2799,6 @@ export default function OltManagement() {
                   <span className="text-2xl font-black text-rose-900 dark:text-rose-100">{opticalStats.critical}</span>
                   <span className="text-xs font-bold text-rose-700 dark:text-rose-400 font-mono">{opticalStats.criticalPct}%</span>
                 </div>
-                <p className="text-[10px] text-rose-700/80 dark:text-rose-400/70 mt-1">Rentan packet loss & drop</p>
               </button>
 
               {/* 5. LOS / Offline */}
@@ -2822,7 +2818,6 @@ export default function OltManagement() {
                   <span className="text-2xl font-black text-slate-900 dark:text-slate-100">{opticalStats.los}</span>
                   <span className="text-xs font-bold text-slate-600 dark:text-slate-400 font-mono">{opticalStats.losPct}%</span>
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Mati daya atau FO cut</p>
               </button>
             </div>
           </div>
