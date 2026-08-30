@@ -1728,10 +1728,7 @@ export default function OltManagement() {
                                   };
 
                                   const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === targetPortId;
-                                  const isUp = String(matchedPort.status).toLowerCase() === 'up' ||
-                                    String(matchedPort.status).toLowerCase() === 'online' ||
-                                    matchedPort.registered_onus > 0 ||
-                                    matchedPort.online_onus > 0;
+                                  const isUp = checkIsPortUp(matchedPort, oltData);
 
                                   return (
                                     <div key={idx} className="flex flex-col items-center gap-1">
@@ -1979,11 +1976,7 @@ export default function OltManagement() {
                                         };
 
                                         const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === `gpon-olt_${targetPortId}` || selectedPortFilter === targetPortId;
-                                        // Status Up real: jika status Up/Online dari SNMP atau terdapat ONU aktif/terdaftar
-                                        const isUp = String(matchedPort.status).toLowerCase() === 'up' ||
-                                          String(matchedPort.status).toLowerCase() === 'online' ||
-                                          (matchedPort.registered_onus > 0) ||
-                                          (matchedPort.online_onus > 0);
+                                        const isUp = checkIsPortUp(matchedPort, oltData);
 
                                         return (
                                           <button
@@ -2101,10 +2094,7 @@ export default function OltManagement() {
                                     };
 
                                     const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === `gpon-olt_${targetPortId}` || selectedPortFilter === targetPortId;
-                                    const isUp = String(matchedPort.status).toLowerCase() === 'up' ||
-                                      String(matchedPort.status).toLowerCase() === 'online' ||
-                                      matchedPort.registered_onus > 0 ||
-                                      matchedPort.online_onus > 0;
+                                    const isUp = checkIsPortUp(matchedPort, oltData);
 
                                     return (
                                       <button
@@ -2185,10 +2175,7 @@ export default function OltManagement() {
                                     };
 
                                     const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === `gpon-olt_${targetPortId}` || selectedPortFilter === targetPortId;
-                                    const isUp = String(matchedPort.status).toLowerCase() === 'up' ||
-                                      String(matchedPort.status).toLowerCase() === 'online' ||
-                                      matchedPort.registered_onus > 0 ||
-                                      matchedPort.online_onus > 0;
+                                    const isUp = checkIsPortUp(matchedPort, oltData);
 
                                     return (
                                       <button
