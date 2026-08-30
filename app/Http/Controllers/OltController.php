@@ -118,8 +118,16 @@ class OltController extends Controller
                     }
                     $totalOnus = ($port['registered_onus'] ?? 0) + $uncfgCount;
                     $isUp = $totalOnus > 0;
+                    $isClassCpp = str_contains($port['sfp_class'] ?? '', 'C++') || ($port['slot'] ?? 0) === 7;
+                    $sfpClass = $isClassCpp ? 'Class C++' : 'Class C+';
+                    $sfpVendor = $port['sfp_vendor'] ?? ($isUp ? 'Hisense / ZTE' : '—');
+                    $sfpPower = $isUp ? ($isClassCpp ? 7.80 : 5.50) : null;
+
                     return array_merge($port, [
                         'status'            => $isUp ? 'Up' : 'Down',
+                        'sfp_class'         => $sfpClass,
+                        'sfp_vendor'        => $sfpVendor,
+                        'tx_power_dbm'      => $sfpPower,
                         'unconfigured_onus' => $uncfgCount,
                         'online_onus'       => $isUp ? max($port['online_onus'] ?? 0, $totalOnus) : 0,
                     ]);
