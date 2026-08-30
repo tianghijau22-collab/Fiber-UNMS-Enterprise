@@ -49,8 +49,8 @@ class ZteC320Driver implements OltDeviceDriverInterface
                 snmpVersion: $snmpVersion,
                 community: $community,
                 port: $port,
-                timeout: 1,
-                retries: 0
+                timeout: 5,
+                retries: 2
             );
         }
     }
@@ -186,25 +186,23 @@ class ZteC320Driver implements OltDeviceDriverInterface
             }
         }
 
-        if ($this->isLive) {
-            $ports = [];
-            for ($port = 1; $port <= 16; $port++) {
-                $ports[] = [
-                    '_source'         => 'live_snmp',
-                    'port_id'         => "gpon-olt_1/1/{$port}",
-                    'slot'            => 1,
-                    'port'            => $port,
-                    'status'          => 'Up',
-                    'tx_power_dbm'    => 5.0,
-                    'sfp_class'       => 'Class C+',
-                    'registered_onus' => 0,
-                    'online_onus'     => 0,
-                    'los_onus'        => 0,
-                ];
-            }
-            $this->cachedPonPorts = $ports;
-            return $ports;
+        $ports = [];
+        for ($port = 1; $port <= 16; $port++) {
+            $ports[] = [
+                '_source'         => $this->isLive ? 'live_snmp' : 'simulation',
+                'port_id'         => "gpon-olt_1/1/{$port}",
+                'slot'            => 1,
+                'port'            => $port,
+                'status'          => 'Up',
+                'tx_power_dbm'    => 5.0,
+                'sfp_class'       => 'Class C+',
+                'registered_onus' => 0,
+                'online_onus'     => 0,
+                'los_onus'        => 0,
+            ];
         }
+        $this->cachedPonPorts = $ports;
+        return $ports;
     }
 
     public function getOnuList(): array
@@ -226,10 +224,13 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     }
                 }
 
-                // 2. Query tabel ONU GPON ZTE V2.x (Prioritas OID 1012.3.28.1.1.5 & 1012.3.50.11.2.1.3)
-                $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
+                // 2. Query tabel ONU GPON ZTE V2.x (Prioritas OID 1012.3.50.11.2.1.3 & 1012.3.28.1.1.5)
+                $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
                 if (empty($snHexList)) {
-                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
+                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
+                }
+                if (empty($snHexList)) {
+                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1') ?: [];
                 }
 
                 $stateList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.4') ?: [];
