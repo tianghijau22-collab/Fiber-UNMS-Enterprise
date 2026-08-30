@@ -58,6 +58,15 @@ const IconServer = ({ className = "w-4 h-4" }) => (
     <line x1="6" y1="18" x2="6.01" y2="18" strokeWidth={2.5} strokeLinecap="round" />
   </svg>
 );
+const IconRouter = ({ className = "w-6 h-6" }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <rect x="2" y="14" width="20" height="8" rx="2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    <line x1="6" y1="18" x2="6.01" y2="18" strokeWidth={2.5} strokeLinecap="round" />
+    <line x1="10" y1="18" x2="10.01" y2="18" strokeWidth={2.5} strokeLinecap="round" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 14V8a3 3 0 013-3h6a3 3 0 013 3v6" />
+    <line x1="12" y1="5" x2="12" y2="2" strokeWidth={2} strokeLinecap="round" />
+  </svg>
+);
 const IconLayers = ({ className = "w-4 h-4" }) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <polygon points="12 2 2 7 12 12 22 7 12 2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
