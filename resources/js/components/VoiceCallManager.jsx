@@ -321,9 +321,13 @@ export default function VoiceCallManager({ currentUser }) {
   useEffect(() => {
     if (callState !== 'idle') return;
 
+    let isRequesting = false;
     const checkInterval = setInterval(async () => {
+      if (document.hidden || isRequesting) return;
+      isRequesting = true;
       try {
         const res = await fetch(`/api/calls/check-incoming?current_user_id=${currentUser?.id || 1}`);
+        if (!res.ok) return;
         const data = await res.json();
 
         if (data.call && data.call.status === 'ringing') {
@@ -332,8 +336,11 @@ export default function VoiceCallManager({ currentUser }) {
           setCallState('incoming');
           playIncomingRingtone();
         }
-      } catch (_) {}
-    }, 2500);
+      } catch (_) {
+      } finally {
+        isRequesting = false;
+      }
+    }, 8000);
 
     return () => clearInterval(checkInterval);
   }, [callState, currentUser]);
