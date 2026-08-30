@@ -1604,26 +1604,26 @@ export default function OltManagement() {
             return (
               <div className="space-y-6 animate-in fade-in duration-200">
                 {/* 1. Realistic Hardware Chassis Panel */}
-                <div className="bg-slate-900 dark:bg-slate-950 border-2 border-slate-700/80 rounded-3xl p-5 sm:p-7 shadow-2xl overflow-x-auto">
+                <div className="bg-slate-100 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700/80 rounded-3xl p-5 sm:p-7 shadow-2xl overflow-x-auto">
                   <div className="min-w-[1240px] space-y-5">
                     {/* Top Bar: Title & Specs & Model Profile Badge */}
-                    <div className="flex flex-wrap items-center justify-between text-xs font-mono text-slate-200 pb-3.5 border-b border-slate-800 gap-3">
+                    <div className="flex flex-wrap items-center justify-between text-xs font-mono text-slate-700 dark:text-slate-200 pb-3.5 border-b border-slate-300 dark:border-slate-800 gap-3">
                       <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 rounded-full bg-indigo-600/40 text-indigo-200 font-black border border-indigo-500/50 text-xs">
+                        <span className="px-3 py-1 rounded-full bg-indigo-100 dark:bg-indigo-600/40 text-indigo-700 dark:text-indigo-200 font-black border border-indigo-300 dark:border-indigo-500/50 text-xs">
                           {isHsgq ? '1U DESKTOP / RACK BOX' : isC300 ? 'RACK 19" 10U (VERTICAL BLADES)' : 'RACK 19" 2U (HORIZONTAL)'}
                         </span>
-                        <strong className="text-white text-base tracking-wide font-black">
+                        <strong className="text-slate-900 dark:text-white text-base tracking-wide font-black">
                           Virtual Chassis View — {activeOlt?.vendor || (isHsgq ? 'HSGQ' : 'ZTE')} {isHsgq ? (activeOlt?.model || 'HSGQ-E04M Gigabit Series') : isC300 ? 'ZXAN C300 Enterprise' : (activeOlt?.model || 'ZXAN C320')}
                         </strong>
-                        <span className="text-slate-300 font-bold">
+                        <span className="text-slate-500 dark:text-slate-300 font-bold">
                           · {isHsgq ? `${oltData.pon_ports?.length || 4} PON Ports + 4 Uplink` : isC300 ? '21 Slots Architecture' : '4 Slots Architecture'} / {oltData.pon_ports?.length || 16} Ports Active
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-4 text-xs font-bold text-slate-300">
+                      <div className="flex items-center gap-4 text-xs font-bold text-slate-500 dark:text-slate-300">
                         <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-emerald-500 shadow-xs shadow-emerald-500/50" /> Port Up / Active Laser</span>
                         <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-rose-500 shadow-xs shadow-rose-500/50" /> Port Down / Standby</span>
-                        <span className="flex items-center gap-2"><span className="w-3 h-3 rounded border-2 border-indigo-400 bg-indigo-900" /> Selected</span>
+                        <span className="flex items-center gap-2"><span className="w-3 h-3 rounded border-2 border-indigo-400 bg-indigo-100 dark:bg-indigo-900" /> Selected</span>
                       </div>
                     </div>
 
@@ -1631,11 +1631,11 @@ export default function OltManagement() {
                         LAYOUT C: HSGQ (1U COMPACT BOX-TYPE OLT — HSGQ-E04M / HSGQ-G08M)
                     ══════════════════════════════════════════════════════════════════ */}
                     {isHsgq ? (
-                      <div className="border-4 border-slate-700 rounded-2xl overflow-hidden bg-slate-950 shadow-2xl">
+                      <div className="border-4 border-slate-300 dark:border-slate-700 rounded-2xl overflow-hidden bg-white dark:bg-slate-950 shadow-2xl">
                         {/* Top Metal Body with "O L T" Grille Ventilation Cutouts */}
-                        <div className="bg-slate-900 border-b border-slate-700 px-6 py-2.5 flex items-center justify-between text-xs font-mono select-none">
+                        <div className="bg-slate-200 dark:bg-slate-900 border-b border-slate-300 dark:border-slate-700 px-6 py-2.5 flex items-center justify-between text-xs font-mono select-none">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-black tracking-widest text-slate-300">HSGQ 1U GIGABIT EPON/GPON OLT</span>
+                            <span className="text-xs font-black tracking-widest text-slate-600 dark:text-slate-300">HSGQ 1U GIGABIT EPON/GPON OLT</span>
                           </div>
 
                           {/* "O L T" Grille Ventilation Pattern */}
@@ -1821,11 +1821,11 @@ export default function OltManagement() {
                         </div>
                       </div>
                     ) : isC300 ? (
-                      <div className="border-4 border-slate-700 rounded-2xl overflow-hidden bg-slate-900 shadow-2xl">
+                      <div className="border-4 border-slate-300 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-900 shadow-2xl">
                         {/* Top Large Fan Tray Bar with 2 Orange Latch Handles */}
-                        <div className="bg-slate-800 border-b-4 border-slate-700 px-6 py-3 flex items-center justify-between text-xs font-mono select-none">
+                        <div className="bg-slate-200 dark:bg-slate-800 border-b-4 border-slate-300 dark:border-slate-700 px-6 py-3 flex items-center justify-between text-xs font-mono select-none">
                           <div className="flex items-center gap-3">
-                            <span className="text-white font-black tracking-wider text-xs flex items-center gap-1.5">
+                            <span className="text-slate-800 dark:text-white font-black tracking-wider text-xs flex items-center gap-1.5">
                               <IconActivity className="w-4 h-4 text-emerald-400" />
                               <span>FAN UNIT MODULE</span>
                             </span>
@@ -1852,12 +1852,12 @@ export default function OltManagement() {
                         </div>
 
                         {/* 21 Vertical Blade Card Slots (Side-by-Side Horizontal Chain) */}
-                        <div className="grid grid-cols-21 divide-x-2 divide-slate-700 bg-slate-950 font-mono text-xs min-h-[500px]">
+                        <div className="grid grid-cols-21 divide-x-2 divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-950 font-mono text-xs min-h-[500px]">
                           {/* Slot 1: PRWG (Power Blade) */}
-                          <div className="flex flex-col items-center justify-between p-2 bg-slate-900/90 hover:bg-slate-850 transition-colors">
+                          <div className="flex flex-col items-center justify-between p-2 bg-slate-50 dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-850 transition-colors">
                             <div className="flex flex-col items-center gap-1">
-                              <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-300 font-black">|</div>
-                              <span className="font-black text-[10px] text-white tracking-tighter">PRWG</span>
+                              <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-300 font-black">|</div>
+                              <span className="font-black text-[10px] text-slate-800 dark:text-white tracking-tighter">PRWG</span>
                               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" />
                             </div>
 
@@ -1902,18 +1902,18 @@ export default function OltManagement() {
                               <div
                                 key={slotNum}
                                 className={`flex flex-col items-center justify-between p-1.5 transition-colors ${isCenterControl
-                                  ? 'bg-slate-900 border-x border-indigo-500/40 shadow-inner'
+                                  ? 'bg-slate-100 dark:bg-slate-900 border-x border-indigo-300 dark:border-indigo-500/40 shadow-inner'
                                   : isUplinkBlade
-                                    ? 'bg-slate-900/80'
+                                    ? 'bg-slate-100/80 dark:bg-slate-900/80'
                                     : isLineCard
-                                      ? 'bg-slate-900/90 hover:bg-slate-850'
-                                      : 'bg-slate-950/60 opacity-60'
+                                      ? 'bg-slate-50 dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-850'
+                                      : 'bg-slate-200/60 dark:bg-slate-950/60 opacity-60'
                                   }`}
                               >
                                 {/* Top Screw & Card Label */}
                                 <div className="flex flex-col items-center gap-1">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-300 font-bold">|</div>
-                                  <span className="font-black text-[10px] sm:text-[11px] text-white truncate max-w-[40px]">
+                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-300 font-bold">|</div>
+                                  <span className="font-black text-[10px] sm:text-[11px] text-slate-800 dark:text-white truncate max-w-[40px]">
                                     {isCenterControl ? 'SCXN' : isUplinkBlade ? (cardInfo?.type || 'HUVQ') : isLineCard ? cardType : '—'}
                                   </span>
                                   {(isLineCard || isCenterControl || isUplinkBlade) && (
@@ -2016,31 +2016,31 @@ export default function OltManagement() {
                       /* ══════════════════════════════════════════════════════════════════
                           LAYOUT B: ZTE C320 (2U HORIZONTAL COMPACT CHASSIS)
                       ══════════════════════════════════════════════════════════════════ */
-                      <div className="flex border-4 border-slate-700 rounded-2xl overflow-hidden bg-slate-800/90 shadow-inner">
+                      <div className="flex border-4 border-slate-300 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800/90 shadow-inner">
                         {/* Left Vertical Column: FAN TRAY */}
-                        <div className="w-16 sm:w-20 bg-slate-800 border-r-2 border-slate-700 p-3 flex flex-col items-center justify-between text-center select-none">
-                          <div className="text-xs font-mono font-black text-white tracking-wider">FAN</div>
+                        <div className="w-16 sm:w-20 bg-slate-200 dark:bg-slate-800 border-r-2 border-slate-300 dark:border-slate-700 p-3 flex flex-col items-center justify-between text-center select-none">
+                          <div className="text-xs font-mono font-black text-slate-700 dark:text-white tracking-wider">FAN</div>
                           <div className="space-y-2.5 py-3">
                             <div className="w-9 h-4 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN 1 OK" />
                             <div className="w-9 h-4 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN 2 OK" />
                             <div className="w-9 h-4 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400 animate-pulse" title="FAN 3 OK" />
                           </div>
-                          <div className="w-8 h-1.5 bg-slate-600 rounded-full" />
+                          <div className="w-8 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full" />
                         </div>
 
                         {/* Right Main Column: Slots 1, 2, 3 & 4 */}
-                        <div className="flex-1 divide-y-2 divide-slate-700 bg-slate-900/60 font-mono">
+                        <div className="flex-1 divide-y-2 divide-slate-200 dark:divide-slate-700 bg-slate-50 dark:bg-slate-900/60 font-mono">
                           {/* ROW 1: SLOT 1 */}
                           {(() => {
                             const card1 = discoveredCards.find(c => Number(c.slot) === 1) || { type: 'GTGHG' };
                             const portCount1 = getCardPortCount(card1.type) || 16;
 
                             return (
-                              <div className="flex items-center justify-between p-3.5 bg-slate-850 hover:bg-slate-800/80 transition-colors">
+                              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-850 hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
                                 <div className="flex items-center gap-3 w-36 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-black shadow-xs">|</div>
+                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-black shadow-xs">|</div>
                                   <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="RUN LED: Active" />
-                                  <span className="text-sm font-black text-white">{card1.type}</span>
+                                  <span className="text-sm font-black text-slate-800 dark:text-white">{card1.type}</span>
                                 </div>
 
                                 <div className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 overflow-x-auto">
@@ -2084,8 +2084,8 @@ export default function OltManagement() {
                                 </div>
 
                                 <div className="flex items-center justify-end gap-3 w-20 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-black shadow-xs">|</div>
-                                  <div className="w-6 h-6 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center text-xs font-black text-white shadow-xs">1</div>
+                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-black shadow-xs">|</div>
+                                  <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-500 flex items-center justify-center text-xs font-black text-slate-800 dark:text-white shadow-xs">1</div>
                                 </div>
                               </div>
                             );
@@ -2099,29 +2099,29 @@ export default function OltManagement() {
 
                             if (!hasCard2) {
                               return (
-                                <div className="flex items-center justify-between p-3.5 bg-slate-900/50 text-slate-500">
+                                <div className="flex items-center justify-between p-3.5 bg-slate-100 dark:bg-slate-900/50 text-slate-400 dark:text-slate-500">
                                   <div className="flex items-center gap-3 w-36 shrink-0">
-                                    <div className="w-4 h-4 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-[9px] text-slate-400 font-bold">|</div>
+                                    <div className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-500 dark:text-slate-400 font-bold">|</div>
                                     <span className="text-xs font-bold text-slate-400">SLOT 2 (EMPTY)</span>
                                   </div>
                                   <div className="flex-1 flex items-center justify-center gap-3 opacity-30">
-                                    <div className="w-40 h-1.5 bg-slate-600 rounded-full" />
+                                    <div className="w-40 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full" />
                                     <span className="text-xs font-mono">EXPANSION BLANK PANEL</span>
-                                    <div className="w-40 h-1.5 bg-slate-600 rounded-full" />
+                                    <div className="w-40 h-1.5 bg-slate-400 dark:bg-slate-600 rounded-full" />
                                   </div>
                                   <div className="flex items-center justify-end gap-3 w-20 shrink-0">
-                                    <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-black text-slate-400">2</div>
+                                    <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-xs font-black text-slate-400">2</div>
                                   </div>
                                 </div>
                               );
                             }
 
                             return (
-                              <div className="flex items-center justify-between p-3.5 bg-slate-850 hover:bg-slate-800/80 transition-colors">
+                              <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-850 hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
                                 <div className="flex items-center gap-3 w-36 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
+                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
                                   <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="RUN LED: Active" />
-                                  <span className="text-sm font-black text-white">{card2.type}</span>
+                                  <span className="text-sm font-black text-slate-800 dark:text-white">{card2.type}</span>
                                 </div>
 
                                 <div className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 overflow-x-auto">
@@ -2165,44 +2165,44 @@ export default function OltManagement() {
                                 </div>
 
                                 <div className="flex items-center justify-end gap-3 w-20 shrink-0">
-                                  <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
-                                  <div className="w-6 h-6 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center text-xs font-black text-white shadow-xs">2</div>
+                                  <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                  <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-500 flex items-center justify-center text-xs font-black text-slate-800 dark:text-white shadow-xs">2</div>
                                 </div>
                               </div>
                             );
                           })()}
 
                           {/* ROW 3: SLOT 3 (PRAM) & SLOT 4 (SMXA) */}
-                          <div className="grid grid-cols-2 divide-x-2 divide-slate-700">
+                          <div className="grid grid-cols-2 divide-x-2 divide-slate-200 dark:divide-slate-700">
                             {/* Slot 3: PRAM */}
-                            <div className="flex items-center justify-between p-3.5 bg-slate-850 hover:bg-slate-800/80 transition-colors">
+                            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-850 hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
                               <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
+                                <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
                                 <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="POWER LED: Active" />
-                                <span className="text-sm font-black text-white">PRAM</span>
+                                <span className="text-sm font-black text-slate-800 dark:text-white">PRAM</span>
                               </div>
 
                               <div className="flex items-center gap-2.5 px-3">
-                                <div className="w-12 h-7 rounded bg-slate-950 border border-slate-600 flex items-center justify-center gap-1.5 shadow-inner">
+                                <div className="w-12 h-7 rounded bg-slate-200 dark:bg-slate-950 border border-slate-300 dark:border-slate-600 flex items-center justify-center gap-1.5 shadow-inner">
                                   <span className="w-1.5 h-4 bg-slate-400 rounded-2xs" />
                                   <span className="w-1.5 h-4 bg-slate-400 rounded-2xs" />
                                   <span className="w-1.5 h-4 bg-slate-400 rounded-2xs" />
                                 </div>
-                                <span className="text-xs text-slate-300 font-bold hidden sm:inline">220V AC / -48V DC</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-300 font-bold hidden sm:inline">220V AC / -48V DC</span>
                               </div>
 
                               <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
-                                <div className="w-6 h-6 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center text-xs font-black text-white shadow-xs">3</div>
+                                <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-500 flex items-center justify-center text-xs font-black text-slate-800 dark:text-white shadow-xs">3</div>
                               </div>
                             </div>
 
                             {/* Slot 4: SMXA */}
-                            <div className="flex items-center justify-between p-3.5 bg-slate-850 hover:bg-slate-800/80 transition-colors">
+                            <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-850 hover:bg-white dark:hover:bg-slate-800/80 transition-colors">
                               <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
+                                <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
                                 <span className="w-3 h-3 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400" title="CTRL LED: Active" />
-                                <span className="text-sm font-black text-white">SMXA</span>
+                                <span className="text-sm font-black text-slate-800 dark:text-white">SMXA</span>
                               </div>
 
                               <div className="flex items-center gap-2 px-3">
@@ -2219,8 +2219,8 @@ export default function OltManagement() {
                               </div>
 
                               <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-300 font-bold shadow-xs">|</div>
-                                <div className="w-6 h-6 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center text-xs font-black text-white shadow-xs">4</div>
+                                <div className="w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 border border-slate-400 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
+                                <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-500 flex items-center justify-center text-xs font-black text-slate-800 dark:text-white shadow-xs">4</div>
                               </div>
                             </div>
                           </div>
@@ -2228,7 +2228,7 @@ export default function OltManagement() {
                       </div>
                     )}
 
-                    {/* Persistent Active/Selected & Hovered Port Telemetry HUD (Untuk Semua Model OLT: HSGQ, ZTE C300, ZTE C320, dll) */}
+                    {/* Persistent Active/Selected & Hovered Port Telemetry HUD */}
                     {(() => {
                       const activePortHUD = hoveredPortInfo || (selectedPortFilter ? (() => {
                         const matched = (oltData.pon_ports || []).find(p => {
@@ -2246,14 +2246,14 @@ export default function OltManagement() {
 
                       if (!activePortHUD) {
                         return (
-                          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-850/90 border border-slate-700/80 shadow-lg flex flex-wrap items-center justify-between gap-3 text-xs text-white animate-in fade-in duration-150">
+                          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-100 dark:bg-slate-850/90 border border-slate-200 dark:border-slate-700/80 shadow-lg flex flex-wrap items-center justify-between gap-3 text-xs text-slate-800 dark:text-white animate-in fade-in duration-150">
                             <div className="flex items-center gap-2.5">
                               <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse" />
-                              <span className="text-slate-300 font-medium">
-                                Silakan <strong className="text-white">klik salah satu nomor Port PON (1–16)</strong> pada visual kartu blade di atas untuk melihat telemetri port &amp; memuat daftar ONU secara realtime.
+                              <span className="text-slate-600 dark:text-slate-300 font-medium">
+                                Silakan <strong className="text-slate-900 dark:text-white">klik salah satu nomor Port PON (1–16)</strong> pada visual kartu blade di atas untuk melihat telemetri port &amp; memuat daftar ONU secara realtime.
                               </span>
                             </div>
-                            <span className="text-[11px] font-mono text-indigo-300 bg-indigo-950/80 px-2.5 py-1 rounded-lg border border-indigo-800">
+                            <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/80 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800">
                               Mode: On-Demand Lazy Loading
                             </span>
                           </div>
@@ -2264,15 +2264,15 @@ export default function OltManagement() {
                       const totalOnusOnPort = (activePortHUD.registered_onus || 0) + (activePortHUD.unconfigured_onus || 0);
 
                       return (
-                        <div className="p-4 sm:p-5 rounded-2xl bg-slate-850 border-2 border-indigo-500/80 shadow-2xl flex flex-wrap items-center justify-between gap-4 text-xs text-white animate-in fade-in duration-100">
+                        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-850 border-2 border-indigo-400 dark:border-indigo-500/80 shadow-2xl flex flex-wrap items-center justify-between gap-4 text-xs text-slate-800 dark:text-white animate-in fade-in duration-100">
                           <div className="flex items-center gap-3">
                             <span className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-black font-mono shadow-xs text-xs sm:text-sm">
                               PORT {activePortHUD.slot ? `1/${activePortHUD.slot}/${activePortHUD.portNum || activePortHUD.port || 1}` : activePortHUD.port_id}
                             </span>
                             <div>
-                              <span className="font-black text-sm text-white">{activePortHUD.port_id}</span>
-                              <span className="text-slate-200 ml-3 text-xs font-semibold">
-                                Status: <strong className={isPortUp ? 'text-emerald-400' : 'text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong> · <span className="text-white font-bold">{activePortHUD.registered_onus || 0}</span> Terdaftar {activePortHUD.unconfigured_onus > 0 ? <span>(<strong className="text-amber-400">{activePortHUD.unconfigured_onus}</strong> Belum Terdaftar)</span> : ''} · Tx Power: <span className="text-amber-300 font-bold font-mono">{activePortHUD.tx_power_dbm ? `${activePortHUD.tx_power_dbm} dBm` : '—'}</span>
+                              <span className="font-black text-sm text-slate-900 dark:text-white">{activePortHUD.port_id}</span>
+                              <span className="text-slate-600 dark:text-slate-200 ml-3 text-xs font-semibold">
+                                Status: <strong className={isPortUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong> · <span className="text-slate-800 dark:text-white font-bold">{activePortHUD.registered_onus || 0}</span> Terdaftar {activePortHUD.unconfigured_onus > 0 ? <span>(<strong className="text-amber-600 dark:text-amber-400">{activePortHUD.unconfigured_onus}</strong> Belum Terdaftar)</span> : ''} · Tx Power: <span className="text-amber-600 dark:text-amber-300 font-bold font-mono">{activePortHUD.tx_power_dbm ? `${activePortHUD.tx_power_dbm} dBm` : '—'}</span>
                               </span>
                             </div>
                           </div>
@@ -2282,7 +2282,7 @@ export default function OltManagement() {
                               <button
                                 type="button"
                                 onClick={() => handleSelectPort(null)}
-                                className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs shadow-xs border border-slate-500 transition-colors flex items-center gap-2"
+                                className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-bold text-xs shadow-xs border border-slate-300 dark:border-slate-500 transition-colors flex items-center gap-2"
                               >
                                 <IconX />
                                 <span>Tampilkan Semua Port</span>
