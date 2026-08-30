@@ -1425,7 +1425,7 @@ export default function OltManagement() {
                     onClick={() => setShowSensitiveIp(!showSensitiveIp)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${showSensitiveIp
                       ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 shadow-xs'
-                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-750'
+                      : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                       }`}
                     title="Toggle sensor IP address"
                   >
@@ -1470,7 +1470,7 @@ export default function OltManagement() {
                         key={o.id}
                         onClick={() => setSelectedOltId(o.id)}
                         className={`relative rounded-2xl border transition-all duration-200 group overflow-hidden cursor-pointer flex flex-col justify-between ${isActive
-                          ? 'bg-white dark:bg-slate-850 border-2 border-indigo-600 dark:border-indigo-500 shadow-lg shadow-indigo-500/10 ring-4 ring-indigo-500/10'
+                          ? 'bg-slate-50/80 dark:bg-slate-800 border-2 border-indigo-600 dark:border-indigo-500 shadow-md ring-2 ring-indigo-500/20'
                           : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md'
                           }`}
                       >
@@ -1482,7 +1482,10 @@ export default function OltManagement() {
                         <div className="p-3.5 pb-2">
                           {/* Top Row: Vendor Badge + Status Pill */}
                           <div className="flex items-center justify-between gap-1.5 mb-2.5">
-                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${isActive
+                              ? 'bg-slate-200/80 dark:bg-slate-700 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                              }`}>
                               {o.vendor}
                             </span>
                             <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${isLive
@@ -1506,7 +1509,10 @@ export default function OltManagement() {
                           </div>
 
                           {/* IP Address Pill */}
-                          <div className="mt-2.5 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[11px] font-semibold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                          <div className={`mt-2.5 px-2.5 py-1.5 rounded-lg border font-mono text-[11px] font-semibold flex items-center justify-between ${isActive
+                            ? 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100'
+                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                            }`}>
                             <span className="truncate">{maskIpAddress(o.ip_address)}</span>
                             <span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase font-sans font-bold">IP</span>
                           </div>
@@ -1965,7 +1971,7 @@ export default function OltManagement() {
                         {/* 21 Vertical Blade Card Slots (Side-by-Side Horizontal Chain) */}
                         <div className="grid grid-cols-21 divide-x divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-950 font-mono text-xs min-h-[500px]">
                           {/* Slot 1: PRWG (Power Blade) */}
-                          <div className="flex flex-col items-center justify-between p-2 bg-slate-50/50 dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-850 transition-colors">
+                          <div className="flex flex-col items-center justify-between p-2 bg-slate-50/50 dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                             <div className="flex flex-col items-center gap-1">
                               <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[8px] text-slate-600 dark:text-slate-300 font-bold">|</div>
                               <span className="font-black text-[10px] text-slate-900 dark:text-white tracking-tighter">PRWG</span>
@@ -2017,7 +2023,7 @@ export default function OltManagement() {
                                   : isUplinkBlade
                                     ? 'bg-slate-50/60 dark:bg-slate-900/80'
                                     : isLineCard
-                                      ? 'bg-white dark:bg-slate-900/90 hover:bg-slate-50 dark:hover:bg-slate-850'
+                                      ? 'bg-white dark:bg-slate-900/90 hover:bg-slate-50 dark:hover:bg-slate-800'
                                       : 'bg-slate-50/30 dark:bg-slate-950/60 opacity-60'
                                   }`}
                               >
@@ -2147,7 +2153,7 @@ export default function OltManagement() {
                             const portCount1 = getCardPortCount(card1.type) || 16;
 
                             return (
-                              <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
+                              <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                                 <div className="flex items-center gap-3 w-36 shrink-0">
                                   <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
                                   <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" title="RUN LED: Active" />
@@ -2228,7 +2234,7 @@ export default function OltManagement() {
                             }
 
                             return (
-                              <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
+                              <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                                 <div className="flex items-center gap-3 w-36 shrink-0">
                                   <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
                                   <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" title="RUN LED: Active" />
@@ -2286,7 +2292,7 @@ export default function OltManagement() {
                           {/* ROW 3: SLOT 3 (PRAM) & SLOT 4 (SMXA) */}
                           <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-slate-700">
                             {/* Slot 3: PRAM */}
-                            <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
+                            <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                               <div className="flex items-center gap-3">
                                 <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
                                 <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" title="POWER LED: Active" />
@@ -2309,12 +2315,13 @@ export default function OltManagement() {
                             </div>
 
                             {/* Slot 4: SMXA */}
-                            <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
+                            <div className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                               <div className="flex items-center gap-3">
                                 <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 flex items-center justify-center text-[9px] text-slate-600 dark:text-slate-300 font-bold shadow-xs">|</div>
                                 <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500" title="CTRL LED: Active" />
                                 <span className="text-sm font-black text-slate-900 dark:text-white">SMXA</span>
                               </div>
+
 
                               <div className="flex items-center gap-2 px-3">
                                 {[1, 2, 3, 4].map(uNum => (
