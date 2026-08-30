@@ -199,17 +199,13 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     }
                 }
 
-                // 2. Query tabel ONU GPON ZTE V2.x (Prioritas OID 1012.3.50.11.2.1.3 & 1012.3.28.1.1.5)
+                // 2. Query tabel ONU GPON ZTE V2.x
                 $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
                 if (empty($snHexList)) {
                     $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
                 }
-                if (empty($snHexList)) {
-                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.14.1.1') ?: [];
-                }
 
                 $stateList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.4') ?: [];
-                $descList  = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.2') ?: [];
                 $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.9') ?: [];
 
                 // Optical Table
@@ -238,13 +234,6 @@ class ZteC320Driver implements OltDeviceDriverInterface
                 }
 
                 $descMap = [];
-                if (!empty($descList)) {
-                    foreach ($descList as $o => $v) {
-                        $p = explode('.', $o);
-                        $key = ($p[count($p)-2] ?? '') . '_' . end($p);
-                        $descMap[$key] = SnmpConnector::parseValue((string)$v);
-                    }
-                }
 
                 $onuRxMap = [];
                 if (!empty($onuRxList)) {
