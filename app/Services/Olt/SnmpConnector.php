@@ -53,12 +53,31 @@ class SnmpConnector
         $this->v3PrivPassword = $v3PrivPassword;
     }
 
+    private ?bool $cachedReachable = null;
+
     /**
      * Check if PHP SNMP extension is available.
      */
     public static function isAvailable(): bool
     {
         return extension_loaded('snmp');
+    }
+
+    /**
+     * Quick reachability check with single sysDescr query cached for the lifecycle.
+     */
+    public function isReachable(): bool
+    {
+        if ($this->cachedReachable !== null) {
+            return $this->cachedReachable;
+        }
+        if (!self::isAvailable()) {
+            $this->cachedReachable = false;
+            return false;
+        }
+        $test = @$this->get('1.3.6.1.2.1.1.1.0');
+        $this->cachedReachable = ($test !== false);
+        return $this->cachedReachable;
     }
 
     /**

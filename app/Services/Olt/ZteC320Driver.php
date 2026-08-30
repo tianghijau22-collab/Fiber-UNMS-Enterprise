@@ -113,7 +113,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
         $onuCountByPort = [];
         $onlineCountByPort = [];
 
-        if ($this->snmp && $this->isLive) {
+        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 $snTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
                 if (empty($snTable)) {
