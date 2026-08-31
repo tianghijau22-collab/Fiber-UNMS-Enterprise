@@ -348,7 +348,7 @@ export default function ServerMonitoring() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
       {/* ── HEADER & CONTROLS HUD ── */}
-      <div className="bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
@@ -437,7 +437,7 @@ export default function ServerMonitoring() {
       {/* ── 5 KARTU STATISTIK UTAMA (CPU, RAM, STORAGE, BANDWIDTH, VPN LATENCY) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* 1. CPU Card */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs relative overflow-hidden flex flex-col justify-between">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">CPU Usage</span>
             <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
@@ -473,7 +473,7 @@ export default function ServerMonitoring() {
         </div>
 
         {/* 2. RAM Card */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs relative overflow-hidden flex flex-col justify-between">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Memory (RAM)</span>
             <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
@@ -507,7 +507,7 @@ export default function ServerMonitoring() {
         </div>
 
         {/* 3. Disk Storage Card */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs relative overflow-hidden flex flex-col justify-between">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">SSD Storage</span>
             <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
@@ -541,7 +541,7 @@ export default function ServerMonitoring() {
         </div>
 
         {/* 4. Bandwidth Card */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs relative overflow-hidden flex flex-col justify-between">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Network Traffic</span>
             <div className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-400">
@@ -577,7 +577,7 @@ export default function ServerMonitoring() {
         </div>
 
         {/* 5. VPN Tunnel Latency Card */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs relative overflow-hidden flex flex-col justify-between">
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Latensi VPN</span>
             <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
@@ -610,7 +610,7 @@ export default function ServerMonitoring() {
       {/* ── GRAFIK REALTIME: CPU, RAM, DAN LATENSI VPN TUNNEL ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Realtime CPU Line Chart */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs flex flex-col justify-between">
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -631,7 +631,7 @@ export default function ServerMonitoring() {
         </div>
 
         {/* Realtime RAM Line Chart */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs flex flex-col justify-between">
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -652,7 +652,7 @@ export default function ServerMonitoring() {
         </div>
 
         {/* Realtime VPN Latency Chart */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs flex flex-col justify-between">
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -676,7 +676,7 @@ export default function ServerMonitoring() {
       {/* ── GRAFIK BANDWIDTH & DETAIL STORAGE DISK ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Realtime Network Traffic Bandwidth Chart (2 Columns) */}
-        <div className="lg:col-span-2 p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs flex flex-col justify-between">
+        <div className="lg:col-span-2 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -698,7 +698,7 @@ export default function ServerMonitoring() {
         </div>
 
         {/* Disk Usage Breakdown & Doughnut (1 Column) */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs flex flex-col justify-between">
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
@@ -757,7 +757,7 @@ export default function ServerMonitoring() {
       </div>
 
       {/* ── PANEL BARU: MONITORING REQUEST & BACKGROUND WORKER TELEMETRI OLT ── */}
-      <div className="bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-xs space-y-5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -974,7 +974,7 @@ export default function ServerMonitoring() {
       </div>
 
       {/* ── PANEL: DETAIL KESEHATAN & LATENSI VPN TUNNEL KE OLT ── */}
-      <div className="bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -1047,7 +1047,7 @@ export default function ServerMonitoring() {
               {vpn.olt_targets.map((target) => (
                 <div
                   key={target.id}
-                  className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b0f19] flex items-center justify-between text-xs"
+                  className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between text-xs"
                 >
                   <div>
                     <div className="font-bold text-slate-900 dark:text-white">{target.name}</div>
@@ -1070,7 +1070,7 @@ export default function ServerMonitoring() {
       </div>
 
       {/* ── STATUS GATEWAY & LAYANAN UNMS ── */}
-      <div className="bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -1149,7 +1149,7 @@ export default function ServerMonitoring() {
       {/* ── TOP PROCESSES & NETWORK INTERFACES TABLE ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Processes Table */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs">
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">Top Proses Konsumsi Server</h3>
@@ -1191,7 +1191,7 @@ export default function ServerMonitoring() {
         </div>
 
         {/* Network Interfaces Detail */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 shadow-xs flex flex-col justify-between">
+        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div>
