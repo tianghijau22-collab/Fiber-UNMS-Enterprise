@@ -69,7 +69,7 @@ class PollOltTelemetry extends Command
         foreach ($devices as $device) {
             $cmd = [$phpBinary, $artisanPath, 'olt:poll-telemetry', "--device={$device->id}", '--force'];
             $process = new Process($cmd);
-            $process->setTimeout(30); // 30 detik maksimal per 1 port PON
+            $process->setTimeout(90); // 90 detik — cukup untuk discovery awal OLT besar (80 port)
             $process->start();
 
             $processes[$device->id] = [
@@ -190,13 +190,27 @@ class PollOltTelemetry extends Command
             $driver = $oltCtrl->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
 
             // 1. Ambil daftar Port PON (seluruh port fisik, cache 5 menit)
-            $allPonPorts = Cache::remember("olt_ports_list_{$device->id}", 300, function () use ($driver) {
-                return $driver->getPonPorts();
-            });
+            // ⚡ OPTIMASI: Pre-populate dari snapshot database dulu (hindari SNMP scan 80 port dari awal)
+            $portsCacheKey = "olt_ports_list_{$device->id}";
+            $allPonPorts = Cache::get($portsCacheKey);
 
             if (empty($allPonPorts)) {
-                $allPonPorts = $driver->getPonPorts();
-                Cache::put("olt_ports_list_{$device->id}", $allPonPorts, 300);
+                // Coba ambil dari snapshot database terlebih dahulu (sudah ada data sebelumnya)
+                $existingSnapshotForPorts = $device->last_telemetry_snapshot ?? [];
+                $snapshotPorts = $existingSnapshotForPorts['pon_ports'] ?? [];
+
+                if (!empty($snapshotPorts)) {
+                    // Gunakan data port dari snapshot — tidak perlu SNMP scan
+                    $allPonPorts = $snapshotPorts;
+                    Cache::put($portsCacheKey, $allPonPorts, 300);
+                    self::appendWorkerLog($device->name, 'SYSTEM', 'INFO', "Port list dari snapshot DB ({$device->name}): " . count($allPonPorts) . " port tersedia (skip SNMP discovery)");
+                } else {
+                    // Fallback: SNMP discovery penuh (hanya saat pertama kali sama sekali)
+                    $allPonPorts = $driver->getPonPorts();
+                    if (!empty($allPonPorts)) {
+                        Cache::put($portsCacheKey, $allPonPorts, 300);
+                    }
+                }
             }
 
             if (empty($allPonPorts)) {
