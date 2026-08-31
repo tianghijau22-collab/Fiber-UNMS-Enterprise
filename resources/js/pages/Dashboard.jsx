@@ -806,77 +806,37 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── SECTION 4: STATUS GATEWAY & SERVER HEALTH SYSTEM (KHUSUS SUPER ADMINISTRATOR) ── */}
+      {/* ── SECTION 4: SERVER HEALTH & MONITORING QUICK SHORTCUT (KHUSUS SUPER ADMINISTRATOR) ── */}
       {isSuperAdmin && (
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-5 shadow-2xs">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-gradient-to-r from-indigo-900/10 via-slate-50 to-white dark:from-indigo-950/20 dark:via-neutral-950 dark:to-neutral-900 border border-slate-200 dark:border-[#222222] rounded-xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 rounded-xl bg-indigo-600 text-white shadow-xs">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+              </svg>
+            </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Status Gateway &amp; Kesehatan Server UNMS
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Monitoring Sumber Daya &amp; Kesehatan Server UNMS
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
+                  Realtime Active
+                </span>
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Infrastruktur server daemon, service dispatch audio, dan utilitas disk storage
+                Pantau grafik real-time penggunaan CPU, RAM, SSD Storage, Bandwidth Rx/Tx, serta status gateway daemon di halaman terdedikasi.
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Service 1: SNMP Poller */}
-            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.snmp_daemon.name}</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
-                  {serverHealth.snmp_daemon.status}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">{serverHealth.snmp_daemon.detail}</p>
-              <p className="text-[10px] font-mono text-slate-400 truncate">{serverHealth.snmp_daemon.driver}</p>
-            </div>
-
-            {/* Service 2: WebRTC Dispatch */}
-            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.webrtc_gateway.name}</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
-                  {serverHealth.webrtc_gateway.status}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">{serverHealth.webrtc_gateway.detail}</p>
-              <p className="text-[10px] font-mono text-slate-400">Channel Ready / Standby</p>
-            </div>
-
-            {/* Service 3: Database & Telemetry */}
-            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.database.name}</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
-                  {serverHealth.database.status}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Ukuran DB: {serverHealth.database.size_mb} MB</p>
-              <p className="text-[10px] font-mono text-slate-400">Driver: {serverHealth.database.driver}</p>
-            </div>
-
-            {/* Service 4: VPS SSD Disk Storage */}
-            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{serverHealth.disk_storage.name}</span>
-                <span className="font-mono text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                  {serverHealth.disk_storage.used_gb} GB / {serverHealth.disk_storage.total_gb} GB
-                </span>
-              </div>
-              <div className="w-full bg-slate-200 dark:bg-neutral-900 rounded-full h-2 overflow-hidden my-1">
-                <div
-                  className={`h-2 rounded-full ${serverHealth.disk_storage.used_pct > 85 ? 'bg-rose-500' : 'bg-emerald-500'}`}
-                  style={{ width: `${Math.max(5, serverHealth.disk_storage.used_pct)}%` }}
-                ></div>
-              </div>
-              <p className="text-[10px] text-slate-400 flex justify-between">
-                <span>Tersedia: {serverHealth.disk_storage.free_gb} GB</span>
-                <span className="font-bold">{serverHealth.disk_storage.used_pct}% Terpakai</span>
-              </p>
-            </div>
-          </div>
+          <Link
+            to="/server-monitoring"
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-2 shrink-0"
+          >
+            <span>Buka Monitoring Server</span>
+            <span>→</span>
+          </Link>
         </div>
       )}
 

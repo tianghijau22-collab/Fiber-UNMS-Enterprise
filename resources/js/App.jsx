@@ -13,6 +13,7 @@ import CustomerManagement from './pages/CustomerManagement.jsx';
 import TicketManagement from './pages/TicketManagement.jsx';
 import InventoryManagement from './pages/InventoryManagement.jsx';
 import OltManagement from './pages/OltManagement.jsx';
+import ServerMonitoring from './pages/ServerMonitoring.jsx';
 import OtdrFaultTracing from './pages/OtdrFaultTracing.jsx';
 import CableRouteEditor from './pages/CableRouteEditor.jsx';
 import FieldTechWorkOrders from './pages/FieldTechWorkOrders.jsx';
@@ -83,8 +84,9 @@ function AppContent() {
           <PageTransitionWrapper>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard"      element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-              <Route path="/olt-management" element={<PrivateRoute><OltManagement /></PrivateRoute>} />
+              <Route path="/dashboard"         element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+              <Route path="/server-monitoring" element={<PrivateRoute><ServerMonitoring /></PrivateRoute>} />
+              <Route path="/olt-management"    element={<PrivateRoute><OltManagement /></PrivateRoute>} />
               <Route path="/network-bridge-setup" element={<PrivateRoute><NetworkBridgeSetup /></PrivateRoute>} />
               <Route path="/otdr-tracing"   element={<PrivateRoute><OtdrFaultTracing /></PrivateRoute>} />
               <Route path="/cable-routes"   element={<PrivateRoute><CableRouteEditor /></PrivateRoute>} />

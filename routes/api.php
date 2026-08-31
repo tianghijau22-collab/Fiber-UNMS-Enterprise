@@ -23,6 +23,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\BtsSiteController;
 use App\Http\Controllers\VpsBridgeController;
 use App\Http\Controllers\LiveMonitorController;
+use App\Http\Controllers\ServerMonitoringController;
 
 /*
 |--------------------------------------------------------------------------
@@ -84,6 +85,7 @@ Route::post('/vps-bridge/test-connection', [VpsBridgeController::class, 'testBri
 // Live Polling & Telemetry Monitoring (SNMP & MikroTik RouterOS API)
 Route::get('/monitoring/router/live-metrics', [LiveMonitorController::class, 'getRouterMetrics']);
 Route::get('/monitoring/olt/{id}/live-telemetry', [LiveMonitorController::class, 'getOltTelemetry']);
+Route::get('/server-monitoring/metrics', [ServerMonitoringController::class, 'getMetrics']);
 Route::post('/monitoring/ping-sweep', [LiveMonitorController::class, 'pingSweep']);
 
 // OTDR Fault Tracing Engine

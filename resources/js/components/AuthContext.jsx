@@ -4,6 +4,7 @@ const AuthContext = createContext();
 
 export const ROUTE_ROLES = {
   '/dashboard': ['*'],
+  '/server-monitoring': ['Super Administrator', 'Operator Jaringan', 'NOC Operator'],
   '/olt-management': ['Super Administrator', 'Operator Jaringan', 'NOC Operator'],
   '/network-bridge-setup': ['Super Administrator'],
   '/otdr-tracing': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
