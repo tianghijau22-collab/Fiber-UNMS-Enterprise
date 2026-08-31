@@ -51,7 +51,7 @@ class PollOltTelemetry extends Command
         foreach ($devices as $device) {
             $cmd = [$phpBinary, $artisanPath, 'olt:poll-telemetry', "--device={$device->id}", '--force'];
             $process = new Process($cmd);
-            $process->setTimeout(25); // Max 25s isolation timeout
+            $process->setTimeout(120); // 120s timeout per OLT
             $process->start();
 
             $processes[$device->id] = [
@@ -94,7 +94,7 @@ class PollOltTelemetry extends Command
                     $uncfgCount  = count($uncfg);
 
                     $isSuccess = $proc->isSuccessful();
-                    $statusStr = $isSuccess ? 'SUCCESS' : ('FAILED: ' . ($errorOutput ?: 'Process timeout'));
+                    $statusStr = $isSuccess ? 'SUCCESS' : ('FAILED: ' . ($errorOutput ?: 'Process error'));
 
                     $totalPortsPolled += $activePorts;
                     $totalOnusPolled += $onusCount;
@@ -173,7 +173,7 @@ class PollOltTelemetry extends Command
     }
 
     /**
-     * Polling Khusus 1 Unit OLT Terisolasi (Sub-Process dengan Update Database Inkremental per Port)
+     * Polling Khusus 1 Unit OLT Terisolasi (Sub-Process dengan Update Database Inkremental per Port Cepat)
      */
     protected function pollSingleDevice(int $deviceId, OltController $oltCtrl): int
     {
@@ -192,10 +192,17 @@ class PollOltTelemetry extends Command
             $deviceInfo = $driver->getDeviceInfo();
             $ponPorts   = $driver->getPonPorts();
             
-            $allOnus = [];
-            $activePortCount = 0;
+            // 1. Fast Batch Query untuk seluruh OLT (Hanya butuh 3-4 SNMP Walks total untuk seluruh ONU di OLT)
+            $allOnus = $driver->getOnuList();
+            $uncfg   = $driver->getUnconfiguredOnus();
 
-            // Inisialisasi snapshot awal dari database jika ada
+            // 2. Kelompokkan ONU berdasarkan Port PON untuk Update Database Inkremental Real-time
+            $onusByPort = [];
+            foreach ($allOnus as $onu) {
+                $p = $onu['port'] ?? 'unknown';
+                $onusByPort[$p][] = $onu;
+            }
+
             $existingSnapshot = $device->last_telemetry_snapshot ?? [];
             $existingOnuMap = [];
             foreach ($existingSnapshot['onu_list'] ?? [] as $o) {
@@ -204,108 +211,85 @@ class PollOltTelemetry extends Command
                 }
             }
 
+            // 3. Iterasi per Port PON dengan Throttling 15ms & Update Database Inkremental
             foreach ($ponPorts as $port) {
                 $portId = $port['port_id'];
-                $hasOnus = (($port['registered_onus'] ?? 0) > 0 || ($port['unconfigured_onus'] ?? 0) > 0);
+                $portOnus = $onusByPort[$portId] ?? [];
+                $hasOnus = count($portOnus) > 0 || (($port['registered_onus'] ?? 0) > 0);
 
                 if ($hasOnus) {
-                    $activePortCount++;
                     $portStart = microtime(true);
-                    
-                    self::appendWorkerLog($device->name, $portId, 'SYNCING', "Sedang query SNMP port {$portId}...");
 
-                    try {
-                        // Query OLT per port (dengan auto-retry & adaptive timeout di SnmpConnector)
-                        $portOnus = $driver->getOnuListByPort($portId);
-                        $portDuration = round((microtime(true) - $portStart) * 1000, 1);
+                    // Update seluruh ONU pada port ini ke database ont_registrations detik itu juga
+                    foreach ($portOnus as $onuData) {
+                        $sn = $onuData['serial_number'] ?? null;
+                        if (!$sn) continue;
 
-                        if (!empty($portOnus)) {
-                            $allOnus = array_merge($allOnus, $portOnus);
-                            
-                            // ── INKREMENTAL: LANGSUNG UPDATE DATABASE UNTUK PORT INI DETIK ITU JUGA ──
-                            foreach ($portOnus as $onuData) {
-                                $sn = $onuData['serial_number'] ?? null;
-                                if (!$sn) continue;
+                        $existingOnuMap[$sn] = $onuData;
+                        $newStatus = ($onuData['status'] === 'Online') ? 'active' : 'inactive';
+                        $newRx     = $onuData['rx_power'] ?? null;
+                        $newTx     = $onuData['tx_power'] ?? null;
 
-                                $existingOnuMap[$sn] = $onuData;
-                                $newStatus = ($onuData['status'] === 'Online') ? 'active' : 'inactive';
-                                $newRx     = $onuData['rx_power'] ?? null;
-                                $newTx     = $onuData['tx_power'] ?? null;
+                        $ontReg = \App\Models\OntRegistration::with(['customerService.customer', 'oltPort.node'])
+                            ->where('onu_serial', $sn)
+                            ->orWhere('onu_mac', $sn)
+                            ->first();
 
-                                $ontReg = \App\Models\OntRegistration::with(['customerService.customer', 'oltPort.node'])
-                                    ->where('onu_serial', $sn)
-                                    ->orWhere('onu_mac', $sn)
-                                    ->first();
+                        if ($ontReg) {
+                            $oldStatus = $ontReg->status;
+                            $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
+                            $portName  = $onuData['port'] ?? ($ontReg->oltPort?->node?->olt_port_ref ?: 'epon_0/1');
 
-                                if ($ontReg) {
-                                    $oldStatus = $ontReg->status;
-                                    $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
-                                    $portName  = $onuData['port'] ?? ($ontReg->oltPort?->node?->olt_port_ref ?: 'epon_0/1');
-
-                                    // Alarm LOS Baru
-                                    if ($oldStatus === 'active' && $newStatus === 'inactive') {
-                                        $downReason = $onuData['last_down_reason'] ?? 'Loss of Signal (Kabel Putus / Dying Gasp)';
-                                        \App\Models\AuditLog::record('ALARM_LOS', 'Monitoring OLT', "🚨 ALERT: Modem {$custName} ({$sn}) LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName]);
-                                        \App\Services\TelegramService::send("🚨 ALARM GANGGUAN OPTIK (LOS)", "<b>Pelanggan:</b> {$custName}\n<b>SN:</b> <code>{$sn}</code>\n<b>OLT:</b> {$device->name} ({$portName})\n<b>Status:</b> 🔴 OFFLINE / LOS", 'NOC');
-                                    }
-
-                                    // Alarm Recovery
-                                    if ($oldStatus === 'inactive' && $newStatus === 'active') {
-                                        \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) Online kembali pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName]);
-                                        \App\Services\TelegramService::send("🟢 PEMULIHAN LAYANAN (RECOVERY)", "<b>Pelanggan:</b> {$custName}\n<b>SN:</b> <code>{$sn}</code>\n<b>OLT:</b> {$device->name} ({$portName})\n<b>Status:</b> 🟢 ONLINE\n<b>Rx:</b> <code>{$newRx} dBm</code>", 'NOC');
-                                    }
-
-                                    $ontReg->update([
-                                        'rx_power' => $newRx,
-                                        'tx_power' => $newTx,
-                                        'status'   => $newStatus,
-                                    ]);
-                                }
+                            // Alarm LOS Baru
+                            if ($oldStatus === 'active' && $newStatus === 'inactive') {
+                                $downReason = $onuData['last_down_reason'] ?? 'Loss of Signal (Kabel Putus / Dying Gasp)';
+                                \App\Models\AuditLog::record('ALARM_LOS', 'Monitoring OLT', "🚨 ALERT: Modem {$custName} ({$sn}) LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName]);
+                                \App\Services\TelegramService::send("🚨 ALARM GANGGUAN OPTIK (LOS)", "<b>Pelanggan:</b> {$custName}\n<b>SN:</b> <code>{$sn}</code>\n<b>OLT:</b> {$device->name} ({$portName})\n<b>Status:</b> 🔴 OFFLINE / LOS", 'NOC');
                             }
 
-                            // Update snapshot database langsung
-                            $device->update([
-                                'last_telemetry_snapshot' => $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, array_values($existingOnuMap), []),
-                                'last_connected_at'       => now(),
-                            ]);
+                            // Alarm Recovery
+                            if ($oldStatus === 'inactive' && $newStatus === 'active') {
+                                \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) Online kembali pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName]);
+                                \App\Services\TelegramService::send("🟢 PEMULIHAN LAYANAN (RECOVERY)", "<b>Pelanggan:</b> {$custName}\n<b>SN:</b> <code>{$sn}</code>\n<b>OLT:</b> {$device->name} ({$portName})\n<b>Status:</b> 🟢 ONLINE\n<b>Rx:</b> <code>{$newRx} dBm</code>", 'NOC');
+                            }
 
-                            self::appendWorkerLog(
-                                $device->name,
-                                $portId,
-                                'SUCCESS',
-                                "Port {$portId}: " . count($portOnus) . " ONU terbaca & database terupdate ({$portDuration} ms)",
-                                ['onu_count' => count($portOnus), 'duration_ms' => $portDuration]
-                            );
-                        } else {
-                            self::appendWorkerLog(
-                                $device->name,
-                                $portId,
-                                'EMPTY',
-                                "Port {$portId}: Standby (0 ONU terdeteksi pada laser SFP, {$portDuration} ms)",
-                                ['onu_count' => 0]
-                            );
+                            $ontReg->update([
+                                'rx_power' => $newRx,
+                                'tx_power' => $newTx,
+                                'status'   => $newStatus,
+                            ]);
                         }
-                    } catch (\Exception $e) {
-                        self::appendWorkerLog(
-                            $device->name,
-                            $portId,
-                            'ERROR',
-                            "Port {$portId}: Timeout / Error ({$e->getMessage()})",
-                            ['error' => $e->getMessage()]
-                        );
                     }
 
-                    // Jeda throttling 15 milidetik (0.015s) antar port aktif
+                    $portDuration = round((microtime(true) - $portStart) * 1000, 1);
+
+                    // Update snapshot database langsung per port
+                    $device->update([
+                        'last_telemetry_snapshot' => $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, array_values($existingOnuMap), []),
+                        'last_connected_at'       => now(),
+                    ]);
+
+                    self::appendWorkerLog(
+                        $device->name,
+                        $portId,
+                        'SUCCESS',
+                        "Port {$portId}: " . count($portOnus) . " ONU terbaca & database terupdate ({$portDuration} ms)",
+                        ['onu_count' => count($portOnus), 'duration_ms' => $portDuration]
+                    );
+
+                    // Jeda throttling 15 milidetik antar port
                     usleep(15000);
+                } else {
+                    // Port Standby (0 ONU)
+                    self::appendWorkerLog(
+                        $device->name,
+                        $portId,
+                        'EMPTY',
+                        "Port {$portId}: Standby (0 ONU terdeteksi pada laser SFP)",
+                        ['onu_count' => 0]
+                    );
                 }
             }
-
-            // Fallback jika tidak ada data port yang didapat
-            if (empty($allOnus)) {
-                $allOnus = $driver->getOnuList();
-            }
-
-            $uncfg = $driver->getUnconfiguredOnus();
 
             // Final Snapshot Update
             $finalSnapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, $allOnus, $uncfg);
