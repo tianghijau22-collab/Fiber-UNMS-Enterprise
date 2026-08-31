@@ -57,7 +57,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     public function getDeviceInfo(): array
     {
-        if ($this->snmp && $this->isLive) {
+        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 $sysDescr  = $this->snmp->get('1.3.6.1.2.1.1.1.0');
                 $sysUpTime = $this->snmp->get('1.3.6.1.2.1.1.3.0');
@@ -398,7 +398,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
         $slotNum = (int)($portParts[1] ?? 1);
         $portNum = (int)($portParts[2] ?? 1);
 
-        if ($this->snmp && $this->isLive) {
+        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 $ifIndex = (0x10 << 24) | ($slotNum << 16) | ($portNum << 8);
 
@@ -660,7 +660,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     protected function getCpuUsage(): ?int
     {
-        if ($this->snmp && $this->isLive) {
+        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 // OID MIB 1082 CPU per Card (GTGH, SMXA, SCXN)
                 $cpus = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.9');
@@ -681,7 +681,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     protected function getRamUsage(): ?int
     {
-        if ($this->snmp && $this->isLive) {
+        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 // OID MIB 1082 Memory per Card (GTGH, SMXA, SCXN)
                 $mems = $this->snmp->walk('1.3.6.1.4.1.3902.1082.10.1.2.4.1.11');
@@ -707,7 +707,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     protected function getChassisCards(): array
     {
-        if ($this->snmp && $this->isLive) {
+        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 $cardTypes = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.1.1.1.2');
                 if (!empty($cardTypes)) {

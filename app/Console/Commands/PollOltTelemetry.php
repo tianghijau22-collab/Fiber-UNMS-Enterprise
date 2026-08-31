@@ -186,100 +186,97 @@ class PollOltTelemetry extends Command
         }
 
         $devStart = microtime(true);
+        $targetPortId = $specificPort ?? 'INIT';
         try {
             $driver = $oltCtrl->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
+            $existingSnapshot = $device->last_telemetry_snapshot ?? [];
 
             // ═══════════════════════════════════════════════════════════════════
-            // 1. DAFTAR PORT AKTIF — 3 LAPIS FALLBACK (urutan prioritas)
+            // 🔹 TAHAP 1: OID SLOT & CARD (CHASSIS INVENTORY)
             // ═══════════════════════════════════════════════════════════════════
-            // Lapisan 1: Cache aktif (TTL 1 jam) — dari SNMP segar, paling akurat
-            // Lapisan 2: Snapshot DB dengan filter status='Up' — cepat, tanpa SNMP
-            // Lapisan 3: SNMP discovery penuh — lambat tapi paling akurat
-            //
-            // BUG FIX CURSOR STUCK: Jangan filter berdasarkan registered_onus dari snapshot!
-            // Snapshot hanya update 1 port per siklus → registered_onus port lain = 0 →
-            // filter menemukan 1 port → count=1 → cursor (0+1)%1=0 → STUCK selamanya.
+            // Membaca tipe dan status kartu di setiap slot OLT lalu simpan ke database
+            $cardsCacheKey = "olt_chassis_cards_{$device->id}";
+            $cards = Cache::get($cardsCacheKey);
 
-            $activePortsCacheKey = "olt_active_ports_{$device->id}";
-            $ponPorts = Cache::get($activePortsCacheKey); // TTL 1 jam — prioritas utama
+            if (empty($cards)) {
+                $deviceInfo = $driver->getDeviceInfo();
+                $cards = $deviceInfo['cards'] ?? [];
 
-            if (empty($ponPorts)) {
-                // ── Lapisan 2: Gunakan snapshot DB (filter status='Up', bukan registered_onus) ──
-                $existingSnap = $device->last_telemetry_snapshot ?? [];
-                $snapshotPorts = $existingSnap['pon_ports'] ?? [];
-
-                if (!empty($snapshotPorts)) {
-                    // Filter port yang status 'Up' atau 'Active' dari snapshot
-                    // Kriteria ini stabil — tidak berubah tiap siklus seperti registered_onus
-                    $upPorts = array_values(array_filter($snapshotPorts, fn($p) =>
-                        in_array(strtolower($p['status'] ?? ''), ['up', 'active', 'online'])
-                    ));
-
-                    if (!empty($upPorts)) {
-                        $ponPorts = $upPorts;
-                        // Cache hanya 5 menit — akan di-refresh oleh SNMP discovery di latar belakang
-                        Cache::put($activePortsCacheKey, $ponPorts, 300);
-                        self::appendWorkerLog($device->name, 'SYSTEM', 'INFO',
-                            "Port dari snapshot DB: " . count($ponPorts) . " port 'Up' dari " . count($snapshotPorts) . " port fisik pada {$device->name}");
-                    }
-                }
-
-                // ── Lapisan 3: SNMP discovery — hanya jika snapshot belum ada/kosong ──
-                if (empty($ponPorts)) {
-                    self::appendWorkerLog($device->name, 'SYSTEM', 'INFO', "SNMP discovery active ports untuk {$device->name}...");
-                    $freshPorts = $driver->getPonPorts();
-
-                    if (!empty($freshPorts)) {
-                        Cache::put("olt_ports_list_{$device->id}", $freshPorts, 300);
-
-                        $activePorts = array_values(array_filter($freshPorts, fn($p) =>
-                            ($p['registered_onus'] ?? 0) > 0 || ($p['unconfigured_onus'] ?? 0) > 0
-                        ));
-                        $ponPorts = !empty($activePorts) ? $activePorts : $freshPorts;
-                        Cache::put($activePortsCacheKey, $ponPorts, 3600); // 1 JAM
-
-                        self::appendWorkerLog($device->name, 'SYSTEM', 'INFO',
-                            count($ponPorts) . " active port(s) dari " . count($freshPorts) . " port fisik. Cached 1 jam.");
-                    }
+                if (!empty($cards)) {
+                    Cache::put($cardsCacheKey, $cards, 600); // Cache 10 menit
+                    self::appendWorkerLog($device->name, 'CHASSIS', 'INFO', "Tahap 1: Slot & Card terupdate (" . count($cards) . " cards aktif)");
                 }
             }
 
-            // Jika masih kosong → skip OLT ini
-            if (empty($ponPorts)) {
+            // ═══════════════════════════════════════════════════════════════════
+            // 🔹 TAHAP 2: OID STATUS PORT PON & POWER OPTICAL (SFP)
+            // ═══════════════════════════════════════════════════════════════════
+            // Membaca status operasional port PON, laser TX Power SFP (dBm), dan kelas SFP
+            $portsCacheKey = "olt_ports_list_{$device->id}";
+            $allPonPorts = Cache::get($portsCacheKey);
+
+            if (empty($allPonPorts)) {
+                $allPonPorts = $driver->getPonPorts();
+                if (!empty($allPonPorts)) {
+                    Cache::put($portsCacheKey, $allPonPorts, 300); // Cache 5 menit
+                    self::appendWorkerLog($device->name, 'SFP_PORTS', 'INFO', "Tahap 2: Status Port PON & SFP Power terupdate (" . count($allPonPorts) . " port fisik)");
+                }
+            }
+
+            // Fallback ke snapshot jika discovery port kosong
+            if (empty($allPonPorts)) {
+                $allPonPorts = $existingSnapshot['pon_ports'] ?? [];
+            }
+
+            if (empty($allPonPorts)) {
                 self::appendWorkerLog($device->name, 'ALL', 'EMPTY', "Tidak ditemukan port PON pada {$device->name}");
                 return 0;
             }
 
-            // $allPonPorts untuk snapshot update — ambil dari cache fisik atau gunakan ponPorts
-            $allPonPorts = Cache::get("olt_ports_list_{$device->id}", $ponPorts);
+            // Filter daftar Port AKTIF untuk cursor giliran polling ONU
+            $activePortsCacheKey = "olt_active_ports_{$device->id}";
+            $activePonPorts = Cache::get($activePortsCacheKey);
 
-            // 2. Tentukan target 1 Port PON yang akan di-query saat ini (Round-Robin Cursor)
+            if (empty($activePonPorts)) {
+                // Filter hanya port yang berstatus Up atau memiliki ONU aktif
+                $filtered = array_values(array_filter($allPonPorts, fn($p) =>
+                    in_array(strtolower($p['status'] ?? ''), ['up', 'active', 'online']) ||
+                    ($p['registered_onus'] ?? 0) > 0 ||
+                    ($p['unconfigured_onus'] ?? 0) > 0
+                ));
+                $activePonPorts = !empty($filtered) ? $filtered : $allPonPorts;
+                Cache::put($activePortsCacheKey, $activePonPorts, 3600); // Cache 1 jam
+            }
+
+            // ═══════════════════════════════════════════════════════════════════
+            // 🔹 TAHAP 3: PENARIKAN DATA ONU PER PORT PON BERTAHAP (GRANULAR)
+            // ═══════════════════════════════════════════════════════════════════
+            // Hanya menembak 1 PORT PON giliran saat ini (cepat, anti-timeout, non-masal)
             $cursorKey = "olt_poll_port_cursor_{$device->id}";
             $cursor = (int)Cache::get($cursorKey, 0);
 
             if ($specificPort) {
                 $targetPortId = $specificPort;
             } else {
-                if ($cursor >= count($ponPorts)) {
+                if ($cursor >= count($activePonPorts)) {
                     $cursor = 0;
                 }
-                $targetPort = $ponPorts[$cursor];
+                $targetPort = $activePonPorts[$cursor];
                 $targetPortId = $targetPort['port_id'];
 
                 // Majukan cursor untuk giliran berikutnya
-                $nextCursor = ($cursor + 1) % count($ponPorts);
+                $nextCursor = ($cursor + 1) % count($activePonPorts);
                 Cache::put($cursorKey, $nextCursor, 86400);
             }
 
-            self::appendWorkerLog($device->name, $targetPortId, 'SYNCING', "Query SNMP HANYA pada port {$targetPortId}...");
+            self::appendWorkerLog($device->name, $targetPortId, 'SYNCING', "Tahap 3: Query SNMP HANYA pada port {$targetPortId}...");
 
-            // 3. Query SNMP MURNI HANYA untuk 1 Port PON ini saja (getOnuListByPort)
+            // Query SNMP MURNI HANYA untuk 1 Port PON ini
             $portStart = microtime(true);
             $portOnus = $driver->getOnuListByPort($targetPortId);
             $portDuration = round((microtime(true) - $portStart) * 1000, 1);
 
-            // 4. Update Database Inkremental untuk Port PON ini
-            $existingSnapshot = $device->last_telemetry_snapshot ?? [];
+            // Update Database Inkremental untuk Port PON ini
             $existingOnus = $existingSnapshot['onu_list'] ?? [];
             $onuMap = [];
             foreach ($existingOnus as $o) {
@@ -330,8 +327,12 @@ class PollOltTelemetry extends Command
                     }
                 }
 
-                // Update snapshot database langsung (gunakan allPonPorts agar info seluruh port tersimpan)
+                // Update snapshot database langsung dengan data Slot/Card & Port/SFP terbaru
                 $deviceInfo = $existingSnapshot['device_info'] ?? $driver->getDeviceInfo();
+                if (!empty($cards)) {
+                    $deviceInfo['cards'] = $cards;
+                }
+                
                 $finalSnapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $allPonPorts, array_values($onuMap), []);
                 
                 $device->update([
@@ -367,11 +368,12 @@ class PollOltTelemetry extends Command
             $devDurationMs = round((microtime(true) - $devStart) * 1000, 1);
             return 0;
         } catch (\Exception $e) {
+            $portLabel = $targetPortId ?? 'ERROR';
             self::appendWorkerLog(
                 $device->name,
-                $targetPortId ?? 'ERROR',
+                $portLabel,
                 'ERROR',
-                "Gagal query port {$targetPortId}: " . $e->getMessage(),
+                "Gagal query port {$portLabel}: " . $e->getMessage(),
                 ['error' => $e->getMessage()]
             );
             $this->error("Failed to poll port on {$device->name}: " . $e->getMessage());

@@ -211,8 +211,8 @@ class SnmpConnector
             }
         }
 
-        // Attempt 2 (Adaptive Timeout Boost): Jika gagal, retry 1x dengan durasi lebih longgar (+1.5s)
-        if ($result === false || empty($result)) {
+        // Attempt 2 (Adaptive Timeout Boost): Jika gagal tapi device reachable, retry 1x dengan durasi lebih longgar (+1.5s)
+        if (($result === false || empty($result)) && $this->isReachable()) {
             $boostedTimeout = max($timeout * 2, 2500000); // 2.5s boost
             if ($this->snmpVersion === 'v3') {
                 $result = @snmp3_real_walk(
