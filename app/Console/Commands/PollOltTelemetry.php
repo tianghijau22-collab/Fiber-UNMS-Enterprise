@@ -190,48 +190,67 @@ class PollOltTelemetry extends Command
             $driver = $oltCtrl->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
 
             // ═══════════════════════════════════════════════════════════════════
-            // 1. DAFTAR PORT AKTIF — SUMBER TUNGGAL: SNMP getPonPorts() ASLI
+            // 1. DAFTAR PORT AKTIF — 3 LAPIS FALLBACK (urutan prioritas)
             // ═══════════════════════════════════════════════════════════════════
-            // BUG FIX: Jangan filter dari snapshot! Snapshot hanya update 1 port per siklus →
-            // setelah filter, hanya 1 port aktif → count=1 → cursor (0+1)%1=0 → STUCK selamanya.
+            // Lapisan 1: Cache aktif (TTL 1 jam) — dari SNMP segar, paling akurat
+            // Lapisan 2: Snapshot DB dengan filter status='Up' — cepat, tanpa SNMP
+            // Lapisan 3: SNMP discovery penuh — lambat tapi paling akurat
             //
-            // Solusi: Cache "active_ports" diisi dari SNMP getPonPorts() segar (TTL 1 jam).
-            // Snapshot TIDAK digunakan sebagai sumber filter port aktif.
+            // BUG FIX CURSOR STUCK: Jangan filter berdasarkan registered_onus dari snapshot!
+            // Snapshot hanya update 1 port per siklus → registered_onus port lain = 0 →
+            // filter menemukan 1 port → count=1 → cursor (0+1)%1=0 → STUCK selamanya.
 
             $activePortsCacheKey = "olt_active_ports_{$device->id}";
-            $ponPorts = Cache::get($activePortsCacheKey); // TTL 1 jam — dari SNMP asli
+            $ponPorts = Cache::get($activePortsCacheKey); // TTL 1 jam — prioritas utama
 
             if (empty($ponPorts)) {
-                // Lakukan SNMP scan untuk mendapatkan daftar port dengan ONU count yang akurat
-                self::appendWorkerLog($device->name, 'SYSTEM', 'INFO', "Discovering active PON ports via SNMP untuk {$device->name}...");
-                $freshPorts = $driver->getPonPorts();
+                // ── Lapisan 2: Gunakan snapshot DB (filter status='Up', bukan registered_onus) ──
+                $existingSnap = $device->last_telemetry_snapshot ?? [];
+                $snapshotPorts = $existingSnap['pon_ports'] ?? [];
 
-                if (!empty($freshPorts)) {
-                    // Simpan semua port fisik ke cache (5 menit) untuk kebutuhan snapshot
-                    Cache::put("olt_ports_list_{$device->id}", $freshPorts, 300);
-
-                    // Filter hanya port yang memiliki ONU aktif (data segar dari SNMP, akurat)
-                    $activePorts = array_values(array_filter($freshPorts, fn($p) =>
-                        ($p['registered_onus'] ?? 0) > 0 || ($p['unconfigured_onus'] ?? 0) > 0
+                if (!empty($snapshotPorts)) {
+                    // Filter port yang status 'Up' atau 'Active' dari snapshot
+                    // Kriteria ini stabil — tidak berubah tiap siklus seperti registered_onus
+                    $upPorts = array_values(array_filter($snapshotPorts, fn($p) =>
+                        in_array(strtolower($p['status'] ?? ''), ['up', 'active', 'online'])
                     ));
 
-                    // Jika ada port aktif → cache 1 jam sebagai daftar round-robin
-                    // Jika tidak ada → gunakan semua port (OLT baru / belum ada ONU)
-                    $ponPorts = !empty($activePorts) ? $activePorts : $freshPorts;
-                    Cache::put($activePortsCacheKey, $ponPorts, 3600); // 1 JAM
+                    if (!empty($upPorts)) {
+                        $ponPorts = $upPorts;
+                        // Cache hanya 5 menit — akan di-refresh oleh SNMP discovery di latar belakang
+                        Cache::put($activePortsCacheKey, $ponPorts, 300);
+                        self::appendWorkerLog($device->name, 'SYSTEM', 'INFO',
+                            "Port dari snapshot DB: " . count($ponPorts) . " port 'Up' dari " . count($snapshotPorts) . " port fisik pada {$device->name}");
+                    }
+                }
 
-                    self::appendWorkerLog($device->name, 'SYSTEM', 'INFO',
-                        count($ponPorts) . " active port(s) dari " . count($freshPorts) . " port fisik pada {$device->name}. Cached 1 jam.");
+                // ── Lapisan 3: SNMP discovery — hanya jika snapshot belum ada/kosong ──
+                if (empty($ponPorts)) {
+                    self::appendWorkerLog($device->name, 'SYSTEM', 'INFO', "SNMP discovery active ports untuk {$device->name}...");
+                    $freshPorts = $driver->getPonPorts();
+
+                    if (!empty($freshPorts)) {
+                        Cache::put("olt_ports_list_{$device->id}", $freshPorts, 300);
+
+                        $activePorts = array_values(array_filter($freshPorts, fn($p) =>
+                            ($p['registered_onus'] ?? 0) > 0 || ($p['unconfigured_onus'] ?? 0) > 0
+                        ));
+                        $ponPorts = !empty($activePorts) ? $activePorts : $freshPorts;
+                        Cache::put($activePortsCacheKey, $ponPorts, 3600); // 1 JAM
+
+                        self::appendWorkerLog($device->name, 'SYSTEM', 'INFO',
+                            count($ponPorts) . " active port(s) dari " . count($freshPorts) . " port fisik. Cached 1 jam.");
+                    }
                 }
             }
 
-            // Jika masih kosong setelah discovery → skip OLT ini
+            // Jika masih kosong → skip OLT ini
             if (empty($ponPorts)) {
                 self::appendWorkerLog($device->name, 'ALL', 'EMPTY', "Tidak ditemukan port PON pada {$device->name}");
                 return 0;
             }
 
-            // $allPonPorts untuk snapshot — ambil dari cache fisik atau gunakan ponPorts
+            // $allPonPorts untuk snapshot update — ambil dari cache fisik atau gunakan ponPorts
             $allPonPorts = Cache::get("olt_ports_list_{$device->id}", $ponPorts);
 
             // 2. Tentukan target 1 Port PON yang akan di-query saat ini (Round-Robin Cursor)
