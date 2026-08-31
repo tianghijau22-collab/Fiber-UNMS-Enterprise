@@ -189,20 +189,37 @@ class PollOltTelemetry extends Command
         try {
             $driver = $oltCtrl->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
 
-            // 1. Ambil daftar Port PON
-            $ponPorts = Cache::remember("olt_ports_list_{$device->id}", 300, function () use ($driver) {
+            // 1. Ambil daftar Port PON (seluruh port fisik, cache 5 menit)
+            $allPonPorts = Cache::remember("olt_ports_list_{$device->id}", 300, function () use ($driver) {
                 return $driver->getPonPorts();
             });
 
-            if (empty($ponPorts)) {
-                $ponPorts = $driver->getPonPorts();
-                Cache::put("olt_ports_list_{$device->id}", $ponPorts, 300);
+            if (empty($allPonPorts)) {
+                $allPonPorts = $driver->getPonPorts();
+                Cache::put("olt_ports_list_{$device->id}", $allPonPorts, 300);
             }
 
-            if (empty($ponPorts)) {
-                self::appendWorkerLog($device->name, 'ALL', 'EMPTY', "Tidak ditemukan port PON aktif pada {$device->name}");
+            if (empty($allPonPorts)) {
+                self::appendWorkerLog($device->name, 'ALL', 'EMPTY', "Tidak ditemukan port PON pada {$device->name}");
                 return 0;
             }
+
+            // ✅ KRITIS: Hanya gunakan port AKTIF (memiliki ONU terdaftar/unconfigured)
+            // Port kosong akan menyebabkan SNMP timeout 5+ detik → SKIP sepenuhnya
+            $ponPorts = array_values(array_filter($allPonPorts, fn($p) =>
+                ($p['registered_onus'] ?? 0) > 0 || ($p['unconfigured_onus'] ?? 0) > 0
+            ));
+
+            // Jika belum ada data ONU (pertama kali atau semua port kosong), query semua port
+            // agar kita bisa "discover" port yang baru aktif
+            if (empty($ponPorts)) {
+                $ponPorts = $allPonPorts;
+            }
+
+            // Simpan daftar port aktif ke cache terpisah untuk cursor (TTL 5 menit)
+            // Sehingga saat refresh port list, cursor tidak berjalan di port kosong
+            $activePortsCacheKey = "olt_active_ports_{$device->id}";
+            Cache::put($activePortsCacheKey, $ponPorts, 300);
 
             // 2. Tentukan target 1 Port PON yang akan di-query saat ini (Round-Robin Cursor)
             $cursorKey = "olt_poll_port_cursor_{$device->id}";
@@ -281,9 +298,9 @@ class PollOltTelemetry extends Command
                     }
                 }
 
-                // Update snapshot database langsung
+                // Update snapshot database langsung (gunakan allPonPorts agar info seluruh port tersimpan)
                 $deviceInfo = $existingSnapshot['device_info'] ?? $driver->getDeviceInfo();
-                $finalSnapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, array_values($onuMap), []);
+                $finalSnapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $allPonPorts, array_values($onuMap), []);
                 
                 $device->update([
                     'last_telemetry_snapshot' => $finalSnapshot,
