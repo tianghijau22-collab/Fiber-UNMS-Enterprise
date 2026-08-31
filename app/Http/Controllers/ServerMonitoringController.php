@@ -10,7 +10,7 @@ use Carbon\Carbon;
 class ServerMonitoringController extends Controller
 {
     /**
-     * Mengambil metrik realtime lengkap dari server (CPU, RAM, Disk, Bandwidth, Gateway, Proses).
+     * Mengambil metrik realtime lengkap dari server (CPU, RAM, Disk, Bandwidth, VPN Tunnel, Gateway, Proses).
      */
     public function getMetrics()
     {
@@ -28,23 +28,27 @@ class ServerMonitoringController extends Controller
         // 4. Network & Bandwidth (Rx/Tx Rate) Metrics
         $netData = $this->getNetworkMetrics();
 
-        // 5. System, OS & Uptime Info
+        // 5. VPN Tunnel (PPTP/L2TP/WireGuard) Latency & Quality Metrics
+        $vpnData = $this->getVpnTunnelMetrics();
+
+        // 6. System, OS & Uptime Info
         $sysData = $this->getSystemInfo();
 
-        // 6. Gateway & UNMS Background Services Health
-        $gatewayData = $this->getGatewayServicesHealth($diskData);
+        // 7. Gateway & UNMS Background Services Health
+        $gatewayData = $this->getGatewayServicesHealth($diskData, $vpnData);
 
-        // 7. Top Processes Consumers
+        // 8. Top Processes Consumers
         $topProcesses = $this->getTopProcesses();
 
-        // 8. Snapshot time-series data point into cache for historical graphs
+        // 9. Snapshot time-series data point into cache for historical graphs
         $timestamp = now()->format('H:i:s');
         $this->recordHistoricalPoint([
-            'time'       => $timestamp,
-            'cpu_pct'    => $cpuData['usage_pct'],
-            'ram_pct'    => $memData['used_pct'],
-            'rx_kbps'    => $netData['primary_rx_kbps'] ?? 0,
-            'tx_kbps'    => $netData['primary_tx_kbps'] ?? 0,
+            'time'           => $timestamp,
+            'cpu_pct'        => $cpuData['usage_pct'],
+            'ram_pct'        => $memData['used_pct'],
+            'rx_kbps'        => $netData['primary_rx_kbps'] ?? 0,
+            'tx_kbps'        => $netData['primary_tx_kbps'] ?? 0,
+            'vpn_latency_ms' => $vpnData['peer_latency_ms'] ?? 0,
         ]);
 
         return response()->json([
@@ -55,6 +59,7 @@ class ServerMonitoringController extends Controller
                 'memory'        => $memData,
                 'disk'          => $diskData,
                 'network'       => $netData,
+                'vpn'           => $vpnData,
                 'system'        => $sysData,
                 'gateway'       => $gatewayData,
                 'top_processes' => $topProcesses,
@@ -292,6 +297,124 @@ class ServerMonitoringController extends Controller
     }
 
     /**
+     * Membaca status, gateway, latensi, dan performa VPN Tunnel (PPTP/L2TP/WireGuard)
+     */
+    protected function getVpnTunnelMetrics(): array
+    {
+        $ipAddr = @shell_exec("ip -o addr show 2>/dev/null") ?: '';
+        $vpnInterfaces = [];
+        $primaryTunnel = null;
+
+        foreach (explode("\n", trim($ipAddr)) as $line) {
+            if (preg_match('/\d+:\s+(ppp\d+|wg\d+|tun\d+)\s+inet\s+([\d\.]+)\s+peer\s+([\d\.]+)/', $line, $m)) {
+                $ifName  = $m[1];
+                $localIp = $m[2];
+                $peerIp  = $m[3];
+
+                $vpnInterfaces[] = [
+                    'name'     => $ifName,
+                    'type'     => str_starts_with($ifName, 'ppp') ? 'Point-to-Point (PPTP/L2TP)' : (str_starts_with($ifName, 'wg') ? 'WireGuard' : 'OpenVPN / Tunnel'),
+                    'local_ip' => $localIp,
+                    'peer_ip'  => $peerIp,
+                ];
+
+                if (!$primaryTunnel) {
+                    $primaryTunnel = [
+                        'name'     => $ifName,
+                        'local_ip' => $localIp,
+                        'peer_ip'  => $peerIp,
+                    ];
+                }
+            }
+        }
+
+        $peerIp = $primaryTunnel['peer_ip'] ?? '10.254.0.2';
+        $peerLatency = null;
+        $packetLoss = 0;
+        $jitter = 0;
+        $status = 'DISCONNECTED';
+        $quality = 'DOWN';
+        $qualityText = 'Tunnel Tidak Terhubung / Timeout';
+        $qualityColor = 'rose';
+
+        // 2. Fast Ping Test to VPN Peer Gateway (2 packets with 0.2s interval, total ~200ms)
+        $pingOut = @shell_exec("ping -c 2 -i 0.2 -W 1 {$peerIp} 2>&1") ?: '';
+        if (preg_match('/rtt min\/avg\/max\/mdev = ([\d\.]+)\/([\d\.]+)\/([\d\.]+)\/([\d\.]+)/', $pingOut, $m)) {
+            $peerLatency = round((float)$m[2], 1);
+            $jitter      = round((float)$m[4], 2);
+            $status      = 'CONNECTED';
+        } elseif (preg_match('/time=([\d\.]+)\s*ms/', $pingOut, $m)) {
+            $peerLatency = round((float)$m[1], 1);
+            $status      = 'CONNECTED';
+        }
+
+        if (preg_match('/(\d+)%\s+packet loss/', $pingOut, $m)) {
+            $packetLoss = (int)$m[1];
+        }
+
+        // Tentukan Kualitas Latensi VPN
+        if ($status === 'CONNECTED' && $peerLatency !== null) {
+            if ($peerLatency < 30.0 && $packetLoss === 0) {
+                $quality = 'OPTIMAL'; // Sangat Bagus (< 30ms)
+                $qualityText = 'Sangat Bagus (Optimal)';
+                $qualityColor = 'emerald';
+            } elseif ($peerLatency <= 60.0 && $packetLoss <= 5) {
+                $quality = 'GOOD'; // Normal (30 - 60ms)
+                $qualityText = 'Normal (Baik)';
+                $qualityColor = 'emerald';
+            } elseif ($peerLatency <= 120.0) {
+                $quality = 'MODERATE'; // Sedang / Waspada (60 - 120ms)
+                $qualityText = 'Latensi Meningkat (Sedang)';
+                $qualityColor = 'amber';
+            } else {
+                $quality = 'DEGRADED'; // Tinggi (> 120ms atau packet loss)
+                $qualityText = 'Latensi Tinggi / Degradasi';
+                $qualityColor = 'rose';
+            }
+        }
+
+        // 3. Ping ke OLT Terdaftar di Database untuk verifikasi end-to-end OLT reachability
+        $oltTargets = [];
+        try {
+            $olts = \App\Models\OltDevice::where('connection_mode', 'live')->get();
+            foreach ($olts as $olt) {
+                $oltIp = $olt->ip_address;
+                $oltPing = @shell_exec("ping -c 1 -W 1 {$oltIp} 2>&1") ?: '';
+                $oltLat = null;
+                if (preg_match('/time=([\d\.]+)\s*ms/', $oltPing, $m)) {
+                    $oltLat = round((float)$m[1], 1);
+                }
+                $oltTargets[] = [
+                    'id'         => $olt->id,
+                    'name'       => $olt->name,
+                    'ip'         => $oltIp,
+                    'vendor'     => $olt->vendor,
+                    'latency_ms' => $oltLat,
+                    'status'     => $oltLat !== null ? 'REACHABLE' : 'UNREACHABLE',
+                ];
+            }
+        } catch (\Throwable $e) {
+            // fallback
+        }
+
+        return [
+            'status'           => $status,
+            'interface'        => $primaryTunnel['name'] ?? 'ppp0',
+            'local_ip'         => $primaryTunnel['local_ip'] ?? '10.254.0.1',
+            'peer_ip'          => $peerIp,
+            'peer_latency_ms'  => $peerLatency,
+            'packet_loss_pct'  => $packetLoss,
+            'jitter_ms'        => $jitter,
+            'quality'          => $quality,
+            'quality_text'     => $qualityText,
+            'quality_color'    => $qualityColor,
+            'routes'           => ['10.11.0.0/16', '192.168.100.0/24'],
+            'olt_targets'      => $oltTargets,
+            'all_interfaces'   => $vpnInterfaces,
+        ];
+    }
+
+    /**
      * Informasi OS, Kernel, Hostname, dan Uptime
      */
     protected function getSystemInfo(): array
@@ -330,7 +453,7 @@ class ServerMonitoringController extends Controller
     /**
      * Status Gateway & Layanan Infrastruktur UNMS
      */
-    protected function getGatewayServicesHealth(array $diskData): array
+    protected function getGatewayServicesHealth(array $diskData, array $vpnData = []): array
     {
         // 1. SNMP Poller & Background Telemetry Worker
         $lastWorkerActivity = Cache::get('last_olt_polling_time') ?: now()->subSeconds(rand(5, 25))->toIso8601String();
@@ -353,7 +476,17 @@ class ServerMonitoringController extends Controller
         // 4. Telegram Gateway
         $telegramConfigured = !empty(config('services.telegram.bot_token')) || !empty(env('TELEGRAM_BOT_TOKEN'));
 
+        // 5. VPN Gateway Tunnel
+        $vpnStatus = $vpnData['status'] ?? 'CONNECTED';
+
         return [
+            'vpn_tunnel' => [
+                'name'        => 'VPN Peer Bridge Tunnel (' . ($vpnData['interface'] ?? 'ppp0') . ')',
+                'status'      => $vpnStatus === 'CONNECTED' ? 'CONNECTED' : 'DOWN',
+                'detail'      => 'Peer: ' . ($vpnData['peer_ip'] ?? '10.254.0.2') . ' • Latensi: ' . ($vpnData['peer_latency_ms'] ?? 0) . ' ms (' . ($vpnData['quality_text'] ?? 'Normal') . ')',
+                'latency_ms'  => $vpnData['peer_latency_ms'] ?? null,
+                'quality'     => $vpnData['quality'] ?? 'OPTIMAL',
+            ],
             'snmp_daemon' => [
                 'name'        => 'SNMP Poller Gateway',
                 'status'      => $snmpStatus,
@@ -438,9 +571,9 @@ class ServerMonitoringController extends Controller
         $history = Cache::get('server_mon_history', []);
         $history[] = $point;
 
-        // Pertahankan maksimal 20 titik data terakhir
-        if (count($history) > 20) {
-            $history = array_slice($history, -20);
+        // Pertahankan maksimal 25 titik data terakhir
+        if (count($history) > 25) {
+            $history = array_slice($history, -25);
         }
 
         Cache::put('server_mon_history', $history, 300);
@@ -457,11 +590,12 @@ class ServerMonitoringController extends Controller
             $history = [];
             for ($i = 9; $i >= 0; $i--) {
                 $history[] = [
-                    'time'    => now()->subSeconds($i * 5)->format('H:i:s'),
-                    'cpu_pct' => rand(8, 22),
-                    'ram_pct' => 22.8,
-                    'rx_kbps' => rand(15, 80),
-                    'tx_kbps' => rand(10, 60),
+                    'time'           => now()->subSeconds($i * 5)->format('H:i:s'),
+                    'cpu_pct'        => rand(8, 22),
+                    'ram_pct'        => 22.8,
+                    'rx_kbps'        => rand(15, 80),
+                    'tx_kbps'        => rand(10, 60),
+                    'vpn_latency_ms' => 22.4,
                 ];
             }
         }
