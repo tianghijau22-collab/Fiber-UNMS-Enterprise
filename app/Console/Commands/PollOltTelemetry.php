@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Models\OltDevice;
 use App\Http\Controllers\OltController;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class PollOltTelemetry extends Command
 {
@@ -14,6 +15,7 @@ class PollOltTelemetry extends Command
 
     public function handle(OltController $oltCtrl)
     {
+        $cycleStart = microtime(true);
         $deviceId = $this->option('device');
         $query = OltDevice::where('status', 'active');
         if ($deviceId) {
@@ -26,7 +28,13 @@ class PollOltTelemetry extends Command
             return 0;
         }
 
+        $totalPortsPolled = 0;
+        $totalOnusPolled = 0;
+        $totalUncfgPolled = 0;
+        $deviceReports = [];
+
         foreach ($devices as $device) {
+            $devStart = microtime(true);
             $interval = $device->polling_interval_seconds ?: 60;
             $force = $this->option('force');
 
@@ -39,8 +47,9 @@ class PollOltTelemetry extends Command
                 }
             }
 
-            $this->info("Polling OLT: {$device->name} ({$device->ip_address}:{$device->snmp_port}) Mode: {$device->connection_mode} Interval: {$interval}s...");
+            $this->info("Polling OLT: {$device->name} ({$device->ip_address}:{$device->snmp_port}) Mode: {$device->connection_mode} Interval: {$interval}s (Throttling: 15ms)...");
 
+            $activePortCount = 0;
             try {
                 $driver = $oltCtrl->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
 
@@ -51,6 +60,7 @@ class PollOltTelemetry extends Command
                 $allOnus = [];
                 foreach ($ponPorts as $port) {
                     if (($port['status'] ?? '') === 'Up' || ($port['registered_onus'] ?? 0) > 0 || ($port['unconfigured_onus'] ?? 0) > 0) {
+                        $activePortCount++;
                         try {
                             $portOnus = $driver->getOnuListByPort($port['port_id']);
                             if (!empty($portOnus)) {
@@ -127,12 +137,12 @@ class PollOltTelemetry extends Command
                             );
                         }
 
-                        // 2. Deteksi Pemulihan Sinyal (Transition from Inactive -> Active / Recovery)
+                        // 2. Deteksi Pemulihan Gangguan (Transition from Inactive -> Active)
                         if ($oldStatus === 'inactive' && $newStatus === 'active') {
                             \App\Models\AuditLog::record(
                                 'ALARM_RECOVERY',
                                 'Monitoring OLT',
-                                "✅ RECOVERY: Modem {$custName} ({$sn}) telah pulih ONLINE pada Port {$portName} dengan Redaman {$newRx} dBm.",
+                                "🟢 RECOVERY: Modem {$custName} ({$sn}) telah pulih/Online kembali pada Port {$portName}. Redaman Rx: {$newRx} dBm",
                                 null,
                                 [
                                     'serial_number' => $sn,
@@ -144,7 +154,7 @@ class PollOltTelemetry extends Command
                             );
 
                             \App\Services\TelegramService::send(
-                                "✅ PEMULIHAN LAYANAN (RECOVERY)",
+                                "🟢 PEMULIHAN LAYANAN (RECOVERY)",
                                 "<b>Pelanggan:</b> {$custName}\n" .
                                 "<b>Serial Number:</b> <code>{$sn}</code>\n" .
                                 "<b>OLT / Port:</b> {$device->name} ({$portName})\n" .
@@ -175,14 +185,82 @@ class PollOltTelemetry extends Command
 
                 // Clear web API fast cache so all frontend users get the latest DB snapshot immediately
                 $cacheKey = "olt_hardware_api_{$device->vendor_key}_{$device->id}";
-                \Illuminate\Support\Facades\Cache::forget($cacheKey);
+                Cache::forget($cacheKey);
 
-                $this->info("Successfully updated database telemetry snapshot for {$device->name}.");
+                $devDurationMs = round((microtime(true) - $devStart) * 1000, 1);
+                $totalPortsPolled += $activePortCount;
+                $totalOnusPolled += count($allOnus);
+                $totalUncfgPolled += count($uncfg);
+
+                $deviceReports[] = [
+                    'device_id'     => $device->id,
+                    'device_name'   => $device->name,
+                    'ip'            => $device->ip_address,
+                    'vendor'        => $device->vendor,
+                    'total_ports'   => count($ponPorts),
+                    'active_ports'  => $activePortCount,
+                    'onus_found'    => count($allOnus),
+                    'uncfg_found'   => count($uncfg),
+                    'duration_ms'   => $devDurationMs,
+                    'status'        => 'SUCCESS',
+                    'timestamp'     => now()->format('H:i:s'),
+                ];
+
+                $this->info("Successfully updated database telemetry snapshot for {$device->name} in {$devDurationMs} ms.");
             } catch (\Exception $e) {
+                $devDurationMs = round((microtime(true) - $devStart) * 1000, 1);
+                $deviceReports[] = [
+                    'device_id'     => $device->id,
+                    'device_name'   => $device->name,
+                    'ip'            => $device->ip_address,
+                    'vendor'        => $device->vendor,
+                    'total_ports'   => 0,
+                    'active_ports'  => 0,
+                    'onus_found'    => 0,
+                    'uncfg_found'   => 0,
+                    'duration_ms'   => $devDurationMs,
+                    'status'        => 'ERROR: ' . $e->getMessage(),
+                    'timestamp'     => now()->format('H:i:s'),
+                ];
                 $this->error("Failed to poll OLT {$device->name}: " . $e->getMessage());
                 Log::warning("OLT Telemetry Polling failed for {$device->name}: " . $e->getMessage());
             }
         }
+
+        $totalCycleDurationMs = round((microtime(true) - $cycleStart) * 1000, 1);
+
+        // Record backend worker telemetry metadata to Cache for live monitoring
+        $workerStats = [
+            'status'               => 'ACTIVE',
+            'last_run_at'          => now()->toIso8601String(),
+            'last_run_human'       => now()->format('d M Y, H:i:s'),
+            'cycle_duration_ms'    => $totalCycleDurationMs,
+            'cycle_duration_human' => ($totalCycleDurationMs < 1000) ? "{$totalCycleDurationMs} ms" : round($totalCycleDurationMs / 1000, 2) . " s",
+            'throttling_delay_ms'  => 15,
+            'total_devices'        => count($devices),
+            'total_ports_polled'   => $totalPortsPolled,
+            'total_onus_polled'    => $totalOnusPolled,
+            'total_uncfg_detected' => $totalUncfgPolled,
+            'device_reports'       => $deviceReports,
+        ];
+
+        Cache::put('backend_worker_telemetry', $workerStats, 86400);
+
+        // Keep last 15 cycle history
+        $cycleHistory = Cache::get('backend_worker_history', []);
+        $cycleHistory[] = [
+            'time'        => now()->format('H:i:s'),
+            'duration_ms' => $totalCycleDurationMs,
+            'devices'     => count($devices),
+            'ports'       => $totalPortsPolled,
+            'onus'        => $totalOnusPolled,
+            'uncfg'       => $totalUncfgPolled,
+            'status'      => 'OK',
+        ];
+        if (count($cycleHistory) > 15) {
+            $cycleHistory = array_slice($cycleHistory, -15);
+        }
+        Cache::put('backend_worker_history', $cycleHistory, 86400);
 
         return 0;
     }

@@ -86,6 +86,7 @@ Route::post('/vps-bridge/test-connection', [VpsBridgeController::class, 'testBri
 Route::get('/monitoring/router/live-metrics', [LiveMonitorController::class, 'getRouterMetrics']);
 Route::get('/monitoring/olt/{id}/live-telemetry', [LiveMonitorController::class, 'getOltTelemetry']);
 Route::get('/server-monitoring/metrics', [ServerMonitoringController::class, 'getMetrics']);
+Route::post('/server-monitoring/trigger-polling', [ServerMonitoringController::class, 'triggerPolling']);
 Route::post('/monitoring/ping-sweep', [LiveMonitorController::class, 'pingSweep']);
 
 // OTDR Fault Tracing Engine
