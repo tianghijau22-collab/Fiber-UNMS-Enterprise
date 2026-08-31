@@ -11,20 +11,40 @@ use Symfony\Component\Process\Process;
 
 class PollOltTelemetry extends Command
 {
-    protected $signature = 'olt:poll-telemetry {--device= : Specific OLT Device ID to poll} {--port= : Specific Port to poll} {--force : Force polling regardless of interval}';
-    protected $description = 'Polls live telemetry per individual PON port sequentially with instant per-port DB sync and zero-queue parallel execution';
+    protected $signature = 'olt:poll-telemetry {--device= : Specific OLT Device ID to poll} {--port= : Specific Port to poll} {--force : Force polling} {--daemon : Run continuously in a 24/7 non-stop loop}';
+    protected $description = 'Polls live telemetry per individual PON port sequentially in a continuous 24/7 loop with real-time activity streaming';
 
     public function handle(OltController $oltCtrl)
     {
         $deviceId = $this->option('device');
         $specificPort = $this->option('port');
+        $isDaemon = $this->option('daemon');
 
         // JIKA SPECIFIC DEVICE ID: Jalankan polling 1 Port PON untuk OLT ini
         if ($deviceId) {
             return $this->pollSinglePortOnDevice((int)$deviceId, $oltCtrl, $specificPort);
         }
 
-        // MASTER DISPATCHER: Menjalankan polling 1 Port PON untuk SEMUA OLT secara PARALEL BERSAMAAN
+        // JIKA MODE DAEMON 24/7: Jalankan continuous loop tanpa henti (non-stop)
+        if ($isDaemon) {
+            $this->info("🌀 Menjalankan Continuous 24/7 Polling Daemon...");
+            self::appendWorkerLog('SYSTEM', 'DAEMON', 'INFO', "Daemon 24/7 continuous loop dimulai.");
+
+            while (true) {
+                try {
+                    $this->dispatchSinglePortParallel($oltCtrl);
+                } catch (\Throwable $e) {
+                    $this->error("Error in daemon loop: " . $e->getMessage());
+                    self::appendWorkerLog('SYSTEM', 'DAEMON', 'ERROR', "Daemon loop error: " . $e->getMessage());
+                }
+
+                // Jeda 2 detik sebelum melanjutkan ke port berikutnya pada seluruh OLT
+                sleep(2);
+            }
+            return 0;
+        }
+
+        // SINGLE RUN DISPATCHER (Dipanggil manual via web trigger atau cron)
         return $this->dispatchSinglePortParallel($oltCtrl);
     }
 
@@ -40,8 +60,6 @@ class PollOltTelemetry extends Command
             $this->info('No active OLT devices found.');
             return 0;
         }
-
-        $this->info("🚀 Memulai Polling Per Port PON untuk " . count($devices) . " OLT secara SIMULTAN...");
 
         $processes = [];
         $phpBinary = PHP_BINARY ?: 'php';
@@ -109,7 +127,6 @@ class PollOltTelemetry extends Command
                         'timestamp'     => now()->format('H:i:s'),
                     ];
 
-                    $this->info("  ✅ [Worker #{$dev->id}] {$dev->name} selesai 1 Port dalam {$durationMs} ms.");
                     unset($processes[$id]);
                 }
             }
@@ -122,13 +139,13 @@ class PollOltTelemetry extends Command
 
         // Record backend worker telemetry metadata to Cache for live monitoring
         $workerStats = [
-            'status'               => 'ACTIVE (PER-PORT CONCURRENT)',
+            'status'               => 'ACTIVE (24/7 CONTINUOUS LOOP)',
             'last_run_at'          => now()->toIso8601String(),
             'last_run_human'       => now()->format('d M Y, H:i:s'),
             'cycle_duration_ms'    => $totalCycleDurationMs,
             'cycle_duration_human' => ($totalCycleDurationMs < 1000) ? "{$totalCycleDurationMs} ms" : round($totalCycleDurationMs / 1000, 2) . " s",
             'throttling_delay_ms'  => 15,
-            'mode'                 => 'Single Port Round-Robin',
+            'mode'                 => 'Continuous Port-by-Port Loop',
             'total_devices'        => count($devices),
             'total_ports_polled'   => $totalPortsPolled > 0 ? $totalPortsPolled : ($prevStats['total_ports_polled'] ?? 8),
             'total_onus_polled'    => $totalOnusPolled > 0 ? $totalOnusPolled : ($prevStats['total_onus_polled'] ?? \App\Models\OntRegistration::count()),
@@ -147,14 +164,13 @@ class PollOltTelemetry extends Command
             'ports'       => $workerStats['total_ports_polled'],
             'onus'        => $workerStats['total_onus_polled'],
             'uncfg'       => 0,
-            'status'      => 'OK (PER-PORT)',
+            'status'      => 'OK',
         ];
         if (count($cycleHistory) > 15) {
             $cycleHistory = array_slice($cycleHistory, -15);
         }
         Cache::put('backend_worker_history', $cycleHistory, 86400);
 
-        $this->info("✨ Seluruh OLT selesai 1 Port secara paralel dalam {$totalCycleDurationMs} ms.");
         return 0;
     }
 
@@ -173,7 +189,7 @@ class PollOltTelemetry extends Command
         try {
             $driver = $oltCtrl->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
 
-            // 1. Ambil daftar Port PON dari cache / driver
+            // 1. Ambil daftar Port PON
             $ponPorts = Cache::remember("olt_ports_list_{$device->id}", 300, function () use ($driver) {
                 return $driver->getPonPorts();
             });
@@ -315,7 +331,7 @@ class PollOltTelemetry extends Command
     }
 
     /**
-     * Catat log aktivitas worker ke Cache untuk live activity stream di UI
+     * Catat log aktivitas worker ke Cache untuk live activity stream di UI (Simpan hingga 100 log)
      */
     public static function appendWorkerLog(string $oltName, string $port, string $level, string $message, array $meta = []): void
     {
@@ -334,9 +350,9 @@ class PollOltTelemetry extends Command
 
         array_unshift($logs, $entry); // Tambahkan di paling atas
 
-        // Pertahankan maksimal 50 log terakhir
-        if (count($logs) > 50) {
-            $logs = array_slice($logs, 0, 50);
+        // Pertahankan maksimal 100 log terakhir
+        if (count($logs) > 100) {
+            $logs = array_slice($logs, 0, 100);
         }
 
         Cache::put('backend_worker_logs', $logs, 86400);
