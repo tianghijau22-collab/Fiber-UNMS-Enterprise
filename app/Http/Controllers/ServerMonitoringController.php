@@ -494,6 +494,7 @@ class ServerMonitoringController extends Controller
             'total_uncfg_detected' => $stats['total_uncfg_detected'] ?? 0,
             'device_reports'       => $stats['device_reports'] ?? [],
             'history'              => $history,
+            'logs'                 => Cache::get('backend_worker_logs', []),
         ];
     }
 

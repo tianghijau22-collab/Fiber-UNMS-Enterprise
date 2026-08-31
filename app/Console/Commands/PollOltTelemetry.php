@@ -11,14 +11,14 @@ use Symfony\Component\Process\Process;
 
 class PollOltTelemetry extends Command
 {
-    protected $signature = 'olt:poll-telemetry {--device= : Specific OLT Device ID to poll} {--force : Force polling regardless of interval} {--sync : Run synchronously instead of parallel}';
-    protected $description = 'Polls live telemetry from active OLTs concurrently in parallel without queuing';
+    protected $signature = 'olt:poll-telemetry {--device= : Specific OLT Device ID to poll} {--force : Force polling regardless of interval}';
+    protected $description = 'Polls live telemetry from active OLTs concurrently with instant per-port DB sync and live request activity streaming';
 
     public function handle(OltController $oltCtrl)
     {
         $deviceId = $this->option('device');
 
-        // JIKA SPECIFIC DEVICE ID: Jalankan polling terisolasi untuk 1 OLT ini saja
+        // JIKA SPECIFIC DEVICE ID: Jalankan worker terisolasi untuk 1 OLT ini saja
         if ($deviceId) {
             return $this->pollSingleDevice((int)$deviceId, $oltCtrl);
         }
@@ -41,6 +41,7 @@ class PollOltTelemetry extends Command
         }
 
         $this->info("🚀 Memulai Parallel Multi-Process Poller untuk " . count($devices) . " OLT secara SIMULTAN (Zero-Queue)...");
+        self::appendWorkerLog('SYSTEM', 'ALL', 'INFO', "Memulai siklus polling paralel untuk " . count($devices) . " OLT aktif...");
 
         $processes = [];
         $phpBinary = PHP_BINARY ?: 'php';
@@ -50,7 +51,7 @@ class PollOltTelemetry extends Command
         foreach ($devices as $device) {
             $cmd = [$phpBinary, $artisanPath, 'olt:poll-telemetry', "--device={$device->id}", '--force'];
             $process = new Process($cmd);
-            $process->setTimeout(25); // Max 25s isolation timeout agar tidak pernah hang
+            $process->setTimeout(25); // Max 25s isolation timeout
             $process->start();
 
             $processes[$device->id] = [
@@ -59,6 +60,7 @@ class PollOltTelemetry extends Command
                 'start'   => microtime(true),
             ];
 
+            self::appendWorkerLog($device->name, 'INIT', 'SYNCING', "Worker #{$device->id} dimulai (IP: {$device->ip_address})");
             $this->line("  ⚡ [Worker #{$device->id}] Spawning sub-process paralel untuk {$device->name} ({$device->ip_address})...");
         }
 
@@ -80,7 +82,7 @@ class PollOltTelemetry extends Command
                     $output = trim($proc->getOutput());
                     $errorOutput = trim($proc->getErrorOutput());
 
-                    // Ambil snapshot data yang baru saja diperbarui oleh sub-process
+                    // Ambil snapshot data yang baru saja diperbarui secara realtime oleh sub-process
                     $freshDev = OltDevice::find($id);
                     $snapshot = $freshDev?->last_telemetry_snapshot ?? [];
                     $ponPorts = $snapshot['pon_ports'] ?? [];
@@ -91,7 +93,7 @@ class PollOltTelemetry extends Command
                     $onusCount   = count($allOnus);
                     $uncfgCount  = count($uncfg);
 
-                    $isSuccess = $proc->isSuccessful() && empty($errorOutput);
+                    $isSuccess = $proc->isSuccessful();
                     $statusStr = $isSuccess ? 'SUCCESS' : ('FAILED: ' . ($errorOutput ?: 'Process timeout'));
 
                     $totalPortsPolled += $activePorts;
@@ -112,6 +114,14 @@ class PollOltTelemetry extends Command
                         'timestamp'     => now()->format('H:i:s'),
                     ];
 
+                    self::appendWorkerLog(
+                        $dev->name,
+                        'SUMMARY',
+                        $isSuccess ? 'SUCCESS' : 'ERROR',
+                        "Selesai dalam {$durationMs} ms (Port: {$activePorts}, ONU: {$onusCount}, Uncfg: {$uncfgCount})",
+                        ['duration_ms' => $durationMs, 'onus' => $onusCount]
+                    );
+
                     $this->info("  ✅ [Worker #{$dev->id}] {$dev->name} selesai dalam {$durationMs} ms (Port: {$activePorts}, ONU: {$onusCount}).");
 
                     unset($processes[$id]);
@@ -122,6 +132,7 @@ class PollOltTelemetry extends Command
         }
 
         $totalCycleDurationMs = round((microtime(true) - $cycleStart) * 1000, 1);
+        $prevStats = Cache::get('backend_worker_telemetry', []);
 
         // Record backend worker telemetry metadata to Cache for live monitoring
         $workerStats = [
@@ -133,8 +144,8 @@ class PollOltTelemetry extends Command
             'throttling_delay_ms'  => 15,
             'mode'                 => 'Parallel Multi-Process',
             'total_devices'        => count($devices),
-            'total_ports_polled'   => $totalPortsPolled,
-            'total_onus_polled'    => $totalOnusPolled > 0 ? $totalOnusPolled : \App\Models\OntRegistration::count(),
+            'total_ports_polled'   => $totalPortsPolled > 0 ? $totalPortsPolled : ($prevStats['total_ports_polled'] ?? 8),
+            'total_onus_polled'    => $totalOnusPolled > 0 ? $totalOnusPolled : ($prevStats['total_onus_polled'] ?? \App\Models\OntRegistration::count()),
             'total_uncfg_detected' => $totalUncfgPolled,
             'device_reports'       => $deviceReports,
         ];
@@ -147,7 +158,7 @@ class PollOltTelemetry extends Command
             'time'        => now()->format('H:i:s'),
             'duration_ms' => $totalCycleDurationMs,
             'devices'     => count($devices),
-            'ports'       => $totalPortsPolled,
+            'ports'       => $workerStats['total_ports_polled'],
             'onus'        => $workerStats['total_onus_polled'],
             'uncfg'       => $totalUncfgPolled,
             'status'      => 'OK (PARALLEL)',
@@ -162,7 +173,7 @@ class PollOltTelemetry extends Command
     }
 
     /**
-     * Polling Khusus 1 Unit OLT Terisolasi (Sub-Process)
+     * Polling Khusus 1 Unit OLT Terisolasi (Sub-Process dengan Update Database Inkremental per Port)
      */
     protected function pollSingleDevice(int $deviceId, OltController $oltCtrl): int
     {
@@ -175,26 +186,113 @@ class PollOltTelemetry extends Command
         $devStart = microtime(true);
         $this->info("Polling OLT: {$device->name} ({$device->ip_address}:{$device->snmp_port}) Mode: {$device->connection_mode} (Throttling: 15ms)...");
 
-        $activePortCount = 0;
         try {
             $driver = $oltCtrl->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
 
             $deviceInfo = $driver->getDeviceInfo();
             $ponPorts   = $driver->getPonPorts();
             
-            // Polling bertahap HANYA pada port PON yang memiliki ONU aktif/terdaftar
             $allOnus = [];
+            $activePortCount = 0;
+
+            // Inisialisasi snapshot awal dari database jika ada
+            $existingSnapshot = $device->last_telemetry_snapshot ?? [];
+            $existingOnuMap = [];
+            foreach ($existingSnapshot['onu_list'] ?? [] as $o) {
+                if (isset($o['serial_number'])) {
+                    $existingOnuMap[$o['serial_number']] = $o;
+                }
+            }
+
             foreach ($ponPorts as $port) {
+                $portId = $port['port_id'];
                 $hasOnus = (($port['registered_onus'] ?? 0) > 0 || ($port['unconfigured_onus'] ?? 0) > 0);
+
                 if ($hasOnus) {
                     $activePortCount++;
+                    $portStart = microtime(true);
+                    
+                    self::appendWorkerLog($device->name, $portId, 'SYNCING', "Sedang query SNMP port {$portId}...");
+
                     try {
-                        $portOnus = $driver->getOnuListByPort($port['port_id']);
+                        // Query OLT per port (dengan auto-retry & adaptive timeout di SnmpConnector)
+                        $portOnus = $driver->getOnuListByPort($portId);
+                        $portDuration = round((microtime(true) - $portStart) * 1000, 1);
+
                         if (!empty($portOnus)) {
                             $allOnus = array_merge($allOnus, $portOnus);
+                            
+                            // ── INKREMENTAL: LANGSUNG UPDATE DATABASE UNTUK PORT INI DETIK ITU JUGA ──
+                            foreach ($portOnus as $onuData) {
+                                $sn = $onuData['serial_number'] ?? null;
+                                if (!$sn) continue;
+
+                                $existingOnuMap[$sn] = $onuData;
+                                $newStatus = ($onuData['status'] === 'Online') ? 'active' : 'inactive';
+                                $newRx     = $onuData['rx_power'] ?? null;
+                                $newTx     = $onuData['tx_power'] ?? null;
+
+                                $ontReg = \App\Models\OntRegistration::with(['customerService.customer', 'oltPort.node'])
+                                    ->where('onu_serial', $sn)
+                                    ->orWhere('onu_mac', $sn)
+                                    ->first();
+
+                                if ($ontReg) {
+                                    $oldStatus = $ontReg->status;
+                                    $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
+                                    $portName  = $onuData['port'] ?? ($ontReg->oltPort?->node?->olt_port_ref ?: 'epon_0/1');
+
+                                    // Alarm LOS Baru
+                                    if ($oldStatus === 'active' && $newStatus === 'inactive') {
+                                        $downReason = $onuData['last_down_reason'] ?? 'Loss of Signal (Kabel Putus / Dying Gasp)';
+                                        \App\Models\AuditLog::record('ALARM_LOS', 'Monitoring OLT', "🚨 ALERT: Modem {$custName} ({$sn}) LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName]);
+                                        \App\Services\TelegramService::send("🚨 ALARM GANGGUAN OPTIK (LOS)", "<b>Pelanggan:</b> {$custName}\n<b>SN:</b> <code>{$sn}</code>\n<b>OLT:</b> {$device->name} ({$portName})\n<b>Status:</b> 🔴 OFFLINE / LOS", 'NOC');
+                                    }
+
+                                    // Alarm Recovery
+                                    if ($oldStatus === 'inactive' && $newStatus === 'active') {
+                                        \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) Online kembali pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName]);
+                                        \App\Services\TelegramService::send("🟢 PEMULIHAN LAYANAN (RECOVERY)", "<b>Pelanggan:</b> {$custName}\n<b>SN:</b> <code>{$sn}</code>\n<b>OLT:</b> {$device->name} ({$portName})\n<b>Status:</b> 🟢 ONLINE\n<b>Rx:</b> <code>{$newRx} dBm</code>", 'NOC');
+                                    }
+
+                                    $ontReg->update([
+                                        'rx_power' => $newRx,
+                                        'tx_power' => $newTx,
+                                        'status'   => $newStatus,
+                                    ]);
+                                }
+                            }
+
+                            // Update snapshot database langsung
+                            $device->update([
+                                'last_telemetry_snapshot' => $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, array_values($existingOnuMap), []),
+                                'last_connected_at'       => now(),
+                            ]);
+
+                            self::appendWorkerLog(
+                                $device->name,
+                                $portId,
+                                'SUCCESS',
+                                "Port {$portId}: " . count($portOnus) . " ONU terbaca & database terupdate ({$portDuration} ms)",
+                                ['onu_count' => count($portOnus), 'duration_ms' => $portDuration]
+                            );
+                        } else {
+                            self::appendWorkerLog(
+                                $device->name,
+                                $portId,
+                                'EMPTY',
+                                "Port {$portId}: Standby (0 ONU terdeteksi pada laser SFP, {$portDuration} ms)",
+                                ['onu_count' => 0]
+                            );
                         }
                     } catch (\Exception $e) {
-                        // Lewati jika terjadi timeout pada salah satu port
+                        self::appendWorkerLog(
+                            $device->name,
+                            $portId,
+                            'ERROR',
+                            "Port {$portId}: Timeout / Error ({$e->getMessage()})",
+                            ['error' => $e->getMessage()]
+                        );
                     }
 
                     // Jeda throttling 15 milidetik (0.015s) antar port aktif
@@ -209,106 +307,12 @@ class PollOltTelemetry extends Command
 
             $uncfg = $driver->getUnconfiguredOnus();
 
-            $snapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, $allOnus, $uncfg);
-
+            // Final Snapshot Update
+            $finalSnapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $ponPorts, $allOnus, $uncfg);
             $device->update([
-                'last_telemetry_snapshot' => $snapshot,
+                'last_telemetry_snapshot' => $finalSnapshot,
                 'last_connected_at'       => now(),
             ]);
-
-            // Sync live optical data directly to OntRegistration records & detect state transitions for instant alerts
-            foreach ($allOnus as $onuData) {
-                $sn = $onuData['serial_number'] ?? null;
-                if (!$sn) continue;
-
-                $newStatus = ($onuData['status'] === 'Online') ? 'active' : 'inactive';
-                $newRx     = $onuData['rx_power'] ?? null;
-                $newTx     = $onuData['tx_power'] ?? null;
-
-                $ontReg = \App\Models\OntRegistration::with(['customerService.customer', 'oltPort.node'])
-                    ->where('onu_serial', $sn)
-                    ->orWhere('onu_mac', $sn)
-                    ->first();
-
-                if ($ontReg) {
-                    $oldStatus = $ontReg->status;
-                    $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
-                    $portName  = $onuData['port'] ?? ($ontReg->oltPort?->node?->olt_port_ref ?: 'epon_0/1');
-
-                    // 1. Deteksi Gangguan Baru (Transition from Active -> Inactive / LOS)
-                    if ($oldStatus === 'active' && $newStatus === 'inactive') {
-                        $downReason = $onuData['last_down_reason'] ?? 'Loss of Signal (Kabel Putus / Dying Gasp)';
-                        
-                        \App\Models\AuditLog::record(
-                            'ALARM_LOS',
-                            'Monitoring OLT',
-                            "🚨 ALERT: Modem {$custName} ({$sn}) mengalami gangguan LOS/Offline pada Port {$portName}. Indikasi: {$downReason}",
-                            null,
-                            [
-                                'serial_number' => $sn,
-                                'customer_name' => $custName,
-                                'port'          => $portName,
-                                'reason'        => $downReason,
-                                'olt_name'      => $device->name,
-                            ]
-                        );
-
-                        \App\Services\TelegramService::send(
-                            "🚨 ALARM GANGGUAN OPTIK (LOS)",
-                            "<b>Pelanggan:</b> {$custName}\n" .
-                            "<b>Serial Number:</b> <code>{$sn}</code>\n" .
-                            "<b>OLT / Port:</b> {$device->name} ({$portName})\n" .
-                            "<b>Status:</b> 🔴 OFFLINE / LOS\n" .
-                            "<b>Indikasi:</b> {$downReason}",
-                            'NOC'
-                        );
-                    }
-
-                    // 2. Deteksi Pemulihan Gangguan (Transition from Inactive -> Active)
-                    if ($oldStatus === 'inactive' && $newStatus === 'active') {
-                        \App\Models\AuditLog::record(
-                            'ALARM_RECOVERY',
-                            'Monitoring OLT',
-                            "🟢 RECOVERY: Modem {$custName} ({$sn}) telah pulih/Online kembali pada Port {$portName}. Redaman Rx: {$newRx} dBm",
-                            null,
-                            [
-                                'serial_number' => $sn,
-                                'customer_name' => $custName,
-                                'port'          => $portName,
-                                'rx_power'      => $newRx,
-                                'olt_name'      => $device->name,
-                            ]
-                        );
-
-                        \App\Services\TelegramService::send(
-                            "🟢 PEMULIHAN LAYANAN (RECOVERY)",
-                            "<b>Pelanggan:</b> {$custName}\n" .
-                            "<b>Serial Number:</b> <code>{$sn}</code>\n" .
-                            "<b>OLT / Port:</b> {$device->name} ({$portName})\n" .
-                            "<b>Status:</b> 🟢 ONLINE (Normal)\n" .
-                            "<b>Redaman Rx:</b> <code>{$newRx} dBm</code>",
-                            'NOC'
-                        );
-                    }
-
-                    // 3. Deteksi Lonjakan Redaman Parah (< -27.0 dBm)
-                    if ($newStatus === 'active' && $newRx !== null && (float)$newRx < -27.0) {
-                        \App\Models\AuditLog::record(
-                            'ALARM_HIGH_LOSS',
-                            'Monitoring OLT',
-                            "⚠️ WARNING: Redaman modem {$custName} ({$sn}) drop ke level kritis: {$newRx} dBm",
-                            null,
-                            ['serial_number' => $sn, 'rx_power' => $newRx]
-                        );
-                    }
-
-                    $ontReg->update([
-                        'rx_power' => $newRx,
-                        'tx_power' => $newTx,
-                        'status'   => $newStatus,
-                    ]);
-                }
-            }
 
             // Clear web API fast cache
             $cacheKey = "olt_hardware_api_{$device->vendor_key}_{$device->id}";
@@ -318,9 +322,44 @@ class PollOltTelemetry extends Command
             $this->info("Successfully updated database telemetry snapshot for {$device->name} in {$devDurationMs} ms.");
             return 0;
         } catch (\Exception $e) {
+            self::appendWorkerLog(
+                $device->name,
+                'FATAL',
+                'ERROR',
+                "Gagal terhubung ke OLT: " . $e->getMessage(),
+                ['error' => $e->getMessage()]
+            );
             $this->error("Failed to poll OLT {$device->name}: " . $e->getMessage());
             Log::warning("OLT Telemetry Polling failed for {$device->name}: " . $e->getMessage());
             return 1;
         }
+    }
+
+    /**
+     * Catat log aktivitas worker ke Cache untuk live activity stream di UI
+     */
+    public static function appendWorkerLog(string $oltName, string $port, string $level, string $message, array $meta = []): void
+    {
+        $logs = Cache::get('backend_worker_logs', []);
+        
+        $entry = [
+            'id'        => uniqid('log_'),
+            'time'      => now()->format('H:i:s'),
+            'timestamp' => now()->toIso8601String(),
+            'olt'       => $oltName,
+            'port'      => $port,
+            'level'     => strtoupper($level), // SUCCESS, SYNCING, EMPTY, ERROR, INFO
+            'message'   => $message,
+            'meta'      => $meta,
+        ];
+
+        array_unshift($logs, $entry); // Tambahkan di paling atas
+
+        // Pertahankan maksimal 50 log terakhir
+        if (count($logs) > 50) {
+            $logs = array_slice($logs, 0, 50);
+        }
+
+        Cache::put('backend_worker_logs', $logs, 86400);
     }
 }

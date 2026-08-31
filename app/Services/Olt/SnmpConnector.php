@@ -8,6 +8,7 @@ namespace App\Services\Olt;
  * Supports:
  *  - SNMPv2c (community string: public or custom)
  *  - SNMPv3 (username + auth + priv)
+ *  - Adaptive Timeout & Auto-Retry Boost
  *
  * Gracefully falls back to simulation if PHP SNMP extension is not loaded.
  */
@@ -42,9 +43,9 @@ class SnmpConnector
     ) {
         $this->ip = $ip;
         $this->snmpVersion = $snmpVersion;
-        $this->community = $community;
-        $this->port = $port;
-        $this->timeout = $timeout * 1000000; // convert to microseconds
+        $this->community = $community ?: 'public';
+        $this->port = $port ?: 161;
+        $this->timeout = max(500000, (int)($timeout * 1000000)); // minimal 500ms
         $this->retries = $retries;
         $this->v3Username = $v3Username;
         $this->v3AuthProtocol = $v3AuthProtocol;
@@ -76,7 +77,7 @@ class SnmpConnector
             return false;
         }
         $test = @$this->get('1.3.6.1.2.1.1.1.0');
-        $this->cachedReachable = ($test !== false);
+        $this->cachedReachable = ($test !== false && $test !== null);
         return $this->cachedReachable;
     }
 
@@ -114,7 +115,7 @@ class SnmpConnector
             $oid = '1.3.6.1.2.1.1.1.0'; // sysDescr
             $result = $this->get($oid);
 
-            if ($result !== false) {
+            if ($result !== false && $result !== null) {
                 return [
                     'success' => true,
                     'sys_descr' => $result,
@@ -130,16 +131,19 @@ class SnmpConnector
     }
 
     /**
-     * SNMP GET — single OID value.
+     * SNMP GET — single OID value with Adaptive Auto-Retry.
      */
-    public function get(string $oid): mixed
+    public function get(string $oid, ?int $customTimeout = null, ?int $customRetries = null): mixed
     {
         if (!self::isAvailable()) return false;
 
         $target = "{$this->ip}:{$this->port}";
+        $timeout = $customTimeout ?? $this->timeout;
+        $retries = $customRetries ?? $this->retries;
 
-        if ($this->snmpVersion === 'v3') {
-            return @snmp3_get(
+        // Attempt 1: Normal Timeout
+        $result = ($this->snmpVersion === 'v3')
+            ? @snmp3_get(
                 $target,
                 $this->v3Username ?? '',
                 'authPriv',
@@ -148,23 +152,45 @@ class SnmpConnector
                 $this->v3PrivProtocol ?? 'AES',
                 $this->v3PrivPassword ?? '',
                 $oid,
-                $this->timeout,
-                $this->retries
-            );
+                $timeout,
+                $retries
+            )
+            : @snmpget($target, $this->community, $oid, $timeout, $retries);
+
+        // Attempt 2 (Adaptive Timeout Boost): Jika gagal/timeout, coba 1x lagi dengan waktu tambahan +1.5s
+        if ($result === false || $result === null) {
+            $boostedTimeout = max($timeout * 2, 2000000); // 2.0s boost
+            $result = ($this->snmpVersion === 'v3')
+                ? @snmp3_get(
+                    $target,
+                    $this->v3Username ?? '',
+                    'authPriv',
+                    $this->v3AuthProtocol ?? 'SHA',
+                    $this->v3AuthPassword ?? '',
+                    $this->v3PrivProtocol ?? 'AES',
+                    $this->v3PrivPassword ?? '',
+                    $oid,
+                    $boostedTimeout,
+                    1
+                )
+                : @snmpget($target, $this->community, $oid, $boostedTimeout, 1);
         }
 
-        return @snmpget($target, $this->community, $oid, $this->timeout, $this->retries);
+        return $result;
     }
 
     /**
-     * SNMP WALK — traverse a subtree of OIDs.
+     * SNMP WALK — traverse a subtree of OIDs with Adaptive Auto-Retry & Timeout Boost.
      */
-    public function walk(string $oid): array|false
+    public function walk(string $oid, ?int $customTimeout = null, ?int $customRetries = null): array|false
     {
         if (!self::isAvailable()) return false;
 
         $target = "{$this->ip}:{$this->port}";
+        $timeout = $customTimeout ?? $this->timeout;
+        $retries = $customRetries ?? $this->retries;
 
+        // Attempt 1: Normal Walk
         if ($this->snmpVersion === 'v3') {
             $result = @snmp3_real_walk(
                 $target,
@@ -175,26 +201,53 @@ class SnmpConnector
                 $this->v3PrivProtocol ?? 'AES',
                 $this->v3PrivPassword ?? '',
                 $oid,
-                $this->timeout,
-                $this->retries
+                $timeout,
+                $retries
             );
         } else {
-            $result = @snmprealwalk($target, $this->community, $oid, $this->timeout, $this->retries);
+            $result = @snmp2_real_walk($target, $this->community, $oid, $timeout, $retries);
+            if ($result === false) {
+                $result = @snmprealwalk($target, $this->community, $oid, $timeout, $retries);
+            }
         }
 
-        return $result ?: [];
+        // Attempt 2 (Adaptive Timeout Boost): Jika gagal, retry 1x dengan durasi lebih longgar (+1.5s)
+        if ($result === false || empty($result)) {
+            $boostedTimeout = max($timeout * 2, 2500000); // 2.5s boost
+            if ($this->snmpVersion === 'v3') {
+                $result = @snmp3_real_walk(
+                    $target,
+                    $this->v3Username ?? '',
+                    'authPriv',
+                    $this->v3AuthProtocol ?? 'SHA',
+                    $this->v3AuthPassword ?? '',
+                    $this->v3PrivProtocol ?? 'AES',
+                    $this->v3PrivPassword ?? '',
+                    $oid,
+                    $boostedTimeout,
+                    1
+                );
+            } else {
+                $result = @snmp2_real_walk($target, $this->community, $oid, $boostedTimeout, 1);
+                if ($result === false) {
+                    $result = @snmprealwalk($target, $this->community, $oid, $boostedTimeout, 1);
+                }
+            }
+        }
+
+        return $result;
     }
 
     /**
-     * Parse raw SNMP value (remove type prefix like "STRING: ", "INTEGER: ").
+     * Clean raw SNMP return values (removes type prefixes like "STRING: ", "INTEGER: ", quotes, etc.).
      */
-    public static function parseValue(string $raw): string
+    public static function parseValue(string $val): string
     {
-        if (preg_match('/^[A-Z0-9_]+:\s*(.+)$/i', $raw, $matches)) {
-            return trim($matches[1], '"');
-        }
-        return trim($raw, '"');
+        $val = trim($val);
+        // Strip common PHP SNMP type prefixes
+        $val = preg_replace('/^(STRING|INTEGER|Gauge32|Counter32|Counter64|Timeticks|IpAddress|OID|Hex-STRING):\s*/i', '', $val);
+        // Strip surrounding quotes
+        $val = trim($val, '"\'');
+        return $val;
     }
-
-    public function getIp(): string { return $this->ip; }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -46,6 +46,11 @@ export default function ServerMonitoring() {
   // Trigger worker state
   const [isTriggeringWorker, setIsTriggeringWorker] = useState(false);
   const [triggerWorkerMessage, setTriggerWorkerMessage] = useState(null);
+
+  // Log filter
+  const [selectedOltLogFilter, setSelectedOltLogFilter] = useState('ALL');
+  const [autoScrollLogs, setAutoScrollLogs] = useState(true);
+  const logContainerRef = useRef(null);
 
   const fetchMetrics = async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
@@ -306,6 +311,28 @@ export default function ServerMonitoring() {
     };
   }, [metrics, isDarkMode]);
 
+  const cpu = metrics?.cpu || {};
+  const mem = metrics?.memory || {};
+  const disk = metrics?.disk || {};
+  const net = metrics?.network || {};
+  const vpn = metrics?.vpn || {};
+  const worker = metrics?.worker || {};
+  const sys = metrics?.system || {};
+  const gateway = metrics?.gateway || {};
+  const topProcesses = metrics?.top_processes || [];
+  const workerLogs = worker.logs || [];
+
+  // Filter logs by OLT
+  const filteredLogs = useMemo(() => {
+    if (selectedOltLogFilter === 'ALL') return workerLogs;
+    return workerLogs.filter((l) => l.olt === selectedOltLogFilter);
+  }, [workerLogs, selectedOltLogFilter]);
+
+  const uniqueOltNames = useMemo(() => {
+    const names = new Set(workerLogs.map((l) => l.olt).filter((n) => n && n !== 'SYSTEM'));
+    return Array.from(names);
+  }, [workerLogs]);
+
   if (loading && !metrics) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
@@ -316,16 +343,6 @@ export default function ServerMonitoring() {
       </div>
     );
   }
-
-  const cpu = metrics?.cpu || {};
-  const mem = metrics?.memory || {};
-  const disk = metrics?.disk || {};
-  const net = metrics?.network || {};
-  const vpn = metrics?.vpn || {};
-  const worker = metrics?.worker || {};
-  const sys = metrics?.system || {};
-  const gateway = metrics?.gateway || {};
-  const topProcesses = metrics?.top_processes || [];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
@@ -739,7 +756,7 @@ export default function ServerMonitoring() {
       </div>
 
       {/* ── PANEL BARU: MONITORING REQUEST & BACKGROUND WORKER TELEMETRI OLT ── */}
-      <div className="bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-slate-800/80 rounded-2xl p-5 shadow-xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -749,14 +766,14 @@ export default function ServerMonitoring() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 </span>
-                <span>Monitoring Background Worker &amp; Polling Request Backend</span>
+                <span>Monitoring Parallel Background Worker &amp; Polling Request Telemetri</span>
               </h3>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                {worker.status || 'ACTIVE'}
+                {worker.status || 'ACTIVE (PARALLEL)'}
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Daemon yang melakukan auto-request per port PON dengan jeda <strong className="text-emerald-600 dark:text-emerald-400 font-mono">15 ms</strong> untuk memperbarui database secara berkala
+              Setiap OLT berjalan secara simultan (Zero-Queue) dengan jeda throttling <strong className="text-emerald-600 dark:text-emerald-400 font-mono">15 ms</strong>, update database langsung per port selesai, dan adaptive auto-retry.
             </p>
           </div>
 
@@ -810,7 +827,7 @@ export default function ServerMonitoring() {
             <div className="font-mono text-sm font-black text-slate-900 dark:text-white">
               {worker.total_devices ?? 0} OLT
             </div>
-            <p className="text-[10px] text-slate-500">Perangkat Aktif</p>
+            <p className="text-[10px] text-slate-500">Multi-Process Simultan</p>
           </div>
 
           <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
@@ -832,7 +849,7 @@ export default function ServerMonitoring() {
 
         {/* Tabel Laporan Eksekusi per Perangkat OLT */}
         {worker.device_reports && worker.device_reports.length > 0 && (
-          <div className="pt-2">
+          <div>
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-2">
               Rincian Pembaruan Database Telemetri per Perangkat OLT (Siklus Terakhir):
             </span>
@@ -875,9 +892,73 @@ export default function ServerMonitoring() {
           </div>
         )}
 
+        {/* ── LIVE ACTIVITY LOG & REQUEST STREAM CONSOLE (BARU) ── */}
+        <div className="pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                Live Request Stream &amp; Activity Log Worker (Real-Time):
+              </span>
+            </div>
+
+            {/* Filter OLT */}
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400 text-[11px] font-semibold">Filter OLT:</span>
+              <select
+                value={selectedOltLogFilter}
+                onChange={(e) => setSelectedOltLogFilter(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-2.5 py-1 font-bold focus:outline-none"
+              >
+                <option value="ALL">Semua OLT ({workerLogs.length})</option>
+                {uniqueOltNames.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div
+            ref={logContainerRef}
+            className="h-64 overflow-y-auto font-mono text-[11px] p-3.5 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-slate-950 text-slate-200 space-y-1.5 shadow-inner"
+          >
+            {filteredLogs.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-slate-500 italic">
+                Belum ada log aktivitas worker... (Menunggu siklus polling berikutnya)
+              </div>
+            ) : (
+              filteredLogs.map((log) => {
+                let badgeColor = 'text-slate-400 bg-slate-800';
+                if (log.level === 'SUCCESS') badgeColor = 'text-emerald-400 bg-emerald-950/80 border border-emerald-800/60';
+                else if (log.level === 'SYNCING') badgeColor = 'text-cyan-400 bg-cyan-950/80 border border-cyan-800/60';
+                else if (log.level === 'EMPTY') badgeColor = 'text-slate-400 bg-slate-850 border border-slate-700/60';
+                else if (log.level === 'ERROR') badgeColor = 'text-rose-400 bg-rose-950/80 border border-rose-800/60';
+                else if (log.level === 'INFO') badgeColor = 'text-indigo-400 bg-indigo-950/80 border border-indigo-800/60';
+
+                return (
+                  <div
+                    key={log.id}
+                    className="flex items-start gap-2.5 py-1 border-b border-slate-900/60 hover:bg-slate-900/40 transition-colors"
+                  >
+                    <span className="text-slate-500 font-bold shrink-0">[{log.time}]</span>
+                    <span className="text-indigo-400 font-bold shrink-0">[{log.olt}]</span>
+                    {log.port && log.port !== 'ALL' && log.port !== 'INIT' && log.port !== 'SUMMARY' && (
+                      <span className="text-cyan-300 font-semibold shrink-0">[{log.port}]</span>
+                    )}
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-black tracking-wider shrink-0 ${badgeColor}`}>
+                      {log.level}
+                    </span>
+                    <span className="text-slate-300 break-all">{log.message}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
         {/* Riwayat 5 Siklus Terakhir */}
         {worker.history && worker.history.length > 0 && (
-          <div className="pt-2 flex flex-wrap items-center gap-2">
+          <div className="pt-1 flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-bold text-slate-400">Riwayat Siklus:</span>
             {worker.history.slice(-6).map((item, idx) => (
               <span
