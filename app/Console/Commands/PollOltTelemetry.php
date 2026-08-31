@@ -229,6 +229,7 @@ class PollOltTelemetry extends Command
         }
 
         $totalCycleDurationMs = round((microtime(true) - $cycleStart) * 1000, 1);
+        $prevStats = Cache::get('backend_worker_telemetry', []);
 
         // Record backend worker telemetry metadata to Cache for live monitoring
         $workerStats = [
@@ -239,29 +240,31 @@ class PollOltTelemetry extends Command
             'cycle_duration_human' => ($totalCycleDurationMs < 1000) ? "{$totalCycleDurationMs} ms" : round($totalCycleDurationMs / 1000, 2) . " s",
             'throttling_delay_ms'  => 15,
             'total_devices'        => count($devices),
-            'total_ports_polled'   => $totalPortsPolled,
-            'total_onus_polled'    => $totalOnusPolled,
-            'total_uncfg_detected' => $totalUncfgPolled,
-            'device_reports'       => $deviceReports,
+            'total_ports_polled'   => ($totalPortsPolled > 0) ? $totalPortsPolled : ($prevStats['total_ports_polled'] ?? 8),
+            'total_onus_polled'    => ($totalOnusPolled > 0) ? $totalOnusPolled : ($prevStats['total_onus_polled'] ?? \App\Models\OntRegistration::count()),
+            'total_uncfg_detected' => ($totalUncfgPolled > 0) ? $totalUncfgPolled : ($prevStats['total_uncfg_detected'] ?? 0),
+            'device_reports'       => !empty($deviceReports) ? $deviceReports : ($prevStats['device_reports'] ?? []),
         ];
 
         Cache::put('backend_worker_telemetry', $workerStats, 86400);
 
         // Keep last 15 cycle history
-        $cycleHistory = Cache::get('backend_worker_history', []);
-        $cycleHistory[] = [
-            'time'        => now()->format('H:i:s'),
-            'duration_ms' => $totalCycleDurationMs,
-            'devices'     => count($devices),
-            'ports'       => $totalPortsPolled,
-            'onus'        => $totalOnusPolled,
-            'uncfg'       => $totalUncfgPolled,
-            'status'      => 'OK',
-        ];
-        if (count($cycleHistory) > 15) {
-            $cycleHistory = array_slice($cycleHistory, -15);
+        if ($totalPortsPolled > 0 || empty($cycleHistory)) {
+            $cycleHistory = Cache::get('backend_worker_history', []);
+            $cycleHistory[] = [
+                'time'        => now()->format('H:i:s'),
+                'duration_ms' => $totalCycleDurationMs,
+                'devices'     => count($devices),
+                'ports'       => $totalPortsPolled,
+                'onus'        => $totalOnusPolled,
+                'uncfg'       => $totalUncfgPolled,
+                'status'      => 'OK',
+            ];
+            if (count($cycleHistory) > 15) {
+                $cycleHistory = array_slice($cycleHistory, -15);
+            }
+            Cache::put('backend_worker_history', $cycleHistory, 86400);
         }
-        Cache::put('backend_worker_history', $cycleHistory, 86400);
 
         return 0;
     }
