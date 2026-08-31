@@ -490,7 +490,7 @@ class ServerMonitoringController extends Controller
             'snmp_daemon' => [
                 'name'        => 'SNMP Poller Gateway',
                 'status'      => $snmpStatus,
-                'detail'      => 'Worker Telemetri OLT Aktif (Throttling 50ms)',
+                'detail'      => 'Worker Telemetri OLT Aktif (Throttling 15ms)',
                 'driver'      => 'ZTE C300/C320, HSGQ & Multi-Vendor Engine',
                 'last_active' => $lastWorkerActivity,
             ],

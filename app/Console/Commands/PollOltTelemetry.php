@@ -60,8 +60,8 @@ class PollOltTelemetry extends Command
                             // Lewati jika terjadi timeout pada salah satu port
                         }
 
-                        // Jeda throttling 50 milidetik (0.05s) antar port agar CPU OLT tidak terbebani
-                        usleep(50000);
+                        // Jeda throttling 15 milidetik (0.015s) antar port agar siklus super cepat dan OLT tetap aman
+                        usleep(15000);
                     }
                 }
 
