@@ -77,7 +77,7 @@ class PollOltTelemetry extends Command
         foreach ($devices as $device) {
             $cmd = [$phpBinary, $artisanPath, 'olt:poll-telemetry', "--device={$device->id}", '--force'];
             $process = new Process($cmd);
-            $process->setTimeout(45); // 45 detik max — batas toleransi ideal untuk OLT 80-port & dense ONU
+            $process->setTimeout(60); // 60 detik max — toleransi aman untuk batch 4-port padat ONU
             $process->start();
 
             $processes[$device->id] = [
@@ -93,7 +93,7 @@ class PollOltTelemetry extends Command
         $totalOnusPolled = 0;
         $totalUncfgPolled = 0;
 
-        $maxProcessTimeoutSec = 45; // Maksimal 45 detik per sub-process OLT
+        $maxProcessTimeoutSec = 60; // Maksimal 60 detik per sub-process OLT
 
         while (count($processes) > 0) {
             foreach ($processes as $id => $item) {
@@ -270,47 +270,75 @@ class PollOltTelemetry extends Command
             }
 
             // ═══════════════════════════════════════════════════════════════════
-            // 🔹 TAHAP 3: PENARIKAN DATA ONU PER PORT PON BERTAHAP (GRANULAR)
+            // 🔹 TAHAP 3: WORKER POOL 4-PORT SIMULTAN (GRANULAR & ULTRA-CEPAT)
             // ═══════════════════════════════════════════════════════════════════
-            // Hanya menembak 1 PORT PON giliran saat ini (cepat, anti-timeout, non-masal)
-            $cursorKey = "olt_poll_port_cursor_{$device->id}";
-            $cursor = (int)Cache::get($cursorKey, 0);
+            $batchSize = 4; // 4 Port PON per Siklus Worker Pool (Aman untuk CPU OLT & Cepat)
 
             if ($specificPort) {
-                $targetPortId = $specificPort;
+                $targetPorts = [$specificPort];
             } else {
-                if ($cursor >= count($activePonPorts)) {
+                $totalAvailable = count($allPonPorts);
+                if ($totalAvailable === 0) {
+                    return 0;
+                }
+
+                $cursorKey = "olt_poll_port_cursor_{$device->id}";
+                $cursor = (int)Cache::get($cursorKey, 0);
+                if ($cursor >= $totalAvailable) {
                     $cursor = 0;
                 }
-                $targetPort = $activePonPorts[$cursor];
-                $targetPortId = $targetPort['port_id'];
 
-                // Majukan cursor untuk giliran berikutnya
-                $nextCursor = ($cursor + 1) % count($activePonPorts);
+                $targetPorts = [];
+                for ($i = 0; $i < min($batchSize, $totalAvailable); $i++) {
+                    $idx = ($cursor + $i) % $totalAvailable;
+                    $targetPorts[] = $allPonPorts[$idx]['port_id'];
+                }
+
+                // Majukan cursor sesuai batch size
+                $nextCursor = ($cursor + count($targetPorts)) % $totalAvailable;
                 Cache::put($cursorKey, $nextCursor, 86400);
             }
 
+            $batchLabel = implode(', ', $targetPorts);
+
             // Catat port yang sedang di-query real-time untuk pulse indicator di UI
             Cache::put("olt_active_querying_port_{$device->id}", [
-                'port'       => $targetPortId,
+                'port'       => $batchLabel,
                 'status'     => 'SYNCING',
                 'timestamp'  => now()->format('H:i:s'),
                 'started_at' => microtime(true),
             ], 60);
 
-            self::appendWorkerLog($device->name, $targetPortId, 'SYNCING', "Tahap 3: Query SNMP HANYA pada port {$targetPortId}...");
+            self::appendWorkerLog($device->name, $batchLabel, 'SYNCING', "Tahap 3: Worker Pool memproses 4-Port (" . $batchLabel . ") simultan...");
 
-            // Query SNMP MURNI HANYA untuk 1 Port PON ini
-            $portStart = microtime(true);
-            $portOnus = $driver->getOnuListByPort($targetPortId);
-            $portDuration = round((microtime(true) - $portStart) * 1000, 1);
+            // Eksekusi penarikan data untuk setiap port di dalam batch
+            $batchStart = microtime(true);
+            $batchOnusCombined = [];
+            $portsResults = [];
 
-            // Update status port selesai di-query
+            foreach ($targetPorts as $pId) {
+                $pStart = microtime(true);
+                $pOnus = $driver->getOnuListByPort($pId);
+                $pDuration = round((microtime(true) - $pStart) * 1000, 1);
+                
+                $portsResults[$pId] = [
+                    'count'       => count($pOnus),
+                    'duration_ms' => $pDuration,
+                    'onus'        => $pOnus,
+                ];
+
+                $batchOnusCombined = array_merge($batchOnusCombined, $pOnus);
+            }
+
+            $batchDuration = round((microtime(true) - $batchStart) * 1000, 1);
+            $totalBatchFound = count($batchOnusCombined);
+
+            // Update status pulse selesai
             Cache::put("olt_active_querying_port_{$device->id}", [
-                'port'        => $targetPortId,
-                'status'      => !empty($portOnus) ? 'SUCCESS' : 'EMPTY',
-                'onu_count'   => count($portOnus),
-                'duration_ms' => $portDuration,
+                'port'        => $batchLabel,
+                'status'      => $totalBatchFound > 0 ? 'SUCCESS' : 'EMPTY',
+                'onu_count'   => $totalBatchFound,
+                'duration_ms' => $batchDuration,
                 'timestamp'   => now()->format('H:i:s'),
             ], 60);
 
@@ -326,18 +354,21 @@ class PollOltTelemetry extends Command
                 }
             }
 
-            // 2. Hapus entri lama khusus port yang sedang di-query (agar data port ini benar-benar fresh)
+            // 2. Hapus entri lama khusus untuk 4 port yang sedang di-query di batch ini (agar selalu fresh)
             foreach ($physicalOnuMap as $sn => $o) {
                 $p = strtolower($o['port'] ?? ($o['detected_port'] ?? ''));
-                $targetClean = strtolower($targetPortId);
-                if ($p === $targetClean || str_contains($p, $targetClean) || str_contains($targetClean, $p)) {
-                    unset($physicalOnuMap[$sn]);
+                foreach ($targetPorts as $tPort) {
+                    $targetClean = strtolower($tPort);
+                    if ($p === $targetClean || str_contains($p, $targetClean) || str_contains($targetClean, $p)) {
+                        unset($physicalOnuMap[$sn]);
+                        break;
+                    }
                 }
             }
 
-            // 3. Masukkan data ONU segar hasil pembacaan port PON saat ini
-            if (!empty($portOnus)) {
-                foreach ($portOnus as $onuData) {
+            // 3. Masukkan data ONU segar hasil pembacaan 4 port saat ini
+            if (!empty($batchOnusCombined)) {
+                foreach ($batchOnusCombined as $onuData) {
                     $sn = strtoupper(trim((string)($onuData['serial_number'] ?? ($onuData['mac_address'] ?? ''))));
                     if (!$sn) continue;
 
@@ -354,7 +385,7 @@ class PollOltTelemetry extends Command
                     if ($ontReg) {
                         $oldStatus = $ontReg->status;
                         $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
-                        $portName  = $onuData['port'] ?? ($ontReg->oltPort?->node?->olt_port_ref ?: $targetPortId);
+                        $portName  = $onuData['port'] ?? ($ontReg->oltPort?->node?->olt_port_ref ?: ($targetPorts[0] ?? 'PON'));
 
                         // Alarm LOS Baru
                         if ($oldStatus === 'active' && $newStatus === 'inactive') {
@@ -378,7 +409,18 @@ class PollOltTelemetry extends Command
                 }
             }
 
-            // 4. Update snapshot database langsung dengan seluruh akumulasi ONU dari semua port
+            // 4. Perbarui status port fisik di pon_ports snapshot
+            $allPonPorts = array_map(function ($p) use ($portsResults) {
+                $pId = $p['port_id'] ?? '';
+                if (isset($portsResults[$pId])) {
+                    $found = $portsResults[$pId]['count'];
+                    $p['status'] = $found > 0 ? 'Up' : ($p['status'] ?? 'Down');
+                    $p['registered_onus'] = $found;
+                }
+                return $p;
+            }, $allPonPorts);
+
+            // 5. Update snapshot database langsung dengan seluruh akumulasi ONU dari semua port
             $deviceInfo = $existingSnapshot['device_info'] ?? $driver->getDeviceInfo();
             if (!empty($cards)) {
                 $deviceInfo['cards'] = $cards;
@@ -391,27 +433,15 @@ class PollOltTelemetry extends Command
                 'last_connected_at'       => now(),
             ]);
 
-            if (!empty($portOnus)) {
-                self::appendWorkerLog(
-                    $device->name,
-                    $targetPortId,
-                    'SUCCESS',
-                    "Port {$targetPortId}: " . count($portOnus) . " ONU terbaca & database terupdate ({$portDuration} ms)",
-                    ['onu_count' => count($portOnus), 'duration_ms' => $portDuration]
-                );
+            self::appendWorkerLog(
+                $device->name,
+                $batchLabel,
+                $totalBatchFound > 0 ? 'SUCCESS' : 'EMPTY',
+                "Worker Pool Batch 4-Port (" . $batchLabel . "): {$totalBatchFound} ONU terbaca & database terupdate ({$batchDuration} ms)",
+                ['onu_count' => $totalBatchFound, 'duration_ms' => $batchDuration]
+            );
 
-                $this->info("Port {$targetPortId} updated: " . count($portOnus) . " ONUs in {$portDuration} ms.");
-            } else {
-                self::appendWorkerLog(
-                    $device->name,
-                    $targetPortId,
-                    'EMPTY',
-                    "Port {$targetPortId}: Standby (0 ONU terdeteksi pada laser SFP, {$portDuration} ms)",
-                    ['onu_count' => 0, 'duration_ms' => $portDuration]
-                );
-
-                $this->info("Port {$targetPortId} is standby (0 ONUs) in {$portDuration} ms.");
-            }
+            $this->info("Worker Pool Batch ({$batchLabel}) updated: {$totalBatchFound} ONUs in {$batchDuration} ms.");
 
             // Clear web fast cache
             $cacheKey = "olt_hardware_api_{$device->vendor_key}_{$device->id}";
