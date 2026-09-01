@@ -219,60 +219,54 @@ class PollOltTelemetry extends Command
             $existingSnapshot = $device->last_telemetry_snapshot ?? [];
 
             // ═══════════════════════════════════════════════════════════════════
-            // 🔹 TAHAP 1: OID SLOT & CARD (CHASSIS INVENTORY)
+            // 🔹 TAHAP 1: OID SLOT & CARD (CHASSIS INVENTORY) DARI DATABASE
             // ═══════════════════════════════════════════════════════════════════
-            // Membaca tipe dan status kartu di setiap slot OLT lalu simpan ke database
-            $cardsCacheKey = "olt_chassis_cards_{$device->id}";
-            $cards = Cache::get($cardsCacheKey);
+            // Membaca inventori kartu chassis dari Database Snapshot lokal
+            $deviceInfo = $existingSnapshot['device_info'] ?? [];
+            $cards = $deviceInfo['cards'] ?? [];
 
+            // Jika database belum memiliki data kartu fisik, ambil sekali via SNMP lalu simpan ke database
             if (empty($cards)) {
-                $deviceInfo = $driver->getDeviceInfo();
-                $cards = $deviceInfo['cards'] ?? [];
-
+                $freshDeviceInfo = $driver->getDeviceInfo();
+                $cards = $freshDeviceInfo['cards'] ?? [];
                 if (!empty($cards)) {
-                    Cache::put($cardsCacheKey, $cards, 1800); // Cache 30 menit
-                    self::appendWorkerLog($device->name, 'CHASSIS', 'INFO', "Tahap 1: Slot & Card terupdate (" . count($cards) . " cards aktif)");
+                    $deviceInfo = array_merge($deviceInfo, $freshDeviceInfo);
+                    $existingSnapshot['device_info'] = $deviceInfo;
+                    $device->update(['last_telemetry_snapshot' => $existingSnapshot]);
+                    self::appendWorkerLog($device->name, 'CHASSIS', 'INFO', "Tahap 1: Slot & Card tersimpan ke Database (" . count($cards) . " cards aktif)");
                 }
             }
 
             // ═══════════════════════════════════════════════════════════════════
-            // 🔹 TAHAP 2: OID STATUS PORT PON & POWER OPTICAL (SFP)
+            // 🔹 TAHAP 2: STATUS PORT PON & POWER OPTICAL (SFP) DARI DATABASE
             // ═══════════════════════════════════════════════════════════════════
-            // Membaca status operasional port PON, laser TX Power SFP (dBm), dan kelas SFP
-            $portsCacheKey = "olt_ports_list_{$device->id}";
-            $allPonPorts = Cache::get($portsCacheKey);
+            // Membaca daftar port fisik dan status SFP dari Database Snapshot lokal
+            $allPonPorts = $existingSnapshot['pon_ports'] ?? [];
 
+            // Jika database belum memiliki daftar port PON, ambil sekali via SNMP lalu simpan ke database
             if (empty($allPonPorts)) {
                 $allPonPorts = $driver->getPonPorts();
                 if (!empty($allPonPorts)) {
-                    Cache::put($portsCacheKey, $allPonPorts, 900); // Cache 15 menit
-                    self::appendWorkerLog($device->name, 'SFP_PORTS', 'INFO', "Tahap 2: Status Port PON & SFP Power terupdate (" . count($allPonPorts) . " port fisik)");
+                    $existingSnapshot['pon_ports'] = $allPonPorts;
+                    $device->update(['last_telemetry_snapshot' => $existingSnapshot]);
+                    self::appendWorkerLog($device->name, 'SFP_PORTS', 'INFO', "Tahap 2: Status Port PON & SFP Power tersimpan ke Database (" . count($allPonPorts) . " port fisik)");
                 }
             }
 
-            // Fallback ke snapshot jika discovery port kosong
             if (empty($allPonPorts)) {
-                $allPonPorts = $existingSnapshot['pon_ports'] ?? [];
-            }
-
-            if (empty($allPonPorts)) {
-                self::appendWorkerLog($device->name, 'ALL', 'EMPTY', "Tidak ditemukan port PON pada {$device->name}");
+                self::appendWorkerLog($device->name, 'ALL', 'EMPTY', "Tidak ditemukan port PON pada database {$device->name}");
                 return 0;
             }
 
-            // Filter daftar Port AKTIF untuk cursor giliran polling ONU
-            $activePortsCacheKey = "olt_active_ports_{$device->id}";
-            $activePonPorts = Cache::get($activePortsCacheKey);
+            // Filter daftar Port AKTIF langsung dari data Database Snapshot
+            $activePonPorts = array_values(array_filter($allPonPorts, fn($p) =>
+                in_array(strtolower($p['status'] ?? ''), ['up', 'active', 'online']) ||
+                ($p['registered_onus'] ?? 0) > 0 ||
+                ($p['unconfigured_onus'] ?? 0) > 0
+            ));
 
             if (empty($activePonPorts)) {
-                // Filter hanya port yang berstatus Up atau memiliki ONU aktif
-                $filtered = array_values(array_filter($allPonPorts, fn($p) =>
-                    in_array(strtolower($p['status'] ?? ''), ['up', 'active', 'online']) ||
-                    ($p['registered_onus'] ?? 0) > 0 ||
-                    ($p['unconfigured_onus'] ?? 0) > 0
-                ));
-                $activePonPorts = !empty($filtered) ? $filtered : $allPonPorts;
-                Cache::put($activePortsCacheKey, $activePonPorts, 3600); // Cache 1 jam
+                $activePonPorts = $allPonPorts;
             }
 
             // ═══════════════════════════════════════════════════════════════════
