@@ -10,8 +10,8 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// ─── Polling Otomatis Telemetri OLT & Snapshot Database (Setiap 1 Menit) ────────
-Schedule::command('olt:poll-telemetry')->everyThirtySeconds()->withoutOverlapping()->name('olt:background-poll-telemetry');
+// ─── Polling Otomatis Telemetri OLT (Dikelola 24/7 oleh systemd daemon: fiber-telemetry-daemon) ────────
+// Schedule::command('olt:poll-telemetry')->everyThirtySeconds()->withoutOverlapping()->name('olt:background-poll-telemetry');
 
 // ─── Schedule Sync Health & Auto-Recovery OLT (Setiap 5 Menit) ────────────
 Schedule::call(function () {

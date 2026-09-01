@@ -77,7 +77,7 @@ class PollOltTelemetry extends Command
         foreach ($devices as $device) {
             $cmd = [$phpBinary, $artisanPath, 'olt:poll-telemetry', "--device={$device->id}", '--force'];
             $process = new Process($cmd);
-            $process->setTimeout(90); // 90 detik — cukup untuk discovery awal OLT besar (80 port)
+            $process->setTimeout(25); // 25 detik max — anti-hang per single port
             $process->start();
 
             $processes[$device->id] = [
