@@ -163,8 +163,8 @@ class OltController extends Controller
         if ($summaryOnly) {
             // Perkaya driverPonPorts dengan data status & ONU dari database / snapshot sebelumnya
             $dbOnts = $device ? OntRegistration::where(function ($q) use ($device) {
-                $q->whereHas('customerService.networkPort.node', fn($sq) => $sq->where('olt_id', $device->id))
-                  ->orWhereHas('oltPort.node', fn($sq) => $sq->where('olt_id', $device->id));
+                $q->whereHas('customerService.networkPort.node', fn($sq) => $sq->where('olt_device_id', $device->id))
+                  ->orWhereHas('oltPort.node', fn($sq) => $sq->where('olt_device_id', $device->id));
             })->get() : collect();
 
             $dbOntsCountByPort = [];
