@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\NetworkNode;
 use App\Models\NetworkPort;
 use App\Models\AuditLog;
+use App\Models\OltDevice;
+use App\Models\Customer;
 use App\Http\Requests\StoreNetworkNodeRequest;
 use App\Http\Requests\UpdateNetworkNodeRequest;
 use App\Http\Resources\NetworkNodeResource;
@@ -126,52 +128,66 @@ class NetworkNodeController extends Controller
         $odcs = $query->orderBy('code')->get();
 
         return response()->json([
-            'data' => $odcs->map(fn($odc) => [
-                'id'                     => $odc->id,
-                'name'                   => $odc->name,
-                'code'                   => $odc->code,
-                'model'                  => $odc->model,
-                'status'                 => $odc->status,
-                'address'                => $odc->address,
-                'latitude'               => $odc->latitude,
-                'longitude'              => $odc->longitude,
-                'province_id'            => $odc->province_id,
-                'regency_id'             => $odc->regency_id,
-                'district_id'            => $odc->district_id,
-                'village_id'             => $odc->village_id,
-                'total_ports'            => $odc->total_ports,
-                'used_ports'             => $odc->used_ports,
-                'core_power'             => $odc->core_power,
-                'core_color'             => $odc->core_color,
-                'splitter_config'        => $odc->splitter_config,
-                'tube_count'             => $odc->tube_count,
-                'tube_info'              => $odc->tube_info,
-                'splitter_count'         => $odc->splitter_count,
-                'odc_topology_type'      => $odc->odc_topology_type,
-                'olt_device_id'          => $odc->olt_device_id,
-                'olt_port_ref'           => $odc->olt_port_ref,
-                'parent_node_id'         => $odc->parent_node_id,
-                'splitter_type_id'       => $odc->splitter_type_id,
-                'splitter_cascade_level' => $odc->splitter_cascade_level,
-                'splitter_type'          => $odc->splitterType ? [
-                    'id'           => $odc->splitterType->id,
-                    'name'         => $odc->splitterType->name,
-                    'ratio'        => $odc->splitterType->ratio,
-                    'output_ports' => $odc->splitterType->output_ports,
-                ] : null,
-                'olt_device' => $odc->oltDevice ? [
-                    'id'   => $odc->oltDevice->id,
-                    'name' => $odc->oltDevice->name,
-                    'code' => $odc->oltDevice->code,
-                ] : null,
-                'parent_node' => $odc->parent ? [
-                    'id'   => $odc->parent->id,
-                    'name' => $odc->parent->name,
-                    'code' => $odc->parent->code,
-                ] : null,
-                'odp_count' => NetworkNode::where('node_type', 'ODP')
-                    ->where('parent_node_id', $odc->id)->count(),
-            ])
+            'data' => $odcs->map(function ($odc) {
+                $autoData = $odc->getAutoDetectedInterfaceAndOlt();
+                $autoPort = $autoData['port_ref'];
+                $effectivePortRef = $odc->olt_port_ref ?: $autoPort;
+                $isAuto = empty($odc->olt_port_ref) && !empty($autoPort);
+
+                return [
+                    'id'                     => $odc->id,
+                    'name'                   => $odc->name,
+                    'code'                   => $odc->code,
+                    'model'                  => $odc->model,
+                    'status'                 => $odc->status,
+                    'address'                => $odc->address,
+                    'latitude'               => $odc->latitude,
+                    'longitude'              => $odc->longitude,
+                    'province_id'            => $odc->province_id,
+                    'regency_id'             => $odc->regency_id,
+                    'district_id'            => $odc->district_id,
+                    'village_id'             => $odc->village_id,
+                    'total_ports'            => $odc->total_ports,
+                    'used_ports'             => $odc->used_ports,
+                    'core_power'             => $odc->core_power,
+                    'core_color'             => $odc->core_color,
+                    'splitter_config'        => $odc->splitter_config,
+                    'tube_count'             => $odc->tube_count,
+                    'tube_info'              => $odc->tube_info,
+                    'splitter_count'         => $odc->splitter_count,
+                    'odc_topology_type'      => $odc->odc_topology_type,
+                    'olt_device_id'          => $odc->olt_device_id ?: ($autoData['olt_device']['id'] ?? null),
+                    'olt_port_ref'           => $effectivePortRef,
+                    'stored_olt_port_ref'    => $odc->olt_port_ref,
+                    'auto_detected_port_ref' => $autoPort,
+                    'is_auto_detected'       => $isAuto,
+                    'parent_node_id'         => $odc->parent_node_id,
+                    'splitter_type_id'       => $odc->splitter_type_id,
+                    'splitter_cascade_level' => $odc->splitter_cascade_level,
+                    'splitter_type'          => $odc->splitterType ? [
+                        'id'           => $odc->splitterType->id,
+                        'name'         => $odc->splitterType->name,
+                        'ratio'        => $odc->splitterType->ratio,
+                        'output_ports' => $odc->splitterType->output_ports,
+                    ] : null,
+                    'olt_device' => $odc->oltDevice ? [
+                        'id'   => $odc->oltDevice->id,
+                        'name' => $odc->oltDevice->name,
+                        'code' => $odc->oltDevice->code,
+                    ] : ($autoData['olt_device'] ? [
+                        'id'   => $autoData['olt_device']['id'],
+                        'name' => $autoData['olt_device']['name'],
+                        'code' => null,
+                    ] : null),
+                    'parent_node' => $odc->parent ? [
+                        'id'   => $odc->parent->id,
+                        'name' => $odc->parent->name,
+                        'code' => $odc->parent->code,
+                    ] : null,
+                    'odp_count' => NetworkNode::where('node_type', 'ODP')
+                        ->where('parent_node_id', $odc->id)->count(),
+                ];
+            })
         ]);
     }
 
@@ -225,14 +241,20 @@ class NetworkNodeController extends Controller
      */
     public function oltTopology(Request $request)
     {
-        $query = NetworkNode::with(['splitterType', 'parent'])
+        $query = NetworkNode::with(['splitterType', 'parent', 'oltDevice'])
             ->where('node_type', 'ODC');
 
         if ($request->filled('olt_id')) {
-            $query->where('olt_device_id', $request->olt_id);
+            $oltId = (int)$request->olt_id;
+            $query->where(function ($q) use ($oltId) {
+                $q->where('olt_device_id', $oltId)
+                  ->orWhereHas('children', fn($cq) => $cq->where('olt_device_id', $oltId))
+                  ->orWhereHas('parent', fn($pq) => $pq->where('olt_device_id', $oltId));
+            });
         }
+
         if ($request->filled('olt_port_ref')) {
-            $pref = str_replace('gpon-olt_', '', $request->olt_port_ref);
+            $pref = str_replace(['gpon-olt_', 'epon-olt_', 'epon_'], '', $request->olt_port_ref);
             $query->where(function ($q) use ($request, $pref) {
                 $q->where('olt_port_ref', 'ilike', "%{$request->olt_port_ref}%")
                   ->orWhere('olt_port_ref', 'ilike', "%{$pref}%");
@@ -241,37 +263,110 @@ class NetworkNodeController extends Controller
 
         $odcs = $query->orderBy('code')->get();
 
-        $result = $odcs->map(function ($odc) {
-            $odps = NetworkNode::with('splitterType')
+        // 1. Build real-time optical power & status map from OLT snapshots
+        $liveOnuMap = [];
+        foreach (OltDevice::whereNotNull('last_telemetry_snapshot')->get() as $dev) {
+            $snapOnus = array_merge(
+                $dev->last_telemetry_snapshot['onu_list'] ?? [],
+                $dev->last_telemetry_snapshot['unconfigured_onus'] ?? []
+            );
+            foreach ($snapOnus as $so) {
+                $snKey = strtolower(trim($so['serial_number'] ?? ''));
+                $macKey = strtolower(trim($so['mac_address'] ?? ($so['onu_mac'] ?? '')));
+                if ($snKey) $liveOnuMap[$snKey] = $so;
+                if ($macKey) $liveOnuMap[$macKey] = $so;
+            }
+        }
+
+        // 2. Fetch customers and map by ODP node id
+        $allCustomers = Customer::with(['services.networkPort', 'services.ontRegistration'])->get();
+        $custByOdp = [];
+        foreach ($allCustomers as $c) {
+            $odpId = $c->odp_node_id ?: ($c->services->first()?->networkPort?->node_id);
+            if (!$odpId) continue;
+
+            $ont = $c->services->first()?->ontRegistration;
+            $snKey = strtolower(trim($ont?->onu_serial ?: ($c->services->first()?->onu_serial ?: '')));
+            $macKey = strtolower(trim($ont?->onu_mac ?: ''));
+            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
+
+            $rx = null;
+            $status = 'Offline';
+            if ($liveData && isset($liveData['rx_power']) && is_numeric($liveData['rx_power'])) {
+                $rx = (float)$liveData['rx_power'];
+                $status = $rx > -38.0 ? 'Online' : 'Offline / LOS';
+            } elseif ($ont && $ont->rx_power !== null && is_numeric($ont->rx_power)) {
+                $rx = (float)$ont->rx_power;
+                $status = $rx > -38.0 ? 'Online' : 'Offline / LOS';
+            }
+
+            $custByOdp[$odpId][] = [
+                'name' => $c->name,
+                'rx' => $rx,
+                'status' => $status,
+            ];
+        }
+
+        $result = $odcs->map(function ($odc) use ($custByOdp) {
+            $autoData = $odc->getAutoDetectedInterfaceAndOlt();
+            $autoPort = $autoData['port_ref'];
+            $effectivePortRef = $odc->olt_port_ref ?: $autoPort;
+
+            $odps = NetworkNode::with(['splitterType', 'oltDevice'])
                 ->where('parent_node_id', $odc->id)
                 ->where('node_type', 'ODP')
                 ->orderBy('code')
                 ->get();
 
             return [
-                'id'          => $odc->id,
-                'name'        => $odc->name,
-                'code'        => $odc->code,
-                'status'      => $odc->status,
-                'address'     => $odc->address,
-                'latitude'    => $odc->latitude,
-                'longitude'   => $odc->longitude,
-                'olt_port_ref'=> $odc->olt_port_ref,
-                'total_ports' => $odc->total_ports,
-                'used_ports'  => $odc->used_ports,
-                'parent_node' => $odc->parent ? ['name' => $odc->parent->name, 'code' => $odc->parent->code] : null,
-                'odps'        => $odps->map(fn($o) => [
-                    'id'          => $o->id,
-                    'name'        => $o->name,
-                    'code'        => $o->code,
-                    'status'      => $o->status,
-                    'address'     => $o->address,
-                    'latitude'    => $o->latitude,
-                    'longitude'   => $o->longitude,
-                    'total_ports' => $o->total_ports,
-                    'used_ports'  => $o->used_ports,
-                    'splitter'    => $o->splitterType?->ratio,
-                ]),
+                'id'                     => $odc->id,
+                'name'                   => $odc->name,
+                'code'                   => $odc->code,
+                'status'                 => $odc->status,
+                'address'                => $odc->address,
+                'latitude'               => $odc->latitude,
+                'longitude'              => $odc->longitude,
+                'olt_port_ref'           => $effectivePortRef,
+                'stored_olt_port_ref'    => $odc->olt_port_ref,
+                'auto_detected_port_ref' => $autoPort,
+                'is_auto_detected'       => empty($odc->olt_port_ref) && !empty($autoPort),
+                'total_ports'            => $odc->total_ports,
+                'used_ports'             => $odc->used_ports,
+                'parent_node'            => $odc->parent ? ['name' => $odc->parent->name, 'code' => $odc->parent->code] : null,
+                'odps'                   => $odps->map(function ($o) use ($effectivePortRef, $custByOdp) {
+                    $odpAuto = $o->getAutoDetectedInterfaceAndOlt();
+                    $odpPort = $o->olt_port_ref ?: ($odpAuto['port_ref'] ?: $effectivePortRef);
+
+                    $custs = $custByOdp[$o->id] ?? [];
+                    $custCount = count($custs);
+                    $validRx = array_filter(array_column($custs, 'rx'), fn($r) => $r !== null);
+                    $onlineCusts = count(array_filter($custs, fn($c) => $c['status'] === 'Online'));
+                    $avgRx = count($validRx) > 0 ? round(array_sum($validRx) / count($validRx), 2) : null;
+                    $computedStatus = $custCount > 0 
+                        ? ($onlineCusts > 0 ? 'ONLINE' : 'OFFLINE') 
+                        : (in_array(strtolower($o->status), ['active', 'online']) ? 'ONLINE' : 'OFFLINE');
+
+                    return [
+                        'id'                     => $o->id,
+                        'name'                   => $o->name,
+                        'code'                   => $o->code,
+                        'status'                 => $computedStatus,
+                        'node_status'            => $o->status,
+                        'has_customers'          => $custCount > 0,
+                        'customer_count'         => $custCount,
+                        'online_customer_count'  => $onlineCusts,
+                        'avg_rx_power'           => $avgRx,
+                        'address'                => $o->address,
+                        'latitude'               => $o->latitude,
+                        'longitude'              => $o->longitude,
+                        'olt_port_ref'           => $odpPort,
+                        'auto_detected_port_ref' => $odpAuto['port_ref'],
+                        'is_auto_detected'       => empty($o->olt_port_ref) && !empty($odpAuto['port_ref']),
+                        'total_ports'            => $o->total_ports,
+                        'used_ports'             => $o->used_ports,
+                        'splitter'               => $o->splitterType?->ratio,
+                    ];
+                }),
             ];
         });
 
@@ -323,29 +418,19 @@ class NetworkNodeController extends Controller
             )
             ->get();
 
-        // 1. Auto-detect Interface OLT
-        $autoOltPortRef = $networkNode->olt_port_ref;
-
+        // 1. Auto-detect Interface OLT & Device
+        $autoData = $networkNode->getAutoDetectedInterfaceAndOlt();
+        $autoOltPortRef = $networkNode->olt_port_ref ?: $autoData['port_ref'];
         if (empty($autoOltPortRef) && $networkNode->parent) {
             $autoOltPortRef = $networkNode->parent->olt_port_ref;
-        }
-
-        $detectedOltPorts = $ports->pluck('olt_port_name')->filter()->unique()->values();
-        if ($detectedOltPorts->isNotEmpty()) {
-            $formattedDetected = $detectedOltPorts->map(function ($p) {
-                if (preg_match('/^\d+\/\d+\/\d+$/', $p)) return "gpon-olt_$p";
-                return $p;
-            })->join(', ');
-            if (empty($autoOltPortRef)) {
-                $autoOltPortRef = $formattedDetected;
-            }
         }
 
         $displayOltRef = $autoOltPortRef ? collect(explode(',', $autoOltPortRef))->map(function ($s) {
             $trimmed = trim($s);
             if (!$trimmed) return '';
+            if (str_starts_with($trimmed, 'epon')) return $trimmed;
             $clean = preg_replace('/^(gpon[-_]olt_)/i', '', $trimmed);
-            return "gpon_olt_$clean";
+            return "gpon-olt_$clean";
         })->filter()->join(', ') : '—';
 
         // 2. Hitung statistik redaman (optical power) dari pelanggan yang terkoneksi
@@ -569,6 +654,11 @@ class NetworkNodeController extends Controller
 
     private function formatNode($node, bool $includeChildren = false): array
     {
+        $autoData = $node->getAutoDetectedInterfaceAndOlt();
+        $autoPort = $autoData['port_ref'];
+        $effectivePortRef = $node->olt_port_ref ?: $autoPort;
+        $isAuto = empty($node->olt_port_ref) && !empty($autoPort);
+
         $data = [
             'id'                    => $node->id,
             'name'                  => $node->name,
@@ -586,7 +676,10 @@ class NetworkNodeController extends Controller
             'total_ports'           => $node->total_ports,
             'used_ports'            => $node->used_ports,
             'splitter_cascade_level'=> $node->splitter_cascade_level,
-            'olt_port_ref'          => $node->olt_port_ref,
+            'olt_port_ref'          => $effectivePortRef,
+            'stored_olt_port_ref'   => $node->olt_port_ref,
+            'auto_detected_port_ref'=> $autoPort,
+            'is_auto_detected'      => $isAuto,
             'parent_node_id'        => $node->parent_node_id,
             'core_power'            => $node->core_power,
             'core_color'            => $node->core_color,
@@ -609,7 +702,15 @@ class NetworkNodeController extends Controller
                 'id'   => $node->oltDevice->id,
                 'name' => $node->oltDevice->name,
                 'code' => $node->oltDevice->code,
-            ] : null,
+            ] : ($node->parent?->oltDevice ? [
+                'id'   => $node->parent->oltDevice->id,
+                'name' => $node->parent->oltDevice->name,
+                'code' => $node->parent->oltDevice->code,
+            ] : ($autoData['olt_device'] ? [
+                'id'   => $autoData['olt_device']['id'],
+                'name' => $autoData['olt_device']['name'],
+                'code' => null,
+            ] : null)),
             'splitter_type'         => $node->splitterType ? [
                 'id'           => $node->splitterType->id,
                 'name'         => $node->splitterType->name,

@@ -18,7 +18,7 @@ class OltDeviceController extends Controller
             'id', 'name', 'code', 'vendor', 'model', 'location', 'ip_address', 
             'total_ports', 'deployment_mode', 'snmp_version', 'snmp_community_type', 
             'snmp_port', 'snmp_timeout', 'probe_agent_url', 'polling_interval_seconds', 
-            'connection_mode', 'status', 'last_connected_at', 'created_at', 'updated_at'
+            'connection_mode', 'status', 'last_connected_at', 'last_telemetry_snapshot', 'created_at', 'updated_at'
         ])->orderBy('created_at')->get();
 
         // Ambil hitungan node secara instan via SQL groupBy
@@ -40,10 +40,15 @@ class OltDeviceController extends Controller
             $odcCount = $countMap[$oltId]['ODC'] ?? 0;
             $odpCount = $countMap[$oltId]['ODP'] ?? 0;
 
+            $snapshot = $olt->last_telemetry_snapshot;
+            $rawPonPorts = !empty($snapshot['pon_ports']) ? $snapshot['pon_ports'] : [];
+
             $oltArray = $olt->makeHidden('last_telemetry_snapshot')->toArray();
             $oltArray['pop_count'] = max(1, $popCount);
             $oltArray['odc_count'] = $odcCount;
             $oltArray['odp_count'] = $odpCount;
+            $oltArray['pon_ports'] = $rawPonPorts;
+            $oltArray['real_total_ports'] = count($rawPonPorts) > 0 ? count($rawPonPorts) : ($olt->total_ports ?: 16);
 
             return $oltArray;
         });

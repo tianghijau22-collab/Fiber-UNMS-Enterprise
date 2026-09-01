@@ -5,6 +5,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
 import VpnMikrotikBridgeModal from '../components/VpnMikrotikBridgeModal';
+import FlowingOltTopology from '../components/FlowingOltTopology.jsx';
 
 // ─── Icon Components ──────────────────────────────────────────────────────────
 const IconSettings = () => (
@@ -1205,8 +1206,8 @@ export default function OltManagement() {
             </span>
             {systemCapabilities && (
               <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${systemCapabilities.snmp_extension
-                ? 'bg-emerald-50 dark:bg-neutral-900 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60'
-                : 'bg-rose-50 dark:bg-neutral-900 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/60'
+                ? 'bg-emerald-50 dark:bg-slate-800 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+                : 'bg-rose-50 dark:bg-slate-800 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
                 }`}>
                 PHP SNMP Ext: {systemCapabilities.snmp_extension ? 'Aktif' : 'Tidak Aktif'}
               </span>
@@ -2518,12 +2519,12 @@ export default function OltManagement() {
                       {displayPorts && displayPorts.length > 0 ? (
                         displayPorts.map(port => {
                           const isSelected = selectedPortFilter === port.port_id;
-                          const isPortUp = checkIsPortUp(port, oltData);
                           const matchedOdcs = oltTopology.filter(o => {
-                            if (!o.olt_port_ref) return false;
-                            const targetClean = port.port_id.replace(/^gpon[-_]olt_/i, '');
-                            const refs = o.olt_port_ref.split(',').map(r => r.trim().replace(/^gpon[-_]olt_/i, ''));
-                            return refs.some(r => r === targetClean || r === port.port_id || `gpon-olt_${r}` === port.port_id);
+                            const oPort = o.olt_port_ref || o.auto_detected_port_ref;
+                            if (!oPort) return false;
+                            const targetClean = port.port_id.replace(/^gpon[-_]olt_|^epon[-_]olt_|^epon_/i, '');
+                            const refs = oPort.split(',').map(r => r.trim().replace(/^gpon[-_]olt_|^epon[-_]olt_|^epon_/i, ''));
+                            return refs.some(r => r === targetClean || r === port.port_id || `gpon-olt_${r}` === port.port_id || `epon_${r}` === port.port_id || `epon-olt_${r}` === port.port_id);
                           });
                           const odcCount = matchedOdcs.length;
                           const odpCount = matchedOdcs.reduce((acc, o) => acc + (o.odps?.length || 0), 0);
@@ -3908,79 +3909,14 @@ export default function OltManagement() {
           )}
 
           {/* ══════════════════════════════════════════════════════════════════
-              BAGIAN PALING BAWAH: TOPOLOGI PASIF (ODC & ODP) UNTUK PORT TERPILIH
+              BAGIAN PALING BAWAH: DIAGRAM TOPOLOGI PASIF MENGALIR (ODC & ODP)
           ══════════════════════════════════════════════════════════════════ */}
-          {selectedPortFilter && (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                <div>
-                  <h3 className="font-bold text-slate-950 dark:text-white text-base flex items-center gap-2">
-                    <IconNetwork />
-                    <span>Topologi Pasif (ODC &amp; ODP) — Port {formatShortPort(selectedPortFilter)}</span>
-                  </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                    Perangkat ODC dan ODP yang mendistribusikan sinyal optik dari port ini ke pelanggan
-                  </p>
-                </div>
-              </div>
-
-              {(() => {
-                const portOdcs = oltTopology.filter(o => {
-                  if (!o.olt_port_ref) return false;
-                  const targetClean = selectedPortFilter.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-                  const refs = o.olt_port_ref.split(',').map(r => r.trim().replace(/^gpon[-_]olt_|^epon[-_]olt_/i, ''));
-                  return refs.some(r => r === targetClean || r === selectedPortFilter || `gpon-olt_${r}` === selectedPortFilter || `epon-olt_${r}` === selectedPortFilter);
-                });
-                if (portOdcs.length === 0) {
-                  return (
-                    <div className="p-6 text-center text-slate-500 dark:text-slate-400 text-xs bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 font-medium">
-                      Belum ada ODC terhubung yang dikonfigurasi untuk port {formatShortPort(selectedPortFilter)}.
-                    </div>
-                  );
-                }
-                return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {portOdcs.map(odc => (
-                      <div key={odc.id} className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                              {odc.name}
-                            </span>
-                          </div>
-                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                            {odc.used_ports}/{odc.total_ports} Port Terisi
-                          </span>
-                        </div>
-
-                        {odc.parent_node && (
-                          <p className="text-xs text-slate-600 dark:text-slate-400"> POP Induk: <strong className="text-slate-950 dark:text-white font-bold">{odc.parent_node.name}</strong></p>
-                        )}
-
-                        {odc.odps && odc.odps.length > 0 ? (
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                              ODP Terhubung ({odc.odps.length} ODP)
-                            </label>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              {odc.odps.map(odp => (
-                                <div key={odp.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 text-xs shadow-2xs">
-                                  <p className="font-bold text-slate-950 dark:text-white truncate">{odp.name}</p>
-                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">{odp.used_ports}/{odp.total_ports} Port</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 italic">Belum ada ODP di bawah ODC ini</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
+          <FlowingOltTopology
+            oltName={activeOlt?.name || 'OLT'}
+            selectedPortFilter={selectedPortFilter}
+            oltTopology={oltTopology}
+            onClearPortFilter={() => setSelectedPortFilter(null)}
+          />
         </div>
       )}
 
@@ -4361,8 +4297,8 @@ export default function OltManagement() {
             <form onSubmit={handleAddOlt} className="p-6 space-y-5 overflow-y-auto flex-1">
               
               {/* ── Section 1: Identitas & Model OLT ──────────────────────────── */}
-              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-3">
-                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-neutral-800 pb-2">
+              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-slate-800 pb-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">1</span>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                     Identitas &amp; Spesifikasi Perangkat OLT
@@ -4426,8 +4362,8 @@ export default function OltManagement() {
               </div>
 
               {/* ── Section 2: Jaringan & Terowongan VPN ───────────────────────── */}
-              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-3">
-                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-neutral-800 pb-2">
+              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-slate-800 pb-2">
                   <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center font-bold">2</span>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                     Jaringan &amp; Terowongan VPN
@@ -4456,8 +4392,8 @@ export default function OltManagement() {
               </div>
 
               {/* ── Section 3: Kredensial SNMP & Quick Copy Scripts ────────────── */}
-              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 space-y-3">
-                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-neutral-800 pb-2">
+              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-slate-800 pb-2">
                   <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">3</span>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                     Kredensial SNMP Telemetri
@@ -4482,7 +4418,7 @@ export default function OltManagement() {
                           onClick={() => setNewOltForm({ ...newOltForm, snmp_community_type: ct })}
                           className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all ${newOltForm.snmp_community_type === ct
                             ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-                            : 'border-slate-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300'
+                            : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300'
                             }`}>
                           {ct === 'public' ? 'public (Standar)' : 'Custom'}
                         </button>
@@ -4507,9 +4443,9 @@ export default function OltManagement() {
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-100 dark:border-neutral-800 flex items-center justify-between">
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <button type="button" onClick={() => setShowAddOltModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-neutral-800 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-200 dark:hover:bg-neutral-700 transition-colors">
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
                   Batal
                 </button>
                 <button type="submit" disabled={submittingOlt}
@@ -4677,8 +4613,8 @@ export default function OltManagement() {
       ══════════════════════════════════════════════════════════════════════ */}
       {showSyncExternalModal && activeOlt && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-800 pb-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl space-y-5 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
                   🔄
@@ -4687,14 +4623,14 @@ export default function OltManagement() {
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                     Sinkronisasi Cadangan &amp; Fallback Sync
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-neutral-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Fitur cadangan jika SNMP timeout / migrasi ke VPS Cloud ({activeOlt.name})
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowSyncExternalModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-neutral-200 text-lg font-bold p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg"
               >
                 ✕
               </button>
@@ -4702,13 +4638,13 @@ export default function OltManagement() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-neutral-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Sumber Sinkronisasi Cadangan
                 </label>
                 <select
                   value={syncSourceType}
                   onChange={(e) => setSyncSourceType(e.target.value)}
-                  className="w-full text-xs font-medium bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-slate-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="regis_zte">Bridge Portal REGIS ZTE / Management Engine (HTTP DataTables API)</option>
                   <option value="probe_agent">Local Agent Probe (Jaringan Lokal On-Premise ke Cloud VPS)</option>
@@ -4717,40 +4653,40 @@ export default function OltManagement() {
               </div>
 
               {syncSourceType === 'regis_zte' && (
-                <div className="space-y-3 p-4 bg-slate-50 dark:bg-neutral-800/60 rounded-2xl border border-slate-200 dark:border-neutral-800">
+                <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-800">
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400 mb-1">
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                       URL Web Management / Portal Eksternal
                     </label>
                     <input
                       type="text"
                       value={syncExternalUrl}
                       onChange={(e) => setSyncExternalUrl(e.target.value)}
-                      className="w-full text-xs font-mono bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-slate-800 dark:text-neutral-200"
+                      className="w-full text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200"
                       placeholder="http://103.152.119.26:2227"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400 mb-1">
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                         Username Akses
                       </label>
                       <input
                         type="text"
                         value={syncUsername}
                         onChange={(e) => setSyncUsername(e.target.value)}
-                        className="w-full text-xs font-mono bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-slate-800 dark:text-neutral-200"
+                        className="w-full text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-600 dark:text-neutral-400 mb-1">
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
                         Password
                       </label>
                       <input
                         type="password"
                         value={syncPassword}
                         onChange={(e) => setSyncPassword(e.target.value)}
-                        className="w-full text-xs font-mono bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl px-3 py-2 text-slate-800 dark:text-neutral-200"
+                        className="w-full text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200"
                       />
                     </div>
                   </div>
@@ -4771,11 +4707,11 @@ export default function OltManagement() {
               )}
             </div>
 
-            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-neutral-800">
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setShowSyncExternalModal(false)}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-neutral-700 text-xs font-semibold text-slate-600 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-800 transition-all"
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
               >
                 Tutup
               </button>
@@ -5152,13 +5088,13 @@ function SnmpDiagnosticModal({ activeOlt, onClose }) {
     <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
       <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl my-auto overflow-hidden animate-in fade-in zoom-in duration-150 flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-800/90 text-slate-900 dark:text-white">
-          <div>
-            <h3 className="text-base font-bold flex items-center gap-2">
-              <span>Diagnostic SNMP &amp; MIB OID Explorer</span>
-            </h3>
-            <p className="text-xs text-slate-300 font-mono mt-0.5">{activeOlt.name} ({activeOlt.ip_address})</p>
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg flex items-center justify-center"><IconX /></button>
+            <div>
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <span>Diagnostic SNMP &amp; MIB OID Explorer</span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{activeOlt.name} ({activeOlt.ip_address})</p>
+            </div>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg flex items-center justify-center"><IconX /></button>
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto flex-1">
@@ -5317,7 +5253,7 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
   };
 
   return (
-    <div className="mt-5 space-y-3 pt-3 border-t border-slate-200 dark:border-neutral-800">
+    <div className="mt-5 space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
       <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200">
         <span className="flex items-center gap-1.5 font-mono">
           <span className="text-indigo-500 font-black">&gt;_</span> Quick Copy Scripts
@@ -5326,8 +5262,8 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
       </div>
 
       {/* ── Accordion 1: SNMP Configuration ───────────────────────────────── */}
-      <div className="rounded-xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-black overflow-hidden shadow-2xs">
-        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-neutral-900 border-b border-slate-200 dark:border-neutral-800">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono flex items-center gap-1.5">
               <span className="text-indigo-500">&gt;_</span> SNMP Configuration
@@ -5341,17 +5277,17 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
             <button
               type="button"
               onClick={handleCopySnmp}
-              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-neutral-800 border border-slate-300 dark:border-neutral-700 text-slate-800 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-neutral-700 hover:text-indigo-600 transition-all flex items-center space-x-1 cursor-pointer shadow-2xs"
+              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-slate-700 hover:text-indigo-600 transition-all flex items-center space-x-1 cursor-pointer shadow-2xs"
               title="Salin script SNMP"
             >
               {copiedSnmp ? (
                 <>
-                  <span className="text-emerald-500 font-bold"></span>
+                  <span className="text-emerald-500 font-bold">✓</span>
                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Tersalin!</span>
                 </>
               ) : (
                 <>
-                  <span></span>
+                  <span>📋</span>
                   <span>Copy</span>
                 </>
               )}
@@ -5359,7 +5295,7 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
             <button
               type="button"
               onClick={() => setOpenSnmp(!openSnmp)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-neutral-800"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800"
             >
               <span className="text-xs">{openSnmp ? '▲' : '▼'}</span>
             </button>
@@ -5380,8 +5316,8 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
       </div>
 
       {/* ── Accordion 2: VPN Configuration (Zetset Style) ────────────────── */}
-      <div className="rounded-xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-black overflow-hidden shadow-2xs">
-        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-neutral-900 border-b border-slate-200 dark:border-neutral-800">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono flex items-center gap-1.5">
               <span className="text-emerald-500">&lt;&gt;</span> VPN Configuration (L2TP Client)
@@ -5396,7 +5332,7 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
               href="/network-bridge-setup"
               target="_blank"
               rel="noreferrer"
-              className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-neutral-800 text-xs font-bold"
+              className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-800 text-xs font-bold"
               title="Buka Wizard Setup Lengkap"
             >
               ↗
@@ -5404,17 +5340,17 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
             <button
               type="button"
               onClick={handleCopyVpn}
-              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-neutral-800 border border-slate-300 dark:border-neutral-700 text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-neutral-700 hover:text-emerald-600 transition-all flex items-center space-x-1 cursor-pointer shadow-2xs"
+              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-slate-700 hover:text-emerald-600 transition-all flex items-center space-x-1 cursor-pointer shadow-2xs"
               title="Salin script MikroTik L2TP"
             >
               {copiedVpn ? (
                 <>
-                  <span className="text-emerald-500 font-bold"></span>
+                  <span className="text-emerald-500 font-bold">✓</span>
                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Tersalin!</span>
                 </>
               ) : (
                 <>
-                  <span></span>
+                  <span>📋</span>
                   <span>Copy</span>
                 </>
               )}
@@ -5422,7 +5358,7 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
             <button
               type="button"
               onClick={() => setOpenVpn(!openVpn)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-neutral-800"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800"
             >
               <span className="text-xs">{openVpn ? '▲' : '▼'}</span>
             </button>
@@ -5436,7 +5372,7 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
               <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
                 Alokasi IP Tunnel VPN:
               </label>
-              <div className="w-full px-3 py-1.5 bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-lg text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-between">
+              <div className="w-full px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-between">
                 <span>10.254.0.2 (Tersedia)</span>
                 <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">VPN Aktif: 1/0</span>
               </div>
@@ -5444,11 +5380,11 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
 
             {/* Credentials Card */}
             <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800">
+              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
                 <div className="text-[10px] font-sans text-slate-400 uppercase">Username:</div>
                 <div className="font-bold text-slate-800 dark:text-slate-200 truncate">unms_client</div>
               </div>
-              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800">
+              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
                 <div className="text-[10px] font-sans text-slate-400 uppercase">Password:</div>
                 <div className="font-bold text-slate-800 dark:text-slate-200 truncate">unmspassword2026</div>
               </div>
@@ -5457,18 +5393,18 @@ function QuickCopyScripts({ vendor = 'ZTE', community = 'public', vpsIp = '103.8
             {/* RouterOS Version Switch */}
             <div className="flex items-center justify-between pt-1">
               <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Script MikroTik:</span>
-              <div className="flex rounded-lg border border-slate-300 dark:border-neutral-700 p-0.5 bg-slate-100 dark:bg-neutral-900 text-[10px] font-bold">
+              <div className="flex rounded-lg border border-slate-300 dark:border-slate-700 p-0.5 bg-slate-100 dark:bg-slate-800 text-[10px] font-bold">
                 <button
                   type="button"
                   onClick={() => setRouterOsVersion('v7')}
-                  className={`px-2 py-0.5 rounded ${routerOsVersion === 'v7' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-black dark:hover:text-white'}`}
+                  className={`px-2 py-0.5 rounded ${routerOsVersion === 'v7' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}`}
                 >
                   RouterOS 7
                 </button>
                 <button
                   type="button"
                   onClick={() => setRouterOsVersion('v6')}
-                  className={`px-2 py-0.5 rounded ${routerOsVersion === 'v6' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-black dark:hover:text-white'}`}
+                  className={`px-2 py-0.5 rounded ${routerOsVersion === 'v6' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}`}
                 >
                   RouterOS 6
                 </button>

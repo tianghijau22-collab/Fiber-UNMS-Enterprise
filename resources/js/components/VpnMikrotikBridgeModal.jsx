@@ -193,42 +193,40 @@ ping -c 4 ${localLanForm.oltIpSample}
 # 3. Uji SNMP OLT dari server lokal (pastikan snmp package terpasang: sudo apt install snmp)
 snmpwalk -v2c -c public ${localLanForm.oltIpSample} 1.3.6.1.2.1.1.1.0`;
 
-  const fc = "w-full px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-300 dark:border-neutral-700 rounded-xl text-xs text-black dark:text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white font-medium";
-  const lc = "block text-[11px] font-bold text-black dark:text-white uppercase tracking-wider mb-1";
+  const fc = "w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-xs text-slate-950 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium";
+  const lc = "block text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-1";
 
   return createPortal(
-    <div className="fixed inset-0 z-[999999] overflow-y-auto bg-black/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
-      <div className="relative w-full max-w-4xl bg-white dark:bg-black rounded-3xl shadow-2xl border border-slate-200 dark:border-neutral-800 flex flex-col my-auto max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-150">
+    <div className="fixed inset-0 z-[999999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col my-auto max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-150">
         
-        {/* Header */}
-        <div className="bg-white dark:bg-black px-6 py-4 flex items-center justify-between border-b border-slate-200 dark:border-neutral-800 flex-shrink-0">
+        <div className="bg-white dark:bg-slate-900 px-6 py-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
           <div>
-            <h3 className="text-base sm:text-lg font-bold text-black dark:text-white tracking-tight flex items-center gap-2">
+            <h3 className="text-base sm:text-lg font-bold text-slate-950 dark:text-white tracking-tight flex items-center gap-2">
               <IconNetwork />
               <span>Panduan Integrasi Jaringan OLT (VPN &amp; Server Lokal)</span>
             </h3>
-            <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Pilihan metode koneksi: VPN Perusahaan, Tunnel MikroTik, atau Server Lokal On-Premise
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-neutral-900 text-neutral-500 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold cursor-pointer transition-colors"
           >
             ✕
           </button>
         </div>
 
-        {/* Tab Selector */}
-        <div className="flex border-b border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-neutral-950 px-6 pt-3 gap-2 flex-shrink-0 overflow-x-auto">
+        <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-6 pt-3 gap-2 flex-shrink-0 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('company_l2tp')}
             className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all border-t-2 flex items-center gap-2 shrink-0 ${
               activeTab === 'company_l2tp'
-                ? 'bg-white dark:bg-black border-black dark:border-white text-black dark:text-white border-l border-r border-slate-200 dark:border-neutral-800'
-                : 'border-transparent text-neutral-500 hover:text-black dark:hover:text-white'
+                ? 'bg-white dark:bg-slate-900 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 border-l border-r border-slate-200 dark:border-slate-800'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <IconTerminal />
@@ -240,8 +238,8 @@ snmpwalk -v2c -c public ${localLanForm.oltIpSample} 1.3.6.1.2.1.1.1.0`;
             onClick={() => setActiveTab('mikrotik_script')}
             className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all border-t-2 flex items-center gap-2 shrink-0 ${
               activeTab === 'mikrotik_script'
-                ? 'bg-white dark:bg-black border-black dark:border-white text-black dark:text-white border-l border-r border-slate-200 dark:border-neutral-800'
-                : 'border-transparent text-neutral-500 hover:text-black dark:hover:text-white'
+                ? 'bg-white dark:bg-slate-900 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 border-l border-r border-slate-200 dark:border-slate-800'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <IconNetwork />
@@ -253,8 +251,8 @@ snmpwalk -v2c -c public ${localLanForm.oltIpSample} 1.3.6.1.2.1.1.1.0`;
             onClick={() => setActiveTab('local_lan')}
             className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all border-t-2 flex items-center gap-2 shrink-0 ${
               activeTab === 'local_lan'
-                ? 'bg-white dark:bg-black border-black dark:border-white text-black dark:text-white border-l border-r border-slate-200 dark:border-neutral-800'
-                : 'border-transparent text-neutral-500 hover:text-black dark:hover:text-white'
+                ? 'bg-white dark:bg-slate-900 border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400 border-l border-r border-slate-200 dark:border-slate-800'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <IconServer />
@@ -262,463 +260,197 @@ snmpwalk -v2c -c public ${localLanForm.oltIpSample} 1.3.6.1.2.1.1.1.0`;
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6 text-xs text-black dark:text-white">
+        <div className="p-6 overflow-y-auto flex-1 space-y-6 text-xs text-slate-900 dark:text-slate-100">
           
-          {/* TAB 1: VPN L2TP PERUSAHAAN DI VPS */}
           {activeTab === 'company_l2tp' && (
             <div className="space-y-6 animate-in fade-in">
-              <div className="p-4 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 rounded-2xl space-y-1">
-                <p className="font-bold text-sm text-black dark:text-white">
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-1">
+                <p className="font-bold text-sm text-slate-950 dark:text-white">
                   Cara Kerja VPN L2TP Perusahaan di VPS:
                 </p>
-                <p className="text-neutral-600 dark:text-neutral-300 leading-relaxed">
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
                   VPS Anda akan bertindak sebagai <strong>L2TP Client</strong> menggunakan akun VPN karyawan dari perusahaan Anda. Begitu terhubung, VPS langsung berada di jaringan kantor dan dapat melakukan <strong>SNMP, Telnet, SSH, dan Ping</strong> ke seluruh IP lokal OLT (tanpa perlu menyentuh konfigurasi router kantor).
                 </p>
               </div>
 
-              {/* Parameter Form Helper */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
                 <div>
                   <label className={lc}>Server VPN Kantor (IP / Domain)</label>
-                  <input
-                    type="text"
-                    value={vpsVpnForm.serverIp}
-                    onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, serverIp: e.target.value })}
-                    placeholder="vpn.kantor.com / 103.x.x.x"
-                    className={fc}
-                  />
+                  <input type="text" value={vpsVpnForm.serverIp} onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, serverIp: e.target.value })} className={fc} />
                 </div>
-
                 <div>
                   <label className={lc}>IPsec Pre-Shared Key (Secret)</label>
-                  <input
-                    type="text"
-                    value={vpsVpnForm.ipsecSecret}
-                    onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, ipsecSecret: e.target.value })}
-                    placeholder="Secret IPsec"
-                    className={fc}
-                  />
+                  <input type="text" value={vpsVpnForm.ipsecSecret} onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, ipsecSecret: e.target.value })} className={fc} />
                 </div>
-
                 <div>
                   <label className={lc}>Username Akun VPN Anda</label>
-                  <input
-                    type="text"
-                    value={vpsVpnForm.username}
-                    onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, username: e.target.value })}
-                    placeholder="username"
-                    className={fc}
-                  />
+                  <input type="text" value={vpsVpnForm.username} onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, username: e.target.value })} className={fc} />
                 </div>
-
                 <div>
                   <label className={lc}>Password Akun VPN Anda</label>
-                  <input
-                    type="password"
-                    value={vpsVpnForm.password}
-                    onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, password: e.target.value })}
-                    placeholder="password"
-                    className={fc}
-                  />
+                  <input type="password" value={vpsVpnForm.password} onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, password: e.target.value })} className={fc} />
                 </div>
-
                 <div>
                   <label className={lc}>Subnet Lokal OLT Kantor</label>
-                  <input
-                    type="text"
-                    value={vpsVpnForm.oltSubnet}
-                    onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, oltSubnet: e.target.value })}
-                    placeholder="192.168.1.0/24"
-                    className={fc}
-                  />
+                  <input type="text" value={vpsVpnForm.oltSubnet} onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, oltSubnet: e.target.value })} className={fc} />
                 </div>
-
                 <div>
                   <label className={lc}>Contoh IP OLT untuk Uji Ping</label>
-                  <input
-                    type="text"
-                    value={vpsVpnForm.oltIpSample}
-                    onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, oltIpSample: e.target.value })}
-                    placeholder="192.168.1.100"
-                    className={fc}
-                  />
+                  <input type="text" value={vpsVpnForm.oltIpSample} onChange={(e) => setVpsVpnForm({ ...vpsVpnForm, oltIpSample: e.target.value })} className={fc} />
                 </div>
               </div>
 
-              {/* Step by step code blocks */}
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Langkah 1: Install Paket Strongswan &amp; XL2TPD di VPS Ubuntu/Debian
-                    </span>
-                    <button
-                      onClick={() => handleCopy(linuxInstallCmd, 'linux_install')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
+                    <span className="font-bold text-slate-950 dark:text-white">Langkah 1: Install Paket Strongswan &amp; XL2TPD di VPS Ubuntu/Debian</span>
+                    <button type="button" onClick={() => handleCopy(linuxInstallCmd, 'linux_install')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
                       {copiedKey === 'linux_install' ? <IconCheck /> : <IconCopy />}
                       <span>{copiedKey === 'linux_install' ? 'Tersalin' : 'Salin Perintah'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {linuxInstallCmd}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-emerald-600 dark:text-emerald-400">{linuxInstallCmd}</pre>
                 </div>
-
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Langkah 2: Konfigurasi File /etc/ipsec.conf &amp; /etc/ipsec.secrets
-                    </span>
-                    <button
-                      onClick={() => handleCopy(ipsecConfContent, 'ipsec_conf')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
+                    <span className="font-bold text-slate-950 dark:text-white">Langkah 2: Konfigurasi File /etc/ipsec.conf &amp; /etc/ipsec.secrets</span>
+                    <button type="button" onClick={() => handleCopy(ipsecConfContent, 'ipsec_conf')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
                       {copiedKey === 'ipsec_conf' ? <IconCheck /> : <IconCopy />}
                       <span>{copiedKey === 'ipsec_conf' ? 'Tersalin' : 'Salin Konfigurasi'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {`# Salin ke file: /etc/ipsec.conf\n${ipsecConfContent}\n\n# Salin ke file: /etc/ipsec.secrets\n${ipsecSecretsContent}`}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-slate-800 dark:text-slate-200">{`# Salin ke file: /etc/ipsec.conf\n${ipsecConfContent}\n\n# Salin ke file: /etc/ipsec.secrets\n${ipsecSecretsContent}`}</pre>
                 </div>
-
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Langkah 3: Konfigurasi /etc/xl2tpd/xl2tpd.conf &amp; /etc/ppp/options.l2tpd.client
-                    </span>
-                    <button
-                      onClick={() => handleCopy(pppOptionsContent, 'ppp_opt')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
+                    <span className="font-bold text-slate-950 dark:text-white">Langkah 3: Konfigurasi /etc/xl2tpd/xl2tpd.conf &amp; /etc/ppp/options.l2tpd.client</span>
+                    <button type="button" onClick={() => handleCopy(pppOptionsContent, 'ppp_opt')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
                       {copiedKey === 'ppp_opt' ? <IconCheck /> : <IconCopy />}
                       <span>{copiedKey === 'ppp_opt' ? 'Tersalin' : 'Salin Konfigurasi'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {`# Salin ke file: /etc/xl2tpd/xl2tpd.conf\n${xl2tpdConfContent}\n\n# Salin ke file: /etc/ppp/options.l2tpd.client\n${pppOptionsContent}`}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-slate-800 dark:text-slate-200">{`# Salin ke file: /etc/xl2tpd/xl2tpd.conf\n${xl2tpdConfContent}\n\n# Salin ke file: /etc/ppp/options.l2tpd.client\n${pppOptionsContent}`}</pre>
                 </div>
-
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Langkah 4: Perintah Start Koneksi &amp; Uji Ping ke OLT Lokal
-                    </span>
-                    <button
-                      onClick={() => handleCopy(linuxConnectCmd, 'linux_connect')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
+                    <span className="font-bold text-slate-950 dark:text-white">Langkah 4: Perintah Start Koneksi &amp; Uji Ping ke OLT Lokal</span>
+                    <button type="button" onClick={() => handleCopy(linuxConnectCmd, 'linux_connect')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
                       {copiedKey === 'linux_connect' ? <IconCheck /> : <IconCopy />}
                       <span>{copiedKey === 'linux_connect' ? 'Tersalin' : 'Salin Perintah'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {linuxConnectCmd}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-emerald-600 dark:text-emerald-400">{linuxConnectCmd}</pre>
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB 2: SCRIPT MIKROTIK (MIKROTIK -> VPS) */}
           {activeTab === 'mikrotik_script' && (
             <div className="space-y-6 animate-in fade-in">
-              <div className="p-4 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 rounded-2xl space-y-1">
-                <p className="font-bold text-sm text-black dark:text-white">
-                  Cara Kerja Tunnel MikroTik ke VPS:
-                </p>
-                <p className="text-neutral-600 dark:text-neutral-300 leading-relaxed">
-                  Router MikroTik di kantor/POP Anda akan melakukan <strong>dial out VPN Client</strong> ke IP Publik VPS Anda. Script di bawah sudah dilengkapi <strong>Watchdog Scheduler</strong> yang otomatis memeriksa koneksi tiap 2 menit dan melakukan reconnect jika jaringan internet kantor sempat terputus atau modem di-restart.
-                </p>
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-1">
+                <p className="font-bold text-sm text-slate-950 dark:text-white">Cara Kerja Tunnel MikroTik ke VPS:</p>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">Router MikroTik di kantor/POP Anda akan melakukan <strong>dial out VPN Client</strong> ke IP Publik VPS Anda. Script di bawah sudah dilengkapi <strong>Watchdog Scheduler</strong> yang otomatis memeriksa koneksi tiap 2 menit dan melakukan reconnect jika jaringan internet kantor sempat terputus atau modem di-restart.</p>
               </div>
 
-              {/* Parameter Form Helper */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl">
-                <div>
-                  <label className={lc}>IP Publik VPS Fiber-UNMS</label>
-                  <input
-                    type="text"
-                    value={mikrotikForm.vpsPublicIp}
-                    onChange={(e) => setMikrotikForm({ ...mikrotikForm, vpsPublicIp: e.target.value })}
-                    placeholder="103.x.x.x"
-                    className={fc}
-                  />
-                </div>
-
-                <div>
-                  <label className={lc}>Username Tunnel VPN</label>
-                  <input
-                    type="text"
-                    value={mikrotikForm.vpnUser}
-                    onChange={(e) => setMikrotikForm({ ...mikrotikForm, vpnUser: e.target.value })}
-                    placeholder="unms_mikrotik"
-                    className={fc}
-                  />
-                </div>
-
-                <div>
-                  <label className={lc}>Password Tunnel VPN</label>
-                  <input
-                    type="password"
-                    value={mikrotikForm.vpnPassword}
-                    onChange={(e) => setMikrotikForm({ ...mikrotikForm, vpnPassword: e.target.value })}
-                    placeholder="password"
-                    className={fc}
-                  />
-                </div>
-
-                <div>
-                  <label className={lc}>IPsec Secret (Preshared Key)</label>
-                  <input
-                    type="text"
-                    value={mikrotikForm.ipsecSecret}
-                    onChange={(e) => setMikrotikForm({ ...mikrotikForm, ipsecSecret: e.target.value })}
-                    placeholder="Secret IPsec"
-                    className={fc}
-                  />
-                </div>
-
-                <div>
-                  <label className={lc}>Subnet Lokal OLT di MikroTik</label>
-                  <input
-                    type="text"
-                    value={mikrotikForm.oltLocalSubnet}
-                    onChange={(e) => setMikrotikForm({ ...mikrotikForm, oltLocalSubnet: e.target.value })}
-                    placeholder="192.168.10.0/24"
-                    className={fc}
-                  />
-                </div>
-
-                <div>
-                  <label className={lc}>Contoh IP OLT</label>
-                  <input
-                    type="text"
-                    value={mikrotikForm.oltIpSample}
-                    onChange={(e) => setMikrotikForm({ ...mikrotikForm, oltIpSample: e.target.value })}
-                    placeholder="192.168.10.2"
-                    className={fc}
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                <div><label className={lc}>IP Publik VPS Fiber-UNMS</label><input type="text" value={mikrotikForm.vpsPublicIp} onChange={(e) => setMikrotikForm({ ...mikrotikForm, vpsPublicIp: e.target.value })} className={fc} /></div>
+                <div><label className={lc}>Username VPN Client</label><input type="text" value={mikrotikForm.vpnUser} onChange={(e) => setMikrotikForm({ ...mikrotikForm, vpnUser: e.target.value })} className={fc} /></div>
+                <div><label className={lc}>Password VPN Client</label><input type="text" value={mikrotikForm.vpnPassword} onChange={(e) => setMikrotikForm({ ...mikrotikForm, vpnPassword: e.target.value })} className={fc} /></div>
+                <div><label className={lc}>IPsec Pre-Shared Secret</label><input type="text" value={mikrotikForm.ipsecSecret} onChange={(e) => setMikrotikForm({ ...mikrotikForm, ipsecSecret: e.target.value })} className={fc} /></div>
+                <div><label className={lc}>Subnet Lokal OLT di MikroTik</label><input type="text" value={mikrotikForm.oltLocalSubnet} onChange={(e) => setMikrotikForm({ ...mikrotikForm, oltLocalSubnet: e.target.value })} className={fc} /></div>
+                <div><label className={lc}>IP OLT untuk Uji Coba</label><input type="text" value={mikrotikForm.oltIpSample} onChange={(e) => setMikrotikForm({ ...mikrotikForm, oltIpSample: e.target.value })} className={fc} /></div>
               </div>
 
-              {/* Script Blocks */}
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Script 1: Setup Interface L2TP Client di Terminal MikroTik
-                    </span>
-                    <button
-                      onClick={() => handleCopy(mikrotikL2tpScript, 'mk_l2tp')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedKey === 'mk_l2tp' ? <IconCheck /> : <IconCopy />}
-                      <span>{copiedKey === 'mk_l2tp' ? 'Tersalin' : 'Salin Script'}</span>
+                    <span className="font-bold text-slate-950 dark:text-white">Script 1: Konfigurasi L2TP Client &amp; Routing di RouterOS MikroTik</span>
+                    <button type="button" onClick={() => handleCopy(mikrotikScript, 'mikrotik_client')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
+                      {copiedKey === 'mikrotik_client' ? <IconCheck /> : <IconCopy />}
+                      <span>{copiedKey === 'mikrotik_client' ? 'Tersalin' : 'Salin Script MikroTik'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {mikrotikL2tpScript}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-slate-800 dark:text-slate-200">{mikrotikScript}</pre>
                 </div>
-
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Script 2: Rule Firewall &amp; NAT Masquerade ke OLT
-                    </span>
-                    <button
-                      onClick={() => handleCopy(mikrotikRouteScript, 'mk_route')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedKey === 'mk_route' ? <IconCheck /> : <IconCopy />}
-                      <span>{copiedKey === 'mk_route' ? 'Tersalin' : 'Salin Script'}</span>
+                    <span className="font-bold text-slate-950 dark:text-white">Script 2: Watchdog Auto-Reconnect Scheduler di MikroTik (Anti-Mati)</span>
+                    <button type="button" onClick={() => handleCopy(mikrotikWatchdogScript, 'mikrotik_watchdog')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
+                      {copiedKey === 'mikrotik_watchdog' ? <IconCheck /> : <IconCopy />}
+                      <span>{copiedKey === 'mikrotik_watchdog' ? 'Tersalin' : 'Salin Watchdog Script'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {mikrotikRouteScript}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-slate-800 dark:text-slate-200">{mikrotikWatchdogScript}</pre>
                 </div>
-
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Script 3: Auto-Reconnect Watchdog &amp; Scheduler Otomatis (Tiap 2 Menit)
-                    </span>
-                    <button
-                      onClick={() => handleCopy(mikrotikSchedulerScript, 'mk_sched')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedKey === 'mk_sched' ? <IconCheck /> : <IconCopy />}
-                      <span>{copiedKey === 'mk_sched' ? 'Tersalin' : 'Salin Script'}</span>
+                    <span className="font-bold text-slate-950 dark:text-white">Script 3: Setup VPN Server di Linux VPS (Jalankan Sekali di Terminal VPS)</span>
+                    <button type="button" onClick={() => handleCopy(vpsServerSetupScript, 'vps_server')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
+                      {copiedKey === 'vps_server' ? <IconCheck /> : <IconCopy />}
+                      <span>{copiedKey === 'vps_server' ? 'Tersalin' : 'Salin Setup Server'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {mikrotikSchedulerScript}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-emerald-600 dark:text-emerald-400">{vpsServerSetupScript}</pre>
                 </div>
               </div>
-
             </div>
           )}
 
-          {/* TAB 3: SERVER LOKAL KANTOR (DIRECT LAN ON-PREMISE) */}
           {activeTab === 'local_lan' && (
             <div className="space-y-6 animate-in fade-in">
-              <div className="p-4 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 rounded-2xl space-y-1">
-                <p className="font-bold text-sm text-black dark:text-white">
-                  Koneksi Server Lokal (On-Premise LAN):
-                </p>
-                <p className="text-neutral-600 dark:text-neutral-300 leading-relaxed">
-                  Jika aplikasi <strong>Fiber-UNMS dideploy langsung di server fisik / Proxmox VM di jaringan kantor</strong>, Anda <strong>TIDAK MEMERLUKAN VPN atau NAT sama sekali</strong>. Server dan OLT sudah berada dalam satu jaringan LAN atau Management VLAN yang sama.
-                </p>
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-1">
+                <p className="font-bold text-sm text-slate-950 dark:text-white">Cara Kerja Server Lokal On-Premise (Satu Jaringan LAN):</p>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">Jika aplikasi Fiber-UNMS di-install langsung pada server/PC yang berada di kantor/ruang server POP Anda (On-Premise), Anda tidak memerlukan VPN. Server terhubung langsung ke switch/port manajemen OLT secara lokal.</p>
               </div>
 
-              {/* Parameter Form Helper */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl">
-                <div>
-                  <label className={lc}>IP Address Server Lokal (CIDR)</label>
-                  <input
-                    type="text"
-                    value={localLanForm.serverIp}
-                    onChange={(e) => setLocalLanForm({ ...localLanForm, serverIp: e.target.value })}
-                    placeholder="192.168.1.50/24"
-                    className={fc}
-                  />
-                </div>
-
-                <div>
-                  <label className={lc}>Gateway Router / Switch</label>
-                  <input
-                    type="text"
-                    value={localLanForm.gatewayIp}
-                    onChange={(e) => setLocalLanForm({ ...localLanForm, gatewayIp: e.target.value })}
-                    placeholder="192.168.1.1"
-                    className={fc}
-                  />
-                </div>
-
-                <div>
-                  <label className={lc}>Nama Interface Fisik Server</label>
-                  <input
-                    type="text"
-                    value={localLanForm.interfaceName}
-                    onChange={(e) => setLocalLanForm({ ...localLanForm, interfaceName: e.target.value })}
-                    placeholder="eth0 / ens18 / enp3s0"
-                    className={fc}
-                  />
-                </div>
-
-                <div>
-                  <label className={lc}>VLAN ID Management OLT (Opsional)</label>
-                  <input
-                    type="text"
-                    value={localLanForm.vlanId}
-                    onChange={(e) => setLocalLanForm({ ...localLanForm, vlanId: e.target.value })}
-                    placeholder="100"
-                    className={fc}
-                  />
-                </div>
-
-                <div>
-                  <label className={lc}>Contoh IP OLT untuk Uji Coba</label>
-                  <input
-                    type="text"
-                    value={localLanForm.oltIpSample}
-                    onChange={(e) => setLocalLanForm({ ...localLanForm, oltIpSample: e.target.value })}
-                    placeholder="192.168.1.100"
-                    className={fc}
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
+                <div><label className={lc}>IP Address Server UNMS</label><input type="text" value={localLanForm.serverIp} onChange={(e) => setLocalLanForm({ ...localLanForm, serverIp: e.target.value })} className={fc} /></div>
+                <div><label className={lc}>Gateway Jaringan OLT</label><input type="text" value={localLanForm.gatewayIp} onChange={(e) => setLocalLanForm({ ...localLanForm, gatewayIp: e.target.value })} className={fc} /></div>
+                <div><label className={lc}>Interface Fisik Server</label><input type="text" value={localLanForm.interfaceName} onChange={(e) => setLocalLanForm({ ...localLanForm, interfaceName: e.target.value })} className={fc} /></div>
+                <div><label className={lc}>VLAN ID Manajemen (Jika Ada)</label><input type="text" value={localLanForm.vlanId} onChange={(e) => setLocalLanForm({ ...localLanForm, vlanId: e.target.value })} className={fc} /></div>
+                <div><label className={lc}>IP OLT untuk Uji Coba</label><input type="text" value={localLanForm.oltIpSample} onChange={(e) => setLocalLanForm({ ...localLanForm, oltIpSample: e.target.value })} className={fc} /></div>
               </div>
 
-              {/* Step by step Local LAN */}
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Langkah 1: Konfigurasi IP Statis Netplan Server Linux (/etc/netplan/01-netcfg.yaml)
-                    </span>
-                    <button
-                      onClick={() => handleCopy(netplanContent, 'netplan_conf')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedKey === 'netplan_conf' ? <IconCheck /> : <IconCopy />}
-                      <span>{copiedKey === 'netplan_conf' ? 'Tersalin' : 'Salin File'}</span>
+                    <span className="font-bold text-slate-950 dark:text-white">Opsi A: Konfigurasi IP Statis Langsung (Satu Subnet dengan OLT)</span>
+                    <button type="button" onClick={() => handleCopy(netplanContent, 'lan_static')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
+                      {copiedKey === 'lan_static' ? <IconCheck /> : <IconCopy />}
+                      <span>{copiedKey === 'lan_static' ? 'Tersalin' : 'Salin Perintah Netplan'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {netplanContent}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-slate-800 dark:text-slate-200">{netplanContent}</pre>
                 </div>
-
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Langkah 2 (Opsional): Konfigurasi Sub-Interface VLAN jika OLT di VLAN Terpisah
-                    </span>
-                    <button
-                      onClick={() => handleCopy(vlanNetplanContent, 'vlan_netplan')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedKey === 'vlan_netplan' ? <IconCheck /> : <IconCopy />}
-                      <span>{copiedKey === 'vlan_netplan' ? 'Tersalin' : 'Salin File'}</span>
+                    <span className="font-bold text-slate-950 dark:text-white">Opsi B: Konfigurasi Sub-Interface VLAN Manajemen (802.1Q)</span>
+                    <button type="button" onClick={() => handleCopy(vlanNetplanContent, 'lan_vlan')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
+                      {copiedKey === 'lan_vlan' ? <IconCheck /> : <IconCopy />}
+                      <span>{copiedKey === 'lan_vlan' ? 'Tersalin' : 'Salin VLAN Netplan'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {vlanNetplanContent}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-slate-800 dark:text-slate-200">{vlanNetplanContent}</pre>
                 </div>
-
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-black dark:text-white">
-                      Langkah 3: Perintah Terapkan Jaringan &amp; Uji Ping / SNMP Langsung ke OLT
-                    </span>
-                    <button
-                      onClick={() => handleCopy(localTestCmd, 'local_test')}
-                      className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-900 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      {copiedKey === 'local_test' ? <IconCheck /> : <IconCopy />}
-                      <span>{copiedKey === 'local_test' ? 'Tersalin' : 'Salin Perintah'}</span>
+                    <span className="font-bold text-slate-950 dark:text-white">Langkah Verifikasi: Tes Ping &amp; SNMP Walk ke OLT</span>
+                    <button type="button" onClick={() => handleCopy(localTestCmd, 'lan_verify')} className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold text-[11px] flex items-center gap-1 cursor-pointer">
+                      {copiedKey === 'lan_verify' ? <IconCheck /> : <IconCopy />}
+                      <span>{copiedKey === 'lan_verify' ? 'Tersalin' : 'Salin Uji Coba'}</span>
                     </button>
                   </div>
-                  <pre className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-300 dark:border-neutral-800 rounded-xl font-mono text-[11px] overflow-x-auto text-black dark:text-white">
-                    {localTestCmd}
-                  </pre>
+                  <pre className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-[11px] overflow-x-auto text-emerald-600 dark:text-emerald-400">{localTestCmd}</pre>
                 </div>
               </div>
-
-              <div className="p-3.5 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 rounded-2xl text-xs space-y-1">
-                <p className="font-bold text-black dark:text-white">
-                  Pengaturan di Form OLT Fiber-UNMS:
-                </p>
-                <p className="text-neutral-600 dark:text-neutral-300 leading-relaxed">
-                  Pada form Tambah/Edit OLT, pilih <strong>Mode Deployment: Direct LAN (Satu Jaringan)</strong> dan masukkan IP OLT yang ingin dihubungkan.
-                </p>
-              </div>
-
             </div>
           )}
-
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 bg-slate-50 dark:bg-neutral-950 border-t border-slate-200 dark:border-neutral-800 flex items-center justify-between flex-shrink-0">
-          <span className="text-[11px] text-neutral-500 font-medium">
-            Sistem mendukung multi-mode: VPN L2TP, MikroTik Site-to-Site, maupun Server Lokal LAN.
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-black dark:bg-white hover:bg-neutral-800 dark:hover:bg-neutral-200 text-white dark:text-black font-bold text-xs transition-all cursor-pointer"
-          >
-            Tutup Panduan
-          </button>
+        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Sistem mendukung multi-mode: VPN L2TP, MikroTik Site-to-Site, maupun Server Lokal LAN.</span>
+          <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all cursor-pointer">Tutup Panduan</button>
         </div>
-
       </div>
     </div>,
     document.body

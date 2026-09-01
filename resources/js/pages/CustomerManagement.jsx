@@ -5,6 +5,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import SearchableSelect from '../components/SearchableSelect';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
+import FtthFlowTopology from '../components/FtthFlowTopology.jsx';
 
 export default function CustomerManagement() {
   const { hasRole } = useAuth();
@@ -326,7 +327,7 @@ export default function CustomerManagement() {
         customer_number: '',
         name: onuName && !onuName.startsWith('ONU ') ? onuName : '',
         address: '',
-        status: 'active',
+        status: 'Online',
         odp_id: '',
         odp_port_number: '',
         onu_serial: onuSn,
@@ -344,7 +345,7 @@ export default function CustomerManagement() {
       customer_number: '',
       name: '',
       address: '',
-      status: 'active',
+      status: 'Online',
       odp_id: '',
       odp_port_number: '',
       onu_serial: sprintf('HWTC-%08X', randInt(10000000, 99999999)),
@@ -361,7 +362,7 @@ export default function CustomerManagement() {
       customer_number: c.customer_number ?? '',
       name: c.name ?? '',
       address: c.address ?? '',
-      status: c.status ?? 'active',
+      status: (c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0)) ? 'Online' : 'Offline / LOS',
       odp_id: c.odp_id ?? '',
       odp_port_number: c.odp_port_number ?? '',
       onu_serial: c.onu_serial ?? '',
@@ -474,7 +475,10 @@ export default function CustomerManagement() {
         c.onu_serial?.toLowerCase().includes(q) ||
         c.ip_address?.toLowerCase().includes(q);
 
-      const matchStatus = filterStatus === 'all' || c.status === filterStatus;
+      const matchStatus = filterStatus === 'all' || 
+        (filterStatus === 'Online' && (c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0))) ||
+        (filterStatus === 'Offline / LOS' && (c.status !== 'Online' && (c.rx_power === null || parseFloat(c.rx_power) <= -38.0)));
+
       const matchOlt = filterOlt === 'all' || String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt;
       const matchOdc = filterOdc === 'all' || String(c.odc_id) === String(filterOdc) || c.odc_name === filterOdc;
       const matchOdp = filterOdp === 'all' || String(c.odp_id) === String(filterOdp) || c.odp_name === filterOdp;
@@ -486,18 +490,15 @@ export default function CustomerManagement() {
   // Overall Statistics for KPI Cards
   const stats = useMemo(() => {
     const total = customers.length;
-    const active = customers.filter(c => c.status === 'active').length;
-    const suspended = customers.filter(c => c.status === 'suspended').length;
+    const online = customers.filter(c => c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0)).length;
+    const offline = total - online;
     const normalSignal = customers.filter(c => {
       const rx = parseFloat(c.rx_power);
-      return !isNaN(rx) && rx >= -24.0 && rx > -40;
+      return !isNaN(rx) && rx >= -24.0 && rx > -38.0;
     }).length;
-    const lossSignal = customers.filter(c => {
-      const rx = parseFloat(c.rx_power);
-      return c.status !== 'active' || isNaN(rx) || rx <= -40 || rx < -27.0;
-    }).length;
+    const lossSignal = offline;
 
-    return { total, active, suspended, normalSignal, lossSignal };
+    return { total, online, offline, normalSignal, lossSignal };
   }, [customers]);
 
   const totalPages = Math.ceil(filtered.length / perPage) || 1;
@@ -518,39 +519,23 @@ export default function CustomerManagement() {
       {toast && (
         <div className={`fixed top-5 right-5 z-[999999] px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold flex items-center gap-2 animate-in slide-in-from-top-3 duration-200 ${
           toast.type === 'error'
-            ? 'bg-rose-600 text-white border-rose-700 shadow-rose-500/20'
-            : 'bg-emerald-600 text-white border-emerald-700 shadow-emerald-500/20'
+            ? 'bg-rose-600 text-white border-rose-700'
+            : 'bg-emerald-600 text-white border-emerald-700'
         }`}>
           <span>{toast.msg}</span>
         </div>
       )}
 
-      {/* ─── HEADER BANNER ─── */}
+      {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-black text-slate-950 dark:text-white tracking-tight">
-                  Manajemen Pelanggan &amp; Pemetaan FTTH
-                </h1>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Live FTTH Telemetry
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Monitoring koneksi OLT, ODC, ODP, live redaman optik dBm, dan uji ping latensi pelanggan secara real-time.
-              </p>
-            </div>
-          </div>
+        <div>
+          <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            Manajemen Pelanggan &amp; Pemetaan FTTH
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Monitoring koneksi OLT, ODC, ODP, live redaman optik dBm, dan status modem realtime.
+          </p>
         </div>
-
         <div className="flex flex-wrap items-center gap-2.5">
           <RefreshButton
             isRefreshing={isRefreshing}
@@ -562,21 +547,15 @@ export default function CustomerManagement() {
               <button
                 type="button"
                 onClick={handleOpenDiscoveryModal}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span>Auto-Discover ONU ({unmappedOnus.length > 0 ? unmappedOnus.length : 'OLT Sync'})</span>
+                <span>Sync Auto-Discover ONU ({unmappedOnus.length > 0 ? unmappedOnus.length : '1.700+'})</span>
               </button>
               <button
                 type="button"
                 onClick={openAddModal}
-                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                </svg>
                 <span>Registrasi Manual</span>
               </button>
             </>
@@ -587,71 +566,43 @@ export default function CustomerManagement() {
       {/* ─── 4 KARTU STATISTIK UTAMA PELANGGAN (KPI) ─── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* 1. Total Pelanggan */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Pelanggan</span>
-            <div className="text-2xl sm:text-3xl font-black font-mono text-slate-950 dark:text-white mt-1">
-              {stats.total.toLocaleString()}
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Terdaftar di UNMS</p>
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Pelanggan</span>
+          <div className="text-2xl sm:text-3xl font-black font-mono text-slate-950 dark:text-white mt-1">
+            {stats.total.toLocaleString()}
           </div>
-          <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/40">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Terdaftar di UNMS</p>
         </div>
 
-        {/* 2. Pelanggan Aktif */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status Aktif</span>
-            <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1">
-              {stats.active.toLocaleString()}
-            </div>
-            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
-              {stats.total > 0 ? `${((stats.active / stats.total) * 100).toFixed(1)}% Dari Total` : '100%'}
-            </p>
+        {/* 2. Pelanggan Online */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status Online</span>
+          <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+            {stats.online.toLocaleString()}
           </div>
-          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
+            {stats.total > 0 ? `${((stats.online / stats.total) * 100).toFixed(1)}% Dari Total` : '100%'}
+          </p>
         </div>
 
-        {/* 3. Sinyal Optik Prima */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Optik Normal</span>
-            <div className="text-2xl sm:text-3xl font-black font-mono text-cyan-600 dark:text-cyan-400 mt-1">
-              {stats.normalSignal.toLocaleString()}
-            </div>
-            <p className="text-[11px] text-cyan-600 dark:text-cyan-400 font-semibold mt-1">≥ -24.0 dBm (Prima)</p>
+        {/* 3. Offline / LOS */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Offline / LOS</span>
+          <div className="text-2xl sm:text-3xl font-black font-mono text-rose-600 dark:text-rose-400 mt-1">
+            {stats.offline.toLocaleString()}
           </div>
-          <div className="p-3 rounded-2xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 border border-cyan-100 dark:border-cyan-900/40">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
+          <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold mt-1">
+            {stats.total > 0 ? `${((stats.offline / stats.total) * 100).toFixed(1)}% Dari Total` : '0%'}
+          </p>
         </div>
 
-        {/* 4. Isolir / Redaman Loss */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Isolir / Kritis</span>
-            <div className="text-2xl sm:text-3xl font-black font-mono text-rose-600 dark:text-rose-400 mt-1">
-              {(stats.suspended + stats.lossSignal).toLocaleString()}
-            </div>
-            <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold mt-1">
-              {stats.suspended} Isolir • {stats.lossSignal} Loss
-            </p>
+        {/* 4. Sinyal Optik Prima */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Optik Prima</span>
+          <div className="text-2xl sm:text-3xl font-black font-mono text-cyan-600 dark:text-cyan-400 mt-1">
+            {stats.normalSignal.toLocaleString()}
           </div>
-          <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
+          <p className="text-[11px] text-cyan-600 dark:text-cyan-400 font-semibold mt-1">≥ -24.0 dBm (Prima)</p>
         </div>
       </div>
 
@@ -737,8 +688,8 @@ export default function CustomerManagement() {
               className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="all">Semua Status</option>
-              <option value="active">Aktif</option>
-              <option value="suspended">Suspended / Isolir</option>
+              <option value="Online">Online</option>
+              <option value="Offline / LOS">Offline / LOS</option>
             </select>
 
             {/* Reset Filters */}
@@ -776,8 +727,8 @@ export default function CustomerManagement() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-16 text-center text-slate-400 text-xs space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center mx-auto text-xl font-bold">
-            🔍
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center mx-auto text-sm font-bold">
+            Data
           </div>
           <p className="font-bold text-sm text-slate-900 dark:text-white">Belum Ada Pelanggan Ditemukan</p>
           <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
@@ -803,24 +754,24 @@ export default function CustomerManagement() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-sans">
                   {paginated.map(c => {
-                    const isOffline = c.status !== 'active' || c.onu_status === 'Offline' || c.onu_status === 'LOS (Dying Gasp)' || c.rx_power === null || parseFloat(c.rx_power) <= -40;
-                    const rx = isOffline ? null : (c.rx_power != null ? parseFloat(c.rx_power) : null);
+                    const isClientOnline = c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0);
+                    const rx = !isClientOnline ? null : (c.rx_power != null ? parseFloat(c.rx_power) : null);
                     let rxLabel = '—';
-                    let rxBadgeClass = 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700';
+                    let rxColorClass = 'text-slate-400';
 
-                    if (isOffline) {
+                    if (!isClientOnline) {
                       rxLabel = 'Loss';
-                      rxBadgeClass = 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800';
+                      rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
                     } else if (rx !== null) {
                       rxLabel = `${rx.toFixed(1)} dBm`;
                       if (rx >= -19.0) {
-                        rxBadgeClass = 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800';
+                        rxColorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
                       } else if (rx >= -24.0) {
-                        rxBadgeClass = 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800';
+                        rxColorClass = 'text-teal-600 dark:text-teal-400 font-bold';
                       } else if (rx >= -27.0) {
-                        rxBadgeClass = 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800';
+                        rxColorClass = 'text-amber-600 dark:text-amber-400 font-bold';
                       } else {
-                        rxBadgeClass = 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800';
+                        rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
                       }
                     }
 
@@ -845,7 +796,6 @@ export default function CustomerManagement() {
                             <span>
                               {c.odc_name ? `${c.odc_name} / ` : ''}
                               <strong>{c.odp_name}</strong>
-                              {c.odp_port_number ? ` (Port ${c.odp_port_number})` : ''}
                             </span>
                           ) : (
                             <span className="text-slate-400 italic">Belum terhubung</span>
@@ -854,27 +804,24 @@ export default function CustomerManagement() {
 
                         {/* 4. OLT & Interface */}
                         <td className="px-4 py-3.5 text-slate-700 dark:text-slate-300">
-                          <span>{c.olt_name || 'OLT Solok'} ({c.gpon_interface || '1/1/1'})</span>
+                          <span>{c.olt_name || '—'}</span>
+                          {c.gpon_interface && c.gpon_interface !== '—' && (
+                            <span className="text-slate-500 font-mono text-[11px] ml-1">({c.gpon_interface})</span>
+                          )}
                         </td>
 
                         {/* 5. Serial (SN) & Sinyal Rx */}
                         <td className="px-4 py-3.5 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
                           <span>{c.onu_serial || '—'}</span>
                           {rxLabel !== '—' && (
-                            <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold border ${rxBadgeClass}`}>
-                              {rxLabel}
-                            </span>
+                            <span className={`ml-1.5 ${rxColorClass}`}>({rxLabel})</span>
                           )}
                         </td>
 
                         {/* 6. Status */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
-                            c.status === 'active'
-                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                              : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
-                          }`}>
-                            {c.status === 'active' ? 'Aktif' : 'Isolir'}
+                          <span className={isClientOnline ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-rose-600 dark:text-rose-400 font-semibold'}>
+                            {isClientOnline ? 'Online' : 'Offline / LOS'}
                           </span>
                         </td>
 
@@ -946,24 +893,24 @@ export default function CustomerManagement() {
           <div className="block md:hidden space-y-4">
             {paginated.map((c, idx) => {
               const globalIndex = (currentPage - 1) * perPage + idx + 1;
-              const isOffline = c.status !== 'active' || c.onu_status === 'Offline' || c.onu_status === 'LOS (Dying Gasp)' || c.rx_power === null || parseFloat(c.rx_power) <= -40;
-              const rx = isOffline ? null : (c.rx_power != null ? parseFloat(c.rx_power) : null);
+              const isClientOnline = c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0);
+              const rx = !isClientOnline ? null : (c.rx_power != null ? parseFloat(c.rx_power) : null);
               let rxLabel = '—';
-              let rxBadgeClass = 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700';
+              let rxColorClass = 'text-slate-400';
 
-              if (isOffline) {
+              if (!isClientOnline) {
                 rxLabel = 'Loss';
-                rxBadgeClass = 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800';
+                rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
               } else if (rx !== null) {
                 rxLabel = `${rx.toFixed(1)} dBm`;
                 if (rx >= -19.0) {
-                  rxBadgeClass = 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800';
+                  rxColorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
                 } else if (rx >= -24.0) {
-                  rxBadgeClass = 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800';
+                  rxColorClass = 'text-teal-600 dark:text-teal-400 font-bold';
                 } else if (rx >= -27.0) {
-                  rxBadgeClass = 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800';
+                  rxColorClass = 'text-amber-600 dark:text-amber-400 font-bold';
                 } else {
-                  rxBadgeClass = 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800';
+                  rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
                 }
               }
 
@@ -973,12 +920,8 @@ export default function CustomerManagement() {
                     {/* Row 1: Index & Status */}
                     <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/70 dark:bg-slate-800/40">
                       <span className="text-slate-400 font-semibold">#{globalIndex} • {c.customer_number || `CMN ${c.id}`}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                        c.status === 'active'
-                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                          : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
-                      }`}>
-                        {c.status === 'active' ? 'Aktif' : 'Isolir'}
+                      <span className={isClientOnline ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-rose-600 dark:text-rose-400 font-semibold'}>
+                        {isClientOnline ? 'Online' : 'Offline / LOS'}
                       </span>
                     </div>
 
@@ -992,18 +935,26 @@ export default function CustomerManagement() {
                     <div className="px-4 py-2.5 grid grid-cols-3 gap-2">
                       <span className="text-slate-400">ODC / ODP</span>
                       <span className="col-span-2 text-slate-800 dark:text-slate-200 font-medium">
-                        {c.odp_name ? `${c.odp_name} (Port ${c.odp_port_number || '—'})` : '—'}
+                        {c.odp_name ? `${c.odc_name ? `${c.odc_name} / ` : ''}${c.odp_name}` : '—'}
                       </span>
                     </div>
 
-                    {/* Row 4: Serial & Rx */}
+                    {/* Row 4: OLT & Interface */}
+                    <div className="px-4 py-2.5 grid grid-cols-3 gap-2 items-center">
+                      <span className="text-slate-400">OLT / Interface</span>
+                      <span className="col-span-2 text-slate-800 dark:text-slate-200 font-medium">
+                        {c.olt_name || '—'} {c.gpon_interface && c.gpon_interface !== '—' ? <span className="font-mono text-[11px] text-slate-500">({c.gpon_interface})</span> : ''}
+                      </span>
+                    </div>
+
+                    {/* Row 5: Serial & Rx */}
                     <div className="px-4 py-2.5 grid grid-cols-3 gap-2 items-center">
                       <span className="text-slate-400">SN &amp; Sinyal</span>
                       <div className="col-span-2 flex items-center gap-1.5 font-mono">
                         <span className="text-slate-800 dark:text-slate-200 font-bold">{c.onu_serial || '—'}</span>
                         {rxLabel !== '—' && (
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${rxBadgeClass}`}>
-                            {rxLabel}
+                          <span className={`ml-1 font-semibold ${rxColorClass}`}>
+                            ({rxLabel})
                           </span>
                         )}
                       </div>
@@ -1105,7 +1056,7 @@ export default function CustomerManagement() {
             <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
               {formErr && (
                 <div className="p-3.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl font-medium">
-                  ⚠️ {formErr}
+                  {formErr}
                 </div>
               )}
 
@@ -1163,8 +1114,8 @@ export default function CustomerManagement() {
                     onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="active">Aktif</option>
-                    <option value="suspended">Suspended / Isolir</option>
+                    <option value="Online">Online</option>
+                    <option value="Offline / LOS">Offline / LOS</option>
                   </select>
                 </div>
               </div>
@@ -1738,40 +1689,25 @@ export default function CustomerManagement() {
                   </button>
                 </div>
 
-                {/* 4. End-to-End FTTH Topology Visual */}
+                {/* 4. End-to-End FTTH Flowing Topology Diagram */}
                 <div className="space-y-2">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                    Jalur Jaringan FTTH (End-to-End)
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
-                    {/* OLT */}
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold">1. OLT Port</span>
-                      <p className="font-bold text-slate-950 dark:text-white">{diagnosticsData.topology?.olt_name}</p>
-                      <p className="text-[10px] font-mono text-blue-600 dark:text-blue-400">{diagnosticsData.topology?.gpon_interface}</p>
-                    </div>
-
-                    {/* ODC */}
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold">2. ODC Feeder</span>
-                      <p className="font-bold text-slate-950 dark:text-white">{diagnosticsData.topology?.odc_name || 'ODC Utama'}</p>
-                      <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{diagnosticsData.topology?.odc_code || 'ODC-01'}</p>
-                    </div>
-
-                    {/* ODP */}
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold">3. ODP Distribusi</span>
-                      <p className="font-bold text-slate-950 dark:text-white">{diagnosticsData.topology?.odp_name || 'ODP Pelanggan'}</p>
-                      <p className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400">Port {diagnosticsData.topology?.odp_port || '1'}</p>
-                    </div>
-
-                    {/* ONT */}
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold">4. ONT / Modem</span>
-                      <p className="font-bold text-slate-950 dark:text-white font-mono text-[11px] truncate">{diagnosticsData.topology?.onu_serial}</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">{diagnosticsData.topology?.onu_type || 'GPON ONT'}</p>
-                    </div>
-                  </div>
+                  <FtthFlowTopology
+                    oltName={diagnosticsData.topology?.olt_name || 'OLT'}
+                    portName={diagnosticsData.topology?.gpon_interface || '1/1/1'}
+                    odcName={diagnosticsData.topology?.odc_name || 'ODC Utama'}
+                    odcCode={diagnosticsData.topology?.odc_code || 'ODC-01'}
+                    odpName={diagnosticsData.topology?.odp_name || 'ODP Pelanggan'}
+                    odpCode={diagnosticsData.topology?.odp_code || 'ODP-01'}
+                    odpPort={diagnosticsData.topology?.odp_port || '1'}
+                    customerName={diagnosticsData.customer?.name}
+                    onuSerial={diagnosticsData.topology?.onu_serial || diagnosticsData.customer?.customer_number}
+                    onuType={diagnosticsData.topology?.onu_type || 'GPON ONT'}
+                    rxPower={diagnosticsData.optical?.rx_power}
+                    txPower={diagnosticsData.optical?.tx_power}
+                    distanceMeters={diagnosticsData.optical?.distance_meters || 850}
+                    pingMs={diagnosticsData.ping?.latency_ms}
+                    isOnline={diagnosticsData.optical?.status === 'Online' || diagnosticsData.ping?.online}
+                  />
                 </div>
               </div>
             ) : null}

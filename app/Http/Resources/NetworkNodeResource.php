@@ -32,6 +32,11 @@ class NetworkNodeResource extends JsonResource
             }
         }
 
+        $autoData = $this->getAutoDetectedInterfaceAndOlt();
+        $autoPort = $autoData['port_ref'];
+        $effectivePortRef = $this->olt_port_ref ?: $autoPort;
+        $isAuto = empty($this->olt_port_ref) && !empty($autoPort);
+
         return [
             'id'                     => $this->id,
             'name'                   => $this->name,
@@ -46,10 +51,13 @@ class NetworkNodeResource extends JsonResource
             'longitude'              => $this->longitude,
             'address'                => $this->address,
             'parent_node_id'         => $this->parent_node_id,
-            'olt_device_id'          => $this->olt_device_id,
+            'olt_device_id'          => $this->olt_device_id ?: ($autoData['olt_device']['id'] ?? null),
             'splitter_type_id'       => $this->splitter_type_id,
             'splitter_cascade_level' => $this->splitter_cascade_level,
-            'olt_port_ref'           => $this->olt_port_ref,
+            'olt_port_ref'           => $effectivePortRef,
+            'stored_olt_port_ref'    => $this->olt_port_ref,
+            'auto_detected_port_ref' => $autoPort,
+            'is_auto_detected'       => $isAuto,
             'total_ports'            => $this->total_ports,
             'used_ports'             => $this->used_ports,
             'installed_at'           => $this->installed_at,
@@ -73,12 +81,20 @@ class NetworkNodeResource extends JsonResource
                     'code' => $this->parent->oltDevice->code,
                 ] : null,
             ]),
-            'olt_device'             => $this->whenLoaded('oltDevice', fn() => [
+            'olt_device'             => $this->oltDevice ? [
                 'id'   => $this->oltDevice->id,
                 'name' => $this->oltDevice->name,
                 'code' => $this->oltDevice->code,
                 'ip_address' => $this->oltDevice->ip_address,
-            ]),
+            ] : ($this->parent?->oltDevice ? [
+                'id'   => $this->parent->oltDevice->id,
+                'name' => $this->parent->oltDevice->name,
+                'code' => $this->parent->oltDevice->code,
+            ] : ($autoData['olt_device'] ? [
+                'id'   => $autoData['olt_device']['id'],
+                'name' => $autoData['olt_device']['name'],
+                'code' => null,
+            ] : null)),
             'splitter_type'          => $this->whenLoaded('splitterType', fn() => [
                 'id'           => $this->splitterType->id,
                 'name'         => $this->splitterType->name,

@@ -148,4 +148,126 @@ class NetworkNode extends Model
     {
         return $this->node_type === 'OLT';
     }
+
+    /**
+     * Cache telemetri live ONU OLT selama request lifecycle
+     */
+    protected static ?array $_liveOnuTelemetryMap = null;
+
+    public static function getLiveOnuTelemetryMap(): array
+    {
+        if (self::$_liveOnuTelemetryMap !== null) {
+            return self::$_liveOnuTelemetryMap;
+        }
+
+        $map = [];
+        $oltDevices = \App\Models\OltDevice::whereNotNull('last_telemetry_snapshot')->get();
+        foreach ($oltDevices as $dev) {
+            $snapOnus = array_merge(
+                $dev->last_telemetry_snapshot['onu_list'] ?? [],
+                $dev->last_telemetry_snapshot['unconfigured_onus'] ?? []
+            );
+            foreach ($snapOnus as $so) {
+                $snKey = strtolower(trim($so['serial_number'] ?? ''));
+                $macKey = strtolower(trim($so['mac_address'] ?? ($so['onu_mac'] ?? '')));
+                $so['_olt_id'] = $dev->id;
+                $so['_olt_name'] = $dev->name;
+                if ($snKey) $map[$snKey] = $so;
+                if ($macKey) $map[$macKey] = $so;
+            }
+        }
+
+        return self::$_liveOnuTelemetryMap = $map;
+    }
+
+    /**
+     * Deteksi otomatis Interface PON dan Perangkat OLT dari pelanggan/modem yang terkoneksi
+     */
+    public function getAutoDetectedInterfaceAndOlt(): array
+    {
+        $liveMap = self::getLiveOnuTelemetryMap();
+        $detectedPorts = [];
+        $detectedOlt = null;
+
+        if ($this->node_type === 'ODP') {
+            $custServices = \Illuminate\Support\Facades\DB::table('network_ports')
+                ->join('customer_services', 'customer_services.id', '=', 'network_ports.customer_service_id')
+                ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
+                ->where('network_ports.node_id', $this->id)
+                ->select('ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'customer_services.onu_serial as svc_serial')
+                ->get();
+
+            foreach ($custServices as $cs) {
+                $sn = strtolower(trim($cs->onu_serial ?: $cs->svc_serial ?: ''));
+                $mac = strtolower(trim($cs->onu_mac ?: ''));
+                $live = ($sn && isset($liveMap[$sn])) ? $liveMap[$sn] : (($mac && isset($liveMap[$mac])) ? $liveMap[$mac] : null);
+                if ($live) {
+                    $p = $live['port'] ?? ($live['detected_port'] ?? ($live['interface'] ?? null));
+                    if ($p && $p !== 'none' && $p !== '—') {
+                        $detectedPorts[] = $p;
+                        if (!$detectedOlt) {
+                            $detectedOlt = [
+                                'id'   => $live['_olt_id'] ?? null,
+                                'name' => $live['_olt_name'] ?? null,
+                            ];
+                        }
+                    }
+                }
+            }
+
+            // Fallback inherit dari parent ODC jika ODP belum memiliki pelanggan aktif
+            if (empty($detectedPorts) && $this->parent) {
+                if ($this->parent->olt_port_ref) {
+                    $detectedPorts[] = $this->parent->olt_port_ref;
+                }
+                if ($this->parent->oltDevice && !$detectedOlt) {
+                    $detectedOlt = [
+                        'id'   => $this->parent->oltDevice->id,
+                        'name' => $this->parent->oltDevice->name,
+                    ];
+                }
+            }
+        } elseif ($this->node_type === 'ODC') {
+            $childIds = \Illuminate\Support\Facades\DB::table('network_nodes')
+                ->where('parent_node_id', $this->id)
+                ->whereNull('deleted_at')
+                ->pluck('id')
+                ->toArray();
+
+            if (!empty($childIds)) {
+                $custServices = \Illuminate\Support\Facades\DB::table('network_ports')
+                    ->join('customer_services', 'customer_services.id', '=', 'network_ports.customer_service_id')
+                    ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
+                    ->whereIn('network_ports.node_id', $childIds)
+                    ->select('ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'customer_services.onu_serial as svc_serial')
+                    ->get();
+
+                foreach ($custServices as $cs) {
+                    $sn = strtolower(trim($cs->onu_serial ?: $cs->svc_serial ?: ''));
+                    $mac = strtolower(trim($cs->onu_mac ?: ''));
+                    $live = ($sn && isset($liveMap[$sn])) ? $liveMap[$sn] : (($mac && isset($liveMap[$mac])) ? $liveMap[$mac] : null);
+                    if ($live) {
+                        $p = $live['port'] ?? ($live['detected_port'] ?? ($live['interface'] ?? null));
+                        if ($p && $p !== 'none' && $p !== '—') {
+                            $detectedPorts[] = $p;
+                            if (!$detectedOlt) {
+                                $detectedOlt = [
+                                    'id'   => $live['_olt_id'] ?? null,
+                                    'name' => $live['_olt_name'] ?? null,
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        $uniquePorts = array_values(array_unique(array_filter($detectedPorts)));
+        $portRef = !empty($uniquePorts) ? implode(', ', $uniquePorts) : null;
+
+        return [
+            'port_ref'   => $portRef,
+            'olt_device' => $detectedOlt,
+        ];
+    }
 }

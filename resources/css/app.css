@@ -363,8 +363,78 @@ article[class*="rounded-"] {
   max-height: none !important;
 }
 
-.leaflet-tile-container {
-  pointer-events: none;
+/* ── Flowing Optical Laser Beam Animation ─────────────────────────────────── */
+@keyframes flowLaser {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes flowLaserReverse {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 24;
+  }
+}
+
+@keyframes pulseLaserGlow {
+  0%, 100% {
+    opacity: 0.5;
+    filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.4));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.9)) drop-shadow(0 0 14px rgba(99, 102, 241, 0.6));
+  }
+}
+
+@keyframes pulseLaserSuccess {
+  0%, 100% {
+    opacity: 0.6;
+    filter: drop-shadow(0 0 2px rgba(16, 185, 129, 0.4));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.9)) drop-shadow(0 0 14px rgba(52, 211, 153, 0.6));
+  }
+}
+
+@keyframes beamSlide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-flow-laser {
+  stroke-dasharray: 6 6;
+  animation: flowLaser 1.2s linear infinite;
+}
+
+.animate-flow-laser-fast {
+  stroke-dasharray: 5 5;
+  animation: flowLaser 0.7s linear infinite;
+}
+
+.animate-flow-laser-success {
+  stroke-dasharray: 6 6;
+  animation: flowLaser 1s linear infinite;
+}
+
+.animate-flow-laser-primary {
+  stroke-dasharray: 6 6;
+  animation: flowLaser 1s linear infinite;
+}
+
+.animate-beam-slide {
+  animation: beamSlide 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 

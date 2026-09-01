@@ -12,6 +12,8 @@ enum CustomerStatus: string
     case SUSPENDED = 'suspended';
     case ISOLATED = 'isolated';
     case TERMINATED = 'terminated';
+    case ONLINE = 'online';
+    case OFFLINE = 'offline';
 
     public function label(): string
     {

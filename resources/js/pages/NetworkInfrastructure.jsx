@@ -171,8 +171,9 @@ const displayInterface = (ref) => {
   return ref.split(',').map(s => {
     const trimmed = s.trim();
     if (!trimmed) return '';
+    if (trimmed.startsWith('epon') || trimmed.startsWith('epon_')) return trimmed;
     const clean = trimmed.replace(/^(gpon[-_]olt_)/i, '');
-    return `gpon_olt_${clean}`;
+    return `gpon-olt_${clean}`;
   }).filter(Boolean).join(', ');
 };
 
@@ -374,38 +375,57 @@ const STANDARD_TUBES = [
 
 function MultiOltPortSelector({ value, onChange, selectedOlt }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeSlot, setActiveSlot] = useState(1);
   const [portSearch, setPortSearch] = useState('');
   const dropdownRef = useRef(null);
 
   const selectedPorts = useMemo(() => {
     if (!value) return [];
-    return value.split(',').map(s => s.trim().replace(/^gpon-olt_/i, '').replace(/^gpon_olt_/i, '')).filter(Boolean);
+    return value.split(',').map(s => s.trim().replace(/^gpon-olt_/i, '').replace(/^gpon_olt_/i, '').replace(/^epon-olt_/i, '')).filter(Boolean);
   }, [value]);
 
-  // Deteksi arsitektur OLT: Compact/Fixed Port (HSGQ, VSOL 4/8P) vs Modular Multi-Slot Chassis (ZTE C300, Huawei)
-  const isCompactOlt = useMemo(() => {
-    if (!selectedOlt) return false;
-    const vendor = (selectedOlt.vendor || selectedOlt.vendor_key || selectedOlt.model || '').toUpperCase();
-    const ports = selectedOlt.total_ports || 4;
-    return vendor.includes('HSGQ') || vendor.includes('EPON') || (ports <= 8 && !vendor.includes('C300') && !vendor.includes('MA5680'));
+  // Ambil daftar port riil dari snapshot OLT
+  const realPonPorts = useMemo(() => {
+    if (!selectedOlt) return [];
+    if (selectedOlt.pon_ports && Array.isArray(selectedOlt.pon_ports) && selectedOlt.pon_ports.length > 0) {
+      return selectedOlt.pon_ports;
+    }
+    if (selectedOlt.last_telemetry_snapshot?.pon_ports && Array.isArray(selectedOlt.last_telemetry_snapshot.pon_ports) && selectedOlt.last_telemetry_snapshot.pon_ports.length > 0) {
+      return selectedOlt.last_telemetry_snapshot.pon_ports;
+    }
+    return [];
   }, [selectedOlt]);
 
-  // Ambil daftar port riil untuk OLT Compact
+  // Deteksi arsitektur OLT: Compact/Fixed Port vs Modular Chassis
+  const isCompactOlt = useMemo(() => {
+    if (!selectedOlt) return false;
+    const vendor = (selectedOlt.vendor || selectedOlt.vendor_key || selectedOlt.model || selectedOlt.name || '').toUpperCase();
+    const ports = selectedOlt.real_total_ports || selectedOlt.total_ports || (realPonPorts.length > 0 ? realPonPorts.length : 4);
+
+    if (vendor.includes('C300') || vendor.includes('C320') || vendor.includes('MA5680') || vendor.includes('MA5608') || vendor.includes('MODULAR')) {
+      return false;
+    }
+    if (realPonPorts.length > 0) {
+      const hasSlotFormat = realPonPorts.some(p => /1\/\d+\/\d+/.test(p.port_id || ''));
+      if (hasSlotFormat) return false;
+    }
+    return vendor.includes('HSGQ') || vendor.includes('EPON') || (ports <= 8 && !vendor.includes('ZTE') && !vendor.includes('HUAWEI'));
+  }, [selectedOlt, realPonPorts]);
+
+  // Ambil daftar port untuk OLT Compact
   const compactPorts = useMemo(() => {
     if (!selectedOlt) return [];
 
-    // Dari snapshot telemetri database
-    if (selectedOlt.last_telemetry_snapshot?.pon_ports?.length > 0) {
-      return selectedOlt.last_telemetry_snapshot.pon_ports.map(p => ({
+    if (realPonPorts.length > 0 && isCompactOlt) {
+      return realPonPorts.map(p => ({
         id: p.port_id,
         label: p.port_id,
         status: p.status || 'Up',
+        onuCount: p.registered_onus || p.online_onus || 0,
       }));
     }
 
-    const totalPorts = selectedOlt.total_ports || 4;
-    const vendor = (selectedOlt.vendor || selectedOlt.vendor_key || '').toUpperCase();
+    const totalPorts = selectedOlt.real_total_ports || selectedOlt.total_ports || 4;
+    const vendor = (selectedOlt.vendor || selectedOlt.vendor_key || selectedOlt.name || '').toUpperCase();
     const prefix = vendor.includes('HSGQ') || vendor.includes('EPON') ? 'epon_0/' : 'gpon_0/';
 
     const list = [];
@@ -414,42 +434,103 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
         id: `${prefix}${i}`,
         label: `${prefix}${i}`,
         status: 'Up',
+        onuCount: 0,
       });
     }
     return list;
-  }, [selectedOlt]);
+  }, [selectedOlt, realPonPorts, isCompactOlt]);
 
-  // Penentuan Slot untuk OLT Modular (ZTE C300 = 16 Slot, C320 = 4 Slot, Huawei = 8-16 Slot)
-  const maxSlots = useMemo(() => {
-    if (!selectedOlt) return 4;
-    const vendor = (selectedOlt.vendor || selectedOlt.model || '').toUpperCase();
-    const ports = selectedOlt.total_ports || 0;
-    if (vendor.includes('C300') || vendor.includes('MA5680T')) return 16;
-    if (vendor.includes('C320') || vendor.includes('MA5608T')) return 4;
-    return Math.max(1, Math.ceil((ports || 16) / 16));
-  }, [selectedOlt]);
-
+  // Ekstrak slot-slot riil atau fallback untuk OLT Modular
   const slots = useMemo(() => {
+    if (!selectedOlt) return [{ id: 1, name: 'Slot 1', portCount: 16, ports: [] }];
+
+    // 1. Jika ada data port riil di telemetri, kelompokkan berdasarkan slot fisik yang benar-benar ada
+    if (realPonPorts.length > 0) {
+      const slotMap = {};
+      realPonPorts.forEach(p => {
+        const pid = p.port_id || '';
+        const match = pid.match(/(?:gpon-olt_|epon-olt_|epon_)?1\/(\d+)\/(\d+)/i);
+        if (match) {
+          const slotNum = parseInt(match[1], 10);
+          if (!slotMap[slotNum]) {
+            slotMap[slotNum] = [];
+          }
+          slotMap[slotNum].push(p);
+        }
+      });
+
+      const slotKeys = Object.keys(slotMap).map(Number).sort((a, b) => a - b);
+      if (slotKeys.length > 0) {
+        return slotKeys.map(slotNum => ({
+          id: slotNum,
+          name: `Slot ${slotNum}`,
+          portCount: slotMap[slotNum].length,
+          ports: slotMap[slotNum],
+        }));
+      }
+    }
+
+    // 2. Fallback berdasarkan model jika belum ada telemetri
+    const vendor = (selectedOlt.vendor || selectedOlt.model || selectedOlt.name || '').toUpperCase();
+    let max = 4;
+    if (vendor.includes('C300') || vendor.includes('MA5680')) max = 16;
+    else if (vendor.includes('C320') || vendor.includes('MA5608')) max = 4;
+    else max = Math.max(1, Math.ceil((selectedOlt.total_ports || 16) / 16));
+
     const list = [];
-    for (let i = 1; i <= maxSlots; i++) {
-      list.push({ id: i, name: `Slot ${i}` });
+    for (let i = 1; i <= max; i++) {
+      list.push({ id: i, name: `Slot ${i}`, portCount: 16, ports: [] });
     }
     return list;
-  }, [maxSlots]);
+  }, [selectedOlt, realPonPorts]);
 
-  // Daftar 16 port dalam slot aktif untuk OLT Modular
+  const [activeSlot, setActiveSlot] = useState(1);
+
+  // Set activeSlot default ke slot pertama yang tersedia
+  useEffect(() => {
+    if (slots.length > 0) {
+      const slotExists = slots.some(s => s.id === activeSlot);
+      if (!slotExists) {
+        setActiveSlot(slots[0].id);
+      }
+    }
+  }, [slots, activeSlot]);
+
+  // Daftar port dalam slot aktif untuk OLT Modular
   const portsInActiveSlot = useMemo(() => {
+    const activeSlotObj = slots.find(s => s.id === activeSlot);
+    if (activeSlotObj?.ports && activeSlotObj.ports.length > 0) {
+      return activeSlotObj.ports.map((p, idx) => {
+        const pid = p.port_id || '';
+        const cleanId = pid.replace(/^gpon-olt_|^epon-olt_/i, '');
+        const pNumMatch = cleanId.match(/1\/\d+\/(\d+)/);
+        const pNum = pNumMatch ? pNumMatch[1] : (idx + 1);
+        return {
+          id: cleanId,
+          fullRef: pid,
+          label: `Port ${String(pNum).padStart(2, '0')}`,
+          shortLabel: `P${pNum}`,
+          status: p.status || 'Up',
+          onuCount: p.registered_onus || p.online_onus || 0,
+        };
+      });
+    }
+
+    // Fallback: 16 port per slot
     const list = [];
-    for (let i = 1; i <= 16; i++) {
+    const count = activeSlotObj?.portCount || 16;
+    for (let i = 1; i <= count; i++) {
       list.push({
         id: `1/${activeSlot}/${i}`,
+        fullRef: `gpon-olt_1/${activeSlot}/${i}`,
         label: `Port ${String(i).padStart(2, '0')}`,
         shortLabel: `P${i}`,
-        fullRef: `gpon-olt_1/${activeSlot}/${i}`,
+        status: 'Up',
+        onuCount: 0,
       });
     }
     return list;
-  }, [activeSlot]);
+  }, [activeSlot, slots]);
 
   // Filter port berdasarkan pencarian
   const filteredCompactPorts = useMemo(() => {
@@ -567,7 +648,7 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
           <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h5 className="font-bold text-xs text-slate-900 dark:text-slate-100">
-                Pilih Interface ({isCompactOlt ? `${compactPorts.length} Port PON` : `Modular ${maxSlots} Slot Card`})
+                Pilih Interface ({isCompactOlt ? `${compactPorts.length} Port PON` : `Modular ${slots.length} Slot Card`})
               </h5>
               <p className="text-[10px] text-slate-400">
                 {selectedOlt ? `${selectedOlt.name} • ${selectedOlt.model || selectedOlt.vendor}` : 'Pilih interface yang mengarah ke ODC/ODP'}
@@ -656,7 +737,7 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
               {/* Slot / Card Tab Switcher */}
               <div className="space-y-1.5">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                  Pilih Slot Card ({maxSlots} Slot Chassis):
+                  Pilih Slot Card ({slots.length} Slot Chassis):
                 </span>
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
                   {slots.map(s => {
@@ -674,6 +755,9 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
                         }`}
                       >
                         <span>Slot {s.id}</span>
+                        {s.portCount ? (
+                          <span className="text-[9px] text-slate-400">({s.portCount}P)</span>
+                        ) : null}
                         {countInSlot > 0 && (
                           <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
                             isActive ? 'bg-white text-indigo-700' : 'bg-indigo-600 text-white'
@@ -687,11 +771,11 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
                 </div>
               </div>
 
-              {/* 16 Port Grid in Active Slot */}
+              {/* Port Grid in Active Slot */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-700 dark:text-slate-200 text-[11px]">
-                    16 Port PON Slot {activeSlot} (Card 1/{activeSlot}/*):
+                    {filteredModularPorts.length} Port PON Slot {activeSlot} (Card 1/{activeSlot}/*):
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -2592,14 +2676,15 @@ function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefr
     finally { setSavingPort(false); }
   };
 
-  // Helper formatting for interface display (convert 1/1/1 or gpon-olt_1/1/1 -> gpon_olt_1/1/1)
+  // Helper formatting for interface display (convert 1/1/1 or gpon-olt_1/1/1 or epon_0/1)
   const displayInterface = (ref) => {
     if (!ref) return '—';
     return ref.split(',').map(s => {
       const trimmed = s.trim();
       if (!trimmed) return '';
+      if (trimmed.startsWith('epon') || trimmed.startsWith('epon_')) return trimmed;
       const clean = trimmed.replace(/^(gpon[-_]olt_)/i, '');
-      return `gpon_olt_${clean}`;
+      return `gpon-olt_${clean}`;
     }).filter(Boolean).join(', ');
   };
 
