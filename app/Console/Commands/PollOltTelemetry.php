@@ -93,6 +93,8 @@ class PollOltTelemetry extends Command
         $totalOnusPolled = 0;
         $totalUncfgPolled = 0;
 
+        $maxProcessTimeoutSec = 20; // Maksimal 20 detik per sub-process OLT
+
         while (count($processes) > 0) {
             foreach ($processes as $id => $item) {
                 /** @var Process $proc */
@@ -100,8 +102,15 @@ class PollOltTelemetry extends Command
                 /** @var OltDevice $dev */
                 $dev = $item['device'];
 
+                $elapsedSec = microtime(true) - $item['start'];
+
+                // Paksa stop proses jika melebihi batas waktu (anti-hang mutlak)
+                if ($elapsedSec > $maxProcessTimeoutSec && $proc->isRunning()) {
+                    $proc->stop(1);
+                }
+
                 if (!$proc->isRunning()) {
-                    $durationMs = round((microtime(true) - $item['start']) * 1000, 1);
+                    $durationMs = round($elapsedSec * 1000, 1);
                     $output = trim($proc->getOutput());
                     $errorOutput = trim($proc->getErrorOutput());
 
@@ -120,7 +129,7 @@ class PollOltTelemetry extends Command
                     $activeQuery = Cache::get("olt_active_querying_port_{$dev->id}");
 
                     $isSuccess = $proc->isSuccessful();
-                    $statusStr = $isSuccess ? 'SUCCESS' : ('FAILED: ' . ($errorOutput ?: 'Process error'));
+                    $statusStr = $isSuccess ? 'SUCCESS' : ('FAILED: ' . ($errorOutput ?: 'Process timed out or error'));
 
                     $totalPortsPolled += $activePorts;
                     $totalOnusPolled += $onusCount;
