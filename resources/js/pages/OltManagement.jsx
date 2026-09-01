@@ -493,9 +493,9 @@ export default function OltManagement() {
         if (prev <= 1) {
           const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
           setIsPollingLive(true);
-          fetchOltHardware(vk, activeOlt.id, true, true);
+          fetchOltHardware(vk, activeOlt.id, true, false); // Baca dari snapshot database lokal (instan)
           fetchOlts(true);
-          setTimeout(() => setIsPollingLive(false), 1500);
+          setTimeout(() => setIsPollingLive(false), 1000);
           return intervalSec;
         }
         return prev - 1;
