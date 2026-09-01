@@ -77,7 +77,7 @@ class PollOltTelemetry extends Command
         foreach ($devices as $device) {
             $cmd = [$phpBinary, $artisanPath, 'olt:poll-telemetry', "--device={$device->id}", '--force'];
             $process = new Process($cmd);
-            $process->setTimeout(60); // 60 detik max — toleransi aman untuk batch 4-port padat ONU
+            $process->setTimeout(90); // 90 detik max — ruang aman 6x lipat agar tidak pernah timeout
             $process->start();
 
             $processes[$device->id] = [
@@ -93,7 +93,7 @@ class PollOltTelemetry extends Command
         $totalOnusPolled = 0;
         $totalUncfgPolled = 0;
 
-        $maxProcessTimeoutSec = 60; // Maksimal 60 detik per sub-process OLT
+        $maxProcessTimeoutSec = 90; // Maksimal 90 detik per sub-process OLT
 
         while (count($processes) > 0) {
             foreach ($processes as $id => $item) {
@@ -270,9 +270,9 @@ class PollOltTelemetry extends Command
             }
 
             // ═══════════════════════════════════════════════════════════════════
-            // 🔹 TAHAP 3: WORKER POOL 4-PORT SIMULTAN (GRANULAR & ULTRA-CEPAT)
+            // 🔹 TAHAP 3: WORKER POOL 2-PORT SIMULTAN (GRANULAR & ULTRA-STABIL)
             // ═══════════════════════════════════════════════════════════════════
-            $batchSize = 4; // 4 Port PON per Siklus Worker Pool (Aman untuk CPU OLT & Cepat)
+            $batchSize = 2; // 2 Port PON per Siklus Worker Pool (Optimal & Anti-Timeout)
 
             if ($specificPort) {
                 $targetPorts = [$specificPort];
