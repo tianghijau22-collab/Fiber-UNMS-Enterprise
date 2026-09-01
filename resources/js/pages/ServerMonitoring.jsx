@@ -48,9 +48,18 @@ export default function ServerMonitoring() {
   const [isTriggeringWorker, setIsTriggeringWorker] = useState(false);
   const [triggerWorkerMessage, setTriggerWorkerMessage] = useState(null);
 
-  // Log filter
+  // Daemon Control & Action States
+  const [isRestartingDaemon, setIsRestartingDaemon] = useState(false);
+  const [isTogglingPause, setIsTogglingPause] = useState(false);
+  const [isClearingLogs, setIsClearingLogs] = useState(false);
+  const [daemonActionMessage, setDaemonActionMessage] = useState(null);
+
+  // Log filters & export
   const [selectedOltLogFilter, setSelectedOltLogFilter] = useState('ALL');
+  const [selectedLogLevelFilter, setSelectedLogLevelFilter] = useState('ALL');
+  const [logSearchQuery, setLogSearchQuery] = useState('');
   const [autoScrollLogs, setAutoScrollLogs] = useState(true);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
   const logContainerRef = useRef(null);
 
   const fetchMetrics = async (isManual = false) => {
@@ -123,6 +132,156 @@ export default function ServerMonitoring() {
       setIsTriggeringWorker(false);
       setTimeout(() => setTriggerWorkerMessage(null), 6000);
     }
+  };
+
+  const handleRestartDaemon = async () => {
+    if (!window.confirm('Restart background service fiber-telemetry-daemon 24/7 sekarang? Polling akan diinisialisasi ulang.')) return;
+    setIsRestartingDaemon(true);
+    setDaemonActionMessage(null);
+    try {
+      const res = await fetch('/api/server-monitoring/worker/restart', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setDaemonActionMessage(`✅ ${json.message}`);
+        fetchMetrics(true);
+      } else {
+        setDaemonActionMessage(`❌ ${json.message || 'Gagal me-restart daemon'}`);
+      }
+    } catch (err) {
+      setDaemonActionMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setIsRestartingDaemon(false);
+      setTimeout(() => setDaemonActionMessage(null), 6000);
+    }
+  };
+
+  const handleTogglePauseWorker = async () => {
+    setIsTogglingPause(true);
+    setDaemonActionMessage(null);
+    try {
+      const res = await fetch('/api/server-monitoring/worker/pause-resume', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setDaemonActionMessage(`✅ ${json.message}`);
+        fetchMetrics(true);
+      } else {
+        setDaemonActionMessage(`❌ ${json.message || 'Gagal mengubah status worker'}`);
+      }
+    } catch (err) {
+      setDaemonActionMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setIsTogglingPause(false);
+      setTimeout(() => setDaemonActionMessage(null), 5000);
+    }
+  };
+
+  const handleChangeLoopDelay = async (delaySec) => {
+    setDaemonActionMessage(null);
+    try {
+      const res = await fetch('/api/server-monitoring/worker/set-interval', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
+        body: JSON.stringify({ delay_sec: parseInt(delaySec, 10) }),
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setDaemonActionMessage(`✅ ${json.message}`);
+        fetchMetrics(true);
+      } else {
+        setDaemonActionMessage(`❌ ${json.message || 'Gagal mengubah interval jeda'}`);
+      }
+    } catch (err) {
+      setDaemonActionMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setTimeout(() => setDaemonActionMessage(null), 5000);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    if (!window.confirm('Bersihkan seluruh riwayat Live Request Stream & Activity Log?')) return;
+    setIsClearingLogs(true);
+    try {
+      const res = await fetch('/api/server-monitoring/worker/clear-logs', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setDaemonActionMessage(`✅ ${json.message}`);
+        fetchMetrics(true);
+      }
+    } catch (err) {
+      setDaemonActionMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setIsClearingLogs(false);
+      setTimeout(() => setDaemonActionMessage(null), 4000);
+    }
+  };
+
+  const handleExportLogs = (format = 'csv') => {
+    setShowExportDropdown(false);
+    if (!workerLogs || workerLogs.length === 0) {
+      alert('Tidak ada log untuk diekspor.');
+      return;
+    }
+
+    const logsToExport = filteredLogs.length > 0 ? filteredLogs : workerLogs;
+    const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    let content = '';
+    let mimeType = 'text/plain';
+    let fileName = `worker_activity_logs_${nowStr}`;
+
+    if (format === 'csv') {
+      mimeType = 'text/csv;charset=utf-8;';
+      fileName += '.csv';
+      const header = ['Timestamp', 'OLT', 'Port', 'Level', 'Message'];
+      const rows = logsToExport.map((l) => [
+        `"${l.time || ''}"`,
+        `"${l.olt || ''}"`,
+        `"${l.port || ''}"`,
+        `"${l.level || ''}"`,
+        `"${(l.message || '').replace(/"/g, '""')}"`,
+      ]);
+      content = [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    } else {
+      mimeType = 'text/plain;charset=utf-8;';
+      fileName += '.txt';
+      content = logsToExport
+        .map((l) => `[${l.time}] [${l.olt}] [${l.port || '—'}] [${l.level}] ${l.message}`)
+        .join('\n');
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   useEffect(() => {
@@ -323,11 +482,25 @@ export default function ServerMonitoring() {
   const topProcesses = metrics?.top_processes || [];
   const workerLogs = worker.logs || [];
 
-  // Filter logs by OLT
+  // Filter logs by OLT, Level & Search Text
   const filteredLogs = useMemo(() => {
-    if (selectedOltLogFilter === 'ALL') return workerLogs;
-    return workerLogs.filter((l) => l.olt === selectedOltLogFilter);
-  }, [workerLogs, selectedOltLogFilter]);
+    let list = workerLogs;
+    if (selectedOltLogFilter !== 'ALL') {
+      list = list.filter((l) => l.olt === selectedOltLogFilter);
+    }
+    if (selectedLogLevelFilter !== 'ALL') {
+      list = list.filter((l) => l.level === selectedLogLevelFilter);
+    }
+    if (logSearchQuery.trim()) {
+      const q = logSearchQuery.toLowerCase();
+      list = list.filter((l) =>
+        (l.message || '').toLowerCase().includes(q) ||
+        (l.olt || '').toLowerCase().includes(q) ||
+        (l.port || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [workerLogs, selectedOltLogFilter, selectedLogLevelFilter, logSearchQuery]);
 
   const uniqueOltNames = useMemo(() => {
     const names = new Set(workerLogs.map((l) => l.olt).filter((n) => n && n !== 'SYSTEM'));
@@ -756,9 +929,9 @@ export default function ServerMonitoring() {
         </div>
       </div>
 
-      {/* ── PANEL BARU: MONITORING REQUEST & BACKGROUND WORKER TELEMETRI OLT ── */}
+      {/* ── PANEL: MONITORING REQUEST & BACKGROUND WORKER TELEMETRI OLT ── */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -769,20 +942,88 @@ export default function ServerMonitoring() {
                 </span>
                 <span>Monitoring Parallel Background Worker &amp; Polling Request Telemetri</span>
               </h3>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                {worker.status || 'ACTIVE (PARALLEL)'}
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                worker.is_paused
+                  ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                  : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+              }`}>
+                {worker.is_paused ? 'PAUSED (DIJEDA)' : 'RUNNING (24/7 CONTINUOUS)'}
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Setiap OLT berjalan secara simultan (Zero-Queue) dengan jeda throttling <strong className="text-emerald-600 dark:text-emerald-400 font-mono">15 ms</strong>, update database langsung per port selesai, dan adaptive auto-retry.
+              Setiap OLT berjalan simultan 3-Tahap (Slot/Card $\rightarrow$ Status Port PON $\rightarrow$ Granular ONU per Port) dengan update database realtime.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Action Button Controls (Restart, Pause/Resume, Jeda Siklus, Trigger) */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Pause / Resume Worker */}
+            <button
+              onClick={handleTogglePauseWorker}
+              disabled={isTogglingPause}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 ${
+                worker.is_paused
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-amber-500 hover:bg-amber-600 text-white'
+              } disabled:opacity-50`}
+              title={worker.is_paused ? 'Lanjutkan Polling Worker' : 'Jeda Sementara Polling Worker'}
+            >
+              {worker.is_paused ? (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  <span>Lanjutkan Worker</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                  </svg>
+                  <span>Jeda Worker</span>
+                </>
+              )}
+            </button>
+
+            {/* Restart Daemon Service */}
+            <button
+              onClick={handleRestartDaemon}
+              disabled={isRestartingDaemon}
+              className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+              title="Restart systemd daemon service fiber-telemetry-daemon"
+            >
+              <svg
+                className={`w-3.5 h-3.5 ${isRestartingDaemon ? 'animate-spin text-indigo-500' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>{isRestartingDaemon ? 'Restarting...' : 'Restart Daemon'}</span>
+            </button>
+
+            {/* Interval Jeda per Siklus */}
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl px-2.5 py-1 text-xs border border-slate-200 dark:border-slate-700">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Jeda:</span>
+              <select
+                value={worker.loop_delay_sec ?? 2}
+                onChange={(e) => handleChangeLoopDelay(e.target.value)}
+                className="bg-transparent font-mono font-bold text-slate-800 dark:text-slate-200 text-xs focus:outline-none cursor-pointer"
+              >
+                <option value="1">1 Detik (Super Cepat)</option>
+                <option value="2">2 Detik (Default)</option>
+                <option value="3">3 Detik (Sedang)</option>
+                <option value="5">5 Detik (Hemat)</option>
+                <option value="10">10 Detik (Lambat)</option>
+              </select>
+            </div>
+
+            {/* Trigger Polling Sekarang */}
             <button
               onClick={handleTriggerPolling}
               disabled={isTriggeringWorker}
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
             >
               <svg
                 className={`w-3.5 h-3.5 ${isTriggeringWorker ? 'animate-spin' : ''}`}
@@ -792,19 +1033,27 @@ export default function ServerMonitoring() {
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              <span>{isTriggeringWorker ? 'Menjalankan...' : 'Trigger Polling Sekarang'}</span>
+              <span>{isTriggeringWorker ? 'Menjalankan...' : 'Trigger Sekarang'}</span>
             </button>
           </div>
         </div>
 
+        {/* Action Message Banner */}
+        {daemonActionMessage && (
+          <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between animate-in fade-in">
+            <span>{daemonActionMessage}</span>
+            <button onClick={() => setDaemonActionMessage(null)} className="text-slate-400 hover:text-slate-600 text-sm">✕</button>
+          </div>
+        )}
+
         {/* Worker Telemetry KPI Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
           <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Jeda Port (Throttling)</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase">Jeda Siklus (Loop)</span>
             <div className="font-mono text-sm font-black text-emerald-600 dark:text-emerald-400">
-              {worker.throttling_delay_ms ?? 15} ms
+              {worker.loop_delay_sec ?? 2} s
             </div>
-            <p className="text-[10px] text-slate-500">Per Port PON</p>
+            <p className="text-[10px] text-slate-500">Antar Putaran Port</p>
           </div>
 
           <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
@@ -848,18 +1097,25 @@ export default function ServerMonitoring() {
           </div>
         </div>
 
-        {/* Tabel Laporan Eksekusi per Perangkat OLT */}
+        {/* Tabel Laporan Eksekusi per Perangkat OLT + Real-Time Active Querying Port Pulse */}
         {worker.device_reports && worker.device_reports.length > 0 && (
           <div>
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-2">
-              Rincian Pembaruan Database Telemetri per Perangkat OLT (Siklus Terakhir):
-            </span>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Rincian Pembaruan Database Telemetri per Perangkat OLT:
+              </span>
+              <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+                Kolom biru menunjukkan port yang sedang di-query detik ini
+              </span>
+            </div>
             <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
                     <th className="p-2.5">Nama OLT</th>
                     <th className="p-2.5">IP Address</th>
+                    <th className="p-2.5">Port Sedang Di-Query Detik Ini</th>
                     <th className="p-2.5">Port Aktif / Total</th>
                     <th className="p-2.5">ONU Ditemukan</th>
                     <th className="p-2.5">Uncfg Baru</th>
@@ -868,54 +1124,162 @@ export default function ServerMonitoring() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono">
-                  {worker.device_reports.map((report, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
-                      <td className="p-2.5 text-slate-900 dark:text-white font-sans font-bold">{report.device_name}</td>
-                      <td className="p-2.5 text-slate-600 dark:text-slate-300">{report.ip}</td>
-                      <td className="p-2.5 text-cyan-600 dark:text-cyan-400 font-bold">{report.active_ports} / {report.total_ports}</td>
-                      <td className="p-2.5 text-purple-600 dark:text-purple-400 font-bold">{report.onus_found}</td>
-                      <td className="p-2.5 text-amber-600 dark:text-amber-400 font-bold">{report.uncfg_found}</td>
-                      <td className="p-2.5 text-slate-700 dark:text-slate-300">{report.duration_ms} ms</td>
-                      <td className="p-2.5">
-                        <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
-                          report.status === 'SUCCESS'
-                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
-                            : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
-                        }`}>
-                          {report.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {worker.device_reports.map((report, idx) => {
+                    const isSyncingNow = report.querying_status === 'SYNCING';
+                    const hasPort = Boolean(report.active_querying_port);
+
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
+                        <td className="p-2.5 text-slate-900 dark:text-white font-sans font-bold">{report.device_name}</td>
+                        <td className="p-2.5 text-slate-600 dark:text-slate-300">{report.ip}</td>
+                        
+                        {/* Port Sedang Di-Query Realtime dengan Pulse Animation */}
+                        <td className="p-2.5">
+                          {isSyncingNow && hasPort ? (
+                            <div className="inline-flex items-center gap-1.5 font-bold font-mono text-xs text-cyan-600 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/80 px-2.5 py-1 rounded-lg border border-cyan-300 dark:border-cyan-700/80 shadow-xs animate-pulse">
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                              </span>
+                              <span>{report.active_querying_port}</span>
+                              <span className="text-[9px] uppercase tracking-wider text-cyan-500 font-black">(Querying...)</span>
+                            </div>
+                          ) : hasPort ? (
+                            <div className="inline-flex items-center gap-1.5 font-bold font-mono text-xs text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span>{report.active_querying_port}</span>
+                              <span className="text-[9px] text-emerald-500 font-semibold">(Selesai)</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px] italic font-sans">Standby</span>
+                          )}
+                        </td>
+
+                        <td className="p-2.5 text-cyan-600 dark:text-cyan-400 font-bold">{report.active_ports} / {report.total_ports}</td>
+                        <td className="p-2.5 text-purple-600 dark:text-purple-400 font-bold">{report.onus_found}</td>
+                        <td className="p-2.5 text-amber-600 dark:text-amber-400 font-bold">{report.uncfg_found}</td>
+                        <td className="p-2.5 text-slate-700 dark:text-slate-300">{report.duration_ms} ms</td>
+                        <td className="p-2.5">
+                          <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                            report.status === 'SUCCESS'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                          }`}>
+                            {report.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
         )}
 
-        {/* ── LIVE ACTIVITY LOG & REQUEST STREAM CONSOLE (BARU) ── */}
+        {/* ── LIVE ACTIVITY LOG & REQUEST STREAM CONSOLE ── */}
         <div className="pt-2">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-2.5">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
                 Live Request Stream &amp; Activity Log Worker (Real-Time):
               </span>
+              <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                {filteredLogs.length} / {workerLogs.length} Baris
+              </span>
             </div>
 
-            {/* Filter OLT */}
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-400 text-[11px] font-semibold">Filter OLT:</span>
+            {/* Filter Bar & Export Actions */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {/* Search Log Input */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Cari kata kunci log..."
+                  value={logSearchQuery}
+                  onChange={(e) => setLogSearchQuery(e.target.value)}
+                  className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg pl-7 pr-2.5 py-1 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 w-36 sm:w-44"
+                />
+                <svg className="w-3.5 h-3.5 absolute left-2 top-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+
+              {/* Filter Level */}
+              <select
+                value={selectedLogLevelFilter}
+                onChange={(e) => setSelectedLogLevelFilter(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-2 py-1 font-bold focus:outline-none"
+              >
+                <option value="ALL">Semua Level</option>
+                <option value="SUCCESS">SUCCESS</option>
+                <option value="SYNCING">SYNCING</option>
+                <option value="INFO">INFO</option>
+                <option value="EMPTY">EMPTY / STANDBY</option>
+                <option value="ERROR">ERROR</option>
+              </select>
+
+              {/* Filter OLT */}
               <select
                 value={selectedOltLogFilter}
                 onChange={(e) => setSelectedOltLogFilter(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-2.5 py-1 font-bold focus:outline-none"
+                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-2 py-1 font-bold focus:outline-none"
               >
-                <option value="ALL">Semua OLT ({workerLogs.length})</option>
+                <option value="ALL">Semua OLT</option>
                 {uniqueOltNames.map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
+
+              {/* Clear Log Button */}
+              <button
+                onClick={handleClearLogs}
+                disabled={isClearingLogs}
+                className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50"
+                title="Bersihkan riwayat live log worker"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Clear Log</span>
+              </button>
+
+              {/* Export Log Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowExportDropdown(!showExportDropdown)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all flex items-center gap-1"
+                  title="Ekspor log ke CSV atau Text file"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  <span>Ekspor</span>
+                  <svg className="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {showExportDropdown && (
+                  <div className="absolute right-0 mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg z-30 py-1 font-sans text-xs">
+                    <button
+                      onClick={() => handleExportLogs('csv')}
+                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center gap-2"
+                    >
+                      <span className="font-bold text-emerald-600">CSV</span>
+                      <span>Format Spreadsheet</span>
+                    </button>
+                    <button
+                      onClick={() => handleExportLogs('txt')}
+                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center gap-2"
+                    >
+                      <span className="font-bold text-indigo-600">TXT</span>
+                      <span>Format Plain Text</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -925,7 +1289,7 @@ export default function ServerMonitoring() {
           >
             {filteredLogs.length === 0 ? (
               <div className="flex items-center justify-center h-full text-slate-500 italic">
-                Belum ada log aktivitas worker... (Menunggu siklus polling berikutnya)
+                Belum ada log aktivitas worker sesuai filter... (Menunggu siklus polling berikutnya)
               </div>
             ) : (
               filteredLogs.map((log) => {

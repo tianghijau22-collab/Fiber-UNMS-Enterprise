@@ -100,6 +100,109 @@ class ServerMonitoringController extends Controller
     }
 
     /**
+     * Restart background daemon service (fiber-telemetry-daemon.service) langsung dari web
+     */
+    public function restartDaemon()
+    {
+        try {
+            $output = [];
+            $exitCode = 0;
+            exec('sudo -n /usr/bin/systemctl restart fiber-telemetry-daemon 2>&1', $output, $exitCode);
+            if ($exitCode !== 0) {
+                exec('sudo -n /bin/systemctl restart fiber-telemetry-daemon 2>&1', $output, $exitCode);
+            }
+
+            $success = ($exitCode === 0);
+            $msg = $success ? 'Fiber Telemetry Daemon 24/7 berhasil di-restart!' : ('Gagal restart daemon: ' . implode(' ', $output));
+
+            \App\Console\Commands\PollOltTelemetry::appendWorkerLog(
+                'SYSTEM',
+                'DAEMON',
+                $success ? 'INFO' : 'ERROR',
+                $success ? 'Daemon 24/7 di-restart oleh admin melalui antarmuka web' : "Gagal restart daemon: {$msg}"
+            );
+
+            return response()->json([
+                'status'  => $success ? 'success' : 'error',
+                'message' => $msg,
+                'output'  => $output,
+            ], $success ? 200 : 500);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Error restarting daemon: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Pause / Resume status worker loop
+     */
+    public function togglePauseWorker(Request $request)
+    {
+        $isPaused = (bool)Cache::get('backend_worker_paused', false);
+        $newPaused = !$isPaused;
+        Cache::put('backend_worker_paused', $newPaused, 86400 * 30);
+
+        \App\Console\Commands\PollOltTelemetry::appendWorkerLog(
+            'SYSTEM',
+            'DAEMON',
+            'INFO',
+            $newPaused ? 'Worker polling dijeda oleh pengguna (Paused)' : 'Worker polling dilanjutkan kembali (Resumed)'
+        );
+
+        return response()->json([
+            'status'    => 'success',
+            'is_paused' => $newPaused,
+            'message'   => $newPaused ? 'Worker berhasil dijeda (Paused).' : 'Worker berhasil dilanjutkan (Resumed).',
+        ]);
+    }
+
+    /**
+     * Mengubah interval jeda siklus loop worker (1 - 60 detik)
+     */
+    public function setLoopDelay(Request $request)
+    {
+        $delay = (int)($request->input('delay_sec') ?? $request->json('delay_sec') ?? 2);
+        if ($delay < 1) $delay = 1;
+        if ($delay > 60) $delay = 60;
+
+        Cache::put('backend_worker_loop_delay_sec', $delay, 86400 * 30);
+
+        \App\Console\Commands\PollOltTelemetry::appendWorkerLog(
+            'SYSTEM',
+            'CONFIG',
+            'INFO',
+            "Interval jeda antar siklus diubah menjadi {$delay} detik"
+        );
+
+        return response()->json([
+            'status'    => 'success',
+            'delay_sec' => $delay,
+            'message'   => "Interval jeda per siklus berhasil diatur ke {$delay} detik.",
+        ]);
+    }
+
+    /**
+     * Membersihkan riwayat live activity logs di Cache
+     */
+    public function clearLogs()
+    {
+        Cache::forget('backend_worker_logs');
+        \App\Console\Commands\PollOltTelemetry::appendWorkerLog(
+            'SYSTEM',
+            'LOG',
+            'INFO',
+            'Riwayat Live Log Worker dibersihkan oleh pengguna'
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Riwayat Live Activity Log berhasil dibersihkan.',
+        ]);
+    }
+
+    /**
      * Baca CPU usage real-time melalui /proc/stat dan /proc/cpuinfo
      */
     protected function getCpuMetrics(): array
@@ -479,8 +582,25 @@ class ServerMonitoringController extends Controller
             ? (int)$stats['total_ports_polled'] 
             : 8;
 
+        $isPaused = (bool)Cache::get('backend_worker_paused', false);
+        $loopDelaySec = (int)Cache::get('backend_worker_loop_delay_sec', 2);
+
+        $deviceReports = $stats['device_reports'] ?? [];
+        foreach ($deviceReports as &$report) {
+            $devId = $report['device_id'] ?? null;
+            if ($devId) {
+                $activeQuery = Cache::get("olt_active_querying_port_{$devId}");
+                $report['active_querying_port'] = $activeQuery['port'] ?? null;
+                $report['querying_status'] = $activeQuery['status'] ?? 'STANDBY';
+                $report['querying_timestamp'] = $activeQuery['timestamp'] ?? null;
+            }
+        }
+        unset($report);
+
         return [
-            'status'               => $stats['status'] ?? 'ACTIVE',
+            'status'               => $isPaused ? 'PAUSED' : ($stats['status'] ?? 'ACTIVE'),
+            'is_paused'            => $isPaused,
+            'loop_delay_sec'       => $loopDelaySec,
             'last_run_at'          => $stats['last_run_at'] ?? now()->toIso8601String(),
             'last_run_human'       => $stats['last_run_human'] ?? now()->format('d M Y, H:i:s'),
             'seconds_ago'          => $secondsAgo,
@@ -492,7 +612,7 @@ class ServerMonitoringController extends Controller
             'total_ports_polled'   => $totalPorts,
             'total_onus_polled'    => $totalOnus,
             'total_uncfg_detected' => $stats['total_uncfg_detected'] ?? 0,
-            'device_reports'       => $stats['device_reports'] ?? [],
+            'device_reports'       => $deviceReports,
             'history'              => $history,
             'logs'                 => Cache::get('backend_worker_logs', []),
         ];

@@ -87,6 +87,10 @@ Route::get('/monitoring/router/live-metrics', [LiveMonitorController::class, 'ge
 Route::get('/monitoring/olt/{id}/live-telemetry', [LiveMonitorController::class, 'getOltTelemetry']);
 Route::get('/server-monitoring/metrics', [ServerMonitoringController::class, 'getMetrics']);
 Route::post('/server-monitoring/trigger-polling', [ServerMonitoringController::class, 'triggerPolling']);
+Route::post('/server-monitoring/worker/restart', [ServerMonitoringController::class, 'restartDaemon']);
+Route::post('/server-monitoring/worker/pause-resume', [ServerMonitoringController::class, 'togglePauseWorker']);
+Route::post('/server-monitoring/worker/set-interval', [ServerMonitoringController::class, 'setLoopDelay']);
+Route::post('/server-monitoring/worker/clear-logs', [ServerMonitoringController::class, 'clearLogs']);
 Route::post('/monitoring/ping-sweep', [LiveMonitorController::class, 'pingSweep']);
 
 // OTDR Fault Tracing Engine

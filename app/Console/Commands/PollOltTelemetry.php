@@ -31,6 +31,14 @@ class PollOltTelemetry extends Command
             self::appendWorkerLog('SYSTEM', 'DAEMON', 'INFO', "Daemon 24/7 continuous loop dimulai.");
 
             while (true) {
+                $isPaused = (bool)Cache::get('backend_worker_paused', false);
+                $loopDelay = (int)Cache::get('backend_worker_loop_delay_sec', 2);
+
+                if ($isPaused) {
+                    sleep(2);
+                    continue;
+                }
+
                 try {
                     $this->dispatchSinglePortParallel($oltCtrl);
                 } catch (\Throwable $e) {
@@ -38,8 +46,8 @@ class PollOltTelemetry extends Command
                     self::appendWorkerLog('SYSTEM', 'DAEMON', 'ERROR', "Daemon loop error: " . $e->getMessage());
                 }
 
-                // Jeda 2 detik sebelum melanjutkan ke port berikutnya pada seluruh OLT
-                sleep(2);
+                // Jeda sesuai konfigurasi interval (default 2 detik)
+                sleep(max(1, $loopDelay));
             }
             return 0;
         }
@@ -269,12 +277,29 @@ class PollOltTelemetry extends Command
                 Cache::put($cursorKey, $nextCursor, 86400);
             }
 
+            // Catat port yang sedang di-query real-time untuk pulse indicator di UI
+            Cache::put("olt_active_querying_port_{$device->id}", [
+                'port'       => $targetPortId,
+                'status'     => 'SYNCING',
+                'timestamp'  => now()->format('H:i:s'),
+                'started_at' => microtime(true),
+            ], 60);
+
             self::appendWorkerLog($device->name, $targetPortId, 'SYNCING', "Tahap 3: Query SNMP HANYA pada port {$targetPortId}...");
 
             // Query SNMP MURNI HANYA untuk 1 Port PON ini
             $portStart = microtime(true);
             $portOnus = $driver->getOnuListByPort($targetPortId);
             $portDuration = round((microtime(true) - $portStart) * 1000, 1);
+
+            // Update status port selesai di-query
+            Cache::put("olt_active_querying_port_{$device->id}", [
+                'port'        => $targetPortId,
+                'status'      => !empty($portOnus) ? 'SUCCESS' : 'EMPTY',
+                'onu_count'   => count($portOnus),
+                'duration_ms' => $portDuration,
+                'timestamp'   => now()->format('H:i:s'),
+            ], 60);
 
             // Update Database Inkremental untuk Port PON ini
             $existingOnus = $existingSnapshot['onu_list'] ?? [];
