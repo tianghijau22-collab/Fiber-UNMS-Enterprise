@@ -476,17 +476,15 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
                     return $onus;
                 }
+
+                // Port ini kosong (tidak ada ONU fisik)
+                return [];
             } catch (\Exception $e) {
-                // Fallback
+                return [];
             }
         }
 
-        // Fallback filter
-        $all = $this->getOnuList();
-        return array_values(array_filter($all, function ($onu) use ($normalizedPort) {
-            $p = strtolower($onu['port'] ?? '');
-            return str_contains($p, $normalizedPort) || str_contains($normalizedPort, $p);
-        }));
+        return [];
     }
 
     public function getUnconfiguredOnus(): array
