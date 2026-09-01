@@ -586,13 +586,55 @@ class ServerMonitoringController extends Controller
         $loopDelaySec = (int)Cache::get('backend_worker_loop_delay_sec', 2);
 
         $deviceReports = $stats['device_reports'] ?? [];
+        if (empty($deviceReports)) {
+            $activeDevs = \App\Models\OltDevice::where('status', 'active')->get();
+            foreach ($activeDevs as $d) {
+                $deviceReports[] = [
+                    'device_id'   => $d->id,
+                    'device_name' => $d->name,
+                    'ip'          => $d->ip_address,
+                    'vendor'      => $d->vendor,
+                    'duration_ms' => 0,
+                    'status'      => 'SUCCESS',
+                    'timestamp'   => now()->format('H:i:s'),
+                ];
+            }
+        }
+        $totalUncfgSum = 0;
+        $totalRegisteredSum = 0;
+
         foreach ($deviceReports as &$report) {
             $devId = $report['device_id'] ?? null;
             if ($devId) {
+                $dev = \App\Models\OltDevice::find($devId);
+                $snapshot = $dev?->last_telemetry_snapshot ?? [];
+                $allOnus  = $snapshot['onu_list'] ?? [];
+                $uncfg    = $snapshot['unconfigured_onus'] ?? [];
+                $ponPorts = $snapshot['pon_ports'] ?? [];
+
+                $activeCount = count(array_filter($ponPorts, fn($p) => ($p['status'] ?? '') === 'Up' || ($p['registered_onus'] ?? 0) > 0));
+                
+                $regCount = count($allOnus);
+                $uncfgCount = count($uncfg);
+                $onlineCount = count(array_filter($allOnus, fn($o) => ($o['status'] ?? '') === 'Online' || ($o['status'] ?? '') === 'active'));
+
+                $report['total_ports']           = count($ponPorts) ?: ($report['total_ports'] ?? 0);
+                $report['active_ports']          = $activeCount ?: ($report['active_ports'] ?? 0);
+                $report['db_registered_total']   = $regCount;
+                $report['db_registered_online']  = $onlineCount;
+                $report['db_unregistered_total'] = $uncfgCount;
+                $report['onus_found']            = $regCount;
+                $report['uncfg_found']           = $uncfgCount;
+
+                $totalRegisteredSum += $regCount;
+                $totalUncfgSum += $uncfgCount;
+
                 $activeQuery = Cache::get("olt_active_querying_port_{$devId}");
-                $report['active_querying_port'] = $activeQuery['port'] ?? null;
-                $report['querying_status'] = $activeQuery['status'] ?? 'STANDBY';
-                $report['querying_timestamp'] = $activeQuery['timestamp'] ?? null;
+                $report['active_querying_port']  = $activeQuery['port'] ?? ($report['last_port_polled'] ?? null);
+                $report['last_port_polled']      = $activeQuery['port'] ?? ($report['last_port_polled'] ?? null);
+                $report['last_port_onu_count']   = $activeQuery['onu_count'] ?? 0;
+                $report['querying_status']       = $activeQuery['status'] ?? 'STANDBY';
+                $report['querying_timestamp']    = $activeQuery['timestamp'] ?? null;
             }
         }
         unset($report);
@@ -610,8 +652,8 @@ class ServerMonitoringController extends Controller
             'throttling_delay_ms'  => $stats['throttling_delay_ms'] ?? 15,
             'total_devices'        => $stats['total_devices'] ?? \App\Models\OltDevice::where('status', 'active')->count(),
             'total_ports_polled'   => $totalPorts,
-            'total_onus_polled'    => $totalOnus,
-            'total_uncfg_detected' => $stats['total_uncfg_detected'] ?? 0,
+            'total_onus_polled'    => $totalRegisteredSum > 0 ? $totalRegisteredSum : $totalOnus,
+            'total_uncfg_detected' => $totalUncfgSum > 0 ? $totalUncfgSum : ($stats['total_uncfg_detected'] ?? 0),
             'device_reports'       => $deviceReports,
             'history'              => $history,
             'logs'                 => Cache::get('backend_worker_logs', []),

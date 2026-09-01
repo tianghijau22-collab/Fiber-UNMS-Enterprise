@@ -91,6 +91,7 @@ class PollOltTelemetry extends Command
         $deviceReports = [];
         $totalPortsPolled = 0;
         $totalOnusPolled = 0;
+        $totalUncfgPolled = 0;
 
         while (count($processes) > 0) {
             foreach ($processes as $id => $item) {
@@ -114,25 +115,34 @@ class PollOltTelemetry extends Command
                     $activePorts = count(array_filter($ponPorts, fn($p) => ($p['status'] ?? '') === 'Up' || ($p['registered_onus'] ?? 0) > 0));
                     $onusCount   = count($allOnus);
                     $uncfgCount  = count($uncfg);
+                    $onlineCount = count(array_filter($allOnus, fn($o) => ($o['status'] ?? '') === 'Online' || ($o['status'] ?? '') === 'active'));
+
+                    $activeQuery = Cache::get("olt_active_querying_port_{$dev->id}");
 
                     $isSuccess = $proc->isSuccessful();
                     $statusStr = $isSuccess ? 'SUCCESS' : ('FAILED: ' . ($errorOutput ?: 'Process error'));
 
                     $totalPortsPolled += $activePorts;
                     $totalOnusPolled += $onusCount;
+                    $totalUncfgPolled += $uncfgCount;
 
                     $deviceReports[] = [
-                        'device_id'     => $dev->id,
-                        'device_name'   => $dev->name,
-                        'ip'            => $dev->ip_address,
-                        'vendor'        => $dev->vendor,
-                        'total_ports'   => count($ponPorts),
-                        'active_ports'  => $activePorts,
-                        'onus_found'    => $onusCount,
-                        'uncfg_found'   => $uncfgCount,
-                        'duration_ms'   => $durationMs,
-                        'status'        => $statusStr,
-                        'timestamp'     => now()->format('H:i:s'),
+                        'device_id'             => $dev->id,
+                        'device_name'           => $dev->name,
+                        'ip'                    => $dev->ip_address,
+                        'vendor'                => $dev->vendor,
+                        'total_ports'           => count($ponPorts),
+                        'active_ports'          => $activePorts,
+                        'db_registered_total'   => $onusCount,
+                        'db_registered_online'  => $onlineCount,
+                        'db_unregistered_total' => $uncfgCount,
+                        'last_port_polled'      => $activeQuery['port'] ?? null,
+                        'last_port_onu_count'   => $activeQuery['onu_count'] ?? 0,
+                        'onus_found'            => $onusCount,
+                        'uncfg_found'           => $uncfgCount,
+                        'duration_ms'           => $durationMs,
+                        'status'                => $statusStr,
+                        'timestamp'             => now()->format('H:i:s'),
                     ];
 
                     unset($processes[$id]);
@@ -157,7 +167,7 @@ class PollOltTelemetry extends Command
             'total_devices'        => count($devices),
             'total_ports_polled'   => $totalPortsPolled > 0 ? $totalPortsPolled : ($prevStats['total_ports_polled'] ?? 8),
             'total_onus_polled'    => $totalOnusPolled > 0 ? $totalOnusPolled : ($prevStats['total_onus_polled'] ?? \App\Models\OntRegistration::count()),
-            'total_uncfg_detected' => 0,
+            'total_uncfg_detected' => $totalUncfgPolled,
             'device_reports'       => $deviceReports,
         ];
 
@@ -171,7 +181,7 @@ class PollOltTelemetry extends Command
             'devices'     => count($devices),
             'ports'       => $workerStats['total_ports_polled'],
             'onus'        => $workerStats['total_onus_polled'],
-            'uncfg'       => 0,
+            'uncfg'       => $totalUncfgPolled,
             'status'      => 'OK',
         ];
         if (count($cycleHistory) > 15) {

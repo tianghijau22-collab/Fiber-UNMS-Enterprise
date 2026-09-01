@@ -1047,7 +1047,8 @@ export default function ServerMonitoring() {
         )}
 
         {/* Worker Telemetry KPI Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+        {/* Worker Telemetry KPI Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase">Jeda Siklus (Loop)</span>
             <div className="font-mono text-sm font-black text-emerald-600 dark:text-emerald-400">
@@ -1081,19 +1082,19 @@ export default function ServerMonitoring() {
           </div>
 
           <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Port PON Disinkron</span>
-            <div className="font-mono text-sm font-black text-cyan-600 dark:text-cyan-400">
-              {worker.total_ports_polled ?? 0} Port
-            </div>
-            <p className="text-[10px] text-slate-500">Port Status UP</p>
-          </div>
-
-          <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase">Total ONU Disinkron</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase">ONU Terdaftar (DB)</span>
             <div className="font-mono text-sm font-black text-purple-600 dark:text-purple-400">
               {worker.total_onus_polled ?? 0} ONU
             </div>
-            <p className="text-[10px] text-slate-500">Terdaftar &amp; Terbaca</p>
+            <p className="text-[10px] text-slate-500">Database Pelanggan UNMS</p>
+          </div>
+
+          <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">Modem Belum Terdaftar</span>
+            <div className="font-mono text-sm font-black text-amber-500 dark:text-amber-400">
+              {worker.total_uncfg_detected ?? 0} Modem
+            </div>
+            <p className="text-[10px] text-slate-500">Fisik OLT / Unconfigured</p>
           </div>
         </div>
 
@@ -1106,7 +1107,7 @@ export default function ServerMonitoring() {
               </span>
               <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-                Kolom biru menunjukkan port yang sedang di-query detik ini
+                Data di bawah tersimpan di Database Snapshot &amp; diperbarui otomatis per siklus
               </span>
             </div>
             <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl">
@@ -1117,9 +1118,10 @@ export default function ServerMonitoring() {
                     <th className="p-2.5">IP Address</th>
                     <th className="p-2.5">Port Sedang Di-Query Detik Ini</th>
                     <th className="p-2.5">Port Aktif / Total</th>
-                    <th className="p-2.5">ONU Ditemukan</th>
-                    <th className="p-2.5">Uncfg Baru</th>
-                    <th className="p-2.5">Durasi Eksekusi</th>
+                    <th className="p-2.5">ONU Terdaftar di DB (UNMS)</th>
+                    <th className="p-2.5">ONU Belum Terdaftar (Uncfg)</th>
+                    <th className="p-2.5">Hasil Port Terakhir</th>
+                    <th className="p-2.5">Durasi</th>
                     <th className="p-2.5">Status</th>
                   </tr>
                 </thead>
@@ -1156,8 +1158,47 @@ export default function ServerMonitoring() {
                         </td>
 
                         <td className="p-2.5 text-cyan-600 dark:text-cyan-400 font-bold">{report.active_ports} / {report.total_ports}</td>
-                        <td className="p-2.5 text-purple-600 dark:text-purple-400 font-bold">{report.onus_found}</td>
-                        <td className="p-2.5 text-amber-600 dark:text-amber-400 font-bold">{report.uncfg_found}</td>
+                        
+                        {/* Kolom 1: Total ONU Terdaftar di DB UNMS */}
+                        <td className="p-2.5">
+                          <div className="flex flex-col">
+                            <span className="text-purple-600 dark:text-purple-400 font-bold text-xs">
+                              {report.db_registered_total ?? report.onus_found ?? 0} ONU
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-sans">
+                              Tersimpan di DB Pelanggan
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Kolom 2: Total Modem Belum Terdaftar (Unconfigured) */}
+                        <td className="p-2.5">
+                          <div className="flex flex-col">
+                            <span className={`font-bold text-xs ${(report.db_unregistered_total ?? report.uncfg_found ?? 0) > 0 ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400'}`}>
+                              {report.db_unregistered_total ?? report.uncfg_found ?? 0} Modem
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-sans">
+                              Fisik OLT (Menunggu Registrasi)
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Kolom 3: Hasil Query Port Terakhir */}
+                        <td className="p-2.5">
+                          {report.last_port_polled ? (
+                            <div className="flex flex-col">
+                              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs">
+                                {report.last_port_polled}
+                              </span>
+                              <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">
+                                {report.last_port_onu_count ?? 0} ONU Terbaca
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px] italic font-sans">—</span>
+                          )}
+                        </td>
+
                         <td className="p-2.5 text-slate-700 dark:text-slate-300">{report.duration_ms} ms</td>
                         <td className="p-2.5">
                           <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
