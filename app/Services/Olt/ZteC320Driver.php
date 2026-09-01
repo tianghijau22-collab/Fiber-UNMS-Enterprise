@@ -109,32 +109,6 @@ class ZteC320Driver implements OltDeviceDriverInterface
             return $this->cachedPonPorts;
         }
 
-        // Dapatkan hitungan ONU per port secara realtime via fast walk (0.2s)
-        $onuCountByPort = [];
-        $onlineCountByPort = [];
-
-        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
-            try {
-                $snTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
-                if (empty($snTable)) {
-                    $snTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
-                }
-                foreach ($snTable as $oid => $val) {
-                    $parts = explode('.', $oid);
-                    if (count($parts) >= 2) {
-                        $ifIndex = (int)$parts[count($parts) - 2];
-                        $slot = ($ifIndex >> 16) & 0xFF;
-                        $port = ($ifIndex >> 8) & 0xFF;
-                        if ($slot > 0 && $port > 0) {
-                            $portKey = "gpon-olt_1/{$slot}/{$port}";
-                            $onuCountByPort[$portKey] = ($onuCountByPort[$portKey] ?? 0) + 1;
-                            $onlineCountByPort[$portKey] = ($onlineCountByPort[$portKey] ?? 0) + 1;
-                        }
-                    }
-                }
-            } catch (\Exception $e) {}
-        }
-
         $cards = $this->getChassisCards();
         $ports = [];
 
@@ -402,9 +376,22 @@ class ZteC320Driver implements OltDeviceDriverInterface
             try {
                 $ifIndex = (0x10 << 24) | ($slotNum << 16) | ($portNum << 8);
 
-                $snHexList = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.3.{$ifIndex}") ?: [];
-                if (empty($snHexList)) {
-                    $snHexList = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.28.1.1.5.{$ifIndex}") ?: [];
+                // Gabungkan kedua OID SN resmi ZTE (GPON Extended & Global Registration)
+                $snHexList1 = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.3.{$ifIndex}") ?: [];
+                $snHexList2 = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.28.1.1.5.{$ifIndex}") ?: [];
+
+                $snHexList = [];
+                foreach ($snHexList1 as $oid => $val) {
+                    $parts = explode('.', $oid);
+                    $onuId = end($parts);
+                    $snHexList[$onuId] = $val;
+                }
+                foreach ($snHexList2 as $oid => $val) {
+                    $parts = explode('.', $oid);
+                    $onuId = end($parts);
+                    if (!isset($snHexList[$onuId])) {
+                        $snHexList[$onuId] = $val;
+                    }
                 }
 
                 if (!empty($snHexList)) {
@@ -440,10 +427,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     }
 
                     $onus = [];
-                    foreach ($snHexList as $oid => $hexVal) {
-                        $parts = explode('.', $oid);
-                        $onuId = end($parts);
-
+                    foreach ($snHexList as $onuId => $hexVal) {
                         $sn = $this->parseZteSerialNumber((string)$hexVal);
                         if (empty($sn) || $sn === '00000000' || strlen($sn) < 6 || preg_match('/^0+$/', $sn)) {
                             continue;
