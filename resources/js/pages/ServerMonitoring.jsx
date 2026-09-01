@@ -1118,9 +1118,9 @@ export default function ServerMonitoring() {
                     <th className="p-2.5">IP Address</th>
                     <th className="p-2.5">Port Sedang Di-Query Detik Ini</th>
                     <th className="p-2.5">Port Aktif / Total</th>
-                    <th className="p-2.5">ONU Terdaftar di DB (UNMS)</th>
-                    <th className="p-2.5">ONU Belum Terdaftar (Uncfg)</th>
-                    <th className="p-2.5">Hasil Port Terakhir</th>
+                    <th className="p-2.5">Total ONU Terdaftar (DB)</th>
+                    <th className="p-2.5">Total Belum Terdaftar (DB)</th>
+                    <th className="p-2.5">Hasil Port Terakhir (SNMP)</th>
                     <th className="p-2.5">Durasi</th>
                     <th className="p-2.5">Status</th>
                   </tr>
@@ -1171,14 +1171,14 @@ export default function ServerMonitoring() {
                           </div>
                         </td>
 
-                        {/* Kolom 2: Total Modem Belum Terdaftar (Unconfigured) */}
+                        {/* Kolom 2: Total Modem Belum Terdaftar (Akumulasi DB) */}
                         <td className="p-2.5">
                           <div className="flex flex-col">
                             <span className={`font-bold text-xs ${(report.db_unregistered_total ?? report.uncfg_found ?? 0) > 0 ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400'}`}>
                               {report.db_unregistered_total ?? report.uncfg_found ?? 0} Modem
                             </span>
                             <span className="text-[9px] text-slate-400 font-sans">
-                              Fisik OLT (Menunggu Registrasi)
+                              Akumulasi Database (Semua Port)
                             </span>
                           </div>
                         </td>

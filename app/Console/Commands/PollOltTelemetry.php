@@ -311,22 +311,34 @@ class PollOltTelemetry extends Command
                 'timestamp'   => now()->format('H:i:s'),
             ], 60);
 
-            // Update Database Inkremental untuk Port PON ini
-            $existingOnus = $existingSnapshot['onu_list'] ?? [];
-            $onuMap = [];
-            foreach ($existingOnus as $o) {
-                if (isset($o['serial_number'])) {
-                    $onuMap[$o['serial_number']] = $o;
+            // 1. Ambil data fisik ONU yang sudah tersimpan sebelumnya (baik Registered maupun Unconfigured)
+            $existingRegistered   = $existingSnapshot['onu_list'] ?? [];
+            $existingUnconfigured = $existingSnapshot['unconfigured_onus'] ?? [];
+
+            $physicalOnuMap = [];
+            foreach (array_merge($existingRegistered, $existingUnconfigured) as $o) {
+                $sn = strtoupper(trim((string)($o['serial_number'] ?? ($o['mac_address'] ?? ''))));
+                if (!empty($sn)) {
+                    $physicalOnuMap[$sn] = $o;
                 }
             }
 
-            // Perbarui data ONU untuk port ini
+            // 2. Hapus entri lama khusus port yang sedang di-query (agar data port ini benar-benar fresh)
+            foreach ($physicalOnuMap as $sn => $o) {
+                $p = strtolower($o['port'] ?? ($o['detected_port'] ?? ''));
+                $targetClean = strtolower($targetPortId);
+                if ($p === $targetClean || str_contains($p, $targetClean) || str_contains($targetClean, $p)) {
+                    unset($physicalOnuMap[$sn]);
+                }
+            }
+
+            // 3. Masukkan data ONU segar hasil pembacaan port PON saat ini
             if (!empty($portOnus)) {
                 foreach ($portOnus as $onuData) {
-                    $sn = $onuData['serial_number'] ?? null;
+                    $sn = strtoupper(trim((string)($onuData['serial_number'] ?? ($onuData['mac_address'] ?? ''))));
                     if (!$sn) continue;
 
-                    $onuMap[$sn] = $onuData;
+                    $physicalOnuMap[$sn] = $onuData;
                     $newStatus = ($onuData['status'] === 'Online') ? 'active' : 'inactive';
                     $newRx     = $onuData['rx_power'] ?? null;
                     $newTx     = $onuData['tx_power'] ?? null;
@@ -361,20 +373,22 @@ class PollOltTelemetry extends Command
                         ]);
                     }
                 }
+            }
 
-                // Update snapshot database langsung dengan data Slot/Card & Port/SFP terbaru
-                $deviceInfo = $existingSnapshot['device_info'] ?? $driver->getDeviceInfo();
-                if (!empty($cards)) {
-                    $deviceInfo['cards'] = $cards;
-                }
-                
-                $finalSnapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $allPonPorts, array_values($onuMap), []);
-                
-                $device->update([
-                    'last_telemetry_snapshot' => $finalSnapshot,
-                    'last_connected_at'       => now(),
-                ]);
+            // 4. Update snapshot database langsung dengan seluruh akumulasi ONU dari semua port
+            $deviceInfo = $existingSnapshot['device_info'] ?? $driver->getDeviceInfo();
+            if (!empty($cards)) {
+                $deviceInfo['cards'] = $cards;
+            }
+            
+            $finalSnapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $allPonPorts, array_values($physicalOnuMap), []);
+            
+            $device->update([
+                'last_telemetry_snapshot' => $finalSnapshot,
+                'last_connected_at'       => now(),
+            ]);
 
+            if (!empty($portOnus)) {
                 self::appendWorkerLog(
                     $device->name,
                     $targetPortId,
