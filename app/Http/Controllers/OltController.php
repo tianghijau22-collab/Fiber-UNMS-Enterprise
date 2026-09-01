@@ -96,59 +96,73 @@ class OltController extends Controller
         // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh
         if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
             $rawSnapshot = $device->last_telemetry_snapshot;
-            $rawPonPorts = !empty($rawSnapshot['pon_ports']) ? $rawSnapshot['pon_ports'] : $this->getDriver($vendor, $device?->id)->getPonPorts();
-            $rawDevInfo  = !empty($rawSnapshot['device_info']) ? $rawSnapshot['device_info'] : $this->getDriver($vendor, $device?->id)->getDeviceInfo();
+            $rawPonPorts = !empty($rawSnapshot['pon_ports']) ? $rawSnapshot['pon_ports'] : [];
+            $rawDevInfo  = !empty($rawSnapshot['device_info']) ? $rawSnapshot['device_info'] : [];
+            $rawOnuList  = $rawSnapshot['onu_list'] ?? [];
+            $rawUncfg    = $rawSnapshot['unconfigured_onus'] ?? [];
 
-            if ($summaryOnly) {
-                // Perkaya pon_ports dengan unconfigured_onus yang ada di snapshot database
-                $allUncfg = $rawSnapshot['unconfigured_onus'] ?? [];
-                $uncfgCountByPort = [];
-                foreach ($allUncfg as $u) {
-                    $p = strtolower($u['detected_port'] ?? ($u['port'] ?? ''));
-                    $uncfgCountByPort[$p] = ($uncfgCountByPort[$p] ?? 0) + 1;
+            // Perkaya pon_ports dengan hitungan dari snapshot database
+            $uncfgCountByPort = [];
+            foreach ($rawUncfg as $u) {
+                $p = strtolower($u['detected_port'] ?? ($u['port'] ?? ''));
+                $uncfgCountByPort[$p] = ($uncfgCountByPort[$p] ?? 0) + 1;
+            }
+
+            $regCountByPort = [];
+            $onlineCountByPort = [];
+            foreach ($rawOnuList as $o) {
+                $p = strtolower($o['port'] ?? '');
+                $regCountByPort[$p] = ($regCountByPort[$p] ?? 0) + 1;
+                if (in_array(strtolower($o['status'] ?? ''), ['online', 'active'])) {
+                    $onlineCountByPort[$p] = ($onlineCountByPort[$p] ?? 0) + 1;
+                }
+            }
+
+            $enrichedPorts = array_map(function ($port) use ($uncfgCountByPort, $regCountByPort, $onlineCountByPort) {
+                $portId = strtolower($port['port_id'] ?? '');
+                $uncfgCount = 0;
+                foreach ($uncfgCountByPort as $pKey => $c) {
+                    if ($this->portsMatch($portId, $pKey)) {
+                        $uncfgCount += $c;
+                    }
+                }
+                $regCount = $port['registered_onus'] ?? 0;
+                foreach ($regCountByPort as $pKey => $c) {
+                    if ($this->portsMatch($portId, $pKey)) {
+                        $regCount = max($regCount, $c);
+                    }
+                }
+                $onlineCount = $port['online_onus'] ?? 0;
+                foreach ($onlineCountByPort as $pKey => $c) {
+                    if ($this->portsMatch($portId, $pKey)) {
+                        $onlineCount = max($onlineCount, $c);
+                    }
                 }
 
-                $enrichedPorts = array_map(function ($port) use ($uncfgCountByPort) {
-                    $portId = strtolower($port['port_id'] ?? '');
-                    $uncfgCount = 0;
-                    foreach ($uncfgCountByPort as $pKey => $c) {
-                        if ($this->portsMatch($portId, $pKey)) {
-                            $uncfgCount += $c;
-                        }
-                    }
-                    $totalOnus = ($port['registered_onus'] ?? 0) + $uncfgCount;
-                    $isUp = $totalOnus > 0;
-                    $isClassCpp = str_contains($port['sfp_class'] ?? '', 'C++') || ($port['slot'] ?? 0) === 7;
-                    $sfpClass = $isClassCpp ? 'Class C++' : 'Class C+';
-                    $sfpVendor = $port['sfp_vendor'] ?? ($isUp ? 'Hisense / ZTE' : '—');
-                    $sfpPower = $isUp ? ($isClassCpp ? 7.80 : 5.50) : null;
+                $totalOnus = $regCount + $uncfgCount;
+                $isUp = ($port['status'] ?? '') === 'Up' || $totalOnus > 0;
+                $isClassCpp = str_contains($port['sfp_class'] ?? '', 'C++') || ($port['slot'] ?? 0) === 7;
+                $sfpClass = $port['sfp_class'] ?? ($isClassCpp ? 'Class C++' : 'Class C+');
+                $sfpVendor = $port['sfp_vendor'] ?? ($isUp ? 'Hisense / ZTE' : '—');
+                $sfpPower = $port['tx_power_dbm'] ?? ($isUp ? ($isClassCpp ? 7.80 : 5.50) : null);
 
-                    return array_merge($port, [
-                        'status'            => $isUp ? 'Up' : 'Down',
-                        'sfp_class'         => $sfpClass,
-                        'sfp_vendor'        => $sfpVendor,
-                        'tx_power_dbm'      => $sfpPower,
-                        'unconfigured_onus' => $uncfgCount,
-                        'online_onus'       => $isUp ? max($port['online_onus'] ?? 0, $totalOnus) : 0,
-                    ]);
-                }, $rawPonPorts);
-
-                return response()->json([
-                    'device_info'       => $rawDevInfo,
-                    'pon_ports'         => $enrichedPorts,
-                    'onu_list'          => [],
-                    'unconfigured_onus' => [],
-                    'orphaned_onus'     => [],
-                    'polled_at'         => $rawSnapshot['polled_at'] ?? now()->toIso8601String(),
+                return array_merge($port, [
+                    'status'            => $isUp ? 'Up' : 'Down',
+                    'sfp_class'         => $sfpClass,
+                    'sfp_vendor'        => $sfpVendor,
+                    'tx_power_dbm'      => $sfpPower,
+                    'registered_onus'   => $regCount,
+                    'unconfigured_onus' => $uncfgCount,
+                    'online_onus'       => $onlineCount,
                 ]);
-            }
+            }, $rawPonPorts);
 
             $snapshot = $this->processAndPartitionTelemetry(
                 $device,
                 $rawDevInfo,
-                $rawPonPorts,
-                $rawSnapshot['onu_list'] ?? [],
-                $rawSnapshot['unconfigured_onus'] ?? []
+                $enrichedPorts,
+                $rawOnuList,
+                $rawUncfg
             );
             $snapshot['polled_at'] = $rawSnapshot['polled_at'] ?? now()->toIso8601String();
             return response()->json($snapshot);

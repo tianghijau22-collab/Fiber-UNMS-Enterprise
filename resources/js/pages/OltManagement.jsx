@@ -505,10 +505,10 @@ export default function OltManagement() {
     return () => clearInterval(timer);
   }, [activeOlt?.id, activeOlt?.polling_interval_seconds, isAutoPollingPaused]);
 
-  // ─── Fetch OLT Hardware Telemetry via SNMP (Summary Only - Super Ringan) ───
+  // ─── Fetch OLT Hardware Telemetry dari Database Snapshot (Instan < 10ms) ───
   const fetchOltHardware = (vendorKey, deviceId, silent = false, fresh = false) => {
     if (!silent) setLoading(true);
-    const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}&summary_only=1${fresh ? '&fresh=1' : ''}`;
+    const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}${fresh ? '&fresh=1' : ''}`;
     fetch(url)
       .then(r => { if (!r.ok) throw new Error('API ' + r.status); return r.json(); })
       .then(data => {
