@@ -349,29 +349,33 @@ class PollOltTelemetry extends Command
             $physicalOnuMap = [];
             foreach (array_merge($existingRegistered, $existingUnconfigured) as $o) {
                 $sn = strtoupper(trim((string)($o['serial_number'] ?? ($o['mac_address'] ?? ''))));
+                $p  = strtolower(trim((string)($o['port'] ?? ($o['detected_port'] ?? ''))));
                 if (!empty($sn)) {
-                    $physicalOnuMap[$sn] = $o;
+                    $key = $sn . '@' . $p;
+                    $physicalOnuMap[$key] = $o;
                 }
             }
 
-            // 2. Hapus entri lama khusus untuk 4 port yang sedang di-query di batch ini secara PRESISI
-            foreach ($physicalOnuMap as $sn => $o) {
+            // 2. Hapus entri lama khusus untuk port yang sedang di-query di batch ini secara PRESISI
+            foreach ($physicalOnuMap as $key => $o) {
                 $p = $o['port'] ?? ($o['detected_port'] ?? '');
                 foreach ($targetPorts as $tPort) {
                     if ($oltCtrl->portsMatch($p, $tPort)) {
-                        unset($physicalOnuMap[$sn]);
+                        unset($physicalOnuMap[$key]);
                         break;
                     }
                 }
             }
 
-            // 3. Masukkan data ONU segar hasil pembacaan 4 port saat ini
+            // 3. Masukkan data ONU segar hasil pembacaan port saat ini
             if (!empty($batchOnusCombined)) {
                 foreach ($batchOnusCombined as $onuData) {
                     $sn = strtoupper(trim((string)($onuData['serial_number'] ?? ($onuData['mac_address'] ?? ''))));
+                    $p  = strtolower(trim((string)($onuData['port'] ?? ($onuData['detected_port'] ?? ''))));
                     if (!$sn) continue;
 
-                    $physicalOnuMap[$sn] = $onuData;
+                    $key = $sn . '@' . $p;
+                    $physicalOnuMap[$key] = $onuData;
                     $newStatus = ($onuData['status'] === 'Online') ? 'active' : 'inactive';
                     $newRx     = $onuData['rx_power'] ?? null;
                     $newTx     = $onuData['tx_power'] ?? null;

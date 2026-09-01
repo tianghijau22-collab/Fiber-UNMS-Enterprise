@@ -468,39 +468,16 @@ export default function OltManagement() {
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchOlts);
   const activeOlt = olts.find(o => o.id === selectedOltId);
 
-  // Live Real-Time Server-Synchronized Polling Countdown & Auto-Sync
-  useEffect(() => {
-    if (!activeOlt) return;
-    const intervalSec = activeOlt.polling_interval_seconds || 60;
-
-    if (activeOlt.last_connected_at) {
-      const lastPollMs = new Date(activeOlt.last_connected_at).getTime();
-      const nowMs = Date.now();
-      const elapsedSec = Math.max(0, Math.floor((nowMs - lastPollMs) / 1000));
-      const rem = Math.max(1, intervalSec - (elapsedSec % intervalSec));
-      setCountdown(rem);
-    } else {
-      setCountdown(intervalSec);
-    }
-  }, [activeOlt?.id, activeOlt?.polling_interval_seconds, activeOlt?.last_connected_at]);
-
+  // Silent Background Auto-Refresh dari Database Snapshot (tanpa re-render per detik)
   useEffect(() => {
     if (!activeOlt || isAutoPollingPaused) return;
-    const intervalSec = activeOlt.polling_interval_seconds || 60;
+    const intervalSec = Math.max(15, activeOlt.polling_interval_seconds || 30);
 
     const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
-          setIsPollingLive(true);
-          fetchOltHardware(vk, activeOlt.id, true, false); // Baca dari snapshot database lokal (instan)
-          fetchOlts(true);
-          setTimeout(() => setIsPollingLive(false), 1000);
-          return intervalSec;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+      const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
+      fetchOltHardware(vk, activeOlt.id, true, false); // Ambil snapshot database terbaru secara background
+      fetchOlts(true);
+    }, intervalSec * 1000);
 
     return () => clearInterval(timer);
   }, [activeOlt?.id, activeOlt?.polling_interval_seconds, isAutoPollingPaused]);
@@ -997,51 +974,55 @@ export default function OltManagement() {
   }, [oltData?.onu_list, selectedPortFilter, isPortMatching]);
 
   // ─── Filtered & Sorted ONU List (Terdaftar) ─────────────────────────────────
-  const rawFilteredOnus = (oltData?.onu_list || []).filter(onu => {
-    if (!isPortMatching(onu.port, selectedPortFilter)) {
-      return false;
-    }
-    const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
-    const rx = parseFloat(onu.rx_power);
+  const rawFilteredOnus = useMemo(() => {
+    return (oltData?.onu_list || []).filter(onu => {
+      if (!isPortMatching(onu.port, selectedPortFilter)) {
+        return false;
+      }
+      const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
+      const rx = parseFloat(onu.rx_power);
 
-    if (onuStatusFilter === 'online' && isOffline) return false;
-    if (onuStatusFilter === 'los' && !isOffline) return false;
-    if (onuStatusFilter === 'excellent' && (isOffline || rx < -19)) return false;
-    if (onuStatusFilter === 'good' && (isOffline || rx >= -19 || rx < -23)) return false;
-    if (onuStatusFilter === 'warning' && (isOffline || rx >= -23 || rx < -27)) return false;
-    if (onuStatusFilter === 'critical' && (isOffline || rx >= -27)) return false;
-    if (onuStatusFilter === 'high_loss' && (isOffline || rx >= -27)) return false;
+      if (onuStatusFilter === 'online' && isOffline) return false;
+      if (onuStatusFilter === 'los' && !isOffline) return false;
+      if (onuStatusFilter === 'excellent' && (isOffline || rx < -19)) return false;
+      if (onuStatusFilter === 'good' && (isOffline || rx >= -19 || rx < -23)) return false;
+      if (onuStatusFilter === 'warning' && (isOffline || rx >= -23 || rx < -27)) return false;
+      if (onuStatusFilter === 'critical' && (isOffline || rx >= -27)) return false;
+      if (onuStatusFilter === 'high_loss' && (isOffline || rx >= -27)) return false;
 
-    if (onuSearchQuery) {
-      const q = onuSearchQuery.toLowerCase();
-      const matchName = onu.customer_name?.toLowerCase().includes(q);
-      const matchSn = onu.serial_number?.toLowerCase().includes(q);
-      const matchPort = onu.port?.toLowerCase().includes(q);
-      const matchIp = onu.ip_address?.toLowerCase().includes(q);
-      return matchName || matchSn || matchPort || matchIp;
-    }
-    return true;
-  });
+      if (onuSearchQuery) {
+        const q = onuSearchQuery.toLowerCase();
+        const matchName = onu.customer_name?.toLowerCase().includes(q);
+        const matchSn = onu.serial_number?.toLowerCase().includes(q);
+        const matchPort = onu.port?.toLowerCase().includes(q);
+        const matchIp = onu.ip_address?.toLowerCase().includes(q);
+        return matchName || matchSn || matchPort || matchIp;
+      }
+      return true;
+    });
+  }, [oltData?.onu_list, selectedPortFilter, isPortMatching, onuStatusFilter, onuSearchQuery]);
 
-  const filteredOnus = [...rawFilteredOnus].sort((a, b) => {
-    let comparison = 0;
-    if (sortField === 'rx_power') {
-      const aOffline = a.status !== 'Online' || a.rx_power === null || a.rx_power <= -40;
-      const bOffline = b.status !== 'Online' || b.rx_power === null || b.rx_power <= -40;
-      const aVal = aOffline ? -999 : parseFloat(a.rx_power) || 0;
-      const bVal = bOffline ? -999 : parseFloat(b.rx_power) || 0;
-      comparison = aVal - bVal;
-    } else if (sortField === 'customer_name') {
-      comparison = (a.customer_name || '').localeCompare(b.customer_name || '');
-    } else if (sortField === 'port') {
-      comparison = (a.port || '').localeCompare(b.port || '');
-    } else if (sortField === 'serial_number') {
-      comparison = (a.serial_number || '').localeCompare(b.serial_number || '');
-    } else if (sortField === 'status') {
-      comparison = (a.status || '').localeCompare(b.status || '');
-    }
-    return sortDirection === 'asc' ? comparison : -comparison;
-  });
+  const filteredOnus = useMemo(() => {
+    return [...rawFilteredOnus].sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'rx_power') {
+        const aOffline = a.status !== 'Online' || a.rx_power === null || a.rx_power <= -40;
+        const bOffline = b.status !== 'Online' || b.rx_power === null || b.rx_power <= -40;
+        const aVal = aOffline ? -999 : parseFloat(a.rx_power) || 0;
+        const bVal = bOffline ? -999 : parseFloat(b.rx_power) || 0;
+        comparison = aVal - bVal;
+      } else if (sortField === 'customer_name') {
+        comparison = (a.customer_name || '').localeCompare(b.customer_name || '');
+      } else if (sortField === 'port') {
+        comparison = (a.port || '').localeCompare(b.port || '');
+      } else if (sortField === 'serial_number') {
+        comparison = (a.serial_number || '').localeCompare(b.serial_number || '');
+      } else if (sortField === 'status') {
+        comparison = (a.status || '').localeCompare(b.status || '');
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [rawFilteredOnus, sortField, sortDirection]);
 
   // ─── Filtered Unregistered ONUs (Fisik di OLT tapi belum di UNMS) ───────────
   const [tableSectionTab, setTableSectionTab] = useState('registered'); // 'registered' | 'unregistered' | 'orphaned'
@@ -1059,54 +1040,64 @@ export default function OltManagement() {
   const [registeredPage, setRegisteredPage] = useState(1);
   const registeredPerPage = 10;
 
-  const filteredUnregisteredOnus = (oltData?.unconfigured_onus || []).filter(onu => {
-    if (!isPortMatching(onu.detected_port || onu.port, selectedPortFilter)) {
-      return false;
-    }
-    if (unregisteredSearchQuery) {
-      const q = unregisteredSearchQuery.toLowerCase();
-      const matchSn = (onu.serial_number || onu.mac_address)?.toLowerCase().includes(q);
-      const matchName = onu.onu_name?.toLowerCase().includes(q);
-      const matchPort = (onu.detected_port || onu.port)?.toLowerCase().includes(q);
-      const matchModel = onu.vendor_model?.toLowerCase().includes(q);
-      return matchSn || matchName || matchPort || matchModel;
-    }
-    return true;
-  });
+  const filteredUnregisteredOnus = useMemo(() => {
+    return (oltData?.unconfigured_onus || []).filter(onu => {
+      if (!isPortMatching(onu.detected_port || onu.port, selectedPortFilter)) {
+        return false;
+      }
+      if (unregisteredSearchQuery) {
+        const q = unregisteredSearchQuery.toLowerCase();
+        const matchSn = (onu.serial_number || onu.mac_address)?.toLowerCase().includes(q);
+        const matchName = onu.onu_name?.toLowerCase().includes(q);
+        const matchPort = (onu.detected_port || onu.port)?.toLowerCase().includes(q);
+        const matchModel = onu.vendor_model?.toLowerCase().includes(q);
+        return matchSn || matchName || matchPort || matchModel;
+      }
+      return true;
+    });
+  }, [oltData?.unconfigured_onus, selectedPortFilter, isPortMatching, unregisteredSearchQuery]);
 
   const totalUnregisteredPages = Math.max(1, Math.ceil(filteredUnregisteredOnus.length / unregisteredPerPage));
-  const paginatedUnregisteredOnus = filteredUnregisteredOnus.slice(
-    (unregisteredPage - 1) * unregisteredPerPage,
-    unregisteredPage * unregisteredPerPage
-  );
+  const paginatedUnregisteredOnus = useMemo(() => {
+    return filteredUnregisteredOnus.slice(
+      (unregisteredPage - 1) * unregisteredPerPage,
+      unregisteredPage * unregisteredPerPage
+    );
+  }, [filteredUnregisteredOnus, unregisteredPage, unregisteredPerPage]);
 
   const totalRegisteredPages = Math.max(1, Math.ceil(filteredOnus.length / registeredPerPage));
-  const paginatedRegisteredOnus = filteredOnus.slice(
-    (registeredPage - 1) * registeredPerPage,
-    registeredPage * registeredPerPage
-  );
+  const paginatedRegisteredOnus = useMemo(() => {
+    return filteredOnus.slice(
+      (registeredPage - 1) * registeredPerPage,
+      registeredPage * registeredPerPage
+    );
+  }, [filteredOnus, registeredPage, registeredPerPage]);
 
-  const filteredOrphanedOnus = (oltData?.orphaned_onus || []).filter(onu => {
-    if (!isPortMatching(onu.olt_port, selectedPortFilter)) {
-      return false;
-    }
-    if (orphanedSearchQuery) {
-      const q = orphanedSearchQuery.toLowerCase();
-      const matchName = onu.customer_name?.toLowerCase().includes(q);
-      const matchSn = (onu.onu_serial || onu.onu_mac)?.toLowerCase().includes(q);
-      const matchCode = onu.customer_number?.toLowerCase().includes(q);
-      const matchOdp = onu.odp_name?.toLowerCase().includes(q);
-      const matchPort = onu.olt_port?.toLowerCase().includes(q);
-      return matchName || matchSn || matchCode || matchOdp || matchPort;
-    }
-    return true;
-  });
+  const filteredOrphanedOnus = useMemo(() => {
+    return (oltData?.orphaned_onus || []).filter(onu => {
+      if (!isPortMatching(onu.olt_port, selectedPortFilter)) {
+        return false;
+      }
+      if (orphanedSearchQuery) {
+        const q = orphanedSearchQuery.toLowerCase();
+        const matchName = onu.customer_name?.toLowerCase().includes(q);
+        const matchSn = (onu.onu_serial || onu.onu_mac)?.toLowerCase().includes(q);
+        const matchCode = onu.customer_number?.toLowerCase().includes(q);
+        const matchOdp = onu.odp_name?.toLowerCase().includes(q);
+        const matchPort = onu.olt_port?.toLowerCase().includes(q);
+        return matchName || matchSn || matchCode || matchOdp || matchPort;
+      }
+      return true;
+    });
+  }, [oltData?.orphaned_onus, selectedPortFilter, isPortMatching, orphanedSearchQuery]);
 
   const totalOrphanedPages = Math.max(1, Math.ceil(filteredOrphanedOnus.length / orphanedPerPage));
-  const paginatedOrphanedOnus = filteredOrphanedOnus.slice(
-    (orphanedPage - 1) * orphanedPerPage,
-    orphanedPage * orphanedPerPage
-  );
+  const paginatedOrphanedOnus = useMemo(() => {
+    return filteredOrphanedOnus.slice(
+      (orphanedPage - 1) * orphanedPerPage,
+      orphanedPage * orphanedPerPage
+    );
+  }, [filteredOrphanedOnus, orphanedPage, orphanedPerPage]);
 
   const handleDeleteOrphaned = (onu) => {
     openConfirm({
@@ -1223,47 +1214,25 @@ export default function OltManagement() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
-          {/* Live Real-Time Request Countdown Ticker Widget */}
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-neutral-800 bg-white dark:bg-slate-900 shadow-2xs">
-            <div className="flex items-center gap-1.5">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${
-                  isPollingLive
-                    ? 'bg-blue-400 opacity-90'
-                    : isAutoPollingPaused
-                    ? 'bg-amber-400 opacity-60'
-                    : 'bg-emerald-400 opacity-75'
-                }`}></span>
-                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                  isPollingLive
-                    ? 'bg-blue-600 animate-spin'
-                    : isAutoPollingPaused
-                    ? 'bg-amber-500'
-                    : 'bg-emerald-500'
-                }`}></span>
+          {/* Live Real-Time Database Telemetry Status Indicator */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <div className="flex items-center gap-1.5 text-xs font-semibold">
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                Database Telemetry:
               </span>
-              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                {isPollingLive ? 'Requesting OLT...' : isAutoPollingPaused ? 'Polling Dijeda' : 'Next Request:'}
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                Live Sync 24/7
               </span>
             </div>
-
-            {!isAutoPollingPaused && (
-              <div className="flex items-center gap-1 font-mono text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800/60">
-                <span>⏱️ {countdown}s</span>
-              </div>
+            {activeOlt?.last_connected_at && (
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 hidden sm:inline font-mono">
+                • {new Date(activeOlt.last_connected_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
             )}
-
-            <span className="text-[10px] text-slate-400 hidden sm:inline font-mono">
-              ({activeOlt?.polling_interval_seconds || 60}s)
-            </span>
-
-            <button
-              onClick={() => setIsAutoPollingPaused(!isAutoPollingPaused)}
-              className="px-1.5 py-0.5 rounded-md hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all text-xs font-bold"
-              title={isAutoPollingPaused ? 'Lanjutkan Auto-Polling' : 'Jeda Auto-Polling'}
-            >
-              {isAutoPollingPaused ? '▶️ Lanjut' : '⏸️ Jeda'}
-            </button>
           </div>
 
           <RefreshButton

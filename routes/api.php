@@ -131,6 +131,7 @@ Route::get('service-packages', function () {
 Route::get('customers/unmapped-onus', [CustomerController::class, 'unmappedOnus']);
 Route::post('customers/batch-provision', [CustomerController::class, 'batchProvision']);
 Route::post('customers/{id}/swap-onu', [CustomerController::class, 'swapOnu']);
+Route::match(['get', 'post'], 'customers/{id}/diagnostics', [CustomerController::class, 'diagnostics']);
 Route::apiResource('customers', CustomerController::class);
 Route::get('tickets/reference-data', [TicketController::class, 'referenceData']);
 Route::post('tickets/{id}/dispatch-telegram', [TicketController::class, 'dispatchTelegram']);

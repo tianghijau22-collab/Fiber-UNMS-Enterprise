@@ -376,17 +376,17 @@ class ZteC320Driver implements OltDeviceDriverInterface
             try {
                 $ifIndex = (0x10 << 24) | ($slotNum << 16) | ($portNum << 8);
 
-                // Gabungkan kedua OID SN resmi ZTE (GPON Extended & Global Registration)
+                // Gabungkan kedua OID SN resmi ZTE (Utamakan 3.28.1.1.5 yang memuat 100% SN asli)
                 $snHexList1 = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.3.{$ifIndex}") ?: [];
                 $snHexList2 = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.28.1.1.5.{$ifIndex}") ?: [];
 
                 $snHexList = [];
-                foreach ($snHexList1 as $oid => $val) {
+                foreach ($snHexList2 as $oid => $val) {
                     $parts = explode('.', $oid);
                     $onuId = end($parts);
                     $snHexList[$onuId] = $val;
                 }
-                foreach ($snHexList2 as $oid => $val) {
+                foreach ($snHexList1 as $oid => $val) {
                     $parts = explode('.', $oid);
                     $onuId = end($parts);
                     if (!isset($snHexList[$onuId])) {

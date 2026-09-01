@@ -14,31 +14,34 @@ class OltDeviceController extends Controller
     // ─── GET /api/olts ───────────────────────────────────────────────────────
     public function index()
     {
-        $olts = OltDevice::orderBy('created_at')->get();
-        $allNodes = NetworkNode::with(['parent.oltDevice', 'oltDevice'])->whereIn('node_type', ['POP', 'ODC', 'ODP'])->get();
+        $olts = OltDevice::select([
+            'id', 'name', 'code', 'vendor', 'model', 'location', 'ip_address', 
+            'total_ports', 'deployment_mode', 'snmp_version', 'snmp_community_type', 
+            'snmp_port', 'snmp_timeout', 'probe_agent_url', 'polling_interval_seconds', 
+            'connection_mode', 'status', 'last_connected_at', 'created_at', 'updated_at'
+        ])->orderBy('created_at')->get();
 
-        $data = $olts->map(function ($olt) use ($allNodes) {
+        // Ambil hitungan node secara instan via SQL groupBy
+        $nodeCounts = \Illuminate\Support\Facades\DB::table('network_nodes')
+            ->whereIn('node_type', ['POP', 'ODC', 'ODP'])
+            ->whereNotNull('olt_device_id')
+            ->select('olt_device_id', 'node_type', \Illuminate\Support\Facades\DB::raw('count(*) as total'))
+            ->groupBy('olt_device_id', 'node_type')
+            ->get();
+
+        $countMap = [];
+        foreach ($nodeCounts as $nc) {
+            $countMap[$nc->olt_device_id][$nc->node_type] = (int)$nc->total;
+        }
+
+        $data = $olts->map(function ($olt) use ($countMap) {
             $oltId = $olt->id;
+            $popCount = $countMap[$oltId]['POP'] ?? 1;
+            $odcCount = $countMap[$oltId]['ODC'] ?? 0;
+            $odpCount = $countMap[$oltId]['ODP'] ?? 0;
 
-            $oltNodes = $allNodes->filter(function ($n) use ($oltId) {
-                if ($n->olt_device_id == $oltId) return true;
-                if ($n->oltDevice && $n->oltDevice->id == $oltId) return true;
-                if ($n->parent && $n->parent->olt_device_id == $oltId) return true;
-                if ($n->parent && $n->parent->oltDevice && $n->parent->oltDevice->id == $oltId) return true;
-                if ($n->parent && $n->parent->parent && $n->parent->parent->olt_device_id == $oltId) return true;
-                return false;
-            });
-
-            $popCount = $oltNodes->where('node_type', 'POP')->count();
-            if ($popCount === 0) {
-                $popCount = 1;
-            }
-
-            $odcCount = $oltNodes->where('node_type', 'ODC')->count();
-            $odpCount = $oltNodes->where('node_type', 'ODP')->count();
-
-            $oltArray = $olt->toArray();
-            $oltArray['pop_count'] = $popCount;
+            $oltArray = $olt->makeHidden('last_telemetry_snapshot')->toArray();
+            $oltArray['pop_count'] = max(1, $popCount);
             $oltArray['odc_count'] = $odcCount;
             $oltArray['odp_count'] = $odpCount;
 
