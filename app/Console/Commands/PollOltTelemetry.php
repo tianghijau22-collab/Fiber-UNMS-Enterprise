@@ -77,7 +77,7 @@ class PollOltTelemetry extends Command
         foreach ($devices as $device) {
             $cmd = [$phpBinary, $artisanPath, 'olt:poll-telemetry', "--device={$device->id}", '--force'];
             $process = new Process($cmd);
-            $process->setTimeout(25); // 25 detik max — anti-hang per single port
+            $process->setTimeout(45); // 45 detik max — batas toleransi ideal untuk OLT 80-port & dense ONU
             $process->start();
 
             $processes[$device->id] = [
@@ -93,7 +93,7 @@ class PollOltTelemetry extends Command
         $totalOnusPolled = 0;
         $totalUncfgPolled = 0;
 
-        $maxProcessTimeoutSec = 20; // Maksimal 20 detik per sub-process OLT
+        $maxProcessTimeoutSec = 45; // Maksimal 45 detik per sub-process OLT
 
         while (count($processes) > 0) {
             foreach ($processes as $id => $item) {
@@ -230,7 +230,7 @@ class PollOltTelemetry extends Command
                 $cards = $deviceInfo['cards'] ?? [];
 
                 if (!empty($cards)) {
-                    Cache::put($cardsCacheKey, $cards, 600); // Cache 10 menit
+                    Cache::put($cardsCacheKey, $cards, 1800); // Cache 30 menit
                     self::appendWorkerLog($device->name, 'CHASSIS', 'INFO', "Tahap 1: Slot & Card terupdate (" . count($cards) . " cards aktif)");
                 }
             }
@@ -245,7 +245,7 @@ class PollOltTelemetry extends Command
             if (empty($allPonPorts)) {
                 $allPonPorts = $driver->getPonPorts();
                 if (!empty($allPonPorts)) {
-                    Cache::put($portsCacheKey, $allPonPorts, 300); // Cache 5 menit
+                    Cache::put($portsCacheKey, $allPonPorts, 900); // Cache 15 menit
                     self::appendWorkerLog($device->name, 'SFP_PORTS', 'INFO', "Tahap 2: Status Port PON & SFP Power terupdate (" . count($allPonPorts) . " port fisik)");
                 }
             }
