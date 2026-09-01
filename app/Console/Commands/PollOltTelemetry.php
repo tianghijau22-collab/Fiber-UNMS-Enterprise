@@ -354,12 +354,11 @@ class PollOltTelemetry extends Command
                 }
             }
 
-            // 2. Hapus entri lama khusus untuk 4 port yang sedang di-query di batch ini (agar selalu fresh)
+            // 2. Hapus entri lama khusus untuk 4 port yang sedang di-query di batch ini secara PRESISI
             foreach ($physicalOnuMap as $sn => $o) {
-                $p = strtolower($o['port'] ?? ($o['detected_port'] ?? ''));
+                $p = $o['port'] ?? ($o['detected_port'] ?? '');
                 foreach ($targetPorts as $tPort) {
-                    $targetClean = strtolower($tPort);
-                    if ($p === $targetClean || str_contains($p, $targetClean) || str_contains($targetClean, $p)) {
+                    if ($oltCtrl->portsMatch($p, $tPort)) {
                         unset($physicalOnuMap[$sn]);
                         break;
                     }

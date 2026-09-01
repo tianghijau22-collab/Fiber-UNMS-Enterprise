@@ -1316,7 +1316,7 @@ class OltController extends Controller
         ]);
     }
 
-    private function portsMatch(string $p1, string $p2): bool
+    public function portsMatch(string $p1, string $p2): bool
     {
         if (empty($p1) || empty($p2)) return false;
         if ($p1 === $p2) return true;
