@@ -348,12 +348,8 @@ function RulerHud({ waypoints, totalMeters, onReset, onClose }) {
   const m = Math.round(totalMeters);
   const displayDist = totalMeters >= 1000 ? `${km} km (${m} m)` : `${m} meter`;
 
-  // Estimasi atenuasi kabel FO standar G.652D (~0.35 dB/km) + 0.1 dB per sambungan splice tambahan
-  const estSplice = waypoints.length > 2 ? (waypoints.length - 2) * 0.1 : 0;
-  const estFiberLoss = ((totalMeters / 1000) * 0.35 + estSplice).toFixed(2);
-
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[999] bg-slate-900/95 text-white backdrop-blur-md border border-amber-500/60 shadow-2xl rounded-2xl p-4 w-full max-w-md animate-in fade-in slide-in-from-bottom-3 duration-200">
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[999] bg-slate-900/95 text-white backdrop-blur-md border border-amber-500/60 shadow-2xl rounded-2xl p-4 w-full max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-200">
       <div className="flex items-center justify-between pb-2 border-b border-slate-800">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
@@ -367,22 +363,19 @@ function RulerHud({ waypoints, totalMeters, onReset, onClose }) {
         </button>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <div className="bg-slate-800/80 rounded-xl p-2.5 border border-slate-700/60">
+      <div className="mt-3 bg-slate-800/80 rounded-xl p-3 border border-slate-700/60 flex items-center justify-between">
+        <div>
           <span className="text-[10px] font-bold uppercase text-slate-400 block">Total Jarak Kabel</span>
-          <span className="text-base font-black font-mono text-emerald-400">{displayDist}</span>
-          <span className="text-[9px] text-slate-400 block mt-0.5">{waypoints.length} Titik Waypoint</span>
+          <span className="text-xl font-black font-mono text-emerald-400 leading-tight">{displayDist}</span>
         </div>
-
-        <div className="bg-slate-800/80 rounded-xl p-2.5 border border-slate-700/60">
-          <span className="text-[10px] font-bold uppercase text-slate-400 block">Estimasi Loss Redaman</span>
-          <span className="text-base font-black font-mono text-amber-400">~{estFiberLoss} dB</span>
-          <span className="text-[9px] text-slate-400 block mt-0.5">Koefisien ~0.35 dB/km</span>
+        <div className="text-right">
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">Titik Waypoint</span>
+          <span className="text-base font-black font-mono text-amber-400 leading-tight">{waypoints.length} Titik</span>
         </div>
       </div>
 
       <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 pt-1">
-        <span>💡 Klik di peta untuk menambah titik tiang/jalur</span>
+        <span>💡 Klik titik peta / marker node untuk mengukur</span>
         <button
           onClick={onReset}
           className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 border border-rose-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
@@ -461,8 +454,13 @@ function LeafletMap({
   const pathHighlightLayerGroupRef = useRef(null);
   const rulerLayerGroupRef = useRef(null);
   const isFirstRenderRef = useRef(true);
+  const rulerActiveRef = useRef(rulerActive);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isSatellite, setIsSatellite] = useState(true);
+
+  useEffect(() => {
+    rulerActiveRef.current = rulerActive;
+  }, [rulerActive]);
 
   // 1. Initialize Map Instance with SVG Renderer (ONLY ONCE ON MOUNT)
   useEffect(() => {
@@ -853,7 +851,19 @@ function LeafletMap({
       });
 
       const marker = Lf.marker([lat, lng], { icon }).addTo(nodesGroup);
-      marker.on('click', () => onSelectNode(node));
+      marker.on('click', (e) => {
+        if (rulerActiveRef.current) {
+          if (e.originalEvent) {
+            e.originalEvent.stopPropagation();
+          }
+          if (Lf.DomEvent) {
+            Lf.DomEvent.stopPropagation(e);
+          }
+          setRulerPoints(pts => [...pts, [lat, lng]]);
+          return;
+        }
+        onSelectNode(node);
+      });
     });
 
     // Fit bounds ONLY ONCE on first load
