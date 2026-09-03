@@ -37,9 +37,14 @@ const TYPE_META = {
 
 const STATUS_META = {
   active: {
-    label: 'Online',
+    label: 'Aktif Normal',
     badge: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
     color: '#059669',
+  },
+  active_loss: {
+    label: 'Aktif (Gangguan Loss)',
+    badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse font-bold',
+    color: '#ef4444',
   },
   maintenance: {
     label: 'Maintenance',
@@ -47,15 +52,90 @@ const STATUS_META = {
     color: '#d97706',
   },
   inactive: {
-    label: 'Down',
-    badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800',
-    color: '#e11d48',
+    label: 'Tidak Aktif',
+    badge: 'bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-neutral-700',
+    color: '#64748b',
   },
   damaged: {
-    label: 'Loss',
-    badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 animate-pulse',
-    color: '#e11d48',
+    label: 'Gangguan Loss',
+    badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse font-bold',
+    color: '#ef4444',
   },
+};
+
+const getNodeEffectiveStatus = (node) => {
+  if (!node) return { key: 'active', label: 'Aktif Normal', badge: STATUS_META.active.badge, color: '#059669', pinBg: '#059669', isLoss: false, isInactive: false, hasRadar: false };
+
+  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+  const isLossRange = node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS'));
+  const isOpticalLoss = isLossRange || (effectivePower != null && parseFloat(effectivePower) <= -27.5);
+
+  // 1. Status TIDAK AKTIF (Offline / Nonaktif) - Warna Abu-abu Netral, BUKAN Gangguan Loss
+  if (node.status === 'inactive') {
+    return {
+      key: 'inactive',
+      label: 'Tidak Aktif',
+      badge: 'bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-neutral-700',
+      color: '#64748b',
+      pinBg: '#64748b',
+      nameBorder: '#94a3b8',
+      nameText: '#475569',
+      isLoss: false,
+      isInactive: true,
+      hasRadar: false,
+    };
+  }
+
+  // 2. Status MAINTENANCE
+  if (node.status === 'maintenance') {
+    return {
+      key: 'maintenance',
+      label: 'Maintenance',
+      badge: 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800',
+      color: '#d97706',
+      pinBg: '#d97706',
+      nameBorder: '#f59e0b',
+      nameText: '#0f172a',
+      isLoss: false,
+      isInactive: false,
+      hasRadar: false,
+    };
+  }
+
+  // 3. Status DAMAGED atau STATUS AKTIF TETAPI SEDANG GANGGUAN LOSS
+  if (node.status === 'damaged' || isOpticalLoss) {
+    const isActuallyActive = node.status === 'active';
+    return {
+      key: isActuallyActive ? 'active_loss' : 'damaged',
+      label: isActuallyActive ? 'Aktif (Gangguan Loss)' : 'Gangguan Loss',
+      badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse font-bold',
+      color: '#ef4444',
+      pinBg: '#ef4444',
+      nameBorder: '#f87171',
+      nameText: '#991b1b',
+      isLoss: true,
+      isInactive: false,
+      hasRadar: true,
+    };
+  }
+
+  // 4. Status AKTIF NORMAL
+  let pinColor = '#059669'; // Emerald
+  if (node.node_type === 'POP') pinColor = '#4f46e5'; // Indigo
+  else if (node.node_type === 'ODC') pinColor = '#2563eb'; // Royal Blue
+
+  return {
+    key: 'active',
+    label: 'Online / Aktif Normal',
+    badge: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+    color: pinColor,
+    pinBg: pinColor,
+    nameBorder: '#cbd5e1',
+    nameText: '#0f172a',
+    isLoss: false,
+    isInactive: false,
+    hasRadar: false,
+  };
 };
 
 const getOpticalQuality = (dbm) => {
@@ -175,11 +255,11 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
   if (!node) return null;
 
   const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
-  const statusMeta = STATUS_META[node.status] ?? STATUS_META.active;
+  const effStatus = getNodeEffectiveStatus(node);
   const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
-  const isLoss = node.status === 'damaged' || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')));
+  const isLoss = effStatus.isLoss;
   const optMeta = isLoss 
-    ? { label: 'Loss / Kritis', color: '#e11d48', badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800' }
+    ? { label: 'Loss / Kritis', color: '#ef4444', badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800' }
     : getOpticalQuality(effectivePower);
   const p = node.total_ports > 0 ? Math.round((node.used_ports / node.total_ports) * 100) : 0;
 
@@ -205,8 +285,8 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
             <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${typeMeta.bg}`}>
               {node.node_type}
             </span>
-            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusMeta.badge}`}>
-              {statusMeta.label}
+            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${effStatus.badge}`}>
+              {effStatus.label}
             </span>
           </div>
           <h4 className="text-base font-extrabold text-slate-900 dark:text-white leading-tight">
@@ -587,6 +667,8 @@ function LeafletMap({
   rulerPoints,
   setRulerPoints,
   targetPin,
+  isFullscreen,
+  onToggleFullscreen,
   onSelectNode,
   onOpenStreetView,
   externalFlyToRef,
@@ -608,6 +690,19 @@ function LeafletMap({
   useEffect(() => {
     rulerActiveRef.current = rulerActive;
   }, [rulerActive]);
+
+  // Invalidate map size when fullscreen mode toggles
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const t1 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 60);
+    const t2 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 250);
+    const t3 = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [isFullscreen]);
 
   // 1. Initialize Map Instance with SVG Renderer (ONLY ONCE ON MOUNT)
   useEffect(() => {
@@ -983,32 +1078,22 @@ function LeafletMap({
       const isSelected = selectedNode?.id === node.id;
       const isOdp = node.node_type === 'ODP';
       const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
-      const isLossRange = node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS'));
-      const isFault = isLossRange || node.status === 'damaged' || (effectiveBestPower != null && parseFloat(effectiveBestPower) <= -27.5);
+      const effStatus = getNodeEffectiveStatus(node);
+      const isFault = effStatus.isLoss;
 
-      const optMeta = isLossRange 
-        ? { label: 'Loss / Kritis', color: '#e11d48', pillBg: '#fff1f2', pillText: '#be123c', pillBorder: '#fecdd3' } 
+      const optMeta = isFault 
+        ? { label: 'Loss / Kritis', color: '#ef4444', pillBg: '#fff1f2', pillText: '#be123c', pillBorder: '#fecdd3' } 
         : getOpticalQuality(effectiveBestPower);
       const opticalDbmText = node.rx_power_range ? node.rx_power_range : (effectiveBestPower != null ? `${effectiveBestPower > 0 ? '+' : ''}${parseFloat(effectiveBestPower).toFixed(2)} dBm` : '—');
 
       const size = isSelected ? typeMeta.size + 4 : typeMeta.size;
-
-      let pinBg = '#059669'; // Mint Emerald
-      if (node.node_type === 'POP') {
-        pinBg = '#4f46e5'; // Indigo
-      } else if (node.node_type === 'ODC') {
-        pinBg = '#2563eb'; // Royal Blue
-      }
-
-      if (isFault) {
-        pinBg = '#e11d48'; // Rose Red
-      }
+      const pinBg = effStatus.pinBg;
 
       const icon = Lf.divIcon({
         className: `custom-gis-node-marker ${isSelected ? 'is-selected' : ''}`,
         html: `
           <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
-            ${(isOdp && node.used_ports > 0 && (node.optical_power_dbm != null || node.rx_power_range != null)) ? `
+            ${(isOdp && node.used_ports > 0 && (node.optical_power_dbm != null || node.rx_power_range != null) && !effStatus.isInactive) ? `
               <div style="
                 background: ${optMeta.pillBg};
                 color: ${optMeta.pillText};
@@ -1032,7 +1117,7 @@ function LeafletMap({
               height: ${size * 2}px;
               border-radius: 50%;
               background: ${pinBg};
-              border: 3px solid #ffffff;
+              border: 3px solid ${effStatus.isInactive ? '#94a3b8' : '#ffffff'};
               box-shadow: 0 3px 10px rgba(0,0,0,0.25);
               display: flex;
               align-items: center;
@@ -1040,24 +1125,27 @@ function LeafletMap({
               color: #ffffff;
               font-weight: 800;
               font-size: ${size >= 20 ? '12px' : size >= 17 ? '11px' : '10px'};
+              opacity: ${effStatus.isInactive ? 0.82 : 1};
             ">
-              ${isFault ? '<div class="radar-ping-ring"></div>' : ''}
+              ${effStatus.hasRadar ? '<div class="radar-ping-ring"></div>' : ''}
               ${node.node_type}
             </div>
 
             <div style="
-              background: #ffffff;
-              color: #0f172a;
+              background: ${effStatus.isInactive ? '#f8fafc' : '#ffffff'};
+              color: ${effStatus.nameText};
               padding: 2px 7px;
               border-radius: 6px;
               font-size: 11px;
               font-weight: 700;
               white-space: nowrap;
               margin-top: 3px;
-              border: 1.5px solid #cbd5e1;
+              border: 1.5px solid ${effStatus.nameBorder};
               box-shadow: 0 2px 6px rgba(0,0,0,0.16);
             ">
               ${node.name}
+              ${effStatus.isInactive ? ' <span style="font-size: 9px; color: #64748b; font-weight: 700;">(Nonaktif)</span>' : ''}
+              ${effStatus.key === 'active_loss' ? ' <span style="font-size: 9px; color: #ef4444; font-weight: 800;">(LOS)</span>' : ''}
             </div>
           </div>
         `,
@@ -1166,12 +1254,24 @@ function LeafletMap({
 
       <div
         ref={mapRef}
-        className="w-full rounded-2xl overflow-hidden shadow-inner relative z-0"
-        style={{ height: '640px', minHeight: '640px' }}
+        className={`w-full overflow-hidden relative z-0 transition-all ${isFullscreen ? 'rounded-none' : 'rounded-2xl shadow-inner'}`}
+        style={{ height: isFullscreen ? '100vh' : '640px', minHeight: isFullscreen ? '100vh' : '640px' }}
       />
 
       {/* Floating Mode Controls */}
       <div className="absolute top-4 right-4 z-[999] flex flex-wrap items-center justify-end gap-2">
+        <button
+          onClick={onToggleFullscreen}
+          className={`px-3.5 py-2 text-xs font-bold rounded-xl border shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer ${
+            isFullscreen
+              ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500 shadow-lg ring-2 ring-rose-400/50'
+              : 'bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 border-slate-200 dark:border-neutral-700'
+          }`}
+          title={isFullscreen ? 'Keluar Full Layar (Esc)' : 'Tampilkan Peta Layar Penuh'}
+        >
+          <span>{isFullscreen ? '↩️ Keluar Full Layar' : '⛶ Layar Penuh'}</span>
+        </button>
+
         <button
           onClick={toggleMapMode}
           className="px-3.5 py-2 bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer"
@@ -1188,6 +1288,21 @@ function LeafletMap({
           </button>
         )}
       </div>
+
+      {/* Prominent Floating Exit Fullscreen Button (Top Left when fullscreen) */}
+      {isFullscreen && (
+        <div className="absolute top-4 left-4 z-[999] flex items-center gap-2 animate-in fade-in duration-200">
+          <button
+            onClick={onToggleFullscreen}
+            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl shadow-2xl border border-rose-400/80 flex items-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95"
+            title="Kembali ke tampilan normal (Atau tekan tombol ESC di keyboard)"
+          >
+            <span className="text-sm">↩️</span>
+            <span>KEMBALI (Keluar Layar Penuh)</span>
+            <span className="text-[10px] opacity-75 font-mono px-1.5 py-0.5 rounded bg-black/40">ESC</span>
+          </button>
+        </div>
+      )}
 
       <button
         onClick={handleRecenterMap}
@@ -1212,22 +1327,24 @@ function GisStatCards({ nodes }) {
   const odpOptValues = activeOdps.map(n => parseFloat(n.optical_power_dbm));
   const avgOdpDbm = odpOptValues.length > 0 ? (odpOptValues.reduce((a, b) => a + b, 0) / odpOptValues.length).toFixed(2) : '—';
 
-  // Count faults
-  const faultyNodes = nodes.filter(n => {
-    const eff = n.best_rx_power ?? n.optical_power_dbm;
-    return n.status === 'damaged' || n.status === 'inactive' || (eff != null && parseFloat(eff) <= -27.5) || (n.rx_power_range && n.rx_power_range.includes('Loss'));
+  // Count optical loss faults (active loss or damaged)
+  const lossNodes = nodes.filter(n => {
+    const eff = getNodeEffectiveStatus(n);
+    return eff.isLoss;
   });
+
+  const inactiveNodes = nodes.filter(n => n.status === 'inactive');
 
   const cards = [
     { label: 'POP Central', value: pops.length, sub: `${pops.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Core Headend', badgeCls: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800' },
     { label: 'ODC Cabinet', value: odcs.length, sub: `${odcs.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Distribution', badgeCls: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800' },
     { label: 'ODP Point', value: odps.length, sub: `${odps.filter(n => n.status === 'active').length} Total Point ODP`, badge: 'Access Terminal', badgeCls: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' },
     { 
-      label: 'Node Bermasalah (LOS/Warning)', 
-      value: faultyNodes.length, 
-      sub: faultyNodes.length > 0 ? 'Perlu Investigasi Lapangan' : 'Seluruh Jaringan Sehat', 
-      badge: faultyNodes.length > 0 ? '🚨 Gangguan' : 'Semua Normal', 
-      badgeCls: faultyNodes.length > 0 
+      label: 'Gangguan Loss Optik', 
+      value: lossNodes.length, 
+      sub: inactiveNodes.length > 0 ? `${lossNodes.length} Loss • ${inactiveNodes.length} Tidak Aktif` : (lossNodes.length > 0 ? 'Perlu Investigasi Lapangan' : 'Seluruh Jalur Sehat'), 
+      badge: lossNodes.length > 0 ? '🚨 Gangguan' : (inactiveNodes.length > 0 ? `${inactiveNodes.length} Nonaktif` : 'Aman Normal'), 
+      badgeCls: lossNodes.length > 0 
         ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800' 
         : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' 
     },
@@ -1281,6 +1398,20 @@ export default function GisTopologyMap() {
   // Target Coordinate / Client Benchmark State
   const [targetCoordModal, setTargetCoordModal] = useState(false);
   const [targetPin, setTargetPin] = useState(null);
+
+  // Fullscreen state
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Esc key listener to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   const fetchNodesAndCables = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -1398,11 +1529,21 @@ export default function GisTopologyMap() {
         }
       }
       if (typeFilter && n.node_type !== typeFilter) return false;
-      if (statusFilter && n.status !== statusFilter) return false;
+      if (statusFilter) {
+        const eff = getNodeEffectiveStatus(n);
+        if (statusFilter === 'active_loss') {
+          if (eff.key !== 'active_loss' && eff.key !== 'damaged') return false;
+        } else if (statusFilter === 'active') {
+          if (eff.key !== 'active') return false;
+        } else if (statusFilter === 'inactive') {
+          if (n.status !== 'inactive') return false;
+        } else if (n.status !== statusFilter) {
+          return false;
+        }
+      }
       if (faultOnlyFilter) {
-        const eff = n.best_rx_power ?? n.optical_power_dbm;
-        const isFault = n.status === 'damaged' || n.status === 'inactive' || (eff != null && parseFloat(eff) <= -27.5) || (n.rx_power_range && n.rx_power_range.includes('Loss'));
-        if (!isFault) return false;
+        const eff = getNodeEffectiveStatus(n);
+        if (!eff.isLoss) return false;
       }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
@@ -1463,6 +1604,19 @@ export default function GisTopologyMap() {
             title="Cek lokasi rumah pelanggan dari koordinat GPS / cari nama pelanggan"
           >
             <span>📍 {targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat Rumah'}</span>
+          </button>
+
+          {/* Fullscreen Button */}
+          <button
+            onClick={() => setIsFullscreen(prev => !prev)}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              isFullscreen
+                ? 'bg-rose-600 text-white border-rose-500 shadow-md ring-2 ring-rose-400/40'
+                : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
+            }`}
+            title={isFullscreen ? 'Keluar mode layar penuh (Esc)' : 'Tampilkan peta dalam mode layar penuh'}
+          >
+            <span>{isFullscreen ? '↩️ Keluar Full Layar' : '⛶ Layar Penuh'}</span>
           </button>
 
           {/* Ruler Button */}
@@ -1572,24 +1726,25 @@ export default function GisTopologyMap() {
             onChange={e => setStatusFilter(e.target.value)}
             className="px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
-            <option value="">Semua Status</option>
-            <option value="active">Aktif Normal</option>
-            <option value="maintenance">Maintenance</option>
-            <option value="inactive">Tidak Aktif</option>
-            <option value="damaged">Rusak / Loss</option>
+            <option value="">Semua Status Node</option>
+            <option value="active">🟢 Aktif Normal</option>
+            <option value="active_loss">🔴 Aktif (Gangguan Loss)</option>
+            <option value="damaged">🚨 Rusak / Loss Putus</option>
+            <option value="inactive">⚪ Tidak Aktif (Nonaktif)</option>
+            <option value="maintenance">🟡 Maintenance</option>
           </select>
 
-          {/* Quick Filter: Hanya Gangguan / LOS */}
+          {/* Quick Filter: Hanya Gangguan Loss */}
           <button
             type="button"
             onClick={() => setFaultOnlyFilter(!faultOnlyFilter)}
             className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
               faultOnlyFilter
-                ? 'bg-rose-500 text-white border-rose-600 shadow-md ring-2 ring-rose-400/40'
+                ? 'bg-rose-600 text-white border-rose-600 shadow-md ring-2 ring-rose-400/40'
                 : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100'
             }`}
           >
-            <span>🚨 Hanya Node Bermasalah</span>
+            <span>🚨 Hanya Gangguan Loss</span>
           </button>
         </div>
 
@@ -1613,7 +1768,11 @@ export default function GisTopologyMap() {
           Memuat topologi spasial GIS &amp; data redaman...
         </div>
       ) : activeView === 'map' ? (
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]">
+        <div className={`transition-all duration-200 ${
+          isFullscreen 
+            ? 'fixed inset-0 z-[99999] w-screen h-screen bg-slate-950 overflow-hidden' 
+            : 'bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]'
+        }`}>
           {/* Node Detail Drawer */}
           <NodeDetailPanel
             node={selectedNode}
@@ -1679,6 +1838,8 @@ export default function GisTopologyMap() {
             rulerPoints={rulerPoints}
             setRulerPoints={setRulerPoints}
             targetPin={targetPin}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={() => setIsFullscreen(prev => !prev)}
             onSelectNode={node => setSelectedNode(node)}
             onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
             externalFlyToRef={externalFlyToRef}
@@ -1703,11 +1864,11 @@ export default function GisTopologyMap() {
               <tbody className="divide-y divide-slate-100 dark:divide-neutral-900 text-xs">
                 {filteredNodes.map(node => {
                   const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
-                  const statusMeta = STATUS_META[node.status] ?? STATUS_META.active;
+                  const effStatus = getNodeEffectiveStatus(node);
                   const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
-                  const isLoss = node.status === 'damaged' || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')));
+                  const isLoss = effStatus.isLoss;
                   const optMeta = isLoss 
-                    ? { label: 'Loss / Kritis', color: '#e11d48', badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800' }
+                    ? { label: 'Loss / Kritis', color: '#ef4444', badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800' }
                     : getOpticalQuality(effectivePower);
 
                   return (
@@ -1722,8 +1883,8 @@ export default function GisTopologyMap() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${statusMeta.badge}`}>
-                          {statusMeta.label}
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${effStatus.badge}`}>
+                          {effStatus.label}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-slate-600 dark:text-slate-400">
