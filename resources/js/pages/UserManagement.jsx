@@ -192,7 +192,17 @@ export default function UserManagement() {
   // Custom UI Modals & Feedback (No Browser Alerts)
   const [userToDelete, setUserToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [feedbackToast, setFeedbackToast] = useState(null); // { type: 'success' | 'error', message: string }
+  
+  const triggerFeedback = ({ type, message }) => {
+    if (typeof window !== 'undefined' && window.showAppAlert) {
+      window.showAppAlert({
+        type: type === 'error' ? 'error' : 'success',
+        title: type === 'error' ? 'Pemberitahuan Gagal' : 'Berhasil!',
+        message,
+        duration: 2600,
+      });
+    }
+  };
 
   const fetchUsers = useCallback((silent = false) => {
     if (!silent) setLoading(true);
@@ -256,8 +266,7 @@ export default function UserManagement() {
         }
 
         setEditingUser(null);
-        setFeedbackToast({ type: 'success', message: isEdit ? 'Data akun user berhasil diperbarui.' : 'Akun user baru berhasil dibuat.' });
-        setTimeout(() => setFeedbackToast(null), 4000);
+        triggerFeedback({ type: 'success', message: isEdit ? 'Data akun user berhasil diperbarui.' : 'Akun user baru berhasil dibuat.' });
         fetchUsers();
       })
       .catch(err => {
@@ -285,16 +294,15 @@ export default function UserManagement() {
       })
       .then(() => {
         setDeleting(false);
+        const name = userToDelete.name;
         setUserToDelete(null);
-        setFeedbackToast({ type: 'success', message: `Akun "${userToDelete.name}" berhasil dihapus dari sistem.` });
-        setTimeout(() => setFeedbackToast(null), 4000);
+        triggerFeedback({ type: 'success', message: `Akun "${name}" berhasil dihapus dari sistem.` });
         fetchUsers();
       })
       .catch(err => {
         setDeleting(false);
         setUserToDelete(null);
-        setFeedbackToast({ type: 'error', message: err.message || 'Gagal menghapus user dari sistem.' });
-        setTimeout(() => setFeedbackToast(null), 5000);
+        triggerFeedback({ type: 'error', message: err.message || 'Gagal menghapus user dari sistem.' });
       });
   };
 
@@ -608,26 +616,7 @@ export default function UserManagement() {
         </div>
       )}
 
-      {/* ── Custom Feedback Toast Banner ── */}
-      {feedbackToast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-3 duration-200">
-          <div className={`p-3.5 rounded-xl border shadow-xl flex items-center gap-2.5 text-xs font-semibold ${
-            feedbackToast.type === 'success'
-              ? 'bg-emerald-50 dark:bg-neutral-950 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-              : 'bg-rose-50 dark:bg-neutral-950 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300'
-          }`}>
-            <span>{feedbackToast.type === 'success' ? '✅' : '⚠️'}</span>
-            <span>{feedbackToast.message}</span>
-            <button
-              type="button"
-              onClick={() => setFeedbackToast(null)}
-              className="ml-2 text-slate-400 hover:text-slate-700 dark:hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

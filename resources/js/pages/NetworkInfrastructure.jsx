@@ -4683,12 +4683,7 @@ export default function NetworkInfrastructure() {
   return (
     <div className="space-y-4 sm:space-y-6">
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-2xl shadow-2xl text-xs sm:text-sm font-semibold text-white transition-all ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'}`}>
-          {toast.msg}
-        </div>
-      )}
+
 
       {/* ── Top Header Banner ──────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#3f3f46] p-5 rounded-lg shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">

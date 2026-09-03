@@ -596,9 +596,15 @@ export default function BtsManagement() {
     fetchSites();
   }, [search, vendorFilter, lengthFilter, statusFilter]);
 
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
+  const showToast = (msg, type = 'success') => {
+    if (typeof window !== 'undefined' && window.showAppAlert) {
+      window.showAppAlert({
+        type: type === 'error' ? 'error' : 'success',
+        title: type === 'error' ? 'Pemberitahuan Gagal' : 'Berhasil!',
+        message: msg,
+        duration: 2600,
+      });
+    }
   };
 
   const handleOpenAdd = () => {
@@ -699,13 +705,7 @@ export default function BtsManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-[99999] px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold flex items-center gap-2 bg-emerald-900 text-white border-emerald-700">
-          <span>✓</span>
-          <span>{toastMessage}</span>
-        </div>
-      )}
+
 
       {/* Header Banner - Exact /customers Structure */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-black p-5 rounded-lg border border-slate-200 dark:border-[#222222] shadow-2xs">

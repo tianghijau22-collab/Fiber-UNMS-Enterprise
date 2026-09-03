@@ -103,9 +103,15 @@ export default function DatabaseBackup() {
   const [clearError, setClearError] = useState(null);
   const [autoBackupBeforeClear, setAutoBackupBeforeClear] = useState(true);
 
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
+  const showToast = (msg, type = 'success') => {
+    if (typeof window !== 'undefined' && window.showAppAlert) {
+      window.showAppAlert({
+        type: type === 'error' ? 'error' : 'success',
+        title: type === 'error' ? 'Pemberitahuan Gagal' : 'Berhasil!',
+        message: msg,
+        duration: 2600,
+      });
+    }
   };
 
   const fetchBackups = async () => {
@@ -292,13 +298,7 @@ export default function DatabaseBackup() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-[99999] px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold flex items-center gap-2 bg-black text-white border-neutral-800 dark:bg-white dark:text-black dark:border-neutral-200 animate-in slide-in-from-top duration-200">
-          <IconCheck />
-          <span>{toastMessage}</span>
-        </div>
-      )}
+
 
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-black p-5 rounded-2xl border border-slate-200 dark:border-neutral-800 shadow-xs">

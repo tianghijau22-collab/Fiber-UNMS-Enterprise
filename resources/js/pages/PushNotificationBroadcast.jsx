@@ -239,8 +239,14 @@ export default function PushNotificationBroadcast() {
   const [uiToast, setUiToast] = useState(null); // { type: 'success' | 'error', message: string }
 
   const showToast = (type, message) => {
-    setUiToast({ type, message });
-    setTimeout(() => setUiToast(null), 4500);
+    if (typeof window !== 'undefined' && window.showAppAlert) {
+      window.showAppAlert({
+        type: type === 'error' ? 'error' : 'success',
+        title: type === 'error' ? 'Pemberitahuan Gagal' : 'Berhasil!',
+        message,
+        duration: 2600,
+      });
+    }
   };
 
   const fetchHistory = useCallback(async () => {
@@ -1406,26 +1412,7 @@ export default function PushNotificationBroadcast() {
         document.body
       )}
 
-      {/* ── Custom UI Toast Feedback ── */}
-      {uiToast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-3 duration-200">
-          <div className={`p-3.5 rounded-xl border shadow-xl flex items-center gap-2.5 text-xs font-semibold ${
-            uiToast.type === 'success'
-              ? 'bg-emerald-50 dark:bg-neutral-950 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-              : 'bg-rose-50 dark:bg-neutral-950 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300'
-          }`}>
-            <span>{uiToast.type === 'success' ? '✅' : '⚠️'}</span>
-            <span>{uiToast.message}</span>
-            <button
-              type="button"
-              onClick={() => setUiToast(null)}
-              className="ml-2 text-slate-400 hover:text-slate-700 dark:hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

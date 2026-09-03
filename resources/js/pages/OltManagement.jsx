@@ -922,8 +922,14 @@ export default function OltManagement() {
   };
 
   const showNotif = (msg, type = 'success') => {
-    setNotification(msg); setNotifType(type);
-    setTimeout(() => setNotification(null), 5000);
+    if (typeof window !== 'undefined' && window.showAppAlert) {
+      window.showAppAlert({
+        type: type === 'error' ? 'error' : 'success',
+        title: type === 'error' ? 'Pemberitahuan Gagal' : 'Berhasil!',
+        message: msg,
+        duration: 2600,
+      });
+    }
   };
 
   // ─── Helper ─────────────────────────────────────────────────────────────────
@@ -1318,16 +1324,7 @@ export default function OltManagement() {
         </div>
       </div>
 
-      {/* ── Notification ────────────────────────────────────────────────────── */}
-      {notification && (
-        <div className={`p-4 rounded-xl text-sm font-semibold flex items-center justify-between shadow-xs ${notifType === 'error'
-          ? 'bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-400'
-          : 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-400'
-          }`}>
-          <span>{notification}</span>
-          <button onClick={() => setNotification(null)} className="font-semibold text-lg leading-none opacity-60 hover:opacity-100">&times;</button>
-        </div>
-      )}
+
 
 
       {/* ── OLT Selector ────────────────────────────────────────────────────── */}

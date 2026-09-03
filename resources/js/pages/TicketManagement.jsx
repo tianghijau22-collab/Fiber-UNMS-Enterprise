@@ -959,9 +959,15 @@ export default function TicketManagement() {
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState(null);
 
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
+  const showToast = (msg, type = 'success') => {
+    if (typeof window !== 'undefined' && window.showAppAlert) {
+      window.showAppAlert({
+        type: type === 'error' ? 'error' : 'success',
+        title: type === 'error' ? 'Pemberitahuan Gagal' : 'Berhasil!',
+        message: msg,
+        duration: 2600,
+      });
+    }
   };
 
   const loadReferenceData = async () => {
@@ -1135,13 +1141,7 @@ export default function TicketManagement() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-[99999] px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold flex items-center gap-2 bg-emerald-900 text-white border-emerald-700 animate-in slide-in-from-top duration-200">
-          <span>✓</span>
-          <span>{toastMessage}</span>
-        </div>
-      )}
+
 
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-black p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">

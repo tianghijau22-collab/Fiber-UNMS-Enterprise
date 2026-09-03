@@ -686,16 +686,7 @@ export default function CustomerManagement() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
-      {/* Toast Notification */}
-      {toast && (
-        <div className={`fixed top-5 right-5 z-[999999] px-4 py-3 rounded-2xl shadow-xl border text-xs font-bold flex items-center gap-2 animate-in slide-in-from-top-3 duration-200 ${
-          toast.type === 'error'
-            ? 'bg-rose-600 text-white border-rose-700'
-            : 'bg-emerald-600 text-white border-emerald-700'
-        }`}>
-          <span>{toast.msg}</span>
-        </div>
-      )}
+
 
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
