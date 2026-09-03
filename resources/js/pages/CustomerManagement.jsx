@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SearchableSelect from '../components/SearchableSelect';
+import SearchableFilterDropdown from '../components/SearchableFilterDropdown';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
 import FtthFlowTopology from '../components/FtthFlowTopology.jsx';
@@ -19,6 +20,7 @@ export default function CustomerManagement() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterOlt, setFilterOlt] = useState('all');
+  const [filterInterface, setFilterInterface] = useState('all');
   const [filterOdc, setFilterOdc] = useState('all');
   const [filterOdp, setFilterOdp] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,7 +28,7 @@ export default function CustomerManagement() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterStatus, filterOlt, filterOdc, filterOdp]);
+  }, [search, filterStatus, filterOlt, filterInterface, filterOdc, filterOdp]);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -219,7 +221,18 @@ export default function CustomerManagement() {
     ]);
   }, [fetchCustomers, fetchOdpNodes, fetchOdcNodes, fetchOlts, fetchServicePackages]);
 
-  const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(refreshAllData);
+  const isAnyModalOpen = showModal || showDiagnosticsModal || showDiscoveryModal || confirmDialog.isOpen;
+
+  // Background polling specifically targets customer list & redaman (ultra fast & silent)
+  const silentCustomerPoll = useCallback(async (silent = true) => {
+    await fetchCustomers(silent);
+  }, [fetchCustomers]);
+
+  const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(silentCustomerPoll, {
+    enablePolling: true,
+    intervalMs: 5000,
+    shouldPause: isAnyModalOpen,
+  });
 
   // Fetch Unmapped ONUs from OLT Devices
   const fetchUnmappedOnus = async () => {
@@ -458,7 +471,153 @@ export default function CustomerManagement() {
     });
   };
 
-  // Filtered customers (Multi-level OLT / ODC / ODP / Status / Search)
+  // 1. Available Interfaces based on filterOlt
+  const availableInterfaces = useMemo(() => {
+    const set = new Set();
+    
+    // Dari OLT yang dipilih atau semua OLT
+    olts.forEach(o => {
+      const matchOlt = filterOlt === 'all' || String(o.id) === String(filterOlt);
+      if (matchOlt && o.pon_ports && Array.isArray(o.pon_ports)) {
+        o.pon_ports.forEach(p => {
+          const id = p.port_id || p.port || p.name;
+          if (id && id !== '—') set.add(id);
+        });
+      }
+    });
+
+    // Dari data pelanggan
+    customers.forEach(c => {
+      const matchOlt = filterOlt === 'all' || String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt;
+      if (matchOlt && c.gpon_interface && c.gpon_interface !== '—' && c.gpon_interface !== 'none') {
+        set.add(c.gpon_interface);
+      }
+    });
+
+    // Dari ODP
+    odpNodes.forEach(odp => {
+      const matchOlt = filterOlt === 'all' || String(odp.olt_device_id) === String(filterOlt);
+      if (matchOlt && odp.olt_port_ref && odp.olt_port_ref !== '—' && odp.olt_port_ref !== 'none') {
+        set.add(odp.olt_port_ref);
+      }
+    });
+
+    return Array.from(set).sort();
+  }, [customers, olts, odpNodes, filterOlt]);
+
+  // 2. Available ODCs based on filterOlt
+  const availableOdcs = useMemo(() => {
+    if (filterOlt === 'all') {
+      return odcNodes;
+    }
+
+    return odcNodes.filter(odc => {
+      // Direct OLT link
+      if (odc.olt_device_id && String(odc.olt_device_id) === String(filterOlt)) {
+        return true;
+      }
+      // Pelanggan yang berada di ODC ini dan terhubung ke OLT terpilih
+      const hasCustomer = customers.some(c => 
+        (String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt) &&
+        (String(c.odc_id) === String(odc.id) || c.odc_name === odc.name)
+      );
+      if (hasCustomer) return true;
+
+      // ODP turunan ODC yang terhubung ke OLT terpilih
+      const hasOdp = odpNodes.some(odp =>
+        String(odp.olt_device_id) === String(filterOlt) &&
+        (String(odp.parent_node_id) === String(odc.id) || String(odp.parent_id) === String(odc.id))
+      );
+      return hasOdp;
+    });
+  }, [odcNodes, customers, odpNodes, filterOlt]);
+
+  // 3. Available ODPs based on filterOlt, filterOdc, and filterInterface
+  const availableOdps = useMemo(() => {
+    return odpNodes.filter(odp => {
+      // A. Filter by OLT
+      if (filterOlt !== 'all') {
+        const directOlt = odp.olt_device_id && String(odp.olt_device_id) === String(filterOlt);
+        const custInOlt = customers.some(c =>
+          (String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt) &&
+          (String(c.odp_id) === String(odp.id) || c.odp_name === odp.name)
+        );
+        const parentOdcInOlt = availableOdcs.some(odc =>
+          String(odc.id) === String(odp.parent_node_id || odp.parent_id)
+        );
+        if (!directOlt && !custInOlt && !parentOdcInOlt) return false;
+      }
+
+      // B. Filter by ODC
+      if (filterOdc !== 'all') {
+        const directOdc = String(odp.parent_node_id || odp.parent_id) === String(filterOdc);
+        const custInOdc = customers.some(c =>
+          (String(c.odc_id) === String(filterOdc) || c.odc_name === filterOdc) &&
+          (String(c.odp_id) === String(odp.id) || c.odp_name === odp.name)
+        );
+        if (!directOdc && !custInOdc) return false;
+      }
+
+      // C. Filter by Interface
+      if (filterInterface !== 'all') {
+        const directPort = odp.olt_port_ref === filterInterface;
+        const custInPort = customers.some(c =>
+          (c.gpon_interface === filterInterface || (c.gpon_interface && c.gpon_interface.toLowerCase() === filterInterface.toLowerCase())) &&
+          (String(c.odp_id) === String(odp.id) || c.odp_name === odp.name)
+        );
+        if (!directPort && !custInPort) return false;
+      }
+
+      return true;
+    });
+  }, [odpNodes, customers, availableOdcs, filterOlt, filterOdc, filterInterface]);
+
+  // Cascading Selection Handlers
+  const handleOltChange = (newOlt) => {
+    setFilterOlt(newOlt);
+    setFilterInterface('all');
+    setFilterOdc('all');
+    setFilterOdp('all');
+  };
+
+  const handleInterfaceChange = (newInterface) => {
+    setFilterInterface(newInterface);
+    setFilterOdp('all');
+  };
+
+  const handleOdcChange = (newOdc) => {
+    setFilterOdc(newOdc);
+    setFilterOdp('all');
+  };
+
+  // Dropdown Options formatted with Name Only (No Code)
+  const oltOptions = useMemo(() => [
+    { value: 'all', label: 'Semua OLT' },
+    ...olts.map(o => ({ value: o.id, label: o.name }))
+  ], [olts]);
+
+  const interfaceOptions = useMemo(() => [
+    { value: 'all', label: filterOlt !== 'all' ? `Semua Port OLT (${availableInterfaces.length})` : 'Semua Interface' },
+    ...availableInterfaces.map(iface => ({ value: iface, label: iface }))
+  ], [availableInterfaces, filterOlt]);
+
+  const odcOptions = useMemo(() => [
+    { value: 'all', label: filterOlt !== 'all' ? `Semua ODC OLT (${availableOdcs.length})` : 'Semua ODC' },
+    ...availableOdcs.map(odc => ({ value: odc.id, label: odc.name }))
+  ], [availableOdcs, filterOlt]);
+
+  const odpOptions = useMemo(() => [
+    { value: 'all', label: filterOlt !== 'all' || filterOdc !== 'all' ? `Semua ODP Terpilih (${availableOdps.length})` : 'Semua ODP' },
+    ...availableOdps.map(odp => ({ value: odp.id, label: odp.name }))
+  ], [availableOdps, filterOlt, filterOdc]);
+
+  const statusOptions = useMemo(() => [
+    { value: 'all', label: 'Semua Status' },
+    { value: 'Online', label: '🟢 Online' },
+    { value: 'Offline / LOS', label: '🔴 Offline / LOS' },
+  ], []);
+
+  // Filtered customers (Multi-level OLT / Interface / ODC / ODP / Status / Search)
   const filtered = useMemo(() => {
     return customers.filter(c => {
       const q = search.toLowerCase();
@@ -480,12 +639,15 @@ export default function CustomerManagement() {
         (filterStatus === 'Offline / LOS' && (c.status !== 'Online' && (c.rx_power === null || parseFloat(c.rx_power) <= -38.0)));
 
       const matchOlt = filterOlt === 'all' || String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt;
+      const matchInterface = filterInterface === 'all' || 
+        c.gpon_interface === filterInterface || 
+        (c.gpon_interface && c.gpon_interface.toLowerCase() === filterInterface.toLowerCase());
       const matchOdc = filterOdc === 'all' || String(c.odc_id) === String(filterOdc) || c.odc_name === filterOdc;
       const matchOdp = filterOdp === 'all' || String(c.odp_id) === String(filterOdp) || c.odp_name === filterOdp;
 
-      return matchSearch && matchStatus && matchOlt && matchOdc && matchOdp;
+      return matchSearch && matchStatus && matchOlt && matchInterface && matchOdc && matchOdp;
     });
-  }, [customers, search, filterStatus, filterOlt, filterOdc, filterOdp]);
+  }, [customers, search, filterStatus, filterOlt, filterInterface, filterOdc, filterOdp]);
 
   // Overall Statistics for KPI Cards
   const stats = useMemo(() => {
@@ -504,11 +666,12 @@ export default function CustomerManagement() {
   const totalPages = Math.ceil(filtered.length / perPage) || 1;
   const paginated = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
 
-  const isFilterActive = search || filterStatus !== 'all' || filterOlt !== 'all' || filterOdc !== 'all' || filterOdp !== 'all';
+  const isFilterActive = search || filterStatus !== 'all' || filterOlt !== 'all' || filterInterface !== 'all' || filterOdc !== 'all' || filterOdp !== 'all';
   const handleResetFilters = () => {
     setSearch('');
     setFilterStatus('all');
     setFilterOlt('all');
+    setFilterInterface('all');
     setFilterOdc('all');
     setFilterOdp('all');
   };
@@ -637,69 +800,64 @@ export default function CustomerManagement() {
           {/* Filter Dropdowns Grid */}
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
             {/* Filter OLT */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 hidden sm:inline">OLT:</span>
-              <select
-                value={filterOlt}
-                onChange={(e) => setFilterOlt(e.target.value)}
-                className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="all">Semua OLT</option>
-                {olts.map(o => (
-                  <option key={o.id} value={o.id}>{o.name} ({o.vendor})</option>
-                ))}
-              </select>
-            </div>
+            <SearchableFilterDropdown
+              label="OLT:"
+              value={filterOlt}
+              onChange={handleOltChange}
+              options={oltOptions}
+              searchPlaceholder="Cari OLT..."
+              minWidth="min-w-[210px]"
+            />
 
-            {/* Filter ODC */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 hidden sm:inline">ODC:</span>
-              <select
-                value={filterOdc}
-                onChange={(e) => setFilterOdc(e.target.value)}
-                className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="all">Semua ODC</option>
-                {odcNodes.map(odc => (
-                  <option key={odc.id} value={odc.id}>{odc.name} ({odc.code})</option>
-                ))}
-              </select>
-            </div>
+            {/* Filter Interface (Menyesuaikan OLT atau Global) */}
+            <SearchableFilterDropdown
+              label="Interface:"
+              value={filterInterface}
+              onChange={handleInterfaceChange}
+              options={interfaceOptions}
+              searchPlaceholder="Cari port interface..."
+              minWidth="min-w-[210px]"
+            />
 
-            {/* Filter ODP */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 hidden sm:inline">ODP:</span>
-              <select
-                value={filterOdp}
-                onChange={(e) => setFilterOdp(e.target.value)}
-                className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="all">Semua ODP</option>
-                {odpNodes.map(odp => (
-                  <option key={odp.id} value={odp.id}>{odp.name} ({odp.code})</option>
-                ))}
-              </select>
-            </div>
+            {/* Filter ODC (Nama Saja Tanpa Kode) */}
+            <SearchableFilterDropdown
+              label="ODC:"
+              value={filterOdc}
+              onChange={handleOdcChange}
+              options={odcOptions}
+              searchPlaceholder="Cari nama ODC..."
+              minWidth="min-w-[200px]"
+            />
+
+            {/* Filter ODP (Nama Saja Tanpa Kode) */}
+            <SearchableFilterDropdown
+              label="ODP:"
+              value={filterOdp}
+              onChange={setFilterOdp}
+              options={odpOptions}
+              searchPlaceholder="Cari nama ODP..."
+              minWidth="min-w-[200px]"
+            />
 
             {/* Filter Status */}
-            <select
+            <SearchableFilterDropdown
+              label="Status:"
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="all">Semua Status</option>
-              <option value="Online">Online</option>
-              <option value="Offline / LOS">Offline / LOS</option>
-            </select>
+              onChange={setFilterStatus}
+              options={statusOptions}
+              searchPlaceholder="Cari status..."
+              minWidth="min-w-[170px]"
+            />
 
             {/* Reset Filters */}
             {isFilterActive && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="px-3 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl hover:bg-rose-100 transition-all cursor-pointer"
+                className="px-3 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all cursor-pointer flex items-center gap-1.5"
                 title="Reset Semua Filter"
               >
+                <span>✕</span>
                 <span>Reset Filter</span>
               </button>
             )}
@@ -760,10 +918,10 @@ export default function CustomerManagement() {
                     let rxColorClass = 'text-slate-400';
 
                     if (!isClientOnline) {
-                      rxLabel = 'Loss';
+                      rxLabel = 'Offline (-40.00 dBm)';
                       rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
                     } else if (rx !== null) {
-                      rxLabel = `${rx.toFixed(1)} dBm`;
+                      rxLabel = `${rx.toFixed(2)} dBm`;
                       if (rx >= -19.0) {
                         rxColorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
                       } else if (rx >= -24.0) {
@@ -899,10 +1057,10 @@ export default function CustomerManagement() {
               let rxColorClass = 'text-slate-400';
 
               if (!isClientOnline) {
-                rxLabel = 'Loss';
+                rxLabel = 'Offline (-40.00 dBm)';
                 rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
               } else if (rx !== null) {
-                rxLabel = `${rx.toFixed(1)} dBm`;
+                rxLabel = `${rx.toFixed(2)} dBm`;
                 if (rx >= -19.0) {
                   rxColorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
                 } else if (rx >= -24.0) {
@@ -1138,10 +1296,10 @@ export default function CustomerManagement() {
                         handleOdpChange({ target: { value: val } });
                       }}
                       placeholder="-- Pilih ODP --"
-                      searchPlaceholder="Cari nama atau kode ODP..."
+                      searchPlaceholder="Cari nama ODP..."
                       options={odpNodes.map(odp => ({
                         value: odp.id,
-                        label: `${odp.name} (${odp.code})`,
+                        label: odp.name,
                         sublabel: `Kapasitas: ${odp.used_ports}/${odp.total_ports} Port Terpakai`
                       }))}
                     />
@@ -1407,10 +1565,10 @@ export default function CustomerManagement() {
                                     }));
                                   }}
                                   placeholder="-- Pilih Node ODP --"
-                                  searchPlaceholder="Cari nama atau kode ODP..."
+                                  searchPlaceholder="Cari nama ODP..."
                                   options={odpNodes.map(odp => ({
                                     value: odp.id,
-                                    label: `${odp.name} (${odp.code})`,
+                                    label: odp.name,
                                     sublabel: `Kapasitas: ${odp.used_ports}/${odp.total_ports} Port Terpakai`
                                   }))}
                                 />

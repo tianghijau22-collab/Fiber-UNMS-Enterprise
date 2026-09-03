@@ -7,17 +7,26 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * 3. Pembaruan data terjadi secara 'silent' (in-place) tanpa memunculkan layar loading berkedip
  * 4. Menyediakan tombol manual 'triggerRefresh' jika pengguna ingin sinkronisasi manual
  */
-export function useAutoRefresh(refreshFn, { enablePolling = false, intervalMs = 0, scope = null } = {}) {
+export function useAutoRefresh(refreshFn, {
+  enablePolling = false,
+  intervalMs = 5000,
+  scope = null,
+  shouldPause = false,
+} = {}) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(() => new Date());
   const refreshFnRef = useRef(refreshFn);
+  const isFetchingRef = useRef(false);
 
   useEffect(() => {
     refreshFnRef.current = refreshFn;
   }, [refreshFn]);
 
   const triggerRefresh = useCallback(async (showLoading = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     if (showLoading) setIsRefreshing(true);
+
     try {
       if (refreshFnRef.current) {
         // Panggil fungsi refresh dengan parameter silent = true agar tidak mereset state loading tabel
@@ -27,14 +36,15 @@ export function useAutoRefresh(refreshFn, { enablePolling = false, intervalMs = 
     } catch (e) {
       console.warn('AutoRefresh error:', e);
     } finally {
+      isFetchingRef.current = false;
       if (showLoading) {
         setTimeout(() => setIsRefreshing(false), 300);
       }
     }
   }, []);
 
+  // 1. Dengarkan event mutasi global (HANYA berjalan saat ada aksi CRUD POST/PUT/DELETE)
   useEffect(() => {
-    // 1. Dengarkan event mutasi global (HANYA berjalan saat ada aksi CRUD POST/PUT/DELETE)
     let debounceTimer = null;
     const handleMutation = (e) => {
       const detail = e?.detail;
@@ -56,6 +66,35 @@ export function useAutoRefresh(refreshFn, { enablePolling = false, intervalMs = 
       if (debounceTimer) clearTimeout(debounceTimer);
     };
   }, [triggerRefresh, scope]);
+
+  // 2. Continuous Silent Polling (Default 5 detik jika enablePolling: true)
+  useEffect(() => {
+    if (!enablePolling || intervalMs <= 0) return;
+
+    let timer = null;
+
+    const runPoll = () => {
+      // Jangan poll jika tab browser tidak terlihat atau sedang dijeda (misal modal form terbuka)
+      if (document.hidden || shouldPause) return;
+      triggerRefresh(false);
+    };
+
+    timer = setInterval(runPoll, intervalMs);
+
+    // Langsung refresh saat user kembali membuka tab browser aktif
+    const handleVisibilityChange = () => {
+      if (!document.hidden && !shouldPause) {
+        triggerRefresh(false);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (timer) clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [enablePolling, intervalMs, shouldPause, triggerRefresh]);
 
   return {
     isRefreshing,

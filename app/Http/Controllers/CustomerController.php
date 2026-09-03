@@ -78,18 +78,21 @@ class CustomerController extends Controller
                 }
             }
 
-            $rxPower = $liveData ? (float)$liveData['rx_power'] : ($ont?->rx_power !== null ? (float)$ont->rx_power : null);
-            $txPower = $liveData ? (float)($liveData['tx_power'] ?? 1.95) : ($ont?->tx_power !== null ? (float)$ont->tx_power : null);
-            $distance = $liveData['distance_meters'] ?? ($ont?->distance_meters ?? 650);
-
-            // Tentukan status realtime: Online jika rx_power terdeteksi valid/aktif, Offline / LOS jika loss atau tidak terbaca
             $isOnline = false;
+            $rxPower = -40.00;
             if ($liveData) {
                 $st = strtolower($liveData['status'] ?? '');
-                $isOnline = ($st === 'online' || $st === 'active') && $rxPower !== null && $rxPower > -38.0;
-            } else {
-                $isOnline = $rxPower !== null && $rxPower > -38.0;
+                $rawRx = $liveData['rx_power'] ?? null;
+                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                $rxPower = $isOnline ? (float)$rawRx : -40.00;
+            } elseif ($ont) {
+                $st = strtolower($ont->status ?? '');
+                $rawRx = $ont->rx_power;
+                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                $rxPower = $isOnline ? (float)$rawRx : -40.00;
             }
+            $txPower = $isOnline ? (float)($liveData['tx_power'] ?? ($ont?->tx_power ?? 1.95)) : 0.0;
+            $distance = $isOnline ? ($liveData['distance_meters'] ?? ($ont?->distance_meters ?? 650)) : 0;
             $realtimeStatus = $isOnline ? 'Online' : 'Offline / LOS';
 
             return [
@@ -122,8 +125,8 @@ class CustomerController extends Controller
                 'onu_serial'         => $ont?->onu_serial ?? $primaryService?->onu_serial,
                 'onu_mac'            => $ont?->onu_mac,
                 'onu_type'           => $ont?->onu_type ?: 'HGU GPON/EPON',
-                'rx_power'           => $rxPower,
-                'tx_power'           => $txPower,
+                'rx_power'           => $rxPower !== null ? number_format((float)$rxPower, 2, '.', '') : '-40.00',
+                'tx_power'           => $txPower !== null ? number_format((float)$txPower, 2, '.', '') : '0.00',
                 'distance_meters'    => $distance,
                 'created_at'         => $c->created_at,
             ];

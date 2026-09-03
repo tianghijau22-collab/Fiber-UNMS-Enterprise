@@ -118,11 +118,28 @@ class NetworkNodeResource extends JsonResource
             return $this->_cachedClientRxPowers = ['powers' => [], 'total' => 0, 'has_loss' => false];
         }
 
-        // Single optimized direct JOIN query
+        static $liveOnuMap = null;
+        if ($liveOnuMap === null) {
+            $liveOnuMap = [];
+            foreach (\App\Models\OltDevice::whereNotNull('last_telemetry_snapshot')->get() as $dev) {
+                $snapOnus = array_merge(
+                    $dev->last_telemetry_snapshot['onu_list'] ?? [],
+                    $dev->last_telemetry_snapshot['unconfigured_onus'] ?? []
+                );
+                foreach ($snapOnus as $so) {
+                    $snKey = strtolower(trim($so['serial_number'] ?? ''));
+                    $macKey = strtolower(trim($so['mac_address'] ?? ($so['onu_mac'] ?? '')));
+                    if ($snKey) $liveOnuMap[$snKey] = $so;
+                    if ($macKey) $liveOnuMap[$macKey] = $so;
+                }
+            }
+        }
+
+        // Optimized query joining ports & ont_registrations
         $onts = DB::table('ont_registrations')
             ->join('network_ports', 'network_ports.customer_service_id', '=', 'ont_registrations.customer_service_id')
             ->where('network_ports.node_id', $this->id)
-            ->select('ont_registrations.status', 'ont_registrations.rx_power')
+            ->select('ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'ont_registrations.status', 'ont_registrations.rx_power')
             ->get();
 
         if ($onts->isEmpty()) {
@@ -132,8 +149,26 @@ class NetworkNodeResource extends JsonResource
         $powers = [];
         $hasLoss = false;
         foreach ($onts as $ont) {
-            if ($ont->status === 'active' && $ont->rx_power !== null && (float)$ont->rx_power > -40) {
-                $powers[] = (float)$ont->rx_power;
+            $snKey = strtolower(trim($ont->onu_serial ?? ''));
+            $macKey = strtolower(trim($ont->onu_mac ?? ''));
+            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
+
+            $isOnline = false;
+            $rxPower = -40.0;
+            if ($liveData) {
+                $st = strtolower($liveData['status'] ?? '');
+                $rawRx = $liveData['rx_power'] ?? null;
+                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                $rxPower = $isOnline ? (float)$rawRx : -40.00;
+            } else {
+                $st = strtolower($ont->status ?? '');
+                $rawRx = $ont->rx_power;
+                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                $rxPower = $isOnline ? (float)$rawRx : -40.00;
+            }
+
+            if ($isOnline) {
+                $powers[] = $rxPower;
             } else {
                 $hasLoss = true;
             }

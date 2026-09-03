@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 
 /**
  * Komponen Topologi Tree ODC & ODP
@@ -156,6 +156,11 @@ export default function FlowingOltTopology({
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-400 border border-emerald-800">
                           ONLINE
                         </span>
+                        {effectiveFilter && effectiveFilter !== 'all' && (
+                          <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-md bg-blue-950 text-blue-300 border border-blue-800 shadow-xs">
+                            {effectiveFilter}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -305,8 +310,8 @@ export default function FlowingOltTopology({
                                               : 'Belum Ada Pelanggan'}
                                           </span>
                                           {odp.avg_rx_power !== null && (
-                                            <span className="font-bold text-emerald-400">
-                                              {odp.avg_rx_power} dBm
+                                            <span className={`font-bold ${isOdpOnline ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                              {Number(odp.avg_rx_power).toFixed(2)} dBm
                                             </span>
                                           )}
                                         </div>

@@ -254,8 +254,8 @@ class HsgqDriver implements OltDeviceDriverInterface
             $isOnline = $phys ? ($phys['status'] === 'Online') : ($reg->status === 'active');
             $status = $isOnline ? 'Online' : 'Offline';
 
-            $rxPower = $isOnline ? ($phys && isset($phys['rx_power']) && $phys['rx_power'] !== null ? (float)$phys['rx_power'] : (float)($reg->rx_power ?? -16.63)) : null;
-            $txPower = $isOnline ? ($phys && isset($phys['tx_power']) && $phys['tx_power'] !== null ? (float)$phys['tx_power'] : (float)($reg->tx_power ?? 1.95)) : null;
+            $rxPower = $isOnline ? ($phys && isset($phys['rx_power']) && $phys['rx_power'] !== null ? (float)$phys['rx_power'] : (float)($reg->rx_power ?? -16.63)) : -40.00;
+            $txPower = $isOnline ? ($phys && isset($phys['tx_power']) && $phys['tx_power'] !== null ? (float)$phys['tx_power'] : (float)($reg->tx_power ?? 1.95)) : 0.0;
 
             return [
                 '_source'         => $phys ? 'live_olt_api' : 'database',

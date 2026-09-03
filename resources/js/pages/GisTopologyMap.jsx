@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { decimalToDms, parseCoordsInput } from '../utils/coordinateParser.js';
+import KmlImportModal from '../components/KmlImportModal.jsx';
 
 /* ══════════════════════════════════════════════════════════════════
    CLEAN & MODERN ENTERPRISE COLOR PALETTE (MATCHING OLT-MANAGEMENT)
@@ -1066,6 +1067,47 @@ function LeafletMap({
       }
     });
 
+    // Render actual Network Cables with route_coordinates from KML / Database
+    cables.forEach(cable => {
+      let coords = cable.route_coordinates;
+      if (typeof coords === 'string') {
+        try { coords = JSON.parse(coords); } catch (e) { coords = null; }
+      }
+      if (Array.isArray(coords) && coords.length >= 2) {
+        const cableColor = cable.cable_color || '#3b82f6';
+        
+        // Background glow
+        Lf.polyline(coords, {
+          color: cableColor,
+          weight: 6,
+          opacity: 0.35,
+          lineCap: 'round',
+        }).addTo(cablesGroup);
+
+        // Core line
+        const poly = Lf.polyline(coords, {
+          color: cableColor,
+          weight: 3.5,
+          opacity: 0.95,
+        }).addTo(cablesGroup);
+
+        const lenText = cable.length_meters
+          ? (cable.length_meters >= 1000 ? (cable.length_meters / 1000).toFixed(2) + ' km' : cable.length_meters + ' m')
+          : '—';
+
+        poly.bindPopup(`
+          <div style="font-family: inherit; font-size: 11px; padding: 4px; min-width: 170px;">
+            <div style="font-weight: 800; font-size: 12px; margin-bottom: 4px; color: #1e293b;">
+              🧵 ${cable.name}
+            </div>
+            <div><strong>Panjang:</strong> ${lenText}</div>
+            <div><strong>Kapasitas:</strong> ${cable.core_count_total || 6} Core</div>
+            ${cable.notes ? `<div style="margin-top: 4px; color: #64748b; font-size: 10px; border-top: 1px solid #e2e8f0; padding-top: 4px; max-height: 80px; overflow-y: auto;">${cable.notes}</div>` : ''}
+          </div>
+        `);
+      }
+    });
+
     // Draw Modern Clean Node Markers with Pulsing Radar for Faults
     nodes.forEach(node => {
       if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
@@ -1385,6 +1427,9 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   const [targetCoordModal, setTargetCoordModal] = useState(false);
   const [targetPin, setTargetPin] = useState(null);
 
+  // KML / KMZ Import Modal State
+  const [kmlImportModal, setKmlImportModal] = useState(false);
+
   // Esc key listener to exit fullscreen
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1400,7 +1445,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     if (!silent) setLoading(true);
     try {
       const [resNodes, resCables] = await Promise.allSettled([
-        fetch('/api/network-nodes?per_page=500').then(r => r.json()),
+        fetch('/api/network-nodes?per_page=5000').then(r => r.json()),
         fetch('/api/network-cables').then(r => r.json()),
       ]);
 
@@ -1630,6 +1675,15 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             >
               <span>🚨 {faultOnlyFilter ? 'Filter: Gangguan' : 'Hanya Gangguan'}</span>
             </button>
+
+            {/* Import KML / KMZ Button */}
+            <button
+              onClick={() => setKmlImportModal(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer bg-blue-600/90 hover:bg-blue-600 text-white border-blue-500 shadow-sm"
+              title="Import Data Jaringan Google Earth (.kml / .kmz)"
+            >
+              <span>📥 Import KML</span>
+            </button>
           </div>
 
           {/* Search & Type Filter */}
@@ -1807,6 +1861,15 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Import KML / KMZ Button */}
+          <button
+            onClick={() => setKmlImportModal(true)}
+            className="px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 shadow-2xs"
+            title="Import Data Jaringan dari Google Earth (.kml / .kmz)"
+          >
+            <span>📥 Import KML / KMZ</span>
+          </button>
+
           {/* Target Location / Check Coordinates Button */}
           <button
             onClick={() => setTargetCoordModal(true)}
@@ -2157,6 +2220,13 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             externalFlyToRef.current(target.lat, target.lng, 17);
           }
         }}
+      />
+
+      {/* KML / KMZ Intelligent Importer Modal */}
+      <KmlImportModal
+        isOpen={kmlImportModal}
+        onClose={() => setKmlImportModal(false)}
+        onSuccess={() => fetchNodesAndCables(true)}
       />
     </div>
   );

@@ -361,13 +361,13 @@ function BtsDetailModal({ site, onClose, onReadLive }) {
             <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
               <div className="text-[10px] text-slate-400 font-semibold uppercase">Rx Power</div>
               <div className="text-sm font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">
-                {site.rx_power !== null ? `${site.rx_power} dBm` : '—'}
+                {site.rx_power !== null ? `${parseFloat(site.rx_power).toFixed(2)} dBm` : '—'}
               </div>
             </div>
             <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
               <div className="text-[10px] text-slate-400 font-semibold uppercase">Tx Power</div>
               <div className="text-sm font-bold font-mono text-slate-800 dark:text-slate-200 mt-0.5">
-                {site.tx_power !== null ? `${site.tx_power} dBm` : '—'}
+                {site.tx_power !== null ? `${parseFloat(site.tx_power).toFixed(2)} dBm` : '—'}
               </div>
             </div>
             <div className="p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
@@ -489,13 +489,13 @@ function BtsLiveDiagModal({ modal, reading, onClose, onRefresh }) {
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 dark:text-slate-400">Rx Optical Power:</span>
                 <span className="font-mono font-black text-sm text-emerald-600 dark:text-emerald-400">
-                  {modal.rx_power} dBm
+                  {modal.rx_power !== null ? `${parseFloat(modal.rx_power).toFixed(2)} dBm` : '—'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 dark:text-slate-400">Tx Optical Power:</span>
                 <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                  {modal.tx_power} dBm
+                  {modal.tx_power !== null ? `${parseFloat(modal.tx_power).toFixed(2)} dBm` : '—'}
                 </span>
               </div>
               {modal.diagResult && (
@@ -816,7 +816,7 @@ export default function BtsManagement() {
                     let rxBadge = 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200';
                     let rxLabel = '—';
                     if (rxVal !== null) {
-                      rxLabel = `${rxVal.toFixed(3)} dBm`;
+                      rxLabel = `${rxVal.toFixed(2)} dBm`;
                       if (rxVal >= -22.0) {
                         rxBadge = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 font-bold';
                       } else if (rxVal >= -26.0) {
@@ -964,7 +964,7 @@ export default function BtsManagement() {
               let rxBadge = 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200';
               let rxLabel = '—';
               if (rxVal !== null) {
-                rxLabel = `${rxVal.toFixed(3)} dBm`;
+                rxLabel = `${rxVal.toFixed(2)} dBm`;
                 if (rxVal >= -22.0) {
                   rxBadge = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
                 } else if (rxVal >= -26.0) {

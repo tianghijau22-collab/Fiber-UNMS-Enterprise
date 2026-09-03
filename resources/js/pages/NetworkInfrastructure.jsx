@@ -3989,7 +3989,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, 
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="text-sm font-extrabold text-emerald-900 dark:text-emerald-200 font-mono">
                         {odpDetailData?.attenuation?.avg_rx_power != null
-                          ? `${odpDetailData.attenuation.avg_rx_power} dBm`
+                          ? `${parseFloat(odpDetailData.attenuation.avg_rx_power).toFixed(2)} dBm`
                           : '—'}
                       </span>
                       {odpDetailData?.attenuation?.signal_status === 'good' && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-300"> Normal</span>}
@@ -4034,7 +4034,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, 
                       const isUsed = !!(port.customer_id || port.customer_service_id || port.status === 'used');
                       const rx = port.rx_power != null ? parseFloat(port.rx_power) : null;
                       const rxColor = getRxColor(rx);
-                      const rxText = rx !== null ? `${rx.toFixed(1)} dBm` : '—';
+                      const rxText = rx !== null ? `${rx.toFixed(2)} dBm` : '—';
 
                       return (
                         <div
@@ -4184,7 +4184,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, 
                             <div>
                               <span className="text-slate-400 block text-[10px]">Status Sinyal Rx Power</span>
                               <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border inline-block ${getRxColor(attenuation?.avg_rx_power ?? node.rx_power)}`}>
-                                {attenuation?.avg_rx_power ? `${attenuation.avg_rx_power} dBm (Rata-rata)` : (node.rx_power != null ? `${node.rx_power} dBm` : 'Normal (-21.5 dBm)')}
+                                {attenuation?.avg_rx_power ? `${parseFloat(attenuation.avg_rx_power).toFixed(2)} dBm (Rata-rata)` : (node.rx_power != null ? `${parseFloat(node.rx_power).toFixed(2)} dBm` : 'Normal (-21.50 dBm)')}
                               </span>
                             </div>
                           </div>
@@ -4272,7 +4272,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, 
                                         </span>
                                       </td>
                                       <td className="py-1.5 px-3 font-mono text-[10px]">
-                                        {p.rx_power != null ? `${p.rx_power} dBm` : '—'}
+                                        {p.rx_power != null ? `${parseFloat(p.rx_power).toFixed(2)} dBm` : '—'}
                                       </td>
                                     </tr>
                                   ))}

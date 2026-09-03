@@ -149,39 +149,64 @@ const SignalStrengthMeter = ({ rxPower, status }) => {
         <span className={`w-1 h-2 rounded-2xs ${bars >= 3 ? colorCls : 'bg-slate-200 dark:bg-slate-700'}`} />
         <span className={`w-1 h-3 rounded-2xs ${bars >= 4 ? colorCls : 'bg-slate-200 dark:bg-slate-700'}`} />
       </span>
-      <span className={textCls}>{rxPower} dBm</span>
+      <span className={textCls}>{!isNaN(rx) ? rx.toFixed(2) : rxPower} dBm</span>
     </div>
   );
 };
 
-// Helper: Menentukan apakah sebuah port berstatus Up (Hijau) HANYA JIKA ada ONU fisik/terdaftar terhubung
-const checkIsPortUp = (port, oltDataRef) => {
-  if (!port) return false;
-  const regCount = Number(port.registered_onus || 0);
-  const uncfgCount = Number(port.unconfigured_onus || 0);
-  const onCount = Number(port.online_onus || 0);
-
-  if (regCount > 0 || uncfgCount > 0 || onCount > 0) return true;
-
-  if (!oltDataRef) return false;
+// Helper: Menghitung status kesehatan port PON secara presisi:
+// - 'mass_down': Port merah (registered > 0 dan online === 0, mati massal)
+// - 'warning': Port kuning (sebagian online, sebagian loss)
+// - 'up': Port hijau (semua online atau ada aktivitas normal)
+// - 'down': Port abu/standby (tidak ada ONU)
+const getPortHealth = (port, oltDataRef) => {
+  if (!port) return { status: 'down', label: 'Down / Standby', isUp: false, isMassDown: false, isWarning: false, regCount: 0, onCount: 0 };
+  
   const portId = port.port_id || '';
   const clean = portId.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
   const slotNum = port.slot;
   const portNum = port.port || port.portNum;
 
-  // Cek apakah ada unconfigured ONUs pada port ini
-  const hasUncfg = (oltDataRef.unconfigured_onus || []).some(o => {
+  // Temukan semua ONU pada port ini dari oltDataRef
+  let portOnus = [];
+  if (oltDataRef && oltDataRef.onu_list) {
+    portOnus = oltDataRef.onu_list.filter(o => {
+      const p = (o.port || o.detected_port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
+      return p === clean || p === portId || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}`));
+    });
+  }
+
+  const regCount = port.registered_onus !== undefined ? Number(port.registered_onus) : portOnus.length;
+  const onCount = port.online_onus !== undefined 
+    ? Number(port.online_onus)
+    : portOnus.filter(o => (o.status === 'Online' || o.status === 'active' || String(o.status).toLowerCase() === 'working') && o.rx_power !== null && Number(o.rx_power) > -38.0).length;
+
+  if (regCount > 0) {
+    if (onCount === 0) {
+      return { status: 'mass_down', label: 'Mati Massal', isUp: false, isMassDown: true, isWarning: false, regCount, onCount };
+    }
+    if (onCount < regCount) {
+      return { status: 'warning', label: `${regCount - onCount} Loss`, isUp: true, isMassDown: false, isWarning: true, regCount, onCount };
+    }
+    return { status: 'up', label: 'Up', isUp: true, isMassDown: false, isWarning: false, regCount, onCount };
+  }
+
+  // Cek apakah ada unconfigured
+  const hasUncfg = (oltDataRef?.unconfigured_onus || []).some(o => {
     const p = (o.detected_port || o.port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
     return p === clean || p === portId || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}`));
   });
-  if (hasUncfg) return true;
 
-  // Cek apakah ada registered ONUs pada port ini
-  const hasOnu = (oltDataRef.onu_list || []).some(o => {
-    const p = (o.port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-    return p === clean || p === portId || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}`));
-  });
-  return hasOnu;
+  if (hasUncfg) {
+    return { status: 'up', label: 'New ONU', isUp: true, isMassDown: false, isWarning: false, regCount: 0, onCount: 0 };
+  }
+
+  return { status: 'down', label: 'Down / Standby', isUp: false, isMassDown: false, isWarning: false, regCount: 0, onCount: 0 };
+};
+
+const checkIsPortUp = (port, oltDataRef) => {
+  const h = getPortHealth(port, oltDataRef);
+  return h.isUp;
 };
 
 // ─── Deployment Mode Options ──────────────────────────────────────────────────
@@ -469,19 +494,23 @@ export default function OltManagement() {
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchOlts);
   const activeOlt = olts.find(o => o.id === selectedOltId);
 
-  // Silent Background Auto-Refresh dari Database Snapshot (tanpa re-render per detik)
+  // Silent Background Auto-Refresh dari Database Snapshot (5 detik, halus tanpa kedip)
   useEffect(() => {
     if (!activeOlt || isAutoPollingPaused) return;
-    const intervalSec = Math.max(15, activeOlt.polling_interval_seconds || 30);
+
+    const isModalActive = showProgressiveSyncModal || showAddOltModal || showEditOltModal || showConfigModal || showSnmpDiagModal || showSyncExternalModal || showVpnModal || selectedOnuForOptical;
+    if (isModalActive) return;
 
     const timer = setInterval(() => {
+      if (document.hidden) return;
       const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
-      fetchOltHardware(vk, activeOlt.id, true, false); // Ambil snapshot database terbaru secara background
-      fetchOlts(true);
-    }, intervalSec * 1000);
+      fetchOltHardware(vk, activeOlt.id, true, false); // Snapshot telemetri hardware
+      fetchOlts(true);                                // Daftar OLT
+      fetchOltTopology(activeOlt.id);                 // Status redaman & link ODC/ODP
+    }, 5000);
 
     return () => clearInterval(timer);
-  }, [activeOlt?.id, activeOlt?.polling_interval_seconds, isAutoPollingPaused]);
+  }, [activeOlt?.id, activeOlt?.vendor_key, activeOlt?.vendor, isAutoPollingPaused, showProgressiveSyncModal, showAddOltModal, showEditOltModal, showConfigModal, showSnmpDiagModal, showSyncExternalModal, showVpnModal, selectedOnuForOptical]);
 
   // ─── Fetch OLT Hardware Telemetry dari Database Snapshot (Instan < 10ms) ───
   const fetchOltHardware = (vendorKey, deviceId, silent = false, fresh = false) => {
@@ -1796,7 +1825,7 @@ export default function OltManagement() {
                                   };
 
                                   const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === targetPortId;
-                                  const isUp = checkIsPortUp(matchedPort, oltData);
+                                  const pHealth = getPortHealth(matchedPort, oltData);
 
                                   return (
                                     <div key={idx} className="flex flex-col items-center gap-1">
@@ -1809,14 +1838,26 @@ export default function OltManagement() {
                                         className={`w-11 sm:w-13 h-11 sm:h-13 rounded-lg border-2 flex flex-col items-center justify-center text-xs font-black transition-all shadow-xs ${
                                           isSelected
                                             ? 'bg-indigo-600 text-white border-white ring-4 ring-indigo-400 scale-110 z-20 shadow-lg'
-                                            : isUp
-                                              ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/40'
-                                              : 'bg-slate-100 dark:bg-slate-950 hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-900 shadow-inner'
+                                            : (pHealth.isMassDown
+                                              ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/50 animate-pulse'
+                                              : (pHealth.isWarning
+                                                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-600 shadow-amber-500/40'
+                                                : (pHealth.isUp
+                                                  ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/40'
+                                                  : 'bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 text-slate-400 border-slate-300 dark:border-slate-800 shadow-inner')))
                                         }`}
-                                        title={`PON Port ${portNum}: ${isUp ? `Up (${matchedPort.online_onus || 0} Online)` : 'Down'}`}
+                                        title={`PON Port ${portNum}: ${pHealth.label} (${pHealth.onCount}/${pHealth.regCount} Online)`}
                                       >
                                         <div className="w-5 h-3.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-xs flex items-center justify-center">
-                                          <span className={`w-2.5 h-1.5 rounded-2xs ${isUp ? 'bg-emerald-500 shadow-xs shadow-emerald-500' : 'bg-rose-500'}`} />
+                                          <span className={`w-2.5 h-1.5 rounded-2xs ${
+                                            pHealth.isMassDown
+                                              ? 'bg-rose-500 shadow-xs shadow-rose-500 animate-ping'
+                                              : (pHealth.isWarning
+                                                ? 'bg-amber-400 shadow-xs shadow-amber-400'
+                                                : (pHealth.isUp
+                                                  ? 'bg-emerald-500 shadow-xs shadow-emerald-500'
+                                                  : 'bg-slate-400'))
+                                          }`} />
                                         </div>
                                       </button>
                                     </div>
@@ -2044,7 +2085,7 @@ export default function OltManagement() {
                                         };
 
                                         const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === `gpon-olt_${targetPortId}` || selectedPortFilter === targetPortId;
-                                        const isUp = checkIsPortUp(matchedPort, oltData);
+                                        const pHealth = getPortHealth(matchedPort, oltData);
 
                                         return (
                                           <button
@@ -2055,11 +2096,15 @@ export default function OltManagement() {
                                             onMouseLeave={() => setHoveredPortInfo(null)}
                                             className={`w-full max-w-[32px] h-5 sm:h-5.5 rounded border flex items-center justify-center text-[9px] sm:text-[10px] font-black transition-all ${isSelected
                                               ? 'bg-indigo-600 text-white border-white ring-2 ring-indigo-400 scale-125 z-20 shadow-lg'
-                                              : isUp
-                                                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
-                                                : 'bg-slate-100 dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 shadow-inner'
+                                              : (pHealth.isMassDown
+                                                ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/40 animate-pulse'
+                                                : (pHealth.isWarning
+                                                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-600 shadow-amber-500/30'
+                                                  : (pHealth.isUp
+                                                    ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
+                                                    : 'bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-400 border-slate-300 dark:border-slate-800 shadow-inner')))
                                               }`}
-                                            title={`Port 1/${slotNum}/${portNum} (${cardType}): ${isUp ? `Up / Active Laser` : 'Down / Standby'} (Tx: ${matchedPort.tx_power_dbm || '—'} dBm, ${matchedPort.online_onus || 0} Online)`}
+                                            title={`Port 1/${slotNum}/${portNum} (${cardType}): ${pHealth.label} (${pHealth.onCount}/${pHealth.regCount} Online)`}
                                           >
                                             {portNum}
                                           </button>
@@ -2162,7 +2207,7 @@ export default function OltManagement() {
                                     };
 
                                     const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === `gpon-olt_${targetPortId}` || selectedPortFilter === targetPortId;
-                                    const isUp = checkIsPortUp(matchedPort, oltData);
+                                    const pHealth = getPortHealth(matchedPort, oltData);
 
                                     return (
                                       <button
@@ -2173,14 +2218,28 @@ export default function OltManagement() {
                                         onMouseLeave={() => setHoveredPortInfo(null)}
                                         className={`w-10 sm:w-11 h-11 sm:h-12 rounded-lg border flex flex-col items-center justify-center text-xs font-black transition-all shadow-xs shrink-0 ${isSelected
                                           ? 'bg-indigo-600 text-white border-white ring-2 ring-indigo-400 scale-110 z-20 shadow-md'
-                                          : isUp
-                                            ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
-                                            : 'bg-slate-100 dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 shadow-inner'
+                                          : (pHealth.isMassDown
+                                            ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/40 animate-pulse'
+                                            : (pHealth.isWarning
+                                              ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-600 shadow-amber-500/30'
+                                              : (pHealth.isUp
+                                                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
+                                                : 'bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-400 border-slate-300 dark:border-slate-800 shadow-inner')))
                                           }`}
-                                        title={`Port 1/1/${portNum}: ${isUp ? `Up (${matchedPort.online_onus || 0} Online)` : 'Down'}`}
+                                        title={`Port 1/1/${portNum}: ${pHealth.label} (${pHealth.onCount}/${pHealth.regCount} Online)`}
                                       >
                                         <span>{portNum}</span>
-                                        <span className={`w-2 h-2 rounded-full mt-1 ${isSelected ? 'bg-white' : isUp ? 'bg-emerald-950' : 'bg-rose-400'}`} />
+                                        <span className={`w-2 h-2 rounded-full mt-1 ${
+                                          isSelected
+                                            ? 'bg-white'
+                                            : (pHealth.isMassDown
+                                              ? 'bg-rose-300 animate-ping'
+                                              : (pHealth.isWarning
+                                                ? 'bg-amber-300'
+                                                : (pHealth.isUp
+                                                  ? 'bg-emerald-950'
+                                                  : 'bg-slate-400')))
+                                        }`} />
                                       </button>
                                     );
                                   })}
@@ -2243,7 +2302,7 @@ export default function OltManagement() {
                                     };
 
                                     const isSelected = selectedPortFilter === matchedPort.port_id || selectedPortFilter === `gpon-olt_${targetPortId}` || selectedPortFilter === targetPortId;
-                                    const isUp = checkIsPortUp(matchedPort, oltData);
+                                    const pHealth = getPortHealth(matchedPort, oltData);
 
                                     return (
                                       <button
@@ -2254,14 +2313,28 @@ export default function OltManagement() {
                                         onMouseLeave={() => setHoveredPortInfo(null)}
                                         className={`w-10 sm:w-11 h-11 sm:h-12 rounded-lg border flex flex-col items-center justify-center text-xs font-black transition-all shadow-xs shrink-0 ${isSelected
                                           ? 'bg-indigo-600 text-white border-white ring-2 ring-indigo-400 scale-110 z-20 shadow-md'
-                                          : isUp
-                                            ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
-                                            : 'bg-slate-100 dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 shadow-inner'
+                                          : (pHealth.isMassDown
+                                            ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-700 shadow-rose-600/40 animate-pulse'
+                                            : (pHealth.isWarning
+                                              ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-600 shadow-amber-500/30'
+                                              : (pHealth.isUp
+                                                ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-600 shadow-emerald-500/30'
+                                                : 'bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-400 border-slate-300 dark:border-slate-800 shadow-inner')))
                                           }`}
-                                        title={`Port 1/2/${portNum}: ${isUp ? `Up (${matchedPort.online_onus || 0} Online)` : 'Down'}`}
+                                        title={`Port 1/2/${portNum}: ${pHealth.label} (${pHealth.onCount}/${pHealth.regCount} Online)`}
                                       >
                                         <span>{portNum}</span>
-                                        <span className={`w-2 h-2 rounded-full mt-1 ${isSelected ? 'bg-white' : isUp ? 'bg-emerald-950' : 'bg-rose-400'}`} />
+                                        <span className={`w-2 h-2 rounded-full mt-1 ${
+                                          isSelected
+                                            ? 'bg-white'
+                                            : (pHealth.isMassDown
+                                              ? 'bg-rose-300 animate-ping'
+                                              : (pHealth.isWarning
+                                                ? 'bg-amber-300'
+                                                : (pHealth.isUp
+                                                  ? 'bg-emerald-950'
+                                                  : 'bg-slate-400')))
+                                        }`} />
                                       </button>
                                     );
                                   })}
@@ -2364,7 +2437,7 @@ export default function OltManagement() {
                         );
                       }
 
-                      const isPortUp = checkIsPortUp(activePortHUD, oltData);
+                      const hudHealth = getPortHealth(activePortHUD, oltData);
                       const totalOnusOnPort = (activePortHUD.registered_onus || 0) + (activePortHUD.unconfigured_onus || 0);
 
                       return (
@@ -2376,19 +2449,17 @@ export default function OltManagement() {
                             <div>
                               <span className="font-black text-sm text-slate-900 dark:text-white">{activePortHUD.port_id}</span>
                               <div className="text-slate-600 dark:text-slate-300 text-xs font-semibold flex flex-wrap items-center gap-2 mt-1">
-                                <span>Status: <strong className={isPortUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>{isPortUp ? 'Up / Active Laser' : 'Down / Standby'}</strong></span>
+                                <span>Status: <strong className={
+                                  hudHealth.isMassDown
+                                    ? 'text-rose-600 dark:text-rose-400 font-black animate-pulse'
+                                    : (hudHealth.isWarning
+                                      ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                      : (hudHealth.isUp ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'))
+                                }>
+                                  {hudHealth.isMassDown ? '🔴 Mati Massal (Semua Pelanggan LOS)' : (hudHealth.isWarning ? `🟡 Warning (${hudHealth.label})` : (hudHealth.isUp ? 'Up / Active Laser' : 'Down / Standby'))}
+                                </strong></span>
                                 <span>·</span>
                                 <span><strong className="text-slate-900 dark:text-white font-bold">{activePortHUD.registered_onus || 0}</strong> Terdaftar {activePortHUD.unconfigured_onus > 0 ? <span>(<strong className="text-amber-600 dark:text-amber-400">{activePortHUD.unconfigured_onus}</strong> Belum Terdaftar)</span> : ''}</span>
-                                <span>·</span>
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold text-[11px]">
-                                  <span>SFP:</span>
-                                  <span className="text-indigo-600 dark:text-indigo-400">{activePortHUD.sfp_class || 'Class C+'}</span>
-                                  {activePortHUD.sfp_vendor && activePortHUD.sfp_vendor !== '—' && (
-                                    <span className="text-slate-500 dark:text-slate-400 font-normal">({activePortHUD.sfp_vendor})</span>
-                                  )}
-                                </span>
-                                <span>·</span>
-                                <span>Tx Power: <strong className="text-amber-600 dark:text-amber-400 font-bold font-mono">{activePortHUD.tx_power_dbm ? `+${activePortHUD.tx_power_dbm} dBm` : (isPortUp ? '+5.50 dBm' : '—')}</strong></span>
                               </div>
                             </div>
                           </div>
@@ -2536,11 +2607,13 @@ export default function OltManagement() {
                           });
                           const activeOnus = portOnusList.filter(o => o.status === 'Online' && o.rx_power !== null && o.rx_power > -40);
                           const avgRx = activeOnus.length > 0
-                            ? (activeOnus.reduce((acc, o) => acc + parseFloat(o.rx_power), 0) / activeOnus.length).toFixed(1)
+                            ? (activeOnus.reduce((acc, o) => acc + parseFloat(o.rx_power), 0) / activeOnus.length).toFixed(2)
                             : null;
                           const maxCapacity = 64;
                           const currentRegistered = port.registered_onus || portOnusList.length;
                           const capPercent = Math.min(100, Math.round((currentRegistered / maxCapacity) * 100));
+
+                          const portHealth = getPortHealth(port, oltData);
 
                           return (
                             <button
@@ -2549,22 +2622,37 @@ export default function OltManagement() {
                               onClick={() => handleSelectPort(port.port_id)}
                               className={`p-4 rounded-2xl space-y-3 text-left transition-all relative group ${isSelected
                                 ? 'bg-indigo-50/90 dark:bg-indigo-900/30 border-2 border-indigo-600 dark:border-indigo-500 shadow-md ring-2 ring-indigo-500/20'
-                                : 'bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-800 shadow-2xs'
+                                : (portHealth.isMassDown
+                                  ? 'bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-500 shadow-md ring-2 ring-rose-500/30 hover:bg-rose-100 dark:hover:bg-rose-900/50'
+                                  : 'bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-white dark:hover:bg-slate-800 shadow-2xs')
                                 }`}
                             >
                               <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-700/70 pb-2.5">
                                 <div className="flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full ${port.status === 'Up' ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50 animate-pulse' : 'bg-rose-500'}`} />
+                                  <span className={`w-2.5 h-2.5 rounded-full ${
+                                    portHealth.isMassDown
+                                      ? 'bg-rose-500 shadow-sm shadow-rose-500/80 animate-ping'
+                                      : (portHealth.isWarning
+                                        ? 'bg-amber-500 shadow-sm shadow-amber-500/60'
+                                        : (portHealth.isUp
+                                          ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50 animate-pulse'
+                                          : 'bg-slate-400'))
+                                  }`} />
                                   <span className="text-xs font-mono font-extrabold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
                                     <span>{formatShortPort(port.port_id)}</span>
                                     {isSelected && loadingPortOnus && <Spinner />}
                                   </span>
                                 </div>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${isPortUp
-                                  ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                  : 'bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
-                                  }`}>
-                                  {isPortUp ? 'Up' : 'Down'}
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  portHealth.isMassDown
+                                    ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 animate-pulse'
+                                    : (portHealth.isWarning
+                                      ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                                      : (portHealth.isUp
+                                        ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'))
+                                }`}>
+                                  {portHealth.label}
                                 </span>
                               </div>
 
@@ -3016,21 +3104,21 @@ export default function OltManagement() {
                               </span>
                             </td>
                             <td className="px-5 py-3.5 font-mono text-xs font-bold">
-                              {isOffline ? (
+                              {isOffline || onu.rx_power === null || Number(onu.rx_power) <= -38 ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                  Loss (-∞ dBm)
+                                  Offline (-40.00 dBm)
                                 </span>
                               ) : onu.rx_power < -27 ? (
                                 <span className="text-rose-600 dark:text-rose-400 font-bold">
-                                  {onu.rx_power} dBm
+                                  {Number(onu.rx_power).toFixed(2)} dBm
                                 </span>
                               ) : onu.rx_power < -24 ? (
                                 <span className="text-amber-600 dark:text-amber-400 font-bold">
-                                  {onu.rx_power} dBm
+                                  {Number(onu.rx_power).toFixed(2)} dBm
                                 </span>
                               ) : (
                                 <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                  {onu.rx_power} dBm
+                                  {Number(onu.rx_power).toFixed(2)} dBm
                                 </span>
                               )}
                             </td>
@@ -3153,16 +3241,16 @@ export default function OltManagement() {
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
                             <span className="text-slate-400 font-semibold">Redaman Rx</span>
                             <span className="col-span-2 font-mono font-bold">
-                              {isOffline ? (
+                              {isOffline || onu.rx_power === null || Number(onu.rx_power) <= -38 ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                  Loss (-∞ dBm)
+                                  Offline (-40.00 dBm)
                                 </span>
                               ) : onu.rx_power < -27 ? (
-                                <span className="text-rose-600 dark:text-rose-400 font-bold">{onu.rx_power} dBm</span>
+                                <span className="text-rose-600 dark:text-rose-400 font-bold">{Number(onu.rx_power).toFixed(2)} dBm</span>
                               ) : onu.rx_power < -24 ? (
-                                <span className="text-amber-600 dark:text-amber-400 font-bold">{onu.rx_power} dBm</span>
+                                <span className="text-amber-600 dark:text-amber-400 font-bold">{Number(onu.rx_power).toFixed(2)} dBm</span>
                               ) : (
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onu.rx_power} dBm</span>
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">{Number(onu.rx_power).toFixed(2)} dBm</span>
                               )}
                             </span>
                           </div>
@@ -4883,7 +4971,7 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
                 {/* Main Rx Power Typography */}
                 <div className="space-y-1">
                   <div className="text-4xl font-black font-mono text-slate-900 dark:text-white">
-                    {isOffline ? 'Loss (-∞ dBm)' : `${rx} dBm`}
+                    {isOffline ? 'Offline (-40.00 dBm)' : `${parseFloat(rx).toFixed(2)} dBm`}
                   </div>
                   <div className="inline-block px-3.5 py-1 rounded-full text-xs font-bold bg-white/80 dark:bg-slate-800/80 shadow-2xs border border-slate-200/60 dark:border-slate-700/60">
                     {isOffline

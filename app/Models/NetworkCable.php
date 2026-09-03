@@ -22,6 +22,7 @@ class NetworkCable extends Model
         'installation_type',
         'route_description',
         'route_coordinates',
+        'cable_color',
         'status',
         'installed_at',
         'notes',

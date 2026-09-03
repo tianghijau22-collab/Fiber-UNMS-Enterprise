@@ -53,7 +53,8 @@ class NetworkNodeController extends Controller
             $query->where('parent_node_id', $request->parent_id);
         }
 
-        $nodes = $query->orderBy('name')->paginate(100);
+        $perPage = min((int)$request->input('per_page', 100), 10000);
+        $nodes = $query->orderBy('name')->paginate($perPage);
         return NetworkNodeResource::collection($nodes);
     }
 
@@ -290,20 +291,25 @@ class NetworkNodeController extends Controller
             $macKey = strtolower(trim($ont?->onu_mac ?: ''));
             $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
 
-            $rx = null;
-            $status = 'Offline';
-            if ($liveData && isset($liveData['rx_power']) && is_numeric($liveData['rx_power'])) {
-                $rx = (float)$liveData['rx_power'];
-                $status = $rx > -38.0 ? 'Online' : 'Offline / LOS';
-            } elseif ($ont && $ont->rx_power !== null && is_numeric($ont->rx_power)) {
-                $rx = (float)$ont->rx_power;
-                $status = $rx > -38.0 ? 'Online' : 'Offline / LOS';
+            $isOnline = false;
+            $rx = -40.00;
+            if ($liveData) {
+                $st = strtolower($liveData['status'] ?? '');
+                $rawRx = $liveData['rx_power'] ?? null;
+                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                $rx = $isOnline ? (float)$rawRx : -40.00;
+            } elseif ($ont) {
+                $st = strtolower($ont->status ?? '');
+                $rawRx = $ont->rx_power;
+                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                $rx = $isOnline ? (float)$rawRx : -40.00;
             }
 
             $custByOdp[$odpId][] = [
-                'name' => $c->name,
-                'rx' => $rx,
-                'status' => $status,
+                'name'      => $c->name,
+                'rx'        => $rx,
+                'is_online' => $isOnline,
+                'status'    => $isOnline ? 'Online' : 'Offline / LOS',
             ];
         }
 
@@ -339,12 +345,21 @@ class NetworkNodeController extends Controller
 
                     $custs = $custByOdp[$o->id] ?? [];
                     $custCount = count($custs);
-                    $validRx = array_filter(array_column($custs, 'rx'), fn($r) => $r !== null);
-                    $onlineCusts = count(array_filter($custs, fn($c) => $c['status'] === 'Online'));
-                    $avgRx = count($validRx) > 0 ? round(array_sum($validRx) / count($validRx), 2) : null;
-                    $computedStatus = $custCount > 0 
-                        ? ($onlineCusts > 0 ? 'ONLINE' : 'OFFLINE') 
-                        : (in_array(strtolower($o->status), ['active', 'online']) ? 'ONLINE' : 'OFFLINE');
+                    $onlineCusts = count(array_filter($custs, fn($c) => $c['is_online']));
+                    $validRx = array_filter(array_column(array_filter($custs, fn($c) => $c['is_online']), 'rx'), fn($r) => $r !== null && is_numeric($r));
+                    
+                    if ($custCount > 0) {
+                        if ($onlineCusts > 0) {
+                            $computedStatus = 'ONLINE';
+                            $avgRx = count($validRx) > 0 ? number_format(array_sum($validRx) / count($validRx), 2, '.', '') : null;
+                        } else {
+                            $computedStatus = 'OFFLINE';
+                            $avgRx = '-40.00';
+                        }
+                    } else {
+                        $computedStatus = in_array(strtolower($o->status), ['active', 'online']) ? 'ONLINE' : 'OFFLINE';
+                        $avgRx = null;
+                    }
 
                     return [
                         'id'                     => $o->id,

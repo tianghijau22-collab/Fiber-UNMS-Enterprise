@@ -174,3 +174,7 @@ Route::get('odp-checks/odp-options', [\App\Http\Controllers\OdpMeasurementContro
 Route::post('odp-checks/{id}/forward-telegram', [\App\Http\Controllers\OdpMeasurementController::class, 'forwardTelegram']);
 Route::apiResource('odp-checks', \App\Http\Controllers\OdpMeasurementController::class)->only(['index', 'store', 'destroy']);
 
+// KML / KMZ Intelligent Spatial Importer
+Route::post('kml-import/preview', [\App\Http\Controllers\KmlImportController::class, 'preview']);
+Route::post('kml-import/execute', [\App\Http\Controllers\KmlImportController::class, 'execute']);
+
