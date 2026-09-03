@@ -51,39 +51,39 @@ export default function FlowingOltTopology({
   const totalOdps = portOdcs.reduce((acc, o) => acc + (o.odps?.length || 0), 0);
 
   return (
-    <div className="bg-slate-950 text-white border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5 relative overflow-hidden">
+    <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-7 shadow-xs dark:shadow-2xl space-y-5 relative overflow-hidden transition-colors">
       {/* Background Ambient Optical Grid & Glow */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b14_1px,transparent_1px),linear-gradient(to_bottom,#1e293b14_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none opacity-60" />
-      <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-48 bg-blue-600/10 blur-3xl pointer-events-none rounded-full" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1e293b14_1px,transparent_1px),linear-gradient(to_bottom,#1e293b14_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none opacity-60" />
+      <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-48 bg-indigo-500/10 dark:bg-blue-600/10 blur-3xl pointer-events-none rounded-full" />
       
       {/* ── HEADER & COLLAPSE BUTTON ── */}
-      <div className="relative z-10 flex items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+      <div className="relative z-10 flex items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/80 pb-4">
         <div className="flex items-center gap-3">
           <span className="relative flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-500 shadow-[0_0_12px_#3b82f6]" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
           </span>
-          <h3 className="font-extrabold text-white text-lg tracking-tight">
-            ODC &amp; ODP
+          <h3 className="font-extrabold text-slate-950 dark:text-white text-lg tracking-tight uppercase">
+            ODC &amp; ODP TOPOLOGI
           </h3>
         </div>
 
         {/* Header Right: KPI + Button Lipat/Tutup */}
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Quick Metrics KPI: ODC & ODP count */}
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs font-mono text-slate-300 shadow-inner">
-            <span className="text-slate-500 text-[11px]">ODC:</span>
-            <span className="font-bold text-blue-400">{totalOdcs}</span>
-            <span className="text-slate-700">|</span>
-            <span className="text-slate-500 text-[11px]">ODP:</span>
-            <span className="font-bold text-indigo-400">{totalOdps}</span>
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300 shadow-2xs">
+            <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">ODC:</span>
+            <span className="font-bold text-indigo-600 dark:text-indigo-400">{totalOdcs}</span>
+            <span className="text-slate-300 dark:text-slate-700">|</span>
+            <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">ODP:</span>
+            <span className="font-bold text-indigo-600 dark:text-indigo-400">{totalOdps}</span>
           </div>
 
           {/* Button Lipat/Tutup Kontainer */}
           <button
             type="button"
             onClick={() => setIsSectionCollapsed(!isSectionCollapsed)}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="px-3.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
           >
             <span>{isSectionCollapsed ? 'Buka' : 'Tutup'}</span>
             <span className="text-[10px]">{isSectionCollapsed ? '▼' : '▲'}</span>
@@ -103,10 +103,10 @@ export default function FlowingOltTopology({
                   setActivePortTab('all');
                   if (onClearPortFilter) onClearPortFilter();
                 }}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                   effectiveFilter === null || activePortTab === 'all'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
                 }`}
               >
                 Semua ({oltTopology.length} ODC)
@@ -118,10 +118,10 @@ export default function FlowingOltTopology({
                     key={p}
                     type="button"
                     onClick={() => setActivePortTab(p)}
-                    className={`px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all shrink-0 cursor-pointer ${
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold transition-all shrink-0 cursor-pointer ${
                       isSelected
                         ? 'bg-indigo-600 text-white shadow-xs border border-indigo-500'
-                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
                     }`}
                   >
                     {p}
@@ -133,8 +133,8 @@ export default function FlowingOltTopology({
 
           {/* ── EMPTY STATE ── */}
           {portOdcs.length === 0 ? (
-            <div className="relative z-10 p-10 text-center text-slate-400 text-xs bg-slate-900/50 rounded-2xl border border-dashed border-slate-800 space-y-2">
-              <p className="font-bold text-slate-200 text-sm">
+            <div className="relative z-10 p-10 text-center text-slate-500 dark:text-slate-400 text-xs bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 space-y-2">
+              <p className="font-bold text-slate-700 dark:text-slate-200 text-sm">
                 Belum ada ODC/ODP yang terhubung.
               </p>
             </div>
@@ -147,17 +147,17 @@ export default function FlowingOltTopology({
 
                 {/* ── LEVEL 1: ROOT NODE (OLT) ── */}
                 <div className="relative flex flex-col items-center">
-                  <div className="group relative rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-blue-500/50 p-4 sm:p-5 shadow-[0_0_30px_rgba(59,130,246,0.25)] hover:border-blue-400 transition-all text-center min-w-[260px] max-w-[320px]">
+                  <div className="group relative rounded-2xl bg-slate-50 dark:bg-slate-800/90 border-2 border-indigo-500/70 dark:border-indigo-500/60 p-4 sm:p-5 shadow-md dark:shadow-[0_0_25px_rgba(99,102,241,0.25)] hover:border-indigo-600 transition-all text-center min-w-[260px] max-w-[320px]">
                     <div className="space-y-1">
-                      <h4 className="font-extrabold text-base text-white tracking-tight truncate">
+                      <h4 className="font-extrabold text-base text-slate-950 dark:text-white tracking-tight truncate">
                         {oltName}
                       </h4>
                       <div className="flex items-center justify-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-400 border border-emerald-800">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                           ONLINE
                         </span>
                         {effectiveFilter && effectiveFilter !== 'all' && (
-                          <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-md bg-blue-950 text-blue-300 border border-blue-800 shadow-xs">
+                          <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-2xs">
                             {effectiveFilter}
                           </span>
                         )}
@@ -171,7 +171,7 @@ export default function FlowingOltTopology({
                       <defs>
                         <linearGradient id="feederDottedGrad" x1="0%" y1="0%" x2="0%" y2="100%">
                           <stop offset="0%" stopColor="#10b981" />
-                          <stop offset="100%" stopColor="#06b6d4" />
+                          <stop offset="100%" stopColor="#6366f1" />
                         </linearGradient>
                       </defs>
                       {/* Glow background line */}
@@ -205,30 +205,30 @@ export default function FlowingOltTopology({
                         <div key={odc.id} className="flex flex-col items-center space-y-3">
                           
                           {/* ODC Node Card */}
-                          <div className="relative group rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/40 hover:border-indigo-400 p-4 sm:p-5 shadow-xl transition-all w-full max-w-[340px]">
+                          <div className="relative group rounded-2xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-400 dark:hover:border-indigo-400 p-4 sm:p-5 shadow-xs dark:shadow-xl transition-all w-full max-w-[340px]">
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
-                                <h5 className="font-extrabold text-base text-white group-hover:text-indigo-300 transition-colors truncate">
+                                <h5 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors truncate">
                                   {odc.name}
                                 </h5>
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
                                   ONLINE
                                 </span>
                               </div>
 
                               {odc.parent_node && (
-                                <p className="text-[11px] text-slate-400 truncate">
-                                  POP Induk: <strong className="text-slate-200">{odc.parent_node.name}</strong>
+                                <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate font-medium">
+                                  POP Induk: <strong className="text-slate-900 dark:text-slate-200 font-bold">{odc.parent_node.name}</strong>
                                 </p>
                               )}
                             </div>
 
-                            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                              <span>Splitter: <strong className="text-indigo-300 font-semibold">{odc.splitter || 'PLC 1:4'}</strong></span>
+                            <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-slate-700/80 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
+                              <span>Splitter: <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{odc.splitter || 'PLC 1:4'}</strong></span>
                               <button
                                 type="button"
                                 onClick={() => toggleOdc(odc.id)}
-                                className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+                                className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 underline cursor-pointer"
                               >
                                 {isOdcExpanded ? `Tutup (${childOdps.length} ODP) ▲` : `Buka (${childOdps.length} ODP) ▼`}
                               </button>
@@ -244,7 +244,7 @@ export default function FlowingOltTopology({
                                   <defs>
                                     <linearGradient id={`distDotted_${odc.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
                                       <stop offset="0%" stopColor="#10b981" />
-                                      <stop offset="100%" stopColor="#3b82f6" />
+                                      <stop offset="100%" stopColor="#6366f1" />
                                     </linearGradient>
                                   </defs>
                                   <line x1="16" y1="0" x2="16" y2="32" stroke="#10b981" strokeWidth="3.5" strokeOpacity="0.15" strokeLinecap="round" />
@@ -271,22 +271,22 @@ export default function FlowingOltTopology({
                                   return (
                                     <div
                                       key={odp.id}
-                                      className={`group relative rounded-xl p-3.5 bg-slate-900/90 border transition-all shadow-md flex flex-col justify-between space-y-2 ${
+                                      className={`group relative rounded-xl p-3.5 bg-white dark:bg-slate-800/90 border transition-all shadow-2xs flex flex-col justify-between space-y-2 ${
                                         isOdpOnline
-                                          ? 'border-emerald-500/30 hover:border-emerald-500/60'
-                                          : 'border-rose-500/30 hover:border-rose-500/60'
+                                          ? 'border-emerald-200 dark:border-emerald-800/60 hover:border-emerald-400'
+                                          : 'border-rose-200 dark:border-rose-800/60 hover:border-rose-400'
                                       }`}
                                     >
                                       {/* ODP Header & Dynamic Status */}
                                       <div className="flex items-start justify-between gap-1.5">
                                         <div>
                                           <div className="flex items-center gap-1.5">
-                                            <span className={`h-2 w-2 rounded-full ${isOdpOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
-                                            <span className="font-bold text-xs text-white group-hover:text-purple-300 transition-colors truncate max-w-[120px]">
+                                            <span className={`h-2 w-2 rounded-full ${isOdpOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                                            <span className="font-bold text-xs text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors truncate max-w-[120px]">
                                               {odp.name}
                                             </span>
                                           </div>
-                                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
                                             Splitter {odp.splitter || '1:8'}
                                           </span>
                                         </div>
@@ -294,23 +294,23 @@ export default function FlowingOltTopology({
                                         {/* Status Badge ONLINE / OFFLINE */}
                                         <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md border ${
                                           isOdpOnline
-                                            ? 'bg-emerald-950/90 text-emerald-400 border-emerald-800'
-                                            : 'bg-rose-950/90 text-rose-400 border-rose-800'
+                                            ? 'bg-emerald-50 dark:bg-emerald-950/90 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                                            : 'bg-rose-50 dark:bg-rose-950/90 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
                                         }`}>
                                           {isOdpOnline ? 'ONLINE' : 'OFFLINE'}
                                         </span>
                                       </div>
 
                                       {/* Dynamic Customer & Optical Details */}
-                                      <div className="pt-1.5 border-t border-slate-800">
-                                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                                      <div className="pt-1.5 border-t border-slate-100 dark:border-slate-700/80">
+                                        <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                                           <span>
                                             {hasCust
                                               ? `${odp.online_customer_count}/${odp.customer_count} Online`
                                               : 'Belum Ada Pelanggan'}
                                           </span>
                                           {odp.avg_rx_power !== null && (
-                                            <span className={`font-bold ${isOdpOnline ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            <span className={`font-bold ${isOdpOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                               {Number(odp.avg_rx_power).toFixed(2)} dBm
                                             </span>
                                           )}
