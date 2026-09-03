@@ -941,7 +941,7 @@ export default function OltManagement() {
 
   const badge = getConnectionBadge(activeOlt);
 
-  const inputCls = "w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium";
+  const inputCls = "w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium";
   const labelCls = "block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5";
 
   // ─── Sorting State untuk Tabel ONU Terdaftar ───────────────────────────────
@@ -4006,17 +4006,17 @@ export default function OltManagement() {
       )}
 
       {showConfigModal && createPortal(
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
           <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
 
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-800/90">
               <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Konfigurasi Koneksi SNMP OLT</h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 font-semibold text-indigo-600 dark:text-indigo-400">{activeOlt?.name} — {maskIpAddress(activeOlt?.ip_address)}</p>
+                <h3 className="text-lg font-bold text-slate-950 dark:text-white">Konfigurasi Koneksi SNMP OLT</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-semibold text-indigo-600 dark:text-indigo-400">{activeOlt?.name} — {maskIpAddress(activeOlt?.ip_address)}</p>
               </div>
               <button onClick={() => { setShowConfigModal(false); setTestResult(null); }}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
                 <IconX />
               </button>
             </div>
@@ -4329,20 +4329,20 @@ export default function OltManagement() {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-900/50">
+            <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-800/80">
               <button
                 type="button"
                 onClick={() => { setShowConfigModal(false); setTestResult(null); }}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer">
                 Tutup
               </button>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2.5">
                 <button
                   type="button"
                   onClick={handleSaveConfig}
                   disabled={savingConfig}
-                  className="px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50">
+                  className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 cursor-pointer">
                   {savingConfig ? 'Menyimpan...' : 'Simpan Saja'}
                 </button>
 
@@ -4350,7 +4350,7 @@ export default function OltManagement() {
                   type="button"
                   onClick={handleTestConnection}
                   disabled={testingConnection}
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 disabled:opacity-50">
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 disabled:opacity-50 cursor-pointer">
                   {testingConnection ? <><Spinner /><span>Menguji SNMP...</span></> : <><span>Uji &amp; Terapkan SNMP</span></>}
                 </button>
               </div>
@@ -4365,16 +4365,16 @@ export default function OltManagement() {
           MODAL: Tambah Perangkat OLT Baru
       ══════════════════════════════════════════════════════════════════════ */}
       {showAddOltModal && createPortal(
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
           <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
 
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-800/90">
               <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Tambah Perangkat OLT Baru</h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Dukungan Multi-Vendor via SNMP (ZTE, Huawei, VSOL, HSGQ, Hioso, Tarmoc, BDCOM, FiberHome)</p>
+                <h3 className="text-lg font-bold text-slate-950 dark:text-white">Tambah Perangkat OLT Baru</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Dukungan Multi-Vendor via SNMP (ZTE, Huawei, VSOL, HSGQ, Hioso, Tarmoc, BDCOM, FiberHome)</p>
               </div>
               <button onClick={() => setShowAddOltModal(false)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
                 <IconX />
               </button>
             </div>
@@ -4382,8 +4382,8 @@ export default function OltManagement() {
             <form onSubmit={handleAddOlt} className="p-6 space-y-5 overflow-y-auto flex-1">
               
               {/* ── Section 1: Identitas & Model OLT ──────────────────────────── */}
-              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
-                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-slate-800 pb-2">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center space-x-2 border-b border-slate-200 dark:border-slate-800 pb-2">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">1</span>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                     Identitas &amp; Spesifikasi Perangkat OLT
@@ -4447,8 +4447,8 @@ export default function OltManagement() {
               </div>
 
               {/* ── Section 2: Jaringan & Terowongan VPN ───────────────────────── */}
-              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
-                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-slate-800 pb-2">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center space-x-2 border-b border-slate-200 dark:border-slate-800 pb-2">
                   <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center font-bold">2</span>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                     Jaringan &amp; Terowongan VPN
@@ -4460,28 +4460,23 @@ export default function OltManagement() {
                     <label className={labelCls}>IP Address Manajemen OLT (Lokal)</label>
                     <input type="text" value={newOltForm.ip_address}
                       onChange={e => setNewOltForm({ ...newOltForm, ip_address: e.target.value })}
-                      placeholder="192.168.100.1" required className={inputCls + ' font-mono'} />
-                    <p className="text-[10px] text-slate-400 mt-1">Default HSGQ: <code>192.168.100.1</code> (dijangkau via VPN MikroTik).</p>
+                      placeholder="192.168.1.100" required className={inputCls + ' font-mono'} />
                   </div>
                   <div>
-                    <label className={labelCls}>Mode Deployment</label>
-                    <select value={newOltForm.deployment_mode}
-                      onChange={e => setNewOltForm({ ...newOltForm, deployment_mode: e.target.value })}
-                      className={inputCls}>
-                      <option value="vpn">VPN Tunnel / L2TP MikroTik (Rekomendasi)</option>
-                      <option value="direct">Direct LAN (Satu Jaringan Lokal)</option>
-                      <option value="probe">Local Probe Agent (Cloud External)</option>
-                    </select>
+                    <label className={labelCls}>Port SNMP OLT</label>
+                    <input type="number" value={newOltForm.snmp_port}
+                      onChange={e => setNewOltForm({ ...newOltForm, snmp_port: parseInt(e.target.value) || 161 })}
+                      required className={inputCls + ' font-mono'} />
                   </div>
                 </div>
               </div>
 
-              {/* ── Section 3: Kredensial SNMP & Quick Copy Scripts ────────────── */}
-              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
-                <div className="flex items-center space-x-2 border-b border-slate-200/80 dark:border-slate-800 pb-2">
-                  <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">3</span>
+              {/* ── Section 3: Kredensial SNMP ─────────────────────────────────── */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center space-x-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+                  <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center font-bold">3</span>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                    Kredensial SNMP Telemetri
+                    Kredensial SNMP (Pure Data Polling)
                   </h4>
                 </div>
 
@@ -4491,24 +4486,18 @@ export default function OltManagement() {
                     <select value={newOltForm.snmp_version}
                       onChange={e => setNewOltForm({ ...newOltForm, snmp_version: e.target.value })}
                       className={inputCls}>
-                      <option value="v2c">SNMPv2c (Community String - Rekomendasi)</option>
-                      <option value="v3">SNMPv3 (Username + Auth/Priv)</option>
+                      <option value="v2c">SNMP v2c (Direkomendasikan)</option>
+                      <option value="v3">SNMP v3 (Dengan Autentikasi/Privasi)</option>
                     </select>
                   </div>
                   <div>
-                    <label className={labelCls}>SNMP Read Community String</label>
-                    <div className="flex space-x-2">
-                      {['public', 'custom'].map(ct => (
-                        <button key={ct} type="button"
-                          onClick={() => setNewOltForm({ ...newOltForm, snmp_community_type: ct })}
-                          className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all ${newOltForm.snmp_community_type === ct
-                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
-                            : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-300'
-                            }`}>
-                          {ct === 'public' ? 'public (Standar)' : 'Custom'}
-                        </button>
-                      ))}
-                    </div>
+                    <label className={labelCls}>Tipe SNMP Read Community</label>
+                    <select value={newOltForm.snmp_community_type}
+                      onChange={e => setNewOltForm({ ...newOltForm, snmp_community_type: e.target.value, snmp_community: e.target.value === 'public' ? 'public' : newOltForm.snmp_community })}
+                      className={inputCls}>
+                      <option value="public">Default ('public')</option>
+                      <option value="custom">Custom Community String</option>
+                    </select>
                   </div>
                 </div>
 
@@ -4528,13 +4517,13 @@ export default function OltManagement() {
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <button type="button" onClick={() => setShowAddOltModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer">
                   Batal
                 </button>
                 <button type="submit" disabled={submittingOlt}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 disabled:opacity-50">
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center space-x-2 disabled:opacity-50 cursor-pointer">
                   {submittingOlt ? <><Spinner /><span>Menyimpan...</span></> : <><IconPlus /><span>Simpan Perangkat OLT</span></>}
                 </button>
               </div>
@@ -4549,16 +4538,16 @@ export default function OltManagement() {
           MODAL: Edit Perangkat OLT
       ══════════════════════════════════════════════════════════════════════ */}
       {showEditOltModal && editingOlt && createPortal(
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
           <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
 
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-800/90">
               <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Edit Perangkat OLT</h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{editingOlt.name} ({editingOlt.code})</p>
+                <h3 className="text-lg font-bold text-slate-950 dark:text-white">Edit Perangkat OLT</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{editingOlt.name} ({editingOlt.code})</p>
               </div>
               <button onClick={() => { setShowEditOltModal(false); setEditingOlt(null); }}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
                 <IconX />
               </button>
             </div>
@@ -4576,12 +4565,6 @@ export default function OltManagement() {
                   <input type="text" value={editOltForm.code}
                     onChange={e => setEditOltForm({ ...editOltForm, code: e.target.value.toUpperCase() })}
                     required className={inputCls + ' uppercase font-mono'} />
-                </div>
-                <div>
-                  <label className={labelCls}>IP Address Manajemen OLT</label>
-                  <input type="text" value={editOltForm.ip_address}
-                    onChange={e => setEditOltForm({ ...editOltForm, ip_address: e.target.value })}
-                    required className={inputCls + ' font-mono'} />
                 </div>
                 <div>
                   <label className={labelCls}>Vendor &amp; Tipe Perangkat</label>
@@ -4604,12 +4587,12 @@ export default function OltManagement() {
                       setEditOltForm({ ...editOltForm, vendor: v, model, total_ports: ports });
                     }}
                     className={inputCls}>
+                    <option value="HSGQ">HSGQ G004 / E04 (4-Port EPON/GPON)</option>
                     <option value="ZTE">ZTE C300 (Modular 16-Port GPON)</option>
                     <option value="ZTE C320">ZTE C320 (Compact 8-Port GPON)</option>
                     <option value="Huawei MA5608T">Huawei SmartAX MA5608T (8-Port GPON)</option>
                     <option value="Huawei MA5683T">Huawei SmartAX MA5683T (16-Port GPON)</option>
                     <option value="VSOL">VSOL V1600G2-B (8-Port GPON)</option>
-                    <option value="HSGQ">HSGQ G004 (4-Port GPON)</option>
                     <option value="Hioso">Hioso HA7302CS (2-Port EPON)</option>
                     <option value="Tarmoc">Tarmoc TMC-EP8 (8-Port EPON)</option>
                     <option value="FiberHome">FiberHome AN5516 (16-Port GPON)</option>

@@ -1104,7 +1104,7 @@ function MultiTubeSelector({ value, onChange, label, placeholder, helpText }) {
 /* ══════════════════════════════════════════════════════════════════
    MODAL ADD/EDIT NODE (POP / ODC / ODP)
 ══════════════════════════════════════════════════════════════════ */
-function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, oltDevices, onSave, onClose, loading, error }) {
+function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, oltDevices, onSave, onClose, loading, error, isMsCreation }) {
   // Clean up port ref for easy editing (convert gpon-olt_1/1/1 -> 1/1/1)
   const initialPortRef = editNode?.olt_port_ref
     ? editNode.olt_port_ref.split(',').map(s => s.trim().replace(/^gpon-olt_/i, '')).join(', ')
@@ -1155,6 +1155,11 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
     ? editNode.code
     : generateAutoNodeCode(type || 'POP', editNode?.name || '', allNodes, parentNode);
 
+  // Jika membuat ODP/MS, default parent_node_id ke POP pertama jika ada
+  const defaultParentId = editNode?.parent_node_id 
+    ?? parentNode?.id 
+    ?? (isMsCreation ? (allNodes.find(n => n.node_type === 'POP')?.id ?? '') : '');
+
   const [form, setForm] = useState({
     name: editNode?.name ?? '',
     code: initialCode,
@@ -1174,7 +1179,7 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
     used_ports: editNode?.used_ports ?? 0,
     olt_port_ref: initialPortRef,
     olt_device_id: editNode?.olt_device_id ?? '',
-    parent_node_id: editNode?.parent_node_id ?? parentNode?.id ?? '',
+    parent_node_id: defaultParentId,
     core_power: editNode?.core_power ?? '',
     core_color: editNode?.core_color ?? '',
     tube_info: editNode?.tube_info ?? '',
@@ -1312,7 +1317,14 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
         {/* Pinned Header */}
         <div className="bg-slate-50 dark:bg-slate-800/90 text-slate-950 dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-200 dark:border-slate-800">
           <div>
-            <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">{isEdit ? '✏️ Edit Node' : '➕ Tambah Node'} ({form.node_type})</h3>
+            <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">
+              {isEdit ? '✏️ Edit Node' : isMsCreation ? '➕ Tambah ODP/MS (Mini Splitter)' : '➕ Tambah Node'} ({isMsCreation ? 'ODP/MS' : form.node_type})
+            </h3>
+            {isMsCreation && (
+              <p className="text-[11px] text-violet-600 dark:text-violet-400 font-semibold mt-0.5">
+                🔵 Pola Mini: Terhubung langsung ke POP (POP → ODP/MS → ODP → CLIENT)
+              </p>
+            )}
             {parentNode && <p className="text-[11px] text-slate-500 dark:text-slate-400">di bawah: {parentNode.name}</p>}
           </div>
           <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
@@ -1487,24 +1499,74 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
           {form.node_type !== 'POP' && (
             <div>
               <label className={lc}>
-                {form.node_type === 'ODC' ? 'Node Induk (POP atau ODC Induk)' : 'Node Induk (ODC)'} *
+                {form.node_type === 'ODC'
+                  ? 'Node Induk (POP atau ODC Induk)'
+                  : isMsCreation
+                    ? 'Node Induk (Pilih POP untuk ODP/MS)'
+                    : 'Node Induk (POP untuk ODP/MS, ODC, atau MS)'} *
               </label>
+
+              {/* Untuk ODP: tampilkan penjelasan opsi parent */}
+              {form.node_type === 'ODP' && (
+                <div className="mb-2 flex flex-wrap gap-1.5 text-[10px]">
+                  <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-950/60 border border-purple-300 dark:border-purple-800 rounded-lg text-purple-800 dark:text-purple-300 font-bold">
+                    🏢 POP → Pilih jika node ini adalah ODP/MS (Pola: POP → MS)
+                  </span>
+                  <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-lg text-blue-700 dark:text-blue-300 font-semibold">
+                    📦 ODC → Pola Standar (POP → ODC → ODP)
+                  </span>
+                  <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 font-semibold">
+                    🔵 ODP/MS → Cabang ke MS lain (POP → MS → ODP)
+                  </span>
+                </div>
+              )}
+
               <SearchableSelect
                 value={form.parent_node_id}
                 onChange={val => set('parent_node_id', val)}
-                placeholder="— Pilih Induk —"
+                placeholder="— Pilih Induk (POP / ODC / MS) —"
                 searchPlaceholder="Cari nama / kode node..."
                 required
                 options={allNodes
                   .filter(n => {
-                    if (form.node_type === 'ODC') return n.node_type === 'POP' || (n.node_type === 'ODC' && n.id !== editNode?.id);
-                    return n.node_type === 'ODC';
+                    if (form.node_type === 'ODC') {
+                      return n.node_type === 'POP' || (n.node_type === 'ODC' && n.id !== editNode?.id);
+                    }
+                    if (form.node_type === 'ODP') {
+                      // 1. POP: Memungkinkan ODP ini menjadi ODP/MS (Mini Splitter langsung dari POP!)
+                      if (n.node_type === 'POP') return true;
+                      // 2. ODC: Pola standar (ODC -> ODP)
+                      if (n.node_type === 'ODC') return true;
+                      // 3. ODP/MS: Pola cabang (ODP yang berinduk ke POP)
+                      if (n.node_type === 'ODP' && n.id !== editNode?.id) {
+                        const parentNode = allNodes.find(p => p.id === n.parent_node_id);
+                        return parentNode?.node_type === 'POP';
+                      }
+                      return false;
+                    }
+                    return false;
                   })
-                  .map(n => ({
-                    value: n.id,
-                    label: n.name,
-                    sublabel: `Tipe: ${n.node_type}`
-                  }))
+                  .map(n => {
+                    if (n.node_type === 'POP') {
+                      return {
+                        value: n.id,
+                        label: `[POP] ${n.name}`,
+                        sublabel: `Point of Presence (Jadikan node ini sebagai ODP/MS) · ${n.code}`
+                      };
+                    }
+                    if (n.node_type === 'ODC') {
+                      return {
+                        value: n.id,
+                        label: `[ODC] ${n.name}`,
+                        sublabel: `Optical Distribution Cabinet (Pola Standar) · ${n.code}`
+                      };
+                    }
+                    return {
+                      value: n.id,
+                      label: `[MS] ${n.name}`,
+                      sublabel: `ODP/Mini Splitter (Pola Cabang ODP) · ${n.code}`
+                    };
+                  })
                 }
               />
             </div>
@@ -2567,7 +2629,7 @@ function EditOdcPortModal({ port, odcName, onSave, onClose, loading }) {
    - Core Power & Multi Interface
    - Dynamic Splitter Grouping & Interactive Port Editing
 ══════════════════════════════════════════════════════════════════ */
-function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefreshGlobal, scopedOltId }) {
+function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, refreshKey, onRefreshGlobal, scopedOltId }) {
   const { hasRole } = useAuth();
   const canCrud = hasRole('Super Administrator', 'Operator Jaringan', 'NOC Operator');
   const [oltDevices, setOltDevices] = useState([]);
@@ -2774,15 +2836,29 @@ function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefr
       {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div>
-          <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">Daftar ODC (Optical Distribution Cabinet)</h3>
+          <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">
+            Daftar ODC & ODP/MS
+          </h3>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+            <span className="font-semibold text-blue-600 dark:text-blue-400">ODC</span> = Pola standar (POP → ODC → ODP) &nbsp;·&nbsp;
+            <span className="font-semibold text-violet-600 dark:text-violet-400">ODP/MS</span> = Pola mini (POP → MS → ODP)
+          </p>
         </div>
         {canCrud && (
-          <button
-            onClick={() => onAddNode('ODC')}
-            className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5"
-          >
-            <span>+</span> Tambah ODC Baru
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => onAddNode('ODC')}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
+            >
+              <span>+</span> Tambah ODC
+            </button>
+            <button
+              onClick={() => onAddMsNode()}
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl shadow-md shadow-violet-600/20 transition-all flex items-center gap-1.5"
+            >
+              <span>+</span> Tambah ODP/MS
+            </button>
+          </div>
         )}
       </div>
 
@@ -2859,7 +2935,7 @@ function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefr
                 <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[11px]">
                   <tr>
                     <th className="py-3.5 px-4">#</th>
-                    <th className="py-3.5 px-4">KODE / NAMA ODC</th>
+                    <th className="py-3.5 px-4">KODE / NAMA ODC / MS</th>
                     <th className="py-3.5 px-4">TOPOLOGI &amp; OLT</th>
                     <th className="py-3.5 px-4">TUBE &amp; CORE POWER</th>
                     <th className="py-3.5 px-4">KAPASITAS PORT</th>
@@ -2872,18 +2948,28 @@ function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefr
                   {paginatedOdcs.map((odc, idx) => {
                     const globalIdx = (currentPage - 1) * perPage + idx + 1;
                     const p = pct(odc.used_ports, odc.total_ports);
+                    const isMsNode = odc.is_ms_node === true;
                     const topoType = odc.odc_topology_type ?? 'tunggal';
-                    const topoBadge = topoType === 'induk'
-                      ? { label: 'ODC Induk', bg: 'bg-blue-100 text-blue-800 border-blue-200' }
-                      : topoType === 'anak'
-                        ? { label: 'ODC Anak', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' }
-                        : { label: 'Tunggal', bg: 'bg-blue-100 text-blue-800 border-blue-200' };
+                    const topoBadge = isMsNode
+                      ? { label: 'ODP/MS', bg: 'bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-950/60 dark:text-violet-300 dark:border-violet-800' }
+                      : topoType === 'induk'
+                        ? { label: 'ODC Induk', bg: 'bg-blue-100 text-blue-800 border-blue-200' }
+                        : topoType === 'anak'
+                          ? { label: 'ODC Anak', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' }
+                          : { label: 'Tunggal', bg: 'bg-blue-100 text-blue-800 border-blue-200' };
 
                     return (
-                      <tr key={odc.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                      <tr key={odc.id} className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors ${isMsNode ? 'bg-violet-50/30 dark:bg-violet-950/10' : ''}`}>
                         <td className="py-3 px-4 font-mono font-bold text-slate-500">{globalIdx}</td>
                         <td className="py-3 px-4">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight block">{odc.name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{odc.name}</span>
+                            {isMsNode && (
+                              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-violet-100 text-violet-700 border border-violet-300 dark:bg-violet-950/70 dark:text-violet-300 dark:border-violet-700 shrink-0">
+                                MS
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${topoBadge.bg} inline-block mb-1`}>
@@ -4755,7 +4841,7 @@ export default function NetworkInfrastructure() {
             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
             }`}
         >
-          <span>ODC</span>
+          <span>ODC / MS</span>
           <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'ODC' ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>{odcs.length}</span>
         </button>
 
@@ -4793,7 +4879,8 @@ export default function NetworkInfrastructure() {
       {activeTab === 'ODC' && (
         <OdcTabContent
           onAddNode={t => setModalAddNode({ type: t })}
-          onEditNode={node => setModalAddNode({ type: 'ODC', editNode: node })}
+          onAddMsNode={() => setModalAddNode({ type: 'ODP', isMsCreation: true })}
+          onEditNode={node => setModalAddNode({ type: node.is_ms_node ? 'ODP' : 'ODC', editNode: node })}
           onDeleteNode={handleDeleteNode}
           refreshKey={refreshKey}
           onRefreshGlobal={refreshAll}
@@ -4817,7 +4904,8 @@ export default function NetworkInfrastructure() {
         <AddNodeModal
           type={modalAddNode.type}
           editNode={modalAddNode.editNode}
-          parentNode={null}
+          parentNode={modalAddNode.parentNode || null}
+          isMsCreation={modalAddNode.isMsCreation}
           allNodes={allNodes}
           splitterTypes={splitterTypes}
           oltDevices={oltDevices}
