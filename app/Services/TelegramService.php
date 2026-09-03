@@ -193,6 +193,30 @@ class TelegramService
                 return false;
             }
 
+            // Filter ketat: HANYA kirim notifikasi audit log untuk aksi nyata user (Human Actions)
+            // Blokir semua event background / engine otomatis / alarm agar tidak menjadi spam "Aktivitas Data"
+            $actLower = strtolower(trim($action));
+            $modLower = strtolower(trim($module));
+
+            $ignoredModules = [
+                'fault localization engine', 'monitoring olt', 'system cron',
+                'telemetry daemon', 'telemetry', 'background', 'diagnostic'
+            ];
+            $ignoredActions = [
+                'noc_alert', 'alarm_los', 'alarm_recovery', 'alarm_sudden_los',
+                'alarm_high_loss', 'telemetry_sync', 'system_sync'
+            ];
+
+            if (in_array($modLower, $ignoredModules) || in_array($actLower, $ignoredActions)) {
+                return false;
+            }
+
+            // Hanya izinkan aksi user nyata
+            $allowedActions = ['create', 'update', 'delete', 'login', 'logout', 'login_failed', 'login_blocked', 'provisioning', 'broadcast', 'test'];
+            if (!in_array($actLower, $allowedActions)) {
+                return false;
+            }
+
             $botToken = SystemSetting::get('telegram_bot_token', env('TELEGRAM_BOT_TOKEN'));
             if (empty($botToken)) {
                 return false;
@@ -314,26 +338,26 @@ class TelegramService
 
             // 1. Header Judul
             $headerTitle = match ($actionUpper) {
-                'CREATE'       => "Data {$entityLabel} Baru Ditambahkan",
-                'UPDATE'       => "Data {$entityLabel} Telah Diperbarui",
-                'DELETE'       => "Data {$entityLabel} Telah Dihapus",
-                'PROVISIONING' => "Otorisasi & Konfigurasi {$entityLabel} Selesai",
-                'BROADCAST'    => "Siaran Notifikasi Massal",
-                'TEST'         => "Uji Koneksi Sistem UNMS",
-                'LOGIN'        => "Aktivitas Login Pengguna",
-                'LOGOUT'       => "Aktivitas Logout Pengguna",
-                'LOGIN_FAILED' => "Peringatan Percobaan Login Gagal",
-                'LOGIN_BLOCKED'=> "Peringatan Login Akun Ditangguhkan",
-                'OTDR_TRACE'   => "Hasil Penembakan Laser OTDR",
-                default        => "Aktivitas {$entityLabel}",
+                'CREATE'       => "📝 DATA {$entityLabel} BARU DITAMBAHKAN",
+                'UPDATE'       => "✏️ DATA {$entityLabel} DIPERBARUI",
+                'DELETE'       => "🗑️ DATA {$entityLabel} DIHAPUS",
+                'PROVISIONING' => "⚡ PROVISIONING {$entityLabel} SELESAI",
+                'BROADCAST'    => "📢 SIARAN NOTIFIKASI MASSAL",
+                'TEST'         => "🧪 UJI KONEKSI SISTEM UNMS",
+                'LOGIN'        => "🔑 LOGIN PENGGUNA",
+                'LOGOUT'       => "🚪 LOGOUT PENGGUNA",
+                'LOGIN_FAILED' => "⚠️ PERCOBAAN LOGIN GAGAL",
+                'LOGIN_BLOCKED'=> "🚫 LOGIN AKUN DITANGGUHKAN",
+                'OTDR_TRACE'   => "🎯 HASIL PENEMBAKAN OTDR",
+                default        => "📝 AKTIVITAS SISTEM: {$entityLabel}",
             };
 
             // 2. Sub-judul Rincian
             $sectionTitle = match ($actionUpper) {
                 'CREATE'       => "Detail {$entityLabel}:",
-                'UPDATE'       => "Detail Perubahan:",
-                'DELETE'       => "Detail Data Terhapus:",
-                default        => "Detail Aktivitas:",
+                'UPDATE'       => "Perubahan Data:",
+                'DELETE'       => "Data Dihapus:",
+                default        => "Keterangan:",
             };
 
             // 3. Label Pelaksana
@@ -341,23 +365,24 @@ class TelegramService
                 'CREATE'       => "Ditambahkan oleh:",
                 'UPDATE'       => "Diperbarui oleh:",
                 'DELETE'       => "Dihapus oleh:",
-                default        => "Pelaksana:",
+                default        => "Pengguna:",
             };
 
             // 4. Catatan Kaki Status
             $statusFootnote = match ($actionUpper) {
-                'CREATE'       => "<b>Status:</b> Data berhasil disimpan ke sistem",
-                'UPDATE'       => "<b>Status:</b> Perubahan berhasil disimpan ke sistem",
-                'DELETE'       => "<b>Status:</b> Data telah dihapus dari sistem",
-                'PROVISIONING' => "<b>Status:</b> Konfigurasi provisioning berhasil diterapkan",
-                'LOGIN'        => "<b>Status:</b> Sesi pengguna aktif",
-                'LOGOUT'       => "<b>Status:</b> Sesi pengguna telah diakhiri",
-                'LOGIN_FAILED', 'LOGIN_BLOCKED' => "<b>Status:</b> Percobaan akses ditolak oleh sistem keamanan",
-                default        => "<b>Status:</b> Aktivitas berhasil dicatat di sistem",
+                'CREATE'       => "<b>Status:</b> Data tersimpan di sistem",
+                'UPDATE'       => "<b>Status:</b> Perubahan berhasil disimpan",
+                'DELETE'       => "<b>Status:</b> Data telah dihapus",
+                'PROVISIONING' => "<b>Status:</b> Berhasil diprovisioning",
+                'LOGIN'        => "<b>Status:</b> Sesi aktif",
+                'LOGOUT'       => "<b>Status:</b> Sesi telah keluar",
+                'LOGIN_FAILED', 'LOGIN_BLOCKED' => "<b>Status:</b> Akses ditolak keamanan sistem",
+                default        => "<b>Status:</b> Sukses dicatat",
             };
 
-            // Susun Pesan
-            $message = "<b>{$headerTitle}</b>\n\n";
+            // Susun Pesan Rapi & Elegan
+            $message = "<b>{$headerTitle}</b>\n";
+            $message .= "────────────────────────────\n\n";
             $message .= "<b>{$sectionTitle}</b>\n";
 
             $payloadDetails = static::formatDataPayload($oldValues, $newValues, $actionUpper, $entityLabel);
@@ -367,8 +392,9 @@ class TelegramService
                 $message .= "• " . htmlspecialchars($description, ENT_QUOTES, 'UTF-8') . "\n\n";
             }
 
+            $message .= "────────────────────────────\n";
             $message .= "<b>{$executorLabel}</b> " . htmlspecialchars($userStr, ENT_QUOTES, 'UTF-8') . "\n";
-            $message .= "<b>Waktu:</b> {$timeStr}\n\n";
+            $message .= "<b>Waktu:</b> {$timeStr}\n";
             $message .= $statusFootnote;
 
             // Pengiriman paralel cepat (Concurrent cURL pool)

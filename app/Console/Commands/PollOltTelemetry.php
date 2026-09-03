@@ -270,13 +270,48 @@ class PollOltTelemetry extends Command
             }
 
             // ═══════════════════════════════════════════════════════════════════
-            // 🔹 TAHAP 3: WORKER POOL 2-PORT SIMULTAN (GRANULAR & ULTRA-STABIL)
+            // 🔹 TAHAP 3: DUAL-LANE WORKER POOL (PRIORITY FAST LANE & ROUND-ROBIN)
             // ═══════════════════════════════════════════════════════════════════
             $batchSize = 2; // 2 Port PON per Siklus Worker Pool (Optimal & Anti-Timeout)
+            $priorityKey = "olt_priority_ports_{$device->id}";
+            $priorityPorts = Cache::get($priorityKey, []);
+
+            // Filter port prioritas yang valid sesuai daftar port fisik OLT
+            $validPriorityPorts = array_values(array_filter($priorityPorts, function($pId) use ($allPonPorts) {
+                return collect($allPonPorts)->contains(function($p) use ($pId) {
+                    return ($p['port_id'] ?? '') === $pId || str_contains($pId, (string)($p['port'] ?? '---'));
+                });
+            }));
 
             if ($specificPort) {
                 $targetPorts = [$specificPort];
+            } elseif (!empty($validPriorityPorts)) {
+                // ── JALUR PRIORITAS (FAST LANE): Port dengan modem LOS / dalam perbaikan diprioritaskan! ──
+                $priorityCursorKey = "olt_priority_cursor_{$device->id}";
+                $pCursor = (int)Cache::get($priorityCursorKey, 0);
+                $chosenPriorityPort = $validPriorityPorts[$pCursor % count($validPriorityPorts)];
+                Cache::put($priorityCursorKey, ($pCursor + 1) % count($validPriorityPorts), 86400);
+
+                $targetPorts = [$chosenPriorityPort];
+
+                // Tambahkan 1 port reguler dari Round-Robin agar port sehat tetap terpantau
+                $totalAvailable = count($allPonPorts);
+                if ($totalAvailable > 1) {
+                    $cursorKey = "olt_poll_port_cursor_{$device->id}";
+                    $cursor = (int)Cache::get($cursorKey, 0);
+                    $regularPort = $allPonPorts[$cursor % $totalAvailable]['port_id'];
+                    if ($regularPort !== $chosenPriorityPort) {
+                        $targetPorts[] = $regularPort;
+                    } else {
+                        $regularPort2 = $allPonPorts[($cursor + 1) % $totalAvailable]['port_id'];
+                        $targetPorts[] = $regularPort2;
+                    }
+                    Cache::put($cursorKey, ($cursor + 1) % $totalAvailable, 86400);
+                }
+
+                self::appendWorkerLog($device->name, $chosenPriorityPort, 'FAST_LANE', "🔥 [Fast-Lane Prioritas] Memprioritaskan pemeriksaan port LOS: {$chosenPriorityPort}");
             } else {
+                // ── JALUR REGULER (ROUND-ROBIN): Seluruh port normal bergulir seimbang ──
                 $totalAvailable = count($allPonPorts);
                 if ($totalAvailable === 0) {
                     return 0;
@@ -309,7 +344,7 @@ class PollOltTelemetry extends Command
                 'started_at' => microtime(true),
             ], 60);
 
-            self::appendWorkerLog($device->name, $batchLabel, 'SYNCING', "Tahap 3: Worker Pool memproses 4-Port (" . $batchLabel . ") simultan...");
+            self::appendWorkerLog($device->name, $batchLabel, 'SYNCING', "Tahap 3: Worker Pool memproses (" . $batchLabel . ") simultan...");
 
             // Eksekusi penarikan data untuk setiap port di dalam batch
             $batchStart = microtime(true);
@@ -367,7 +402,9 @@ class PollOltTelemetry extends Command
                 }
             }
 
-            // 3. Masukkan data ONU segar hasil pembacaan port saat ini
+            // 3. Masukkan data ONU segar hasil pembacaan port saat ini & Kelola Priority Watchlist
+            $activePriorityPorts = $validPriorityPorts;
+
             if (!empty($batchOnusCombined)) {
                 foreach ($batchOnusCombined as $onuData) {
                     $sn = strtoupper(trim((string)($onuData['serial_number'] ?? ($onuData['mac_address'] ?? ''))));
@@ -376,13 +413,16 @@ class PollOltTelemetry extends Command
 
                     $key = $sn . '@' . $p;
                     $physicalOnuMap[$key] = $onuData;
-                    $newStatus = ($onuData['status'] === 'Online') ? 'active' : 'inactive';
-                    $newRx     = $onuData['rx_power'] ?? null;
-                    $newTx     = $onuData['tx_power'] ?? null;
+                    
+                    $isOnline = ($onuData['status'] === 'Online' || strtolower($onuData['status']) === 'working') && isset($onuData['rx_power']) && is_numeric($onuData['rx_power']) && (float)$onuData['rx_power'] > -38.0;
+                    $newStatus = $isOnline ? 'active' : 'inactive';
+                    $newRx     = $isOnline ? (float)$onuData['rx_power'] : -40.00;
+                    $newTx     = $isOnline ? ($onuData['tx_power'] ?? 1.95) : 0.0;
 
+                    // Cari kecocokan data pelanggan
                     $ontReg = \App\Models\OntRegistration::with(['customerService.customer', 'oltPort.node'])
-                        ->where('onu_serial', $sn)
-                        ->orWhere('onu_mac', $sn)
+                        ->whereRaw('LOWER(onu_serial) = ?', [strtolower($sn)])
+                        ->orWhereRaw('LOWER(onu_mac) = ?', [strtolower($sn)])
                         ->first();
 
                     if ($ontReg) {
@@ -390,17 +430,48 @@ class PollOltTelemetry extends Command
                         $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
                         $portName  = $onuData['port'] ?? ($ontReg->oltPort?->node?->olt_port_ref ?: ($targetPorts[0] ?? 'PON'));
 
-                        // Alarm LOS Baru
+                        // 🚨 ALARM SUDDEN LOSS: Modem tiba-tiba drop dari Online menjadi LOS/Mati
                         if ($oldStatus === 'active' && $newStatus === 'inactive') {
-                            $downReason = $onuData['last_down_reason'] ?? 'Loss of Signal (Kabel Putus / Dying Gasp)';
-                            \App\Models\AuditLog::record('ALARM_LOS', 'Monitoring OLT', "🚨 ALERT: Modem {$custName} ({$sn}) LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName]);
-                            \App\Services\TelegramService::send("🚨 ALARM GANGGUAN OPTIK (LOS)", "<b>Pelanggan:</b> {$custName}\n<b>SN:</b> <code>{$sn}</code>\n<b>OLT:</b> {$device->name} ({$portName})\n<b>Status:</b> 🔴 OFFLINE / LOS", 'NOC');
+                            \App\Models\AuditLog::record('ALARM_SUDDEN_LOS', 'Monitoring OLT', "🚨 SUDDEN LOSS: Modem {$custName} ({$sn}) tiba-tiba putus / LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => -40.00]);
+                            \App\Models\AppNotification::notifyAll(
+                                "🚨 ALARM GANGGUAN: Modem {$custName} Putus / LOS!",
+                                "Modem pelanggan {$custName} (SN: {$sn}) pada port {$portName} mengalami putus sinyal mendadak (redaman jatuh ke -40.00 dBm). Port otomatis dimasukkan ke Jalur Prioritas Cepat.",
+                                'NOC',
+                                '/customers'
+                            );
+                            \App\Services\TelegramService::send(
+                                "🚨 ALARM GANGGUAN OPTIK (LOS)",
+                                "<b>Pelanggan:</b> {$custName}\n" .
+                                "<b>Serial Number:</b> <code>{$sn}</code>\n" .
+                                "<b>OLT / Port:</b> {$device->name} ({$portName})\n" .
+                                "<b>Status:</b> 🔴 OFFLINE / LOS (-40.00 dBm)",
+                                'NOC'
+                            );
+
+                            // Masukkan port ini ke antrean prioritas cepat
+                            if (!in_array($portName, $activePriorityPorts)) {
+                                $activePriorityPorts[] = $portName;
+                            }
                         }
 
-                        // Alarm Recovery
+                        // 🟢 ALARM INSTANT RECOVERY: Modem terdeteksi pulih kembali online!
                         if ($oldStatus === 'inactive' && $newStatus === 'active') {
-                            \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) Online kembali pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName]);
-                            \App\Services\TelegramService::send("🟢 PEMULIHAN LAYANAN (RECOVERY)", "<b>Pelanggan:</b> {$custName}\n<b>SN:</b> <code>{$sn}</code>\n<b>OLT:</b> {$device->name} ({$portName})\n<b>Status:</b> 🟢 ONLINE\n<b>Rx:</b> <code>{$newRx} dBm</code>", 'NOC');
+                            \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) pulih normal pada {$portName} (Rx: {$newRx} dBm)", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => $newRx]);
+                            \App\Models\AppNotification::notifyAll(
+                                "🟢 PEMULIHAN LAYANAN: Modem {$custName} Online Kembali!",
+                                "Koneksi optik pelanggan {$custName} (SN: {$sn}) pada port {$portName} telah kembali pulih dengan redaman sehat {$newRx} dBm.",
+                                'NOC',
+                                '/customers'
+                            );
+                            \App\Services\TelegramService::send(
+                                "🟢 PEMULIHAN LAYANAN (RECOVERY)",
+                                "<b>Pelanggan:</b> {$custName}\n" .
+                                "<b>Serial Number:</b> <code>{$sn}</code>\n" .
+                                "<b>OLT / Port:</b> {$device->name} ({$portName})\n" .
+                                "<b>Status:</b> 🟢 ONLINE (Normal)\n" .
+                                "<b>Redaman Rx:</b> <code>{$newRx} dBm</code>",
+                                'NOC'
+                            );
                         }
 
                         $ontReg->update([
@@ -412,13 +483,48 @@ class PollOltTelemetry extends Command
                 }
             }
 
-            // 4. Perbarui status port fisik di pon_ports snapshot
+            // Evaluasi Port yang Selesai di-Query: Jika semua modem pada port tersebut sudah online, keluarkan dari prioritas
+            foreach ($targetPorts as $tPort) {
+                $onusOnPort = array_filter(array_values($physicalOnuMap), function($o) use ($tPort, $oltCtrl) {
+                    $p = $o['port'] ?? ($o['detected_port'] ?? '');
+                    return $oltCtrl->portsMatch($p, $tPort);
+                });
+
+                $hasLossOnPort = false;
+                foreach ($onusOnPort as $o) {
+                    $isOnline = ($o['status'] === 'Online' || strtolower($o['status'] ?? '') === 'working') && isset($o['rx_power']) && (float)$o['rx_power'] > -38.0;
+                    if (!$isOnline) {
+                        $hasLossOnPort = true;
+                        break;
+                    }
+                }
+
+                if ($hasLossOnPort) {
+                    if (!in_array($tPort, $activePriorityPorts)) {
+                        $activePriorityPorts[] = $tPort;
+                    }
+                } else {
+                    // Semua modem pada port ini sudah sehat -> Keluarkan dari antrean prioritas
+                    $activePriorityPorts = array_values(array_filter($activePriorityPorts, fn($p) => $p !== $tPort));
+                }
+            }
+
+            Cache::put($priorityKey, array_values(array_unique($activePriorityPorts)), 86400);
+
+            // 4. Perbarui status port fisik di pon_ports snapshot (Termasuk deteksi Mati Massal)
             $allPonPorts = array_map(function ($p) use ($portsResults) {
                 $pId = $p['port_id'] ?? '';
                 if (isset($portsResults[$pId])) {
                     $found = $portsResults[$pId]['count'];
-                    $p['status'] = $found > 0 ? 'Up' : ($p['status'] ?? 'Down');
+                    $onus = $portsResults[$pId]['onus'] ?? [];
+                    $onlineCount = count(array_filter($onus, fn($o) => ($o['status'] === 'Online' || strtolower($o['status'] ?? '') === 'working') && isset($o['rx_power']) && (float)$o['rx_power'] > -38.0));
+                    
+                    // Port Down jika ada registered ONUs tetapi seluruhnya mati (online == 0)
+                    $isMassDown = $found > 0 && $onlineCount === 0;
+                    $p['status'] = $found > 0 ? ($isMassDown ? 'Down' : 'Up') : ($p['status'] ?? 'Down');
                     $p['registered_onus'] = $found;
+                    $p['online_onus'] = $onlineCount;
+                    $p['is_mass_outage'] = $isMassDown;
                 }
                 return $p;
             }, $allPonPorts);

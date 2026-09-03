@@ -32,73 +32,118 @@ class DashboardController extends Controller
         $criticalTickets = Ticket::where('priority', 'Critical')->whereNotIn('status', ['Resolved', 'Closed'])->count();
         $inProgressTickets = Ticket::where('status', 'In Progress')->count();
 
-        // ── 1. Optical Power Distribution from real DB entries (ont_registrations & NetworkNode) ──
-        $goodSignal = 0;
-        $modSignal = 0;
-        $warnSignal = 0;
-        $losSignal = 0;
+        // ── 1. Optical Power Distribution from real-time OLT telemetry & ont_registrations ──
+        $liveOnuMap = [];
+        $oltDevices = OltDevice::whereNotNull('last_telemetry_snapshot')->get();
+        foreach ($oltDevices as $dev) {
+            $snapOnus = array_merge(
+                $dev->last_telemetry_snapshot['onu_list'] ?? [],
+                $dev->last_telemetry_snapshot['unconfigured_onus'] ?? []
+            );
+            foreach ($snapOnus as $so) {
+                $snKey = strtolower(trim($so['serial_number'] ?? ''));
+                $macKey = strtolower(trim($so['mac_address'] ?? ($so['onu_mac'] ?? '')));
+                if ($snKey) $liveOnuMap[$snKey] = $so;
+                if ($macKey) $liveOnuMap[$macKey] = $so;
+            }
+        }
+
+        // 5 standard FTTH signal bands matching Customers & OLT Management
+        $sangatBaik = 0; // > -19.0 dBm
+        $normal = 0;     // -19.0 s/d -23.99 dBm
+        $warning = 0;    // -24.0 s/d -27.0 dBm
+        $kritis = 0;     // < -27.0 dBm (dan > -38.0 dBm)
+        $losSignal = 0;  // <= -38.0 dBm atau offline
+
         $totalPowerSum = 0;
         $powerCount = 0;
 
-        $onts = DB::table('ont_registrations')->get();
+        $onts = DB::table('ont_registrations')
+            ->leftJoin('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
+            ->leftJoin('customers', 'customers.id', '=', 'customer_services.customer_id')
+            ->leftJoin('network_ports', 'network_ports.id', '=', 'ont_registrations.olt_port_id')
+            ->leftJoin('network_nodes as odp', 'odp.id', '=', 'network_ports.node_id')
+            ->leftJoin('olt_devices', 'olt_devices.id', '=', 'odp.olt_device_id')
+            ->select(
+                'ont_registrations.*',
+                'customers.name as customer_name',
+                'odp.olt_port_ref',
+                'odp.name as odp_name',
+                'olt_devices.name as olt_name'
+            )
+            ->get();
         $totalRegisteredOnus = $onts->count();
         $onlineOnuCount = 0;
+        $offlineOnuList = [];
+        $portOutageTracker = [];
 
         foreach ($onts as $ont) {
-            $isOnline = ($ont->status === 'active' && $ont->rx_power !== null && (float)$ont->rx_power > -35.0);
+            $snKey = strtolower(trim($ont->onu_serial ?? ''));
+            $macKey = strtolower(trim($ont->onu_mac ?? ''));
+            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
+
+            $isOnline = false;
+            $rxPower = -40.0;
+            if ($liveData) {
+                $st = strtolower($liveData['status'] ?? '');
+                $rawRx = $liveData['rx_power'] ?? null;
+                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                $rxPower = $isOnline ? (float)$rawRx : -40.00;
+            } else {
+                $st = strtolower($ont->status ?? '');
+                $rawRx = $ont->rx_power;
+                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                $rxPower = $isOnline ? (float)$rawRx : -40.00;
+            }
+
+            // Pelacakan status per port PON
+            $portKey = ($ont->olt_name ?: 'OLT') . ' @ ' . ($ont->olt_port_ref ?: 'Port PON');
+            if (!isset($portOutageTracker[$portKey])) {
+                $portOutageTracker[$portKey] = [
+                    'olt_name'      => $ont->olt_name ?: 'OLT',
+                    'port_ref'      => $ont->olt_port_ref ?: 'Port PON',
+                    'total_clients' => 0,
+                    'online_count'  => 0,
+                ];
+            }
+            $portOutageTracker[$portKey]['total_clients']++;
+
             if ($isOnline) {
                 $onlineOnuCount++;
+                $portOutageTracker[$portKey]['online_count']++;
+                $totalPowerSum += $rxPower;
+                $powerCount++;
+
+                if ($rxPower > -19.0) {
+                    $sangatBaik++;
+                } elseif ($rxPower >= -24.0) {
+                    $normal++;
+                } elseif ($rxPower >= -27.0) {
+                    $warning++;
+                } else {
+                    $kritis++;
+                }
             } else {
                 $losSignal++;
-                continue;
-            }
-
-            $p = (float) $ont->rx_power;
-            $totalPowerSum += $p;
-            $powerCount++;
-
-            if ($p >= -24.0) {
-                $goodSignal++;
-            } elseif ($p >= -27.0) {
-                $modSignal++;
-            } else {
-                $warnSignal++;
+                $offlineOnuList[] = [
+                    'ont'       => $ont,
+                    'cust_name' => $ont->customer_name ?: ('Pelanggan #' . $ont->id),
+                    'sn'        => $ont->onu_serial ?: $ont->onu_mac,
+                    'rx'        => $rxPower,
+                    'olt_name'  => $ont->olt_name ?: 'OLT',
+                    'port_ref'  => $ont->olt_port_ref ?: 'Port PON',
+                ];
             }
         }
 
-        // Check ODP & ODC node core_power if numeric
-        $nodePowers = NetworkNode::whereIn('node_type', ['ODP', 'ODC'])
-            ->whereNotNull('core_power')
-            ->pluck('core_power');
-
-        foreach ($nodePowers as $cp) {
-            if (!is_numeric($cp)) continue;
-            $p = (float) $cp;
-            $totalPowerSum += $p;
-            $powerCount++;
-
-            if ($p >= -22.0) {
-                $goodSignal++;
-            } elseif ($p >= -26.0) {
-                $modSignal++;
-            } elseif ($p >= -30.0) {
-                $warnSignal++;
-            } else {
-                $losSignal++;
-            }
-        }
-
-        $avgPower = $powerCount > 0 ? round($totalPowerSum / $powerCount, 1) : null;
+        $avgPower = $powerCount > 0 ? number_format($totalPowerSum / $powerCount, 2, '.', '') : null;
         $offlineOnuCount = max(0, $totalRegisteredOnus - $onlineOnuCount);
         $onuOnlineRate = $totalRegisteredOnus > 0 ? round(($onlineOnuCount / $totalRegisteredOnus) * 100, 1) : 100;
 
         // ── 2. Ringkasan Status Pelanggan & Kapasitas Port ODP ──
         $totalCustomers = Customer::count();
-        $activeCustomers = Customer::where('status', 'active')->count();
-        $candidateCustomers = Customer::whereIn('status', ['prospect', 'survey', 'installation', 'draft'])->count();
-        $suspendedCustomers = Customer::where('status', 'suspended')->count();
-        $isolatedCustomers = Customer::where('status', 'isolated')->count();
-        $terminatedCustomers = Customer::where('status', 'terminated')->count();
+        $activeCustomers = $onlineOnuCount;
+        $offlineCustomers = max(0, $totalCustomers - $activeCustomers);
 
         // ODP Ports Stats
         $odpNodeIds = NetworkNode::where('node_type', 'ODP')->pluck('id');
@@ -192,17 +237,108 @@ class DashboardController extends Controller
             ]
         ];
 
-        // ── 6. Mini Live GIS Map Preview Data ──
-        $gisNodes = NetworkNode::select('id', 'name', 'code', 'node_type', 'latitude', 'longitude', 'status', 'core_power', 'olt_device_id')
+        // ── 6. Mini Live GIS Map Preview Data with Real-Time Health ──
+        $gisNodes = NetworkNode::with('oltDevice')
+            ->select('id', 'name', 'code', 'node_type', 'latitude', 'longitude', 'status', 'core_power', 'olt_device_id', 'parent_node_id')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
-            ->get();
+            ->get()
+            ->map(function ($node) use ($liveOnuMap) {
+                $status = strtolower($node->status);
+                $rxPower = $node->core_power;
+                if ($node->node_type === 'ODP') {
+                    $onts = DB::table('ont_registrations')
+                        ->join('network_ports', 'network_ports.customer_service_id', '=', 'ont_registrations.customer_service_id')
+                        ->where('network_ports.node_id', $node->id)
+                        ->select('ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'ont_registrations.status', 'ont_registrations.rx_power')
+                        ->get();
+
+                    if ($onts->isNotEmpty()) {
+                        $hasOffline = false;
+                        $powers = [];
+                        foreach ($onts as $ont) {
+                            $snKey = strtolower(trim($ont->onu_serial ?? ''));
+                            $macKey = strtolower(trim($ont->onu_mac ?? ''));
+                            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
+                            $isOnline = false;
+                            if ($liveData) {
+                                $st = strtolower($liveData['status'] ?? '');
+                                $rawRx = $liveData['rx_power'] ?? null;
+                                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                            } else {
+                                $st = strtolower($ont->status ?? '');
+                                $rawRx = $ont->rx_power;
+                                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                            }
+
+                            if ($isOnline) {
+                                $powers[] = (float)($liveData['rx_power'] ?? $ont->rx_power);
+                            } else {
+                                $hasOffline = true;
+                            }
+                        }
+
+                        if ($hasOffline) {
+                            $status = 'offline';
+                            $rxPower = '-40.00';
+                        } else {
+                            $status = 'active';
+                            $rxPower = count($powers) > 0 ? number_format(array_sum($powers) / count($powers), 2, '.', '') : '-18.50';
+                        }
+                    }
+                }
+
+                return [
+                    'id'            => $node->id,
+                    'name'          => $node->name,
+                    'code'          => $node->code,
+                    'node_type'     => $node->node_type,
+                    'latitude'      => (float)$node->latitude,
+                    'longitude'     => (float)$node->longitude,
+                    'status'        => $status,
+                    'core_power'    => $rxPower,
+                    'olt_device_id' => $node->olt_device_id,
+                    'olt_name'      => $node->oltDevice?->name,
+                ];
+            });
 
         $gisCables = NetworkCable::select('id', 'name', 'code', 'route_coordinates', 'status', 'core_count_total', 'core_count_used')
             ->get();
 
-        // ── 7. Incident Alerts Feed ──
+        // ── 7. Incident Alerts Feed (Realtime ONUs, Tickets & Audit Logs) ──
         $recentAlerts = [];
+
+        // A. Realtime Port PON Mass Outage Alerts (Mati Massal)
+        foreach ($portOutageTracker as $pKey => $pTrack) {
+            if ($pTrack['total_clients'] >= 2 && $pTrack['online_count'] === 0) {
+                $recentAlerts[] = [
+                    'id'          => 'mass_outage_' . md5($pKey),
+                    'severity'    => 'critical',
+                    'title'       => "🚨 ALARM GANGGUAN MATI MASSAL: {$pTrack['port_ref']} ({$pTrack['olt_name']})",
+                    'description' => "Seluruh {$pTrack['total_clients']} pelanggan pada port PON ini terdeteksi Loss of Signal (Redaman -40.00 dBm). Indikasi kabel feeder/backbone putus atau modul SFP laser mati!",
+                    'node'        => $pTrack['port_ref'],
+                    'time'        => 'Sedang Berlangsung (Kritis)',
+                    'olt'         => $pTrack['olt_name'],
+                    'is_mass_outage' => true,
+                ];
+            }
+        }
+
+        // B. Realtime Active Modem LOS Alerts
+        foreach ($offlineOnuList as $offOnu) {
+            $formattedRx = number_format((float)$offOnu['rx'], 2, '.', '');
+            $recentAlerts[] = [
+                'id'          => 'onu_los_' . $offOnu['ont']->id,
+                'severity'    => 'critical',
+                'title'       => '🚨 ALARM LOS: Modem ' . $offOnu['cust_name'],
+                'description' => "Modem pelanggan mengalami gangguan Loss of Signal (LOS) dengan redaman {$formattedRx} dBm pada SN {$offOnu['sn']}.",
+                'node'        => 'Pelanggan FTTH',
+                'time'        => 'Sedang Berlangsung',
+                'olt'         => $offOnu['olt_name'] ?? ($olts->first()?->name ?? 'OLT Region'),
+            ];
+        }
+
+        // B. Realtime Tickets (if any)
         $rawTickets = Ticket::with(['networkNode.oltDevice'])->latest()->take(5)->get();
         foreach ($rawTickets as $t) {
             $sev = strtolower($t->priority) === 'critical' ? 'critical' : (strtolower($t->priority) === 'high' ? 'warning' : 'info');
@@ -217,26 +353,38 @@ class DashboardController extends Controller
             ];
         }
 
-        $problemNodes = NetworkNode::with('oltDevice')
-            ->whereIn('node_type', ['POP', 'ODC', 'ODP'])
-            ->whereIn('status', ['offline', 'degraded', 'maintenance'])
-            ->latest()->take(5)->get();
+        // C. Alarm Logs from AuditLog
+        $auditAlarms = AuditLog::where(function($q) {
+            $q->where('action', 'ilike', '%ALARM%')
+              ->orWhere('action', 'ilike', '%LOS%')
+              ->orWhere('action', 'ilike', '%ALERT%')
+              ->orWhere('description', 'ilike', '%LOS%')
+              ->orWhere('description', 'ilike', '%ALERT%')
+              ->orWhere('description', 'ilike', '%RECOVERY%');
+        })
+        ->latest()
+        ->take(10)
+        ->get();
 
-        foreach ($problemNodes as $node) {
-            $sev = $node->status === 'offline' ? 'critical' : 'warning';
+        foreach ($auditAlarms as $al) {
+            $upperAct = strtoupper($al->action . ' ' . $al->description);
+            $isRecovery = str_contains($upperAct, 'RECOVERY') || str_contains($upperAct, 'PULIH') || str_contains($upperAct, 'ONLINE KEMBALI');
+            $isCritical = str_contains($upperAct, 'LOS') || str_contains($upperAct, 'CRITICAL') || str_contains($upperAct, 'PUTUS');
+            $sev = $isRecovery ? 'info' : ($isCritical ? 'critical' : 'warning');
+
             $recentAlerts[] = [
-                'id'          => 'node_' . $node->id,
+                'id'          => 'audit_' . $al->id,
                 'severity'    => $sev,
-                'title'       => "Status Node {$node->node_type}: {$node->name} ({$node->status})",
-                'description' => "Node {$node->node_type} {$node->name} terdeteksi berkendala dengan status {$node->status}.",
-                'node'        => "{$node->node_type} {$node->code}",
-                'time'        => $node->updated_at ? $node->updated_at->diffForHumans() : 'Baru saja',
-                'olt'         => $node->oltDevice?->name ?? 'OLT Region',
+                'title'       => $al->action . ' • ' . ($al->module ?? 'Sistem Monitoring'),
+                'description' => $al->description,
+                'node'        => 'Audit Log #' . $al->id,
+                'time'        => $al->created_at ? $al->created_at->diffForHumans() : 'Baru saja',
+                'olt'         => 'Sistem UNMS',
             ];
         }
 
         // ── 8. Recent Activities Feed from AuditLog ──
-        $auditLogs = AuditLog::latest()->take(6)->get();
+        $auditLogs = AuditLog::latest()->take(8)->get();
         $recentActivities = $auditLogs->map(function ($log) {
             return [
                 'id'     => $log->id,
@@ -267,10 +415,7 @@ class DashboardController extends Controller
                 'customer_stats' => [
                     'total_customers'     => $totalCustomers,
                     'active_customers'    => $activeCustomers,
-                    'isolated_customers'  => $isolatedCustomers,
-                    'suspended_customers' => $suspendedCustomers,
-                    'terminated_customers'=> $terminatedCustomers,
-                    'candidate_customers' => $candidateCustomers,
+                    'offline_customers'   => $offlineCustomers,
                     'active_percentage'   => $totalCustomers > 0 ? round(($activeCustomers / $totalCustomers) * 100) : 100,
                 ],
                 'odp_port_stats' => [
@@ -298,11 +443,14 @@ class DashboardController extends Controller
                     'cables'              => $gisCables,
                 ],
                 'rx_power' => [
-                    'good'      => $goodSignal,
-                    'moderate'  => $modSignal,
-                    'warning'   => $warnSignal,
-                    'los'       => $losSignal,
-                    'avg_power' => $avgPower,
+                    'sangat_baik' => $sangatBaik,
+                    'normal'      => $normal,
+                    'warning'     => $warning,
+                    'kritis'      => $kritis,
+                    'los'         => $losSignal,
+                    'good'        => $sangatBaik + $normal,
+                    'moderate'    => $warning,
+                    'avg_power'   => $avgPower,
                 ],
                 'recent_alerts'     => $recentAlerts,
                 'recent_activities' => $recentActivities,

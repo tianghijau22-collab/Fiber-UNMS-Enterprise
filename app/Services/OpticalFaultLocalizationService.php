@@ -80,21 +80,27 @@ class OpticalFaultLocalizationService
 
                 $alerts[] = $alertItem;
 
-                // Kirim notifikasi alarm insiden massal
-                AppNotification::notifyAll(
-                    "ALARM GANGGUAN MASSAL: ODP {$odp->name} ({$downCount}/{$totalOnus} Klien LOS)",
-                    "Terdeteksi {$downCount} dari total {$totalOnus} pelanggan ({$alertItem['down_percentage']}%) pada ODP {$odp->name} ({$odp->code}) mengalami LOS/Mati Bersamaan. ODC: {$odcName}, Interface: {$portRef}. Indikasi kabel distribusi putus atau splitter bermasalah.",
-                    'NOC',
-                    '/network'
-                );
+                // Anti-spam key: hanya kirim sekali saat pertama kali terdeteksi (cooldown 12 jam)
+                $massKey = "notif_mass_down_{$odp->id}";
+                if (!\Illuminate\Support\Facades\Cache::has($massKey)) {
+                    \Illuminate\Support\Facades\Cache::put($massKey, true, now()->addHours(12));
 
-                AuditLog::record(
-                    'NOC_ALERT',
-                    'Fault Localization Engine',
-                    "Deteksi gangguan mati massal pada ODP {$odp->name} ({$downCount} pelanggan LOS)",
-                    null,
-                    $alertItem
-                );
+                    $cleanMassMsg = "<b>• Node ODP:</b> {$odp->name} ({$odp->code})\n" .
+                                    "<b>• ODC Induk:</b> {$odcName}\n" .
+                                    "<b>• Interface OLT:</b> {$portRef}\n" .
+                                    "<b>• Klien Terdampak:</b> 🔴 {$downCount} dari {$totalOnus} Pelanggan ({$alertItem['down_percentage']}% LOS)\n\n" .
+                                    "<i>Status: Seluruh pelanggan pada ODP ini terdeteksi mengalami pemutusan sinyal bersamaan.</i>";
+
+                    AppNotification::notifyAll(
+                        "🚨 ALARM GANGGUAN MASSAL: ODP {$odp->name}",
+                        $cleanMassMsg,
+                        'NOC',
+                        '/network'
+                    );
+                }
+            } else {
+                // Jika sudah normal kembali, bersihkan key agar alarm bisa berbunyi lagi di masa depan
+                \Illuminate\Support\Facades\Cache::forget("notif_mass_down_{$odp->id}");
             }
         }
 
@@ -108,6 +114,7 @@ class OpticalFaultLocalizationService
     public static function localizeOpticalBreakBoundaries(): array
     {
         $detectedBreaks = [];
+        $currentBreakKeys = [];
 
         // Ambil ODC sebagai pusat distribusi
         $odcs = NetworkNode::where('node_type', 'ODC')->with(['children'])->get();
@@ -168,10 +175,17 @@ class OpticalFaultLocalizationService
                     $lastHealthyOdp = $current['odp'];
                     $firstDeadOdp   = $next['odp'];
 
+                    $breakKey = "break_{$odc->id}_{$lastHealthyOdp->id}_{$firstDeadOdp->id}";
+                    $currentBreakKeys[] = $breakKey;
+
                     $breakInfo = [
+                        'break_key'              => $breakKey,
+                        'odc_id'                 => $odc->id,
                         'odc_name'               => $odc->name,
+                        'last_healthy_odp_id'    => $lastHealthyOdp->id,
                         'last_healthy_odp'       => $lastHealthyOdp->name,
                         'last_healthy_power_dbm' => $current['avg_power'],
+                        'first_dead_odp_id'      => $firstDeadOdp->id,
                         'first_dead_odp'         => $firstDeadOdp->name,
                         'estimated_break_sector' => "Antara {$lastHealthyOdp->name} dan {$firstDeadOdp->name}",
                         'affected_odp_list'      => $affectedOdps,
@@ -183,29 +197,60 @@ class OpticalFaultLocalizationService
 
                     $detectedBreaks[] = $breakInfo;
 
-                    // Siarkan Notifikasi Pintar Lokalisasi Jalur Putus
-                    $affectedNames = implode(', ', array_slice($affectedOdps, 0, 4));
-                    if (count($affectedOdps) > 4) {
-                        $affectedNames .= ' dkk.';
+                    // Siarkan Notifikasi Pintar Lokalisasi Jalur Putus (HANYA SEKALI, ANTI-SPAM)
+                    $notifKey = "notif_cable_break_{$odc->id}_{$lastHealthyOdp->id}_{$firstDeadOdp->id}";
+                    if (!\Illuminate\Support\Facades\Cache::has($notifKey)) {
+                        \Illuminate\Support\Facades\Cache::put($notifKey, $breakInfo, now()->addHours(12));
+
+                        $affectedNames = implode(', ', array_slice($affectedOdps, 0, 4));
+                        if (count($affectedOdps) > 4) {
+                            $affectedNames .= ' dkk.';
+                        }
+
+                        $cleanBreakMsg = "<b>• Jalur Distribusi:</b> ODC {$odc->name}\n" .
+                                         "<b>• Batas Putus Kabel:</b> <b>{$lastHealthyOdp->name}</b> ➔ <b>{$firstDeadOdp->name}</b>\n" .
+                                         "<b>• Titik Sinyal Terakhir:</b> {$lastHealthyOdp->name} (Rx: <code>{$current['avg_power']} dBm</code>)\n" .
+                                         "<b>• Titik Hilang Sinyal:</b> {$firstDeadOdp->name} (🔴 LOS / Mati)\n" .
+                                         "<b>• Estimasi Terdampak:</b> " . count($affectedOdps) . " ODP ({$affectedNames}) & {$totalAffectedClients} Pelanggan";
+
+                        AppNotification::notifyAll(
+                            "🚨 LOKALISASI PUTUS KABEL: {$lastHealthyOdp->name} ➔ {$firstDeadOdp->name}",
+                            $cleanBreakMsg,
+                            'NOC',
+                            '/otdr-tracing'
+                        );
                     }
-
-                    AppNotification::notifyAll(
-                        "LOKALISASI PUTUS KABEL: Antara {$lastHealthyOdp->name} & {$firstDeadOdp->name}",
-                        "Terdeteksi batas putus kabel distribusi optik pada jalur ODC {$odc->name}. Titik terakhir berdaya optik normal: {$lastHealthyOdp->name} ({$current['avg_power']} dBm), sedangkan {$firstDeadOdp->name} dan seterusnya mengalami kehilangan sinyal total (LOS). Total terdampak: " . count($affectedOdps) . " ODP ({$affectedNames}) & {$totalAffectedClients} pelanggan.",
-                        'NOC',
-                        '/otdr-tracing'
-                    );
-
-                    AuditLog::record(
-                        'NOC_ALERT',
-                        'Fault Localization Engine',
-                        "Lokalisasi putus kabel optik terisolasi antara {$lastHealthyOdp->name} dan {$firstDeadOdp->name}",
-                        null,
-                        $breakInfo
-                    );
                 }
             }
         }
+
+        // Cek Pemulihan: Jika break yang sebelumnya aktif sekarang sudah tersambung kembali
+        $activeBreaksMap = \Illuminate\Support\Facades\Cache::get('active_cable_breaks_map', []);
+        foreach ($activeBreaksMap as $oldKey => $oldBreak) {
+            if (!in_array($oldKey, $currentBreakKeys)) {
+                // Kabel telah pulih / disambung kembali
+                $recoveryMsg = "<b>• Jalur Distribusi:</b> ODC {$oldBreak['odc_name']}\n" .
+                               "<b>• Segmen:</b> {$oldBreak['last_healthy_odp']} ➔ {$oldBreak['first_dead_odp']}\n" .
+                               "<b>• Status:</b> 🟢 NORMAL (Kabel Selesai Disambung)\n\n" .
+                               "<i>Sinyal optik pada segmen ini telah kembali normal dan pelanggan telah terhubung kembali.</i>";
+
+                AppNotification::notifyAll(
+                    "🟢 PEMULIHAN KABEL OPTIK: {$oldBreak['last_healthy_odp']} ➔ {$oldBreak['first_dead_odp']}",
+                    $recoveryMsg,
+                    'NOC',
+                    '/otdr-tracing'
+                );
+
+                \Illuminate\Support\Facades\Cache::forget("notif_cable_break_{$oldBreak['odc_id']}_{$oldBreak['last_healthy_odp_id']}_{$oldBreak['first_dead_odp_id']}");
+            }
+        }
+
+        // Simpan snapshot break aktif terkini
+        $newBreaksMap = [];
+        foreach ($detectedBreaks as $db) {
+            $newBreaksMap[$db['break_key']] = $db;
+        }
+        \Illuminate\Support\Facades\Cache::put('active_cable_breaks_map', $newBreaksMap, now()->addHours(24));
 
         return $detectedBreaks;
     }

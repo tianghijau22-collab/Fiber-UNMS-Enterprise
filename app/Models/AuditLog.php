@@ -65,17 +65,22 @@ class AuditLog extends Model
             'new_values'  => $newValues,
         ]);
 
-        // Otomatis sinkronisasi kirim aktivitas ke Telegram Bot
-        \App\Services\TelegramService::sendAuditLog(
-            $action,
-            $module,
-            $description,
-            $userName,
-            $userRole,
-            $ip,
-            $oldValues,
-            $newValues
-        );
+        // Otomatis sinkronisasi kirim aktivitas ke Telegram Bot (Hanya untuk aksi nyata user, bukan internal engine/alarm)
+        $ignoredModules = ['fault localization engine', 'monitoring olt', 'system cron', 'telemetry daemon', 'telemetry', 'background'];
+        $ignoredActions = ['noc_alert', 'alarm_los', 'alarm_recovery', 'alarm_sudden_los', 'alarm_high_loss', 'telemetry_sync'];
+
+        if (!in_array(strtolower($module), $ignoredModules) && !in_array(strtolower($action), $ignoredActions)) {
+            \App\Services\TelegramService::sendAuditLog(
+                $action,
+                $module,
+                $description,
+                $userName,
+                $userRole,
+                $ip,
+                $oldValues,
+                $newValues
+            );
+        }
 
         return $log;
     }

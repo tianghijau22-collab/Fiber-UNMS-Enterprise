@@ -72,10 +72,16 @@ export default function Dashboard() {
   const [olts, setOlts] = useState([]);
   const [activeAlertFilter, setActiveAlertFilter] = useState('all');
 
-  // Mini GIS Map References
+  // Mini GIS Map References & Controls
+  const [mapTileType, setMapTileType] = useState('hybrid'); // 'hybrid' | 'osm'
   const miniMapContainerRef = useRef(null);
   const miniMapInstanceRef = useRef(null);
   const leafletRef = useRef(null);
+  const tileLayerRef = useRef(null);
+  const cablesLayerGroupRef = useRef(null);
+  const nodesLayerGroupRef = useRef(null);
+  const hasInitialFitRef = useRef(false);
+  const latestBoundsRef = useRef([]);
 
   // Fetch Dashboard Data
   const fetchDashboardData = useCallback(async () => {
@@ -105,8 +111,11 @@ export default function Dashboard() {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // Hook for silent auto refresh
-  const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchDashboardData);
+  // Hook for silent auto refresh (real-time telemetry & alerts every 5 seconds)
+  const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchDashboardData, {
+    enablePolling: true,
+    intervalMs: 5000,
+  });
 
   // Aggregated Real-Time KPI Stats
   const totalPop = metrics?.overview?.total_pop ?? stats?.by_type?.POP ?? 0;
@@ -144,25 +153,33 @@ export default function Dashboard() {
     online_rate: 100,
   };
 
-  // 2. Optical Signal Power Distribution Chart
+  // 2. Optical Signal Power Distribution Chart (Sesuai Pola Customers & OLT)
   const rxPowerData = useMemo(() => {
     const rx = metrics?.rx_power;
     return {
-      labels: ['Bagus (-15~-24 dBm)', 'Sedang (-25~-27 dBm)', 'Warning (-28 dBm+)', 'LOS (Loss Signal)'],
+      labels: [
+        'Sangat Baik (> -19 dBm)',
+        'Normal (-19~-24 dBm)',
+        'Warning (-24~-27 dBm)',
+        'Kritis (< -27 dBm)',
+        'LOS / Offline'
+      ],
       datasets: [
         {
-          label: 'Jumlah Node / ODP',
+          label: 'Jumlah Modem / ODP',
           data: [
-            rx?.good ?? 0,
-            rx?.moderate ?? 0,
+            rx?.sangat_baik ?? 0,
+            rx?.normal ?? 0,
             rx?.warning ?? 0,
+            rx?.kritis ?? 0,
             rx?.los ?? 0
           ],
           backgroundColor: [
-            '#10b981', // Emerald
-            '#f59e0b', // Amber
-            '#f97316', // Orange
-            '#ef4444'  // Red
+            '#10b981', // Sangat Baik (Emerald)
+            '#06b6d4', // Normal (Cyan / Teal)
+            '#f59e0b', // Warning (Amber)
+            '#f97316', // Kritis (Orange)
+            '#ef4444'  // LOS / Offline (Rose / Red)
           ],
           borderRadius: 6,
           borderWidth: 0,
@@ -280,7 +297,106 @@ export default function Dashboard() {
     }
   };
 
-  // 4. Mini GIS Map Leaflet Initialization
+  // 4. Helper to Render / Update GIS Layers In-Place (Without Recreating Map or Resetting Zoom)
+  const renderGisLayers = useCallback((gisData, isInitial = false) => {
+    const map = miniMapInstanceRef.current;
+    const Lf = leafletRef.current;
+    if (!map || !Lf || !cablesLayerGroupRef.current || !nodesLayerGroupRef.current) return;
+
+    // Bersihkan layer kabel & node lama tanpa menghancurkan instance map
+    cablesLayerGroupRef.current.clearLayers();
+    nodesLayerGroupRef.current.clearLayers();
+
+    const nodes = gisData?.nodes ?? [];
+    const cables = gisData?.cables ?? [];
+    const markerBounds = [];
+
+    // Render Cable Polyline
+    cables.forEach(c => {
+      try {
+        const rawCoords = c.route_coordinates || c.coordinates;
+        const coords = typeof rawCoords === 'string' ? JSON.parse(rawCoords) : rawCoords;
+        if (Array.isArray(coords) && coords.length >= 2) {
+          const latLngs = coords.map(pt => [pt.lat || pt[0], pt.lng || pt[1]]);
+          const isDamaged = c.status === 'damaged' || c.status === 'offline';
+          Lf.polyline(latLngs, {
+            color: isDamaged ? '#ef4444' : '#10b981',
+            weight: 3.5,
+            opacity: 0.9,
+            dashArray: isDamaged ? '8, 6' : '12, 6',
+          }).addTo(cablesLayerGroupRef.current);
+
+          coords.forEach(pt => {
+            const pLat = parseFloat(pt.lat || pt[0]);
+            const pLng = parseFloat(pt.lng || pt[1]);
+            if (!isNaN(pLat) && !isNaN(pLng)) {
+              markerBounds.push([pLat, pLng]);
+            }
+          });
+        }
+      } catch {
+        // ignore parsing error
+      }
+    });
+
+    // Render Nodes Markers with Live Optical Power & Status
+    nodes.forEach(n => {
+      const lat = parseFloat(n.latitude);
+      const lng = parseFloat(n.longitude);
+      if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
+
+      markerBounds.push([lat, lng]);
+
+      let color = '#10b981'; // Green ODP
+      let radius = 6.5;
+      if (n.node_type === 'POP') {
+        color = '#6366f1'; // Indigo POP
+        radius = 9.5;
+      } else if (n.node_type === 'ODC') {
+        color = '#06b6d4'; // Cyan ODC
+        radius = 8;
+      }
+
+      const isOff = n.status === 'damaged' || n.status === 'offline';
+      if (isOff) {
+        color = '#ef4444'; // Red if down / loss
+      }
+
+      const circle = Lf.circleMarker([lat, lng], {
+        radius: isOff ? radius + 2.5 : radius,
+        fillColor: color,
+        color: isOff ? '#fca5a5' : '#ffffff',
+        weight: isOff ? 3 : 2,
+        opacity: 1,
+        fillOpacity: 0.95,
+      }).addTo(nodesLayerGroupRef.current);
+
+      const pwrText = n.core_power ? `${parseFloat(n.core_power).toFixed(1)} dBm` : 'Normal';
+      circle.bindTooltip(`
+        <div style="font-family: sans-serif; min-width: 140px; padding: 2px;">
+          <div style="font-weight: 800; font-size: 11px; color: #0f172a;">${n.node_type}: ${n.name}</div>
+          <div style="font-size: 10px; font-family: monospace; color: #64748b;">Kode: ${n.code}</div>
+          <div style="font-size: 10px; font-weight: 700; color: ${isOff ? '#e11d48' : '#059669'}; margin-top: 2px;">
+            ● ${isOff ? 'OFFLINE / LOS' : 'ONLINE'} (${pwrText})
+          </div>
+          ${n.olt_name ? `<div style="font-size: 9px; color: #94a3b8; margin-top: 1px;">OLT: ${n.olt_name}</div>` : ''}
+        </div>
+      `, {
+        direction: 'top',
+        className: 'custom-map-tooltip',
+      });
+    });
+
+    latestBoundsRef.current = markerBounds;
+
+    // HANYA fitBounds saat pertama kali dibuka! Saat polling auto-reload, jangan ubah zoom / posisi map user
+    if ((isInitial || !hasInitialFitRef.current) && markerBounds.length > 0) {
+      map.fitBounds(markerBounds, { padding: [35, 35], maxZoom: 15 });
+      hasInitialFitRef.current = true;
+    }
+  }, []);
+
+  // 4a. Mini GIS Map Leaflet Initialization (HANYA SEKALI SAAT MOUNT)
   useEffect(() => {
     let map = null;
 
@@ -289,12 +405,9 @@ export default function Dashboard() {
       const Lf = leafletRef.current;
 
       if (!miniMapContainerRef.current) return;
-      if (miniMapInstanceRef.current) {
-        miniMapInstanceRef.current.remove();
-        miniMapInstanceRef.current = null;
-      }
+      if (miniMapInstanceRef.current) return; // Peta sudah aktif, jangan recreate!
 
-      const defaultCenter = [-6.2088, 106.8456]; // fallback center
+      const defaultCenter = [-0.6865, 100.6480]; // fallback region center
       map = Lf.map(miniMapContainerRef.current, {
         center: defaultCenter,
         zoom: 13,
@@ -302,108 +415,73 @@ export default function Dashboard() {
         attributionControl: false,
       });
 
-      // Tile Layer (Dark or Light OpenStreetMap)
-      const tileUrl = isDark
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-      Lf.tileLayer(tileUrl, { maxZoom: 19, subdomains: isDark ? ['a', 'b', 'c', 'd'] : ['a', 'b', 'c'] }).addTo(map);
-
-      // Add Zoom Control at bottom right
-      Lf.control.zoom({ position: 'bottomright' }).addTo(map);
-
-      miniMapInstanceRef.current = map;
-
-      // Invalidate size immediately and on intervals to guarantee full tile spread
-      map.invalidateSize();
-      const t1 = setTimeout(() => map.invalidateSize(), 150);
-      const t2 = setTimeout(() => map.invalidateSize(), 400);
-
-      // Add Node Markers & Polylines from GIS preview data
-      const nodes = metrics?.gis_preview?.nodes ?? [];
-      const cables = metrics?.gis_preview?.cables ?? [];
-
-      const markerBounds = [];
-
-      // Render Cable Polyline
-      cables.forEach(c => {
-        try {
-          const rawCoords = c.route_coordinates || c.coordinates;
-          const coords = typeof rawCoords === 'string' ? JSON.parse(rawCoords) : rawCoords;
-          if (Array.isArray(coords) && coords.length >= 2) {
-            const latLngs = coords.map(pt => [pt.lat || pt[0], pt.lng || pt[1]]);
-            const isDamaged = c.status === 'damaged';
-            Lf.polyline(latLngs, {
-              color: isDamaged ? '#ef4444' : '#3b82f6',
-              weight: 3,
-              opacity: 0.8,
-              dashArray: isDamaged ? '6, 6' : undefined,
-            }).addTo(map);
-
-            coords.forEach(pt => {
-              const pLat = parseFloat(pt.lat || pt[0]);
-              const pLng = parseFloat(pt.lng || pt[1]);
-              if (!isNaN(pLat) && !isNaN(pLng)) {
-                markerBounds.push([pLat, pLng]);
-              }
-            });
-          }
-        } catch {
-          // ignore parsing error
-        }
-      });
-
-      // Render Nodes Markers
-      nodes.forEach(n => {
-        const lat = parseFloat(n.latitude);
-        const lng = parseFloat(n.longitude);
-        if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
-
-        markerBounds.push([lat, lng]);
-
-        let color = '#10b981'; // Green ODP
-        let radius = 6;
-        if (n.node_type === 'POP') {
-          color = '#6366f1'; // Indigo POP
-          radius = 9;
-        } else if (n.node_type === 'ODC') {
-          color = '#3b82f6'; // Blue ODC
-          radius = 7.5;
-        }
-
-        if (n.status === 'damaged' || n.status === 'offline') {
-          color = '#ef4444'; // Red if down
-        }
-
-        const circle = Lf.circleMarker([lat, lng], {
-          radius: radius,
-          fillColor: color,
-          color: '#ffffff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.9,
-        }).addTo(map);
-
-        circle.bindTooltip(`<b>${n.node_type} ${n.code || n.name}</b><br/>Status: ${n.status}`, {
-          direction: 'top',
-          className: 'text-xs font-sans rounded-lg shadow-md',
-        });
-      });
-
-      if (markerBounds.length > 0) {
-        map.fitBounds(markerBounds, { padding: [30, 30], maxZoom: 15 });
+      // Tile Layer Setup
+      let tileUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+      let subdomains = ['0', '1', '2', '3'];
+      if (mapTileType === 'osm') {
+        tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        subdomains = ['a', 'b', 'c'];
       }
 
+      tileLayerRef.current = Lf.tileLayer(tileUrl, { maxZoom: 20, subdomains }).addTo(map);
+      Lf.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      // Inisialisasi Layer Groups untuk Polylines dan CircleMarkers
+      cablesLayerGroupRef.current = Lf.layerGroup().addTo(map);
+      nodesLayerGroupRef.current = Lf.layerGroup().addTo(map);
+
       miniMapInstanceRef.current = map;
+
+      // Invalidate size saat pertama mount
+      map.invalidateSize();
+      setTimeout(() => map?.invalidateSize(), 150);
+      setTimeout(() => map?.invalidateSize(), 400);
+
+      // Render GIS data jika sudah tersedia
+      if (metrics?.gis_preview) {
+        renderGisLayers(metrics.gis_preview, true);
+      }
     });
 
     return () => {
       if (miniMapInstanceRef.current) {
         miniMapInstanceRef.current.remove();
         miniMapInstanceRef.current = null;
+        cablesLayerGroupRef.current = null;
+        nodesLayerGroupRef.current = null;
+        tileLayerRef.current = null;
+        hasInitialFitRef.current = false;
       }
     };
-  }, [metrics?.gis_preview, isDark]);
+  }, []); // Mount sekali saja
+
+  // 4b. Ganti Tile Layer secara mulus tanpa recreate map / reset zoom
+  useEffect(() => {
+    if (!miniMapInstanceRef.current || !leafletRef.current) return;
+    const Lf = leafletRef.current;
+    const map = miniMapInstanceRef.current;
+
+    if (tileLayerRef.current) {
+      tileLayerRef.current.remove();
+    }
+
+    let tileUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+    let subdomains = ['0', '1', '2', '3'];
+
+    if (mapTileType === 'osm') {
+      tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      subdomains = ['a', 'b', 'c'];
+    }
+
+    tileLayerRef.current = Lf.tileLayer(tileUrl, { maxZoom: 20, subdomains }).addTo(map);
+  }, [mapTileType]);
+
+  // 4c. Update GIS Layers In-Place saat Auto-Reload (Tanpa mengganggu posisi pan & zoom user)
+  useEffect(() => {
+    if (metrics?.gis_preview && miniMapInstanceRef.current) {
+      renderGisLayers(metrics.gis_preview, false);
+    }
+  }, [metrics?.gis_preview, renderGisLayers]);
 
   // 5. OLT Hardware Health & Telemetry
   const oltHardwareList = metrics?.olt_hardware_health ?? [];
@@ -485,21 +563,17 @@ export default function Dashboard() {
           <div className="my-2.5 flex items-baseline justify-between">
             <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">{customerStats.total_customers}</span>
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-neutral-900 text-emerald-700 dark:text-emerald-400">
-              {customerStats.active_customers} Aktif ({customerStats.active_percentage}%)
+              {customerStats.active_customers} Online ({customerStats.active_percentage}%)
             </span>
           </div>
           <div className="pt-2 border-t border-slate-100 dark:border-[#1f1f1f] text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between font-medium">
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-              <span className="font-bold text-amber-600 dark:text-amber-400">{customerStats.isolated_customers}</span> Isolir
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs"></span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">{customerStats.active_customers}</span> Online
             </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-              <span className="font-bold text-purple-600 dark:text-purple-400">{customerStats.suspended_customers}</span> Suspend
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-              <span className="font-bold text-rose-600 dark:text-rose-400">{customerStats.terminated_customers}</span> Off
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-xs"></span>
+              <span className="font-bold text-rose-600 dark:text-rose-400">{customerStats.offline_customers ?? (customerStats.total_customers - customerStats.active_customers)}</span> Offline
             </span>
           </div>
         </div>
@@ -630,18 +704,43 @@ export default function Dashboard() {
           {/* Map Container */}
           <div className="w-full h-64 rounded-xl overflow-hidden border border-slate-200 dark:border-[#222222] relative">
             <div ref={miniMapContainerRef} className="w-full h-full z-0" />
+            
+            {/* Layer Switcher & Re-center Buttons */}
+            <div className="absolute top-2.5 right-2.5 z-[999] flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (miniMapInstanceRef.current && latestBoundsRef.current?.length > 0) {
+                    miniMapInstanceRef.current.fitBounds(latestBoundsRef.current, { padding: [35, 35], maxZoom: 15 });
+                  }
+                }}
+                className="px-2.5 py-1 bg-slate-900/85 hover:bg-slate-900 text-white rounded-lg text-[10px] font-bold border border-slate-700 shadow-md backdrop-blur-xs transition-all flex items-center gap-1 cursor-pointer"
+                title="Pusatkan tampilan peta ke seluruh node"
+              >
+                🎯 Pusatkan
+              </button>
+              <button
+                type="button"
+                onClick={() => setMapTileType(t => t === 'hybrid' ? 'osm' : 'hybrid')}
+                className="px-2.5 py-1 bg-slate-900/85 hover:bg-slate-900 text-white rounded-lg text-[10px] font-bold border border-slate-700 shadow-md backdrop-blur-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                {mapTileType === 'hybrid' ? '🛰️ Mode Satelit' : '🗺️ Mode Vektor'}
+              </button>
+            </div>
+
+            {/* Legend */}
             <div className="absolute bottom-2 left-2 z-[999] bg-white/90 dark:bg-black/90 backdrop-blur-xs px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[#333333] text-[10px] flex items-center gap-3">
               <span className="flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span> POP
               </span>
-              <span className="flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span> ODC
+              <span className="flex items-center gap-1 font-bold text-cyan-600 dark:text-cyan-400">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-600"></span> ODC
               </span>
               <span className="flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> ODP
               </span>
               <span className="flex items-center gap-1 font-bold text-rose-600 dark:text-rose-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-600"></span> Loss / Putus
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-600"></span> Loss / Offline
               </span>
             </div>
           </div>
@@ -655,7 +754,7 @@ export default function Dashboard() {
                 Distribusi Sinyal Optical Power ONU
               </h3>
               <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                Avg: {avgPowerDbm ? `${avgPowerDbm} dBm` : '—'}
+                Avg: {avgPowerDbm ? `${parseFloat(avgPowerDbm).toFixed(2)} dBm` : '—'}
               </span>
             </div>
             <div className="h-56 w-full">
@@ -665,7 +764,7 @@ export default function Dashboard() {
           <div className="mt-3 pt-3 border-t border-slate-100 dark:border-[#1f1f1f] flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
             <span>Rata-Rata Redaman Seluruh ONU</span>
             <span className="font-bold text-slate-800 dark:text-slate-200">
-              {avgPowerDbm ? `${avgPowerDbm} dBm (Real-Time)` : 'Data Belum Tersedia'}
+              {avgPowerDbm ? `${parseFloat(avgPowerDbm).toFixed(2)} dBm (Real-Time)` : 'Data Belum Tersedia'}
             </span>
           </div>
         </div>
@@ -894,39 +993,61 @@ export default function Dashboard() {
                   Tidak ada insiden gangguan aktif saat ini.
                 </div>
               ) : (
-                filteredAlerts.map((alert) => (
-                  <div
-                    key={alert.id}
-                    className="p-3 rounded-xl border border-amber-300 dark:border-amber-900/60 bg-amber-50/40 dark:bg-neutral-950 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                        <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
-                          {alert.title}
-                        </span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 dark:bg-neutral-900 text-amber-700 dark:text-amber-400 uppercase">
-                          {alert.severity || 'WARNING'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 line-clamp-1">
-                        {alert.description}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-mono">
-                        <span>Node: {alert.node}</span>
-                        <span>•</span>
-                        <span>{alert.time}</span>
-                      </div>
-                    </div>
+                filteredAlerts.map((alert) => {
+                  const isCrit = alert.severity === 'critical';
+                  const isWarn = alert.severity === 'warning';
+                  const cardBorder = isCrit
+                    ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20'
+                    : isWarn
+                    ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20'
+                    : 'border-blue-300 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20';
+                  const dotColor = isCrit ? 'bg-rose-500' : (isWarn ? 'bg-amber-500' : 'bg-emerald-500');
+                  const badgeCls = isCrit
+                    ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800'
+                    : isWarn
+                    ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800'
+                    : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800';
 
-                    <Link
-                      to="/otdr-tracing"
-                      className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-neutral-900 border border-slate-200 dark:border-[#222222] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors"
+                  return (
+                    <div
+                      key={alert.id}
+                      className={`p-3 rounded-xl border ${cardBorder} flex items-center justify-between gap-3 transition-all`}
                     >
-                      Tracing OTDR
-                    </Link>
-                  </div>
-                ))
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${dotColor} shrink-0 ${isCrit ? 'animate-ping' : ''}`}></span>
+                          <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                            {alert.title}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${badgeCls}`}>
+                            {alert.severity || 'WARNING'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 line-clamp-2">
+                          {alert.description}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-mono">
+                          <span>Node: {alert.node}</span>
+                          <span>•</span>
+                          <span>{alert.time}</span>
+                          {alert.olt && (
+                            <>
+                              <span>•</span>
+                              <span>{alert.olt}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <Link
+                        to="/otdr-tracing"
+                        className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-neutral-900 border border-slate-200 dark:border-[#222222] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors"
+                      >
+                        Tracing OTDR
+                      </Link>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
