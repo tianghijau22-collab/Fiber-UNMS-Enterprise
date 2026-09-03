@@ -28,6 +28,7 @@ import Login from './pages/Login.jsx';
 import NetworkBridgeSetup from './pages/NetworkBridgeSetup.jsx';
 import VoiceCallManager from './components/VoiceCallManager.jsx';
 import PageTransitionWrapper from './components/PageTransitionWrapper.jsx';
+import GlobalAlertModal from './components/GlobalAlertModal.jsx';
 
 /**
  * PrivateRoute: jika belum login → redirect ke /login
@@ -147,6 +148,7 @@ export default function App() {
             {/* Semua halaman lain — wajib login */}
             <Route path="/*" element={<AppContent />} />
           </Routes>
+          <GlobalAlertModal />
         </Router>
       </AuthProvider>
     </ThemeProvider>

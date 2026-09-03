@@ -139,6 +139,14 @@ export default function CustomerManagement() {
   });
 
   const showToastMsg = (msg, type = 'success') => {
+    if (typeof window !== 'undefined' && window.showAppAlert) {
+      window.showAppAlert({
+        type: type === 'error' ? 'error' : 'success',
+        title: type === 'error' ? 'Pemberitahuan Gagal' : 'Berhasil!',
+        message: msg,
+        duration: 2600,
+      });
+    }
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };

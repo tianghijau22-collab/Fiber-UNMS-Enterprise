@@ -4411,6 +4411,14 @@ export default function NetworkInfrastructure() {
   const [toast, setToast] = useState(null);
 
   const showToast = (msg, type = 'success') => {
+    if (typeof window !== 'undefined' && window.showAppAlert) {
+      window.showAppAlert({
+        type: type === 'error' ? 'error' : 'success',
+        title: type === 'error' ? 'Pemberitahuan Gagal' : 'Berhasil!',
+        message: msg,
+        duration: 2600,
+      });
+    }
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };
@@ -4522,7 +4530,15 @@ export default function NetworkInfrastructure() {
       });
       if (!res.ok) {
         const err = await res.json();
-        setNodeErr(err.errors ?? err.message ?? 'Gagal menyimpan node');
+        const errStr = err.errors ? (typeof err.errors === 'object' ? Object.values(err.errors).flat().join(', ') : err.errors) : (err.message ?? 'Gagal menyimpan node');
+        setNodeErr(errStr);
+        if (typeof window !== 'undefined' && window.showAppAlert) {
+          window.showAppAlert({
+            type: 'error',
+            title: 'Gagal Menyimpan Node!',
+            message: errStr,
+          });
+        }
         return;
       }
       setModalAddNode(null);
@@ -4549,11 +4565,19 @@ export default function NetworkInfrastructure() {
       });
       if (!res.ok) {
         const err = await res.json();
-        setCableErr(err.errors ?? err.message ?? 'Gagal membuat kabel');
+        const errStr = err.errors ? (typeof err.errors === 'object' ? Object.values(err.errors).flat().join(', ') : err.errors) : (err.message ?? 'Gagal membuat kabel');
+        setCableErr(errStr);
+        if (typeof window !== 'undefined' && window.showAppAlert) {
+          window.showAppAlert({
+            type: 'error',
+            title: 'Gagal Membuat Kabel!',
+            message: errStr,
+          });
+        }
         return;
       }
       setShowAddCableModal(false);
-      showToast(' Kabel & Core Matrix TIA-598-A berhasil dibuat!');
+      showToast('Kabel & Core Matrix TIA-598-A berhasil dibuat!');
       refreshAll();
     } finally {
       setSavingCable(false);
@@ -4577,7 +4601,15 @@ export default function NetworkInfrastructure() {
       });
       if (!res.ok) {
         const err = await res.json();
-        setCableErr(err.errors ?? err.message ?? 'Gagal memperbarui kabel');
+        const errStr = err.errors ? (typeof err.errors === 'object' ? Object.values(err.errors).flat().join(', ') : err.errors) : (err.message ?? 'Gagal memperbarui kabel');
+        setCableErr(errStr);
+        if (typeof window !== 'undefined' && window.showAppAlert) {
+          window.showAppAlert({
+            type: 'error',
+            title: 'Gagal Memperbarui Kabel!',
+            message: errStr,
+          });
+        }
         return;
       }
       setEditingCable(null);
