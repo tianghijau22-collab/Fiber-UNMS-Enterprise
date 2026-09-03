@@ -1512,7 +1512,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         if (!match) return false;
       }
       return true;
-    });
+    }).sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
   }, [allNodes, oltFilterParam, typeFilter, statusFilter, faultOnlyFilter, searchQuery]);
 
   const nodesWithCoords = useMemo(() => {

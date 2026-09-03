@@ -3596,12 +3596,16 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, 
     finally { setSavingOdpPort(false); }
   };
 
-  const filteredOdps = odps.filter(odp => {
-    const q = searchQuery.toLowerCase();
-    const matchSearch = !q || odp.name?.toLowerCase().includes(q) || odp.code?.toLowerCase().includes(q) || odp.address?.toLowerCase().includes(q);
-    const matchStatus = !filterStatus || odp.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
+  const filteredOdps = useMemo(() => {
+    return odps
+      .filter(odp => {
+        const q = searchQuery.toLowerCase();
+        const matchSearch = !q || odp.name?.toLowerCase().includes(q) || odp.code?.toLowerCase().includes(q) || odp.address?.toLowerCase().includes(q);
+        const matchStatus = !filterStatus || odp.status === filterStatus;
+        return matchSearch && matchStatus;
+      })
+      .sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
+  }, [odps, searchQuery, filterStatus]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const perPage = 6;
@@ -4345,13 +4349,23 @@ export default function NetworkInfrastructure() {
     const scopedPops = scopedOltId
       ? allNodes.filter(n => n.node_type === 'POP' && (String(n.olt_device_id) === String(scopedOltId) || (n.olt_device && String(n.olt_device.id) === String(scopedOltId))))
       : [];
-    return (scopedOltId && scopedPops.length > 0)
+    const list = (scopedOltId && scopedPops.length > 0)
       ? scopedPops
       : allNodes.filter(n => n.node_type === 'POP');
+    return [...list].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
   }, [allNodes, scopedOltId]);
 
-  const odcs = useMemo(() => filteredAllNodes.filter(n => n.node_type === 'ODC'), [filteredAllNodes]);
-  const odps = useMemo(() => filteredAllNodes.filter(n => n.node_type === 'ODP'), [filteredAllNodes]);
+  const odcs = useMemo(() => {
+    return filteredAllNodes
+      .filter(n => n.node_type === 'ODC')
+      .sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
+  }, [filteredAllNodes]);
+
+  const odps = useMemo(() => {
+    return filteredAllNodes
+      .filter(n => n.node_type === 'ODP')
+      .sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
+  }, [filteredAllNodes]);
 
   const [modalAddNode, setModalAddNode] = useState(null); // { type }
   const [showAddCableModal, setShowAddCableModal] = useState(false);
