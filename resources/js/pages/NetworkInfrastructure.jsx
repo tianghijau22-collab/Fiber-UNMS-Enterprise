@@ -2599,7 +2599,7 @@ function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefr
       .then(r => r.json())
       .then(d => setOltDevices(d.data ?? []))
       .catch(() => setOltDevices([]));
-    fetch('/api/network-nodes?type=POP&per_page=100')
+    fetch('/api/network-nodes?type=POP&per_page=1000')
       .then(r => r.json())
       .then(d => setPopNodes(d.data ?? []))
       .catch(() => setPopNodes([]));
@@ -4413,7 +4413,7 @@ export default function NetworkInfrastructure() {
   /* Fetch All Nodes */
   const fetchAllNodes = useCallback(async () => {
     try {
-      const r = await fetch('/api/network-nodes?per_page=500');
+      const r = await fetch('/api/network-nodes?per_page=10000');
       const d = await r.json();
       const list = d.data ?? [];
       setAllNodes(list);
