@@ -225,7 +225,9 @@ class KmlImportService
 
             // Stage 4: Insert or Update Cables (LineStrings)
             foreach ($parsed['cables'] as $cableData) {
-                $code = 'CBL-' . Str::slug($cableData['name']) . '-' . substr(md5(json_encode($cableData['coordinates'])), 0, 6);
+                $slug = Str::slug($cableData['name'] ?: 'cable');
+                $hash = substr(md5(json_encode($cableData['coordinates'])), 0, 6);
+                $code = 'CBL-' . substr($slug, 0, 28) . '-' . $hash;
                 
                 $cable = NetworkCable::withTrashed()->where('code', $code)->first();
                 $isNew = false;
