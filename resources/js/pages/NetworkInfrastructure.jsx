@@ -179,20 +179,20 @@ const displayInterface = (ref) => {
 
 function StatCard({ label, value, sub, badgeText }) {
   return (
-    <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#3f3f46] rounded-lg p-4 flex flex-col justify-between shadow-2xs">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-xs">
       <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
         <span className="text-[11px] font-bold uppercase tracking-wider">{label}</span>
         {badgeText && (
-          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-blue-100 dark:bg-neutral-900 text-blue-700 dark:text-blue-400">
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60">
             {badgeText}
           </span>
         )}
       </div>
       <div className="my-2.5 flex items-baseline justify-between">
-        <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white font-sans">{value}</span>
+        <span className="text-2xl sm:text-3xl font-extrabold text-slate-950 dark:text-white font-sans">{value}</span>
       </div>
       {sub && (
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate pt-2 border-t border-slate-100 dark:border-[#1f1f1f]">
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate pt-2.5 border-t border-slate-100 dark:border-slate-800">
           {sub}
         </p>
       )}
@@ -235,26 +235,26 @@ function EditCoreModal({ core, cableName, onSave, onClose, loading, allNodes = [
 
   const handleSubmit = e => { e.preventDefault(); onSave(form); };
 
-  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium';
-  const lc = 'block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1';
+  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium';
+  const lc = 'block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1.5';
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/75 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
-      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
-        <div className="bg-slate-900 dark:bg-slate-950 text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-800">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div className="bg-slate-50 dark:bg-slate-800/90 text-slate-950 dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-3">
             <div
-              className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs border ${colorMeta.bg} ${colorMeta.border} ${colorMeta.text}`}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs border ${colorMeta.bg} ${colorMeta.border} ${colorMeta.text}`}
               style={{ backgroundColor: colorMeta.hex, borderColor: colorMeta.borderHex }}
             >
               {core.core_number}
             </div>
             <div>
-              <h3 className="text-base font-bold">Core #{core.core_number} — {getIndonesianColor(core.color)}</h3>
-              <p className="text-xs text-slate-300">Tube {core.tube_number} ({getIndonesianColor(core.tube_color)}) · {cableName}</p>
+              <h3 className="text-base font-bold text-slate-950 dark:text-white">Core #{core.core_number} — {getIndonesianColor(core.color)}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Tube {core.tube_number} ({getIndonesianColor(core.tube_color)}) · {cableName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 font-bold">✕</button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold transition-colors cursor-pointer">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
@@ -303,7 +303,7 @@ function EditCoreModal({ core, cableName, onSave, onClose, loading, allNodes = [
             </div>
             <div>
               <label className={lc}>Warna Standard</label>
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-100 dark:bg-slate-700 rounded-xl text-xs font-semibold">
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white">
                 <span
                   className={`w-3.5 h-3.5 rounded-full border ${colorMeta.bg} ${colorMeta.border}`}
                   style={{ backgroundColor: colorMeta.hex, borderColor: colorMeta.borderHex }}
@@ -324,11 +324,11 @@ function EditCoreModal({ core, cableName, onSave, onClose, loading, allNodes = [
             />
           </div>
 
-          <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex-shrink-0">
-            <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+          <div className="flex gap-3 pt-3 border-t border-slate-200 dark:border-slate-800 flex-shrink-0">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
               Batal
             </button>
-            <button type="submit" disabled={loading} className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20">
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 transition-all">
               {loading && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
               Simpan
             </button>
@@ -1302,20 +1302,20 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
     onSave(payload);
   };
 
-  const fc = 'w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium';
-  const lc = 'block text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide mb-1';
+  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium';
+  const lc = 'block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1.5';
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/75 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
         
         {/* Pinned Header */}
-        <div className="bg-slate-900 dark:bg-slate-950 text-white px-5 py-3.5 flex items-center justify-between flex-shrink-0 border-b border-slate-800">
+        <div className="bg-slate-50 dark:bg-slate-800/90 text-slate-950 dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-200 dark:border-slate-800">
           <div>
-            <h3 className="text-sm sm:text-base font-bold">{isEdit ? '✏️ Edit Node' : '➕ Tambah Node'} ({form.node_type})</h3>
-            {parentNode && <p className="text-[11px] text-slate-300">di bawah: {parentNode.name}</p>}
+            <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">{isEdit ? '✏️ Edit Node' : '➕ Tambah Node'} ({form.node_type})</h3>
+            {parentNode && <p className="text-[11px] text-slate-500 dark:text-slate-400">di bawah: {parentNode.name}</p>}
           </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white font-bold cursor-pointer transition-colors">✕</button>
+          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
         </div>
 
         {/* Form Wrapper */}
@@ -1383,7 +1383,7 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
           {/* ── Mode & Input Koordinat Lokasi (Google Earth DMS / Google Maps Desimal) ── */}
           <div className="space-y-2 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700">
             <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wide flex items-center gap-1.5">
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide flex items-center gap-1.5">
                 <span>📍 Koordinat Lokasi Node</span>
               </label>
               <div className="flex gap-1 bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
@@ -1391,8 +1391,8 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
                   type="button"
                   onClick={() => set('coord_mode', 'dms')}
                   className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all ${form.coord_mode === 'dms'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                 >
                   🌍 Google Earth (DMS)
@@ -1401,8 +1401,8 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
                   type="button"
                   onClick={() => set('coord_mode', 'decimal')}
                   className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all ${form.coord_mode === 'decimal'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                 >
                   🗺️ Google Maps (Desimal)
@@ -1773,18 +1773,18 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
         </div>
 
         {/* Pinned Modal Footer */}
-        <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2 flex-shrink-0">
+        <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5 flex-shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             Batal
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
             <span>Simpan Node</span>
@@ -1853,23 +1853,23 @@ function AddCableModal({ popNode, onSave, onClose, loading, error, cables = [], 
     onSave({ ...form, code: autoCode });
   };
 
-  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium';
-  const lc = 'block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1';
+  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium';
+  const lc = 'block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1.5';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-700 max-h-[92vh] flex flex-col overflow-hidden">
-        <div className="bg-slate-900 dark:bg-slate-950 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div className="bg-slate-50 dark:bg-slate-800/90 text-slate-950 dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-200 dark:border-slate-800">
           <div>
-            <h3 className="text-base font-bold"> Tambah Kabel Fiber Optik Baru</h3>
-            <p className="text-xs text-slate-300">Konfigurasi Node Asal, Node Tujuan, &amp; Core Matrix TIA-598-A</p>
+            <h3 className="text-base font-bold text-slate-950 dark:text-white"> Tambah Kabel Fiber Optik Baru</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Konfigurasi Node Asal, Node Tujuan, &amp; Core Matrix TIA-598-A</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 font-bold">✕</button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+            <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/60 rounded-xl p-3.5 text-xs text-red-800 dark:text-red-200">
               {typeof error === 'object' ? Object.values(error).flat().join(' · ') : error}
             </div>
           )}
@@ -1956,13 +1956,13 @@ function AddCableModal({ popNode, onSave, onClose, loading, error, cables = [], 
             <textarea rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Keterangan pemasangan, brand kabel, dll..." className={`${fc} resize-none`} />
           </div>
 
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-xs text-indigo-800">
+          <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-xl p-3 text-xs text-indigo-900 dark:text-indigo-200 font-medium">
             ℹ️ Sistem akan otomatis generate <strong>{form.core_count_total} core</strong> dalam <strong>{form.tube_count} tube</strong> ({Math.ceil(form.core_count_total / form.tube_count)} core/tube) sesuai standar TIA-598-A.
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">Batal</button>
-            <button type="submit" disabled={loading} className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md transition-all disabled:opacity-50">
+          <div className="pt-2 flex justify-end gap-2.5">
+            <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Batal</button>
+            <button type="submit" disabled={loading} className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50">
               {loading ? 'Menyimpan...' : 'Buat Kabel & Core Matrix'}
             </button>
           </div>
@@ -1990,23 +1990,23 @@ function EditCableModal({ cable, onSave, onClose, loading, error, allNodes = [] 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const handleSubmit = e => { e.preventDefault(); onSave(form); };
 
-  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium';
-  const lc = 'block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1';
+  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium';
+  const lc = 'block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1.5';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 dark:border-slate-700 max-h-[92vh] flex flex-col overflow-hidden">
-        <div className="bg-slate-900 dark:bg-slate-950 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div className="bg-slate-50 dark:bg-slate-800/90 text-slate-950 dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-200 dark:border-slate-800">
           <div>
-            <h3 className="text-base font-bold">️ Edit Kabel — {cable.name}</h3>
-            <p className="text-xs text-slate-300 font-mono">{cable.code} · {cable.core_count_total} Core</p>
+            <h3 className="text-base font-bold text-slate-950 dark:text-white">️ Edit Kabel — {cable.name}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{cable.code} · {cable.core_count_total} Core</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 font-bold">✕</button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+            <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/60 rounded-xl p-3.5 text-xs text-red-800 dark:text-red-200">
               {typeof error === 'object' ? Object.values(error).flat().join(' · ') : error}
             </div>
           )}
@@ -2084,9 +2084,9 @@ function EditCableModal({ cable, onSave, onClose, loading, error, allNodes = [] 
             <textarea rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} className={`${fc} resize-none`} />
           </div>
 
-          <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50">Batal</button>
-            <button type="submit" disabled={loading} className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20">
+          <div className="flex gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Batal</button>
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 transition-all">
               {loading && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
               Simpan Perubahan
             </button>
@@ -2287,16 +2287,16 @@ function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, 
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* POP Selector Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
+      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div>
-            <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100"> Pilih POP Central Office (Headend) ({pops.length} POP)</h3>
+            <h3 className="text-xs sm:text-sm font-bold text-slate-950 dark:text-white"> Pilih POP ({pops.length} POP)</h3>
             <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">Pilih POP untuk melihat daftar kabel &amp; core matrix</p>
           </div>
           {canCrud && (
             <button
               onClick={() => onAddNode('POP')}
-              className="w-full sm:w-auto px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1"
+              className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5"
             >
               <span>+</span> Tambah POP
             </button>
@@ -2312,8 +2312,8 @@ function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, 
                 const pop = pops.find(p => p.id === Number(val));
                 if (pop) onSelectPop(pop);
               }}
-              placeholder="— Pilih POP Central —"
-              searchPlaceholder="Cari POP Central..."
+              placeholder="— Pilih POP —"
+              searchPlaceholder="Cari POP..."
               options={pops.map(pop => ({
                 value: pop.id,
                 label: pop.name,
@@ -2327,12 +2327,12 @@ function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, 
               <button
                 onClick={() => onEditNode(selectedPop)}
                 title="Edit POP ini"
-                className="flex-shrink-0 px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-indigo-50 hover:border-indigo-300 text-slate-700 dark:text-slate-300 transition-all"
+                className="flex-shrink-0 px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 hover:border-indigo-300 text-slate-700 dark:text-slate-300 transition-all"
               >Edit</button>
               <button
                 onClick={() => onDeleteNode(selectedPop)}
                 title="Hapus POP ini"
-                className="flex-shrink-0 px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-red-50 hover:border-red-300 text-red-600 dark:text-red-400 transition-all"
+                className="flex-shrink-0 px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/40 hover:border-red-300 text-red-600 dark:text-red-400 transition-all"
               >Hapus</button>
             </>
           )}
@@ -2772,15 +2772,14 @@ function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefr
   return (
     <div className="space-y-4">
       {/* ─── Header ─── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div>
-          <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">Daftar ODC (Optical Distribution Cabinet)</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Kabinet distribusi sekunder — kelola interface OLT, core power, splitter modul, dan port peruntukan</p>
+          <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">Daftar ODC (Optical Distribution Cabinet)</h3>
         </div>
         {canCrud && (
           <button
             onClick={() => onAddNode('ODC')}
-            className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5"
+            className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5"
           >
             <span>+</span> Tambah ODC Baru
           </button>
@@ -2788,19 +2787,19 @@ function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefr
       </div>
 
       {/* ─── Filter & Search Bar ─── */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs p-4 flex flex-col sm:flex-row gap-3">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 flex flex-col sm:flex-row gap-3">
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1"> Cari ODC</label>
+          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1"> Cari ODC</label>
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Cari kode, nama, lokasi..."
-            className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-slate-800/80 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
           />
         </div>
         <div className="flex-1 min-w-[160px]">
-          <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1"> Filter OLT</label>
+          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1"> Filter OLT</label>
           <SearchableSelect
             value={filterOlt}
             onChange={val => { setFilterOlt(val); setFilterPop(''); }}
@@ -2813,7 +2812,7 @@ function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefr
           />
         </div>
         <div className="flex-1 min-w-[160px]">
-          <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1"> Filter POP</label>
+          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1"> Filter POP</label>
           <SearchableSelect
             value={filterPop}
             onChange={val => setFilterPop(val)}
@@ -2828,7 +2827,7 @@ function OdcTabContent({ onAddNode, onEditNode, onDeleteNode, refreshKey, onRefr
         <div className="flex items-end">
           <button
             onClick={fetchOdcs}
-            className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl transition-all"
+            className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
           >
             Cari &amp; Filter
           </button>
@@ -3626,10 +3625,10 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, 
 
   return (
     <div className="space-y-4">
-      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs space-y-3">
+      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">Daftar ODP (Optical Distribution Point)</h3>
+            <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">Daftar ODP (Optical Distribution Point)</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {filteredOdps.length} dari {odps.length} ODP · Titik terminal distribusi optik ke pelanggan
             </p>
@@ -3637,24 +3636,24 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, 
           {canCrud && (
             <button
               onClick={() => onAddNode('ODP')}
-              className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5"
             >
               <span>+</span> Tambah ODP Baru
             </button>
           )}
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col sm:flex-row gap-2.5">
           <input
             type="text"
             placeholder=" Cari nama, kode, atau alamat ODP..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="flex-1 px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
           />
           <select
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
           >
             <option value="">Semua Status</option>
             <option value="active"> Aktif</option>
@@ -4686,14 +4685,11 @@ export default function NetworkInfrastructure() {
 
 
       {/* ── Top Header Banner ──────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#3f3f46] p-5 rounded-lg shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
-            Infrastruktur Jaringan Fiber Optik
+          <h1 className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white tracking-tight font-sans uppercase">
+            INFRASTRUKTUR JARINGAN FIBER OPTIK
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Dokumentasi hierarki POP, ODC, ODP, kapasitas core splitter, dan kabel backbone
-          </p>
         </div>
         <RefreshButton
           isRefreshing={isRefreshing}
@@ -4705,17 +4701,17 @@ export default function NetworkInfrastructure() {
 
       {/* Regional Scoped OLT Banner ("Data Wilayah") */}
       {scopedOltId && activeScopedOlt && (
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#3f3f46] rounded-lg p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
           <div>
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-neutral-900 text-blue-700 dark:text-blue-400">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400">
                 Data Wilayah OLT
               </span>
               <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
                 {activeScopedOlt.code || 'OLT REGION'}
               </span>
             </div>
-            <h2 className="text-lg sm:text-xl font-bold mt-1 text-slate-900 dark:text-white">
+            <h2 className="text-lg sm:text-xl font-bold mt-1 text-slate-950 dark:text-white">
               Data Wilayah: {activeScopedOlt.name}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -4724,7 +4720,7 @@ export default function NetworkInfrastructure() {
           </div>
           <Link
             to="/network"
-            className="px-3.5 py-2 bg-slate-100 dark:bg-neutral-900 hover:bg-slate-200 dark:hover:bg-neutral-800 border border-slate-200 dark:border-[#3f3f46] rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 transition-all shrink-0"
+            className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 transition-all shrink-0"
           >
             Tampilkan Semua Wilayah (Global)
           </Link>
@@ -4733,45 +4729,45 @@ export default function NetworkInfrastructure() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard label="POP Central" value={pops.length} sub="Point of Presence Sentral" badgeText="POP" />
-        <StatCard label="Kabinet ODC" value={odcs.length} sub="Optical Distribution Cabinet" badgeText="ODC" />
-        <StatCard label="Titik ODP" value={odps.length} sub="Optical Distribution Point" badgeText="ODP" />
-        <StatCard label="Core Terpakai" value={`${pct(usedCores, totalCores)}%`} sub={`${usedCores} / ${totalCores} Core Aktif`} badgeText="CORE" />
+        <StatCard label="POP" value={pops.length} sub="Point of Presence" badgeText="POP" />
+        <StatCard label="ODC" value={odcs.length} sub="Optical Distribution Cabinet" badgeText="ODC" />
+        <StatCard label="ODP" value={odps.length} sub="Optical Distribution Point" badgeText="ODP" />
+        <StatCard label="Core" value={`${pct(usedCores, totalCores)}%`} sub={`${usedCores} / ${totalCores} Core Aktif`} badgeText="CORE" />
       </div>
 
       {/* TAB NAVIGATION BAR (Sleek & Segmented) */}
-      <div className="bg-white dark:bg-black p-1.5 rounded-lg border border-slate-200 dark:border-[#3f3f46] shadow-2xs flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+      <div className="bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-1.5 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('POP')}
-          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-md text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 ${activeTab === 'POP'
-            ? 'bg-blue-50 dark:bg-neutral-900 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/60 shadow-2xs'
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-neutral-950'
+          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'POP'
+            ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 shadow-xs'
+            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
             }`}
         >
           <span>POP</span>
-          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'POP' ? 'bg-blue-100 dark:bg-neutral-800 text-blue-700 dark:text-blue-300' : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400'}`}>{pops.length}</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'POP' ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>{pops.length}</span>
         </button>
 
         <button
           onClick={() => setActiveTab('ODC')}
-          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-md text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 ${activeTab === 'ODC'
-            ? 'bg-blue-50 dark:bg-neutral-900 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/60 shadow-2xs'
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-neutral-950'
+          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'ODC'
+            ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 shadow-xs'
+            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
             }`}
         >
           <span>ODC</span>
-          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'ODC' ? 'bg-blue-100 dark:bg-neutral-800 text-blue-700 dark:text-blue-300' : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400'}`}>{odcs.length}</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'ODC' ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>{odcs.length}</span>
         </button>
 
         <button
           onClick={() => setActiveTab('ODP')}
-          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-md text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 ${activeTab === 'ODP'
-            ? 'bg-blue-50 dark:bg-neutral-900 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/60 shadow-2xs'
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-neutral-950'
+          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'ODP'
+            ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 shadow-xs'
+            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
             }`}
         >
           <span>ODP</span>
-          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'ODP' ? 'bg-blue-100 dark:bg-neutral-800 text-blue-700 dark:text-blue-300' : 'bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400'}`}>{odps.length}</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'ODP' ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>{odps.length}</span>
         </button>
       </div>
 
