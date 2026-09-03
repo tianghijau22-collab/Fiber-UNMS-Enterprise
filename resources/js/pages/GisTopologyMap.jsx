@@ -148,7 +148,7 @@ function StreetViewModal({ lat, lng, title, onClose }) {
             </a>
             <button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white font-bold transition-all"
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white font-bold transition-all cursor-pointer"
             >
               ✕
             </button>
@@ -171,7 +171,7 @@ function StreetViewModal({ lat, lng, title, onClose }) {
 /* ══════════════════════════════════════════════════════════════════
    NODE DETAIL DRAWER / POPUP MODAL
 ══════════════════════════════════════════════════════════════════ */
-function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
+function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
   if (!node) return null;
 
   const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
@@ -216,7 +216,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
         </div>
         <button
           onClick={onClose}
-          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all text-xs font-bold"
+          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all text-xs font-bold cursor-pointer"
         >
           ✕
         </button>
@@ -234,7 +234,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-2xl font-black font-mono" style={{ color: optMeta.color }}>
-                {node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${effectivePower} dBm` : '—')}
+                {node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(2)} dBm` : '—')}
               </span>
               <span className="text-[10px] font-mono text-slate-400">
                 {node.used_ports} Klien Terhubung
@@ -256,7 +256,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
                 </span>
                 <button
                   onClick={handleCopyCoords}
-                  className="px-2.5 py-0.5 text-[10px] font-bold bg-white dark:bg-black border border-slate-200 dark:border-neutral-700 rounded-lg hover:bg-slate-100 dark:hover:bg-neutral-800 transition-all text-slate-700 dark:text-slate-300"
+                  className="px-2.5 py-0.5 text-[10px] font-bold bg-white dark:bg-black border border-slate-200 dark:border-neutral-700 rounded-lg hover:bg-slate-100 dark:hover:bg-neutral-800 transition-all text-slate-700 dark:text-slate-300 cursor-pointer"
                 >
                   {copied ? 'Tersalin!' : 'Salin'}
                 </button>
@@ -276,7 +276,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
               <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/60 dark:border-neutral-800">
                 <button
                   onClick={() => onOpenStreetView(node.latitude, node.longitude, node.name)}
-                  className="py-2 px-2 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center col-span-3 sm:col-span-1 shadow-2xs"
+                  className="py-2 px-2 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center col-span-3 sm:col-span-1 shadow-2xs cursor-pointer"
                 >
                   <span>👁️ Street View</span>
                 </button>
@@ -286,7 +286,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
                   rel="noopener noreferrer"
                   className="py-2 px-2 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center shadow-2xs"
                 >
-                  <span>🗺️ Google Maps</span>
+                  <span>🗺️ Maps</span>
                 </a>
                 <a
                   href={`https://earth.google.com/web/search/${node.latitude},${node.longitude}`}
@@ -327,25 +327,144 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView }) {
             <p className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{node.olt_port_ref || 'PON 1/1/1'}</p>
           </div>
         </div>
+
+        {/* Quick Action Button to Trace Path */}
+        <button
+          onClick={() => onTracePath && onTracePath(node)}
+          className="w-full py-2.5 px-3 bg-cyan-50 dark:bg-cyan-950/60 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+        >
+          <span>🧭 Lacak Jalur Kabel (Path Tracing)</span>
+        </button>
       </div>
     </div>
   );
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   FAST INTERACTIVE LEAFLET TOPOLOGY MAP WITH REFINED FLOW ANIMATION
+   RULER & DISTANCE MEASUREMENT FLOATING HUD
 ══════════════════════════════════════════════════════════════════ */
-function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
+function RulerHud({ waypoints, totalMeters, onReset, onClose }) {
+  const km = (totalMeters / 1000).toFixed(2);
+  const m = Math.round(totalMeters);
+  const displayDist = totalMeters >= 1000 ? `${km} km (${m} m)` : `${m} meter`;
+
+  // Estimasi atenuasi kabel FO standar G.652D (~0.35 dB/km) + 0.1 dB per sambungan splice tambahan
+  const estSplice = waypoints.length > 2 ? (waypoints.length - 2) * 0.1 : 0;
+  const estFiberLoss = ((totalMeters / 1000) * 0.35 + estSplice).toFixed(2);
+
+  return (
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[999] bg-slate-900/95 text-white backdrop-blur-md border border-amber-500/60 shadow-2xl rounded-2xl p-4 w-full max-w-md animate-in fade-in slide-in-from-bottom-3 duration-200">
+      <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+          <span className="font-bold text-xs text-amber-300">📏 Alat Ukur Jarak Kabel Lapangan</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-slate-400 hover:text-white text-xs font-bold px-1 cursor-pointer"
+        >
+          ✕ Selesai
+        </button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="bg-slate-800/80 rounded-xl p-2.5 border border-slate-700/60">
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">Total Jarak Kabel</span>
+          <span className="text-base font-black font-mono text-emerald-400">{displayDist}</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">{waypoints.length} Titik Waypoint</span>
+        </div>
+
+        <div className="bg-slate-800/80 rounded-xl p-2.5 border border-slate-700/60">
+          <span className="text-[10px] font-bold uppercase text-slate-400 block">Estimasi Loss Redaman</span>
+          <span className="text-base font-black font-mono text-amber-400">~{estFiberLoss} dB</span>
+          <span className="text-[9px] text-slate-400 block mt-0.5">Koefisien ~0.35 dB/km</span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 pt-1">
+        <span>💡 Klik di peta untuk menambah titik tiang/jalur</span>
+        <button
+          onClick={onReset}
+          className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 border border-rose-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+        >
+          Reset Titik
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   PATH TRACING BREADCRUMB BANNER
+══════════════════════════════════════════════════════════════════ */
+function PathTracingBanner({ pathNodes, activeNodeId, onSelectNode, onClose }) {
+  if (!pathNodes || pathNodes.length <= 1) return null;
+
+  return (
+    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[998] bg-slate-900/90 dark:bg-black/90 backdrop-blur-md border border-cyan-500/60 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 text-white text-xs max-w-[92vw] overflow-hidden">
+      <div className="flex items-center gap-1.5 font-bold text-cyan-400 shrink-0">
+        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+        <span>Jalur Traced:</span>
+      </div>
+      <div className="flex items-center gap-2 overflow-x-auto py-0.5 scrollbar-none">
+        {pathNodes.map((pn, idx) => (
+          <React.Fragment key={pn.id}>
+            {idx > 0 && <span className="text-slate-500 font-mono shrink-0">➔</span>}
+            <button
+              onClick={() => onSelectNode(pn)}
+              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                pn.id === activeNodeId
+                  ? 'bg-cyan-500 text-slate-950 shadow-md ring-2 ring-cyan-400/50'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+              }`}
+            >
+              <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-cyan-300 font-mono font-bold">
+                {pn.node_type}
+              </span>
+              <span>{pn.name}</span>
+            </button>
+          </React.Fragment>
+        ))}
+      </div>
+      <button
+        onClick={onClose}
+        className="ml-1 w-6 h-6 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-bold text-xs transition-all shrink-0 cursor-pointer"
+        title="Tutup Tracing"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   FAST INTERACTIVE LEAFLET TOPOLOGY MAP
+══════════════════════════════════════════════════════════════════ */
+function LeafletMap({
+  nodes,
+  cables = [],
+  selectedNode,
+  tracedPath,
+  rulerActive,
+  rulerPoints,
+  setRulerPoints,
+  onSelectNode,
+  onOpenStreetView,
+  externalFlyToRef,
+}) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const leafletRef = useRef(null);
   const tileLayerRef = useRef(null);
-  const layersGroupRef = useRef(null);
+  const cablesLayerGroupRef = useRef(null);
+  const nodesLayerGroupRef = useRef(null);
+  const pathHighlightLayerGroupRef = useRef(null);
+  const rulerLayerGroupRef = useRef(null);
   const isFirstRenderRef = useRef(true);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isSatellite, setIsSatellite] = useState(true);
 
-  // 1. Initialize Map Instance with SVG Renderer
+  // 1. Initialize Map Instance with SVG Renderer (ONLY ONCE ON MOUNT)
   useEffect(() => {
     if (mapInstanceRef.current) return;
 
@@ -366,11 +485,14 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
         const map = Lf.map(mapRef.current, {
           center: defaultCenter,
           zoom: 15,
-          zoomControl: true,
+          zoomControl: false,
           scrollWheelZoom: true,
           preferCanvas: false,
           renderer: Lf.svg(),
         });
+
+        // Zoom control at bottom right
+        Lf.control.zoom({ position: 'bottomright' }).addTo(map);
 
         const satUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
         tileLayerRef.current = Lf.tileLayer(satUrl, {
@@ -378,21 +500,25 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
           subdomains: ['0', '1', '2', '3'],
         }).addTo(map);
 
-        layersGroupRef.current = Lf.layerGroup().addTo(map);
+        // Separate layer groups for high-performance in-place updates
+        cablesLayerGroupRef.current = Lf.layerGroup().addTo(map);
+        pathHighlightLayerGroupRef.current = Lf.layerGroup().addTo(map);
+        nodesLayerGroupRef.current = Lf.layerGroup().addTo(map);
+        rulerLayerGroupRef.current = Lf.layerGroup().addTo(map);
+
         mapInstanceRef.current = map;
         setMapLoaded(true);
 
+        // Expose flyTo capability
+        if (externalFlyToRef) {
+          externalFlyToRef.current = (lat, lng, zoom = 17) => {
+            map.flyTo([lat, lng], zoom, { duration: 1.2 });
+          };
+        }
+
         map.invalidateSize();
-        setTimeout(() => {
-          if (mapInstanceRef.current) {
-            mapInstanceRef.current.invalidateSize();
-          }
-        }, 150);
-        setTimeout(() => {
-          if (mapInstanceRef.current) {
-            mapInstanceRef.current.invalidateSize();
-          }
-        }, 500);
+        setTimeout(() => map?.invalidateSize(), 150);
+        setTimeout(() => map?.invalidateSize(), 500);
       }
     }).catch(err => console.warn('Leaflet load failed:', err));
 
@@ -400,11 +526,15 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        cablesLayerGroupRef.current = null;
+        nodesLayerGroupRef.current = null;
+        pathHighlightLayerGroupRef.current = null;
+        rulerLayerGroupRef.current = null;
       }
     };
   }, []);
 
-  // 2. Toggle Satelit Hybrid vs Vektor
+  // 2. Toggle Satelit Hybrid vs Vektor smoothly
   const toggleMapMode = () => {
     if (!mapInstanceRef.current || !leafletRef.current || !tileLayerRef.current) return;
     const Lf = leafletRef.current;
@@ -426,7 +556,6 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
       });
     }
     tileLayerRef.current.addTo(map);
-    map.invalidateSize();
   };
 
   // 3. Recenter to all nodes
@@ -443,14 +572,91 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
     }
   }, [nodes]);
 
-  // 4. Synchronously Render Markers & Animated Fiber Lines via LayerGroup
+  // 4. Ruler Map Click Listener
   useEffect(() => {
-    if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current || !layersGroupRef.current) return;
+    if (!mapInstanceRef.current || !rulerActive) return;
+    const map = mapInstanceRef.current;
+
+    const handleMapClick = (e) => {
+      const { lat, lng } = e.latlng;
+      setRulerPoints(pts => [...pts, [lat, lng]]);
+    };
+
+    map.on('click', handleMapClick);
+    map.getContainer().style.cursor = 'crosshair';
+
+    return () => {
+      map.off('click', handleMapClick);
+      if (map.getContainer()) {
+        map.getContainer().style.cursor = '';
+      }
+    };
+  }, [rulerActive, setRulerPoints]);
+
+  // 5. Render Ruler Waypoints & Lines
+  useEffect(() => {
+    if (!rulerLayerGroupRef.current || !leafletRef.current || !mapInstanceRef.current) return;
+    const Lf = leafletRef.current;
+    const layer = rulerLayerGroupRef.current;
+    layer.clearLayers();
+
+    if (!rulerActive || rulerPoints.length === 0) return;
+
+    // Draw waypoints
+    rulerPoints.forEach((pt, idx) => {
+      const icon = Lf.divIcon({
+        className: 'custom-ruler-pin',
+        html: `
+          <div style="
+            background: #f97316;
+            color: #ffffff;
+            border: 2px solid #ffffff;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          ">
+            ${idx + 1}
+          </div>
+        `,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+
+      Lf.marker(pt, { icon }).addTo(layer);
+    });
+
+    // Draw connecting line
+    if (rulerPoints.length >= 2) {
+      Lf.polyline(rulerPoints, {
+        color: '#f97316',
+        weight: 3.5,
+        opacity: 0.95,
+        dashArray: '8, 6',
+      }).addTo(layer);
+    }
+  }, [rulerActive, rulerPoints]);
+
+  // 6. In-Place Rendering of Nodes, Cables, & Path Tracing Highlights
+  useEffect(() => {
+    if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current) return;
     const Lf = leafletRef.current;
     const map = mapInstanceRef.current;
-    const layerGroup = layersGroupRef.current;
 
-    layerGroup.clearLayers();
+    const cablesGroup = cablesLayerGroupRef.current;
+    const highlightGroup = pathHighlightLayerGroupRef.current;
+    const nodesGroup = nodesLayerGroupRef.current;
+
+    if (!cablesGroup || !highlightGroup || !nodesGroup) return;
+
+    cablesGroup.clearLayers();
+    highlightGroup.clearLayers();
+    nodesGroup.clearLayers();
 
     const nodeMap = new Map();
     nodes.forEach(n => {
@@ -459,9 +665,10 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
       }
     });
 
+    const isPathTracingActive = tracedPath?.nodeIds && tracedPath.nodeIds.size > 1;
     const bounds = [];
 
-    // Draw Modern Animated Fiber Lines between Parent & Child
+    // Draw Fiber Connections (Parent-Child)
     nodes.forEach(node => {
       if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
 
@@ -493,16 +700,16 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
             || (bestPower != null && bestPower <= -27.5);
 
           if (isLossLine) {
-            lineColor = '#e11d48'; // Clean Rose Red
+            lineColor = '#e11d48'; // Rose Red
             glowColor = 'rgba(225, 29, 72, 0.28)';
           } else if (bestPower != null && bestPower <= -25.9) {
-            lineColor = '#d97706'; // Clean Amber
+            lineColor = '#d97706'; // Amber
             glowColor = 'rgba(217, 119, 6, 0.25)';
           } else if (bestPower != null && bestPower <= -23.9) {
-            lineColor = '#0284c7'; // Clean Sky Azure
+            lineColor = '#0284c7'; // Sky Azure
             glowColor = 'rgba(2, 132, 199, 0.25)';
           } else if (bestPower != null && bestPower > -23.9) {
-            lineColor = '#059669'; // Clean Mint Emerald
+            lineColor = '#059669'; // Mint Emerald
             glowColor = 'rgba(5, 150, 105, 0.25)';
           } else {
             lineColor = '#10b981';
@@ -511,27 +718,47 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
         }
 
         const lineCoords = [[pLat, pLng], [nLat, nLng]];
+        const isInSelectedPath = isPathTracingActive && tracedPath.nodeIds.has(node.id) && tracedPath.nodeIds.has(parent.id);
 
-        // 1. Ambient Background Halo Line
-        Lf.polyline(lineCoords, {
-          color: glowColor,
-          weight: isOdpLine ? 6 : 8,
-          opacity: 0.9,
-          lineCap: 'round',
-        }).addTo(layerGroup);
+        if (isInSelectedPath) {
+          // Highlight glowing laser line for selected end-to-end path
+          Lf.polyline(lineCoords, {
+            color: '#38bdf8', // Cyan glow
+            weight: isOdpLine ? 10 : 12,
+            opacity: 0.6,
+            lineCap: 'round',
+          }).addTo(highlightGroup);
 
-        // 2. Core Clean Animated Flow Line
-        Lf.polyline(lineCoords, {
-          color: lineColor,
-          weight: isOdpLine ? 3.5 : 4.5,
-          opacity: 1,
-          dashArray: '12, 10',
-          className: 'animated-fiber-laser-flow',
-        }).addTo(layerGroup);
+          Lf.polyline(lineCoords, {
+            color: '#06b6d4', // Bright Cyan Laser
+            weight: isOdpLine ? 4.5 : 5.5,
+            opacity: 1,
+            dashArray: '10, 8',
+            className: 'animated-fiber-laser-flow',
+          }).addTo(highlightGroup);
+        } else {
+          // Standard / Dimmed connection
+          const opacityMultiplier = isPathTracingActive ? 0.2 : 1;
+
+          Lf.polyline(lineCoords, {
+            color: glowColor,
+            weight: isOdpLine ? 6 : 8,
+            opacity: 0.9 * opacityMultiplier,
+            lineCap: 'round',
+          }).addTo(cablesGroup);
+
+          Lf.polyline(lineCoords, {
+            color: lineColor,
+            weight: isOdpLine ? 3.5 : 4.5,
+            opacity: 1 * opacityMultiplier,
+            dashArray: '12, 10',
+            className: isPathTracingActive ? '' : 'animated-fiber-laser-flow',
+          }).addTo(cablesGroup);
+        }
       }
     });
 
-    // Draw Modern Clean Node Markers
+    // Draw Modern Clean Node Markers with Pulsing Radar for Faults
     nodes.forEach(node => {
       if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
 
@@ -544,22 +771,24 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
       const isOdp = node.node_type === 'ODP';
       const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
       const isLossRange = node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS'));
+      const isFault = isLossRange || node.status === 'damaged' || (effectiveBestPower != null && parseFloat(effectiveBestPower) <= -27.5);
+
       const optMeta = isLossRange 
         ? { label: 'Loss / Kritis', color: '#e11d48', pillBg: '#fff1f2', pillText: '#be123c', pillBorder: '#fecdd3' } 
         : getOpticalQuality(effectiveBestPower);
-      const opticalDbmText = node.rx_power_range ? node.rx_power_range : (effectiveBestPower != null ? `${effectivePower > 0 ? '+' : ''}${effectiveBestPower} dBm` : '—');
+      const opticalDbmText = node.rx_power_range ? node.rx_power_range : (effectiveBestPower != null ? `${effectiveBestPower > 0 ? '+' : ''}${parseFloat(effectiveBestPower).toFixed(2)} dBm` : '—');
 
       const size = isSelected ? typeMeta.size + 4 : typeMeta.size;
 
-      let pinBg = '#059669'; // Clean Mint Emerald
+      let pinBg = '#059669'; // Mint Emerald
       if (node.node_type === 'POP') {
-        pinBg = '#4f46e5'; // Clean Indigo
+        pinBg = '#4f46e5'; // Indigo
       } else if (node.node_type === 'ODC') {
-        pinBg = '#2563eb'; // Clean Royal Blue
+        pinBg = '#2563eb'; // Royal Blue
       }
 
-      if (isLossRange || node.status === 'damaged') {
-        pinBg = '#e11d48'; // Clean Rose Red
+      if (isFault) {
+        pinBg = '#e11d48'; // Rose Red
       }
 
       const icon = Lf.divIcon({
@@ -573,18 +802,19 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
                 border: 1.5px solid ${optMeta.pillBorder};
                 font-weight: 800;
                 font-size: 11px;
-                padding: 2.5px 9px;
+                padding: 2px 8px;
                 border-radius: 9999px;
                 box-shadow: 0 2px 6px rgba(0,0,0,0.18);
                 white-space: nowrap;
                 margin-bottom: 4px;
-                font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-                letter-spacing: -0.2px;
+                font-family: ui-monospace, monospace;
               ">
                 ${opticalDbmText}
               </div>
             ` : ''}
+
             <div style="
+              position: relative;
               width: ${size * 2}px;
               height: ${size * 2}px;
               border-radius: 50%;
@@ -597,19 +827,20 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
               color: #ffffff;
               font-weight: 800;
               font-size: ${size >= 20 ? '12px' : size >= 17 ? '11px' : '10px'};
-              letter-spacing: -0.2px;
             ">
+              ${isFault ? '<div class="radar-ping-ring"></div>' : ''}
               ${node.node_type}
             </div>
+
             <div style="
               background: #ffffff;
               color: #0f172a;
-              padding: 2.5px 8px;
+              padding: 2px 7px;
               border-radius: 6px;
               font-size: 11px;
               font-weight: 700;
               white-space: nowrap;
-              margin-top: 3.5px;
+              margin-top: 3px;
               border: 1.5px solid #cbd5e1;
               box-shadow: 0 2px 6px rgba(0,0,0,0.16);
             ">
@@ -621,10 +852,11 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
         iconAnchor: [90, size * 2 + 30],
       });
 
-      const marker = Lf.marker([lat, lng], { icon }).addTo(layerGroup);
+      const marker = Lf.marker([lat, lng], { icon }).addTo(nodesGroup);
       marker.on('click', () => onSelectNode(node));
     });
 
+    // Fit bounds ONLY ONCE on first load
     if (bounds.length > 0) {
       map.invalidateSize();
       if (isFirstRenderRef.current) {
@@ -638,46 +870,68 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
         isFirstRenderRef.current = false;
       }
     }
-  }, [mapLoaded, nodes, selectedNode, onSelectNode]);
+  }, [mapLoaded, nodes, selectedNode, tracedPath]);
 
   return (
     <div className="relative w-full h-full">
-      {/* CSS Animation for Smooth Fiber Flow */}
+      {/* CSS Keyframes for Pulsing Radar & Smooth Laser Flow */}
       <style>{`
         @keyframes fiberFlowAnimation {
-          0% {
-            stroke-dashoffset: 44;
-          }
-          100% {
-            stroke-dashoffset: 0;
-          }
+          0% { stroke-dashoffset: 44; }
+          100% { stroke-dashoffset: 0; }
         }
         .animated-fiber-laser-flow,
         .leaflet-overlay-pane svg path.animated-fiber-laser-flow {
           stroke-dasharray: 12 10 !important;
           animation: fiberFlowAnimation 1.1s linear infinite !important;
         }
+
+        @keyframes radarPing {
+          0% {
+            transform: scale(0.85);
+            opacity: 0.9;
+          }
+          70% {
+            transform: scale(2.3);
+            opacity: 0;
+          }
+          100% {
+            transform: scale(2.5);
+            opacity: 0;
+          }
+        }
+        .radar-ping-ring {
+          position: absolute;
+          top: -3px;
+          left: -3px;
+          width: calc(100% + 6px);
+          height: calc(100% + 6px);
+          border-radius: 50%;
+          border: 3px solid #ef4444;
+          animation: radarPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+          pointer-events: none;
+        }
       `}</style>
 
       <div
         ref={mapRef}
         className="w-full rounded-2xl overflow-hidden shadow-inner relative z-0"
-        style={{ height: '620px', minHeight: '620px' }}
+        style={{ height: '640px', minHeight: '640px' }}
       />
 
       {/* Floating Mode Controls */}
       <div className="absolute top-4 right-4 z-[999] flex flex-wrap items-center justify-end gap-2">
         <button
           onClick={toggleMapMode}
-          className="px-3.5 py-2 bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 shadow-md backdrop-blur-md transition-all flex items-center gap-1.5"
+          className="px-3.5 py-2 bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer"
         >
-          <span>{isSatellite ? '🗺️ Mode Peta Vektor' : '🛰️ Mode Satelit High-Res'}</span>
+          <span>{isSatellite ? '🗺️ Mode Vektor' : '🛰️ Mode Satelit'}</span>
         </button>
 
         {selectedNode && selectedNode.latitude && selectedNode.longitude && (
           <button
             onClick={() => onOpenStreetView(selectedNode.latitude, selectedNode.longitude, selectedNode.name)}
-            className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+            className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <span>👁️ Street View 360°</span>
           </button>
@@ -686,10 +940,10 @@ function LeafletMap({ nodes, selectedNode, onSelectNode, onOpenStreetView }) {
 
       <button
         onClick={handleRecenterMap}
-        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 shadow-md backdrop-blur-md flex items-center gap-1.5 transition-all"
+        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 shadow-md backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer"
         title="Pusatkan Peta ke Lokasi Node"
       >
-        <span>Fokus Lokasi Node</span>
+        <span>🎯 Pusatkan Peta</span>
       </button>
     </div>
   );
@@ -705,13 +959,27 @@ function GisStatCards({ nodes }) {
 
   const activeOdps = odps.filter(n => n.used_ports > 0 && n.optical_power_dbm != null);
   const odpOptValues = activeOdps.map(n => parseFloat(n.optical_power_dbm));
-  const avgOdpDbm = odpOptValues.length > 0 ? (odpOptValues.reduce((a, b) => a + b, 0) / odpOptValues.length).toFixed(1) : '—';
+  const avgOdpDbm = odpOptValues.length > 0 ? (odpOptValues.reduce((a, b) => a + b, 0) / odpOptValues.length).toFixed(2) : '—';
+
+  // Count faults
+  const faultyNodes = nodes.filter(n => {
+    const eff = n.best_rx_power ?? n.optical_power_dbm;
+    return n.status === 'damaged' || n.status === 'inactive' || (eff != null && parseFloat(eff) <= -27.5) || (n.rx_power_range && n.rx_power_range.includes('Loss'));
+  });
 
   const cards = [
     { label: 'POP Central', value: pops.length, sub: `${pops.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Core Headend', badgeCls: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800' },
     { label: 'ODC Cabinet', value: odcs.length, sub: `${odcs.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Distribution', badgeCls: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800' },
     { label: 'ODP Point', value: odps.length, sub: `${odps.filter(n => n.status === 'active').length} Total Point ODP`, badge: 'Access Terminal', badgeCls: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' },
-    { label: 'Rerata Redaman ODP', value: avgOdpDbm !== '—' ? `${avgOdpDbm} dBm` : '— dBm', sub: `${activeOdps.length} ODP Ada Pelanggan`, badge: 'Modem ONU', badgeCls: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' },
+    { 
+      label: 'Node Bermasalah (LOS/Warning)', 
+      value: faultyNodes.length, 
+      sub: faultyNodes.length > 0 ? 'Perlu Investigasi Lapangan' : 'Seluruh Jaringan Sehat', 
+      badge: faultyNodes.length > 0 ? '🚨 Gangguan' : 'Semua Normal', 
+      badgeCls: faultyNodes.length > 0 
+        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800' 
+        : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' 
+    },
   ];
 
   return (
@@ -719,7 +987,9 @@ function GisStatCards({ nodes }) {
       {cards.map((c, i) => (
         <div key={i} className="bg-white dark:bg-black rounded-2xl border border-slate-200 dark:border-neutral-800 shadow-2xs p-4 transition-colors duration-300">
           <div className="flex justify-between items-start mb-1">
-            <span className="text-2xl font-black text-slate-900 dark:text-white leading-none">{c.value}</span>
+            <span className={`text-2xl font-black leading-none ${c.label.includes('Bermasalah') && c.value > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
+              {c.value}
+            </span>
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.badgeCls}`}>
               {c.badge}
             </span>
@@ -740,42 +1010,63 @@ export default function GisTopologyMap() {
   const oltFilterParam = searchParams.get('olt_id');
 
   const [allNodes, setAllNodes] = useState([]);
+  const [allCables, setAllCables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState(null);
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [faultOnlyFilter, setFaultOnlyFilter] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [livePolling, setLivePolling] = useState(true);
   const [activeView, setActiveView] = useState('map');
   const [streetViewTarget, setStreetViewTarget] = useState(null);
 
-  const fetchNodes = useCallback(async (silent = false) => {
+  // Ruler state
+  const [rulerActive, setRulerActive] = useState(false);
+  const [rulerPoints, setRulerPoints] = useState([]);
+  const externalFlyToRef = useRef(null);
+
+  const fetchNodesAndCables = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const r = await fetch('/api/network-nodes?per_page=500');
-      const d = await r.json();
-      const rawNodes = d.data ?? [];
+      const [resNodes, resCables] = await Promise.allSettled([
+        fetch('/api/network-nodes?per_page=500').then(r => r.json()),
+        fetch('/api/network-cables').then(r => r.json()),
+      ]);
 
-      setAllNodes(rawNodes);
+      if (resNodes.status === 'fulfilled' && resNodes.value?.data) {
+        setAllNodes(resNodes.value.data);
+      }
+      if (resCables.status === 'fulfilled' && resCables.value?.data) {
+        setAllCables(resCables.value.data);
+      }
     } catch {
-      if (!silent) setAllNodes([]);
+      if (!silent) {
+        setAllNodes([]);
+        setAllCables([]);
+      }
     } finally {
       if (!silent) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchNodes(); }, [fetchNodes]);
+  useEffect(() => {
+    fetchNodesAndCables();
+  }, [fetchNodesAndCables]);
 
-  // Live polling telemetry: silent fetch dari backend API setiap 15 detik
+  // Live polling telemetry: silent fetch setiap 6 detik (kamera peta persisten)
   useEffect(() => {
     if (!livePolling) return;
     const timer = setInterval(() => {
-      fetchNodes(true);
-    }, 15000);
+      if (document.hidden) return;
+      fetchNodesAndCables(true);
+    }, 6000);
 
     return () => clearInterval(timer);
-  }, [livePolling, fetchNodes]);
+  }, [livePolling, fetchNodesAndCables]);
 
+  // Update selectedNode live values smoothly
   useEffect(() => {
     if (selectedNode) {
       const updated = allNodes.find(n => n.id === selectedNode.id);
@@ -785,6 +1076,64 @@ export default function GisTopologyMap() {
     }
   }, [allNodes, selectedNode]);
 
+  // Compute End-to-End Traced Path Hierarchy for Selected Node
+  const tracedPath = useMemo(() => {
+    if (!selectedNode) return { nodeIds: new Set(), pathNodes: [] };
+    const nodeMap = new Map(allNodes.map(n => [n.id, n]));
+    const path = [];
+    let curr = selectedNode;
+    const visited = new Set();
+
+    while (curr && !visited.has(curr.id)) {
+      visited.add(curr.id);
+      path.unshift(curr);
+      if (curr.parent_node_id && nodeMap.has(curr.parent_node_id)) {
+        curr = nodeMap.get(curr.parent_node_id);
+      } else if (curr.node_type === 'ODP') {
+        const potentialOdc = allNodes.find(n => n.node_type === 'ODC' && n.olt_device_id === curr.olt_device_id);
+        if (potentialOdc && !visited.has(potentialOdc.id)) {
+          curr = potentialOdc;
+        } else {
+          curr = null;
+        }
+      } else {
+        curr = null;
+      }
+    }
+
+    return {
+      nodeIds: visited,
+      pathNodes: path,
+    };
+  }, [selectedNode, allNodes]);
+
+  // Calculate Total Distance for Ruler Tool
+  const rulerTotalMeters = useMemo(() => {
+    if (rulerPoints.length < 2) return 0;
+    const R = 6371e3; // Earth radius in meters
+    let sum = 0;
+
+    for (let i = 0; i < rulerPoints.length - 1; i++) {
+      const [lat1, lon1] = rulerPoints[i];
+      const [lat2, lon2] = rulerPoints[i + 1];
+
+      const φ1 = (lat1 * Math.PI) / 180;
+      const φ2 = (lat2 * Math.PI) / 180;
+      const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+      const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+      const a =
+        Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      sum += R * c;
+    }
+
+    return sum;
+  }, [rulerPoints]);
+
+  // Filtered Nodes
   const filteredNodes = useMemo(() => {
     return allNodes.filter(n => {
       if (!['POP', 'ODC', 'ODP'].includes(n.node_type)) return false;
@@ -795,18 +1144,41 @@ export default function GisTopologyMap() {
       }
       if (typeFilter && n.node_type !== typeFilter) return false;
       if (statusFilter && n.status !== statusFilter) return false;
+      if (faultOnlyFilter) {
+        const eff = n.best_rx_power ?? n.optical_power_dbm;
+        const isFault = n.status === 'damaged' || n.status === 'inactive' || (eff != null && parseFloat(eff) <= -27.5) || (n.rx_power_range && n.rx_power_range.includes('Loss'));
+        if (!isFault) return false;
+      }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const match = n.name?.toLowerCase().includes(q) || n.code?.toLowerCase().includes(q) || n.address?.toLowerCase().includes(q);
+        const match = n.name?.toLowerCase().includes(q) || n.code?.toLowerCase().includes(q) || n.address?.toLowerCase().includes(q) || n.olt_port_ref?.toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;
     });
-  }, [allNodes, oltFilterParam, typeFilter, statusFilter, searchQuery]);
+  }, [allNodes, oltFilterParam, typeFilter, statusFilter, faultOnlyFilter, searchQuery]);
 
   const nodesWithCoords = useMemo(() => {
     return filteredNodes.filter(n => n.latitude && n.longitude && parseFloat(n.latitude) !== 0);
   }, [filteredNodes]);
+
+  // Search Auto-Suggestions
+  const searchSuggestions = useMemo(() => {
+    if (!searchQuery || searchQuery.trim().length === 0) return [];
+    const q = searchQuery.toLowerCase();
+    return allNodes.filter(n => {
+      return n.name?.toLowerCase().includes(q) || n.code?.toLowerCase().includes(q) || n.address?.toLowerCase().includes(q) || n.olt_port_ref?.toLowerCase().includes(q);
+    }).slice(0, 6);
+  }, [allNodes, searchQuery]);
+
+  const handleSelectSuggestion = (node) => {
+    setSelectedNode(node);
+    setSearchQuery(node.name);
+    setIsSearchFocused(false);
+    if (node.latitude && node.longitude && externalFlyToRef.current) {
+      externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -825,9 +1197,25 @@ export default function GisTopologyMap() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Ruler Button */}
+          <button
+            onClick={() => {
+              const next = !rulerActive;
+              setRulerActive(next);
+              if (!next) setRulerPoints([]);
+            }}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              rulerActive
+                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md ring-2 ring-amber-400/40'
+                : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
+            }`}
+          >
+            <span>📏 {rulerActive ? 'Tutup Penggaris' : 'Ukur Jarak FO'}</span>
+          </button>
+
           <button
             onClick={() => setActiveView('map')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${activeView === 'map'
+            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${activeView === 'map'
               ? 'bg-blue-600 text-white border-blue-600 shadow-md'
               : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
               }`}
@@ -836,7 +1224,7 @@ export default function GisTopologyMap() {
           </button>
           <button
             onClick={() => setActiveView('list')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all ${activeView === 'list'
+            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${activeView === 'list'
               ? 'bg-blue-600 text-white border-blue-600 shadow-md'
               : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
               }`}
@@ -848,21 +1236,62 @@ export default function GisTopologyMap() {
 
       <GisStatCards nodes={allNodes} />
 
-      {/* Main Controls Filter Bar */}
+      {/* Main Controls Filter Bar with Smart Search & Fault Filter */}
       <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 p-4 rounded-2xl shadow-2xs transition-colors duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Cari nama node, kode, lokasi..."
-            className="px-3.5 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64"
-          />
+        <div className="flex flex-wrap items-center gap-3 relative">
+          {/* Smart Search Input with Floating Dropdown Suggestions */}
+          <div className="relative w-full sm:w-72">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+              placeholder="Cari ODP, ODC, POP, OLT, Port..."
+              className="px-3.5 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+
+            {/* Suggestions Dropdown */}
+            {isSearchFocused && searchSuggestions.length > 0 && (
+              <div className="absolute top-full left-0 mt-1.5 w-full bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl shadow-2xl z-[1000] overflow-hidden">
+                {searchSuggestions.map(s => {
+                  const tm = TYPE_META[s.node_type] ?? TYPE_META.ODC;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => handleSelectSuggestion(s)}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-neutral-800 flex items-center justify-between border-b border-slate-100 dark:border-neutral-800 last:border-0 cursor-pointer"
+                    >
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded border ${tm.bg}`}>
+                            {s.node_type}
+                          </span>
+                          <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{s.name}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 block">{s.code} • {s.olt_port_ref || 'PON'}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">Fly To ➔</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
             <option value="">Semua Tipe Node</option>
             <option value="POP">POP Central</option>
@@ -873,7 +1302,7 @@ export default function GisTopologyMap() {
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
             <option value="">Semua Status</option>
             <option value="active">Aktif Normal</option>
@@ -881,12 +1310,25 @@ export default function GisTopologyMap() {
             <option value="inactive">Tidak Aktif</option>
             <option value="damaged">Rusak / Loss</option>
           </select>
+
+          {/* Quick Filter: Hanya Gangguan / LOS */}
+          <button
+            type="button"
+            onClick={() => setFaultOnlyFilter(!faultOnlyFilter)}
+            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              faultOnlyFilter
+                ? 'bg-rose-500 text-white border-rose-600 shadow-md ring-2 ring-rose-400/40'
+                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100'
+            }`}
+          >
+            <span>🚨 Hanya Node Bermasalah</span>
+          </button>
         </div>
 
         <div className="flex items-center space-x-3">
           <button
             onClick={() => setLivePolling(!livePolling)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${livePolling
+            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${livePolling
               ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
               : 'bg-slate-100 dark:bg-neutral-900 border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400'
               }`}
@@ -903,18 +1345,60 @@ export default function GisTopologyMap() {
           Memuat topologi spasial GIS &amp; data redaman...
         </div>
       ) : activeView === 'map' ? (
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[620px]">
+        <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]">
+          {/* Node Detail Drawer */}
           <NodeDetailPanel
             node={selectedNode}
             onClose={() => setSelectedNode(null)}
             onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
+            onTracePath={node => {
+              setSelectedNode(node);
+              if (node.latitude && node.longitude && externalFlyToRef.current) {
+                externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
+              }
+            }}
           />
 
+          {/* Path Tracing Hierarchy Breadcrumb Banner */}
+          {tracedPath.pathNodes.length > 1 && (
+            <PathTracingBanner
+              pathNodes={tracedPath.pathNodes}
+              activeNodeId={selectedNode?.id}
+              onSelectNode={node => {
+                setSelectedNode(node);
+                if (node.latitude && node.longitude && externalFlyToRef.current) {
+                  externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
+                }
+              }}
+              onClose={() => setSelectedNode(null)}
+            />
+          )}
+
+          {/* Interactive Ruler Distance & Loss HUD */}
+          {rulerActive && (
+            <RulerHud
+              waypoints={rulerPoints}
+              totalMeters={rulerTotalMeters}
+              onReset={() => setRulerPoints([])}
+              onClose={() => {
+                setRulerActive(false);
+                setRulerPoints([]);
+              }}
+            />
+          )}
+
+          {/* Leaflet Map Component */}
           <LeafletMap
             nodes={nodesWithCoords}
+            cables={allCables}
             selectedNode={selectedNode}
+            tracedPath={tracedPath}
+            rulerActive={rulerActive}
+            rulerPoints={rulerPoints}
+            setRulerPoints={setRulerPoints}
             onSelectNode={node => setSelectedNode(node)}
             onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
+            externalFlyToRef={externalFlyToRef}
           />
         </div>
       ) : (
@@ -966,7 +1450,7 @@ export default function GisTopologyMap() {
                         {node.node_type === 'ODP' ? (
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono font-bold" style={{ color: optMeta.color }}>
-                              {node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${effectivePower} dBm` : '—')}
+                              {node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(2)} dBm` : '—')}
                             </span>
                             <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${optMeta.badge}`}>
                               {optMeta.label}
@@ -989,7 +1473,7 @@ export default function GisTopologyMap() {
                             setSelectedNode(node);
                             setActiveView('map');
                           }}
-                          className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 rounded-lg text-xs font-bold transition-all border border-blue-200 dark:border-blue-800"
+                          className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 rounded-lg text-xs font-bold transition-all border border-blue-200 dark:border-blue-800 cursor-pointer"
                         >
                           Lihat Peta
                         </button>
