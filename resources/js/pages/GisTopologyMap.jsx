@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { decimalToDms } from '../utils/coordinateParser.js';
+import { decimalToDms, parseCoordsInput } from '../utils/coordinateParser.js';
 
 /* ══════════════════════════════════════════════════════════════════
    CLEAN & MODERN ENTERPRISE COLOR PALETTE (MATCHING OLT-MANAGEMENT)
@@ -343,7 +343,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
 /* ══════════════════════════════════════════════════════════════════
    RULER & DISTANCE MEASUREMENT FLOATING HUD
 ══════════════════════════════════════════════════════════════════ */
-function RulerHud({ waypoints, totalMeters, onReset, onClose }) {
+function RulerHud({ waypoints, totalMeters, onUndo, onReset, onClose }) {
   const km = (totalMeters / 1000).toFixed(2);
   const m = Math.round(totalMeters);
   const displayDist = totalMeters >= 1000 ? `${km} km (${m} m)` : `${m} meter`;
@@ -374,13 +374,273 @@ function RulerHud({ waypoints, totalMeters, onReset, onClose }) {
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 pt-1">
-        <span>💡 Klik titik peta / marker node untuk mengukur</span>
+      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
+        <span className="text-[10px]">💡 Klik titik peta / marker node</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onUndo}
+            disabled={waypoints.length === 0}
+            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed text-slate-200 border border-slate-700 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+            title="Hapus titik waypoint terakhir"
+          >
+            ↩️ Undo
+          </button>
+          <button
+            onClick={onReset}
+            disabled={waypoints.length === 0}
+            className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/40 disabled:opacity-35 disabled:cursor-not-allowed text-rose-300 border border-rose-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   TARGET CLIENT COORDINATE MODAL
+══════════════════════════════════════════════════════════════════ */
+function TargetCoordModal({ isOpen, onClose, onSetTarget }) {
+  const [inputVal, setInputVal] = useState('');
+  const [labelVal, setLabelVal] = useState('');
+  const [custSearch, setCustSearch] = useState('');
+  const [customers, setCustomers] = useState([]);
+  const [loadingCust, setLoadingCust] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoadingCust(true);
+    fetch('/api/customers')
+      .then(r => r.json())
+      .then(res => {
+        const list = res.data ?? res ?? [];
+        setCustomers(Array.isArray(list) ? list : []);
+      })
+      .catch(() => setCustomers([]))
+      .finally(() => setLoadingCust(false));
+  }, [isOpen]);
+
+  const parsed = useMemo(() => {
+    return parseCoordsInput(inputVal);
+  }, [inputVal]);
+
+  const filteredCustomers = useMemo(() => {
+    if (!custSearch.trim()) return [];
+    const q = custSearch.toLowerCase();
+    return customers.filter(c => 
+      c.name?.toLowerCase().includes(q) || 
+      c.customer_id?.toLowerCase().includes(q) || 
+      c.pppoe_user?.toLowerCase().includes(q) ||
+      c.address?.toLowerCase().includes(q)
+    ).slice(0, 5);
+  }, [customers, custSearch]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!parsed.isValid) return;
+
+    onSetTarget({
+      lat: parsed.lat,
+      lng: parsed.lng,
+      label: labelVal.trim() || 'Rumah Pelanggan',
+      dms: parsed.formattedDms,
+    });
+    onClose();
+  };
+
+  const handleSelectCustomer = (c) => {
+    if (c.latitude && c.longitude) {
+      setInputVal(`${c.latitude}, ${c.longitude}`);
+      setLabelVal(c.name || 'Rumah Pelanggan');
+      setCustSearch('');
+    } else {
+      setLabelVal(c.name || 'Rumah Pelanggan');
+      alert('Pelanggan ini belum memiliki koordinat GPS tersimpan di database. Silakan masukkan koordinat manual.');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-neutral-800 overflow-hidden text-slate-800 dark:text-slate-100">
+        <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">📍</span>
+            <div>
+              <h3 className="text-sm font-bold">Cek Koordinat Rumah Client / Patokan Ukur</h3>
+              <p className="text-[11px] text-slate-400">Tentukan titik target rumah pelanggan sebelum mengukur penarikan kabel</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white font-bold transition-all cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+          {/* Opsi A: Cari dari database pelanggan */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block">
+              Opsi A: Cari Pelanggan Terdaftar
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                value={custSearch}
+                onChange={e => setCustSearch(e.target.value)}
+                placeholder="Ketik nama pelanggan, nomor pppoe, atau alamat..."
+                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-black border border-slate-200 dark:border-neutral-700 rounded-xl font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs"
+              />
+              {loadingCust && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 animate-pulse">Memuat...</span>
+              )}
+
+              {/* Suggestions */}
+              {filteredCustomers.length > 0 && (
+                <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl shadow-xl z-50 overflow-hidden max-h-48 overflow-y-auto">
+                  {filteredCustomers.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => handleSelectCustomer(c)}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-neutral-700 flex items-center justify-between border-b border-slate-100 dark:border-neutral-700 last:border-0 cursor-pointer"
+                    >
+                      <div>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 block">{c.name}</span>
+                        <span className="text-[10px] text-slate-400 block font-mono">{c.customer_id || c.pppoe_user || 'Pelanggan'} • {c.address || '—'}</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-fuchsia-600 dark:text-fuchsia-400">
+                        {c.latitude && c.longitude ? 'Pilih ➔' : 'Tanpa GPS'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="relative flex items-center justify-center py-1">
+            <div className="border-t border-slate-200 dark:border-neutral-800 w-full"></div>
+            <span className="bg-white dark:bg-neutral-900 px-3 text-[10px] font-bold uppercase text-slate-400 absolute">ATAU INPUT KOORDINAT MANUAL</span>
+          </div>
+
+          {/* Opsi B: Input Manual Koordinat */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block">
+              Koordinat GPS (Desimal / Google Earth DMS) <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={inputVal}
+              onChange={e => setInputVal(e.target.value)}
+              placeholder="Contoh: -0.785123, 100.654123 atau 0°47'5.96&quot;S 100°39'15.87&quot;T"
+              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-black border border-slate-200 dark:border-neutral-700 rounded-xl font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs"
+            />
+            {inputVal && (
+              <div className="text-[11px] mt-1">
+                {parsed.isValid ? (
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+                    <span>✓ Valid: <b>{parsed.lat.toFixed(6)}, {parsed.lng.toFixed(6)}</b></span>
+                    <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">{parsed.formattedDms}</span>
+                  </div>
+                ) : (
+                  <div className="p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-700 dark:text-rose-300">
+                    ✕ Format koordinat tidak dikenali. Masukkan contoh: <code>-0.785123, 100.654123</code>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block">
+              Nama / Keterangan Patokan (Opsional)
+            </label>
+            <input
+              type="text"
+              value={labelVal}
+              onChange={e => setLabelVal(e.target.value)}
+              placeholder="Contoh: Rumah Bpk. Ahmad / Ruko No. 12"
+              className="w-full px-3.5 py-2 bg-slate-50 dark:bg-black border border-slate-200 dark:border-neutral-700 rounded-xl font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs"
+            />
+          </div>
+
+          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-neutral-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={!parsed.isValid}
+              className="px-5 py-2 bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>📍 Pasang Patokan di Peta</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   TARGET PIN FLOATING BANNER
+══════════════════════════════════════════════════════════════════ */
+function TargetPinBanner({ targetPin, nearestOdp, onFlyToTarget, onStartMeasureFromOdp, onClearTarget }) {
+  if (!targetPin) return null;
+
+  return (
+    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[998] bg-slate-900/95 text-white backdrop-blur-md border border-fuchsia-500/70 shadow-2xl rounded-2xl px-4 py-2.5 flex flex-col sm:flex-row items-center gap-3 text-xs max-w-[92vw] animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="w-2.5 h-2.5 rounded-full bg-fuchsia-400 animate-ping"></span>
+        <div>
+          <span className="font-extrabold text-fuchsia-300 block">🏠 Patokan Rumah: {targetPin.label}</span>
+          <span className="text-[10px] font-mono text-slate-300">
+            {targetPin.lat.toFixed(6)}, {targetPin.lng.toFixed(6)}
+          </span>
+        </div>
+      </div>
+
+      {nearestOdp && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-fuchsia-950/60 border border-fuchsia-700/60 rounded-xl text-[11px] text-fuchsia-200">
+          <span>ODP Terdekat: <b>{nearestOdp.name}</b></span>
+          <span className="font-mono text-emerald-300 font-bold">(~{Math.round(nearestOdp.distanceMeters)} m)</span>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 shrink-0 ml-auto">
         <button
-          onClick={onReset}
-          className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 border border-rose-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+          onClick={onFlyToTarget}
+          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-[11px] font-bold text-slate-200 transition-all cursor-pointer"
         >
-          Reset Titik
+          🎯 Fokus
+        </button>
+
+        {nearestOdp && (
+          <button
+            onClick={() => onStartMeasureFromOdp(nearestOdp, targetPin)}
+            className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg text-[11px] font-bold shadow-md transition-all flex items-center gap-1 cursor-pointer"
+            title="Mulai tarik garis penggaris dari ODP terdekat ke rumah pelanggan"
+          >
+            <span>📏 Ukur dari ODP Ini</span>
+          </button>
+        )}
+
+        <button
+          onClick={onClearTarget}
+          className="w-6 h-6 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 font-bold text-xs transition-all cursor-pointer"
+          title="Hapus Patokan"
+        >
+          ✕
         </button>
       </div>
     </div>
@@ -441,6 +701,8 @@ function LeafletMap({
   rulerActive,
   rulerPoints,
   setRulerPoints,
+  targetPin,
+  nearestOdp,
   onSelectNode,
   onOpenStreetView,
   externalFlyToRef,
@@ -453,6 +715,7 @@ function LeafletMap({
   const nodesLayerGroupRef = useRef(null);
   const pathHighlightLayerGroupRef = useRef(null);
   const rulerLayerGroupRef = useRef(null);
+  const targetPinLayerGroupRef = useRef(null);
   const isFirstRenderRef = useRef(true);
   const rulerActiveRef = useRef(rulerActive);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -503,6 +766,7 @@ function LeafletMap({
         pathHighlightLayerGroupRef.current = Lf.layerGroup().addTo(map);
         nodesLayerGroupRef.current = Lf.layerGroup().addTo(map);
         rulerLayerGroupRef.current = Lf.layerGroup().addTo(map);
+        targetPinLayerGroupRef.current = Lf.layerGroup().addTo(map);
 
         mapInstanceRef.current = map;
         setMapLoaded(true);
@@ -528,6 +792,7 @@ function LeafletMap({
         nodesLayerGroupRef.current = null;
         pathHighlightLayerGroupRef.current = null;
         rulerLayerGroupRef.current = null;
+        targetPinLayerGroupRef.current = null;
       }
     };
   }, []);
@@ -639,6 +904,84 @@ function LeafletMap({
       }).addTo(layer);
     }
   }, [rulerActive, rulerPoints]);
+
+  // 5b. Render Target House Pin & Guide Line to Nearest ODP
+  useEffect(() => {
+    if (!targetPinLayerGroupRef.current || !leafletRef.current || !mapInstanceRef.current) return;
+    const Lf = leafletRef.current;
+    const layer = targetPinLayerGroupRef.current;
+    layer.clearLayers();
+
+    if (!targetPin || !targetPin.lat || !targetPin.lng) return;
+
+    const lat = targetPin.lat;
+    const lng = targetPin.lng;
+
+    const icon = Lf.divIcon({
+      className: 'custom-target-client-pin',
+      html: `
+        <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+          <div class="target-house-ping"></div>
+          <div style="
+            background: #d946ef;
+            color: #ffffff;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 3px solid #ffffff;
+            box-shadow: 0 4px 14px rgba(217,70,239,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            z-index: 10;
+          ">
+            🏠
+          </div>
+          <div style="
+            background: #18181b;
+            color: #fdf4ff;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+            margin-top: 4px;
+            border: 1.5px solid #d946ef;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            z-index: 10;
+          ">
+            ${targetPin.label || 'Rumah Pelanggan'}
+          </div>
+        </div>
+      `,
+      iconSize: [160, 75],
+      iconAnchor: [80, 20],
+    });
+
+    const marker = Lf.marker([lat, lng], { icon }).addTo(layer);
+
+    // If ruler is active, clicking target pin adds it as a waypoint
+    marker.on('click', (e) => {
+      if (rulerActiveRef.current) {
+        if (e.originalEvent) e.originalEvent.stopPropagation();
+        if (Lf.DomEvent) Lf.DomEvent.stopPropagation(e);
+        setRulerPoints(pts => [...pts, [lat, lng]]);
+      }
+    });
+
+    // Guide line from nearest ODP to Target Pin
+    if (nearestOdp && nearestOdp.latitude && nearestOdp.longitude) {
+      const odpLat = parseFloat(nearestOdp.latitude);
+      const odpLng = parseFloat(nearestOdp.longitude);
+      Lf.polyline([[odpLat, odpLng], [lat, lng]], {
+        color: '#d946ef',
+        weight: 2,
+        opacity: 0.7,
+        dashArray: '4, 6',
+      }).addTo(layer);
+    }
+  }, [targetPin, nearestOdp, setRulerPoints]);
 
   // 6. In-Place Rendering of Nodes, Cables, & Path Tracing Highlights
   useEffect(() => {
@@ -921,6 +1264,32 @@ function LeafletMap({
           animation: radarPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
           pointer-events: none;
         }
+
+        @keyframes targetPing {
+          0% {
+            transform: scale(0.85);
+            opacity: 0.9;
+          }
+          70% {
+            transform: scale(2.2);
+            opacity: 0;
+          }
+          100% {
+            transform: scale(2.4);
+            opacity: 0;
+          }
+        }
+        .target-house-ping {
+          position: absolute;
+          top: -3px;
+          left: calc(50% - 21px);
+          width: 42px;
+          height: 42px;
+          border-radius: 50%;
+          border: 3px solid #d946ef;
+          animation: targetPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+          pointer-events: none;
+        }
       `}</style>
 
       <div
@@ -1037,6 +1406,10 @@ export default function GisTopologyMap() {
   const [rulerPoints, setRulerPoints] = useState([]);
   const externalFlyToRef = useRef(null);
 
+  // Target Coordinate / Client Benchmark State
+  const [targetCoordModal, setTargetCoordModal] = useState(false);
+  const [targetPin, setTargetPin] = useState(null);
+
   const fetchNodesAndCables = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -1143,6 +1516,50 @@ export default function GisTopologyMap() {
     return sum;
   }, [rulerPoints]);
 
+  // Calculate Nearest ODP to Target Client Pin
+  const nearestOdp = useMemo(() => {
+    if (!targetPin || allNodes.length === 0) return null;
+    const odps = allNodes.filter(n => n.node_type === 'ODP' && n.latitude && n.longitude && parseFloat(n.latitude) !== 0);
+    if (odps.length === 0) return null;
+
+    const R = 6371e3;
+    let closest = null;
+    let minDist = Infinity;
+
+    odps.forEach(odp => {
+      const lat1 = targetPin.lat;
+      const lon1 = targetPin.lng;
+      const lat2 = parseFloat(odp.latitude);
+      const lon2 = parseFloat(odp.longitude);
+
+      const φ1 = (lat1 * Math.PI) / 180;
+      const φ2 = (lat2 * Math.PI) / 180;
+      const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+      const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+      const a =
+        Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+        Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const d = R * c;
+
+      if (d < minDist) {
+        minDist = d;
+        closest = { ...odp, distanceMeters: d };
+      }
+    });
+
+    return closest;
+  }, [targetPin, allNodes]);
+
+  const handleStartMeasureFromOdp = (odp, target) => {
+    setRulerActive(true);
+    setRulerPoints([
+      [parseFloat(odp.latitude), parseFloat(odp.longitude)],
+      [target.lat, target.lng]
+    ]);
+  };
+
   // Filtered Nodes
   const filteredNodes = useMemo(() => {
     return allNodes.filter(n => {
@@ -1207,6 +1624,19 @@ export default function GisTopologyMap() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Target Location / Check Coordinates Button */}
+          <button
+            onClick={() => setTargetCoordModal(true)}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              targetPin
+                ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-md ring-2 ring-fuchsia-400/40'
+                : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
+            }`}
+            title="Cek lokasi rumah pelanggan dari koordinat GPS / cari nama pelanggan"
+          >
+            <span>📍 {targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat Rumah'}</span>
+          </button>
+
           {/* Ruler Button */}
           <button
             onClick={() => {
@@ -1384,11 +1814,27 @@ export default function GisTopologyMap() {
             />
           )}
 
-          {/* Interactive Ruler Distance & Loss HUD */}
+          {/* Target House Pin Floating Banner */}
+          {targetPin && (
+            <TargetPinBanner
+              targetPin={targetPin}
+              nearestOdp={nearestOdp}
+              onFlyToTarget={() => {
+                if (externalFlyToRef.current) {
+                  externalFlyToRef.current(targetPin.lat, targetPin.lng, 17);
+                }
+              }}
+              onStartMeasureFromOdp={handleStartMeasureFromOdp}
+              onClearTarget={() => setTargetPin(null)}
+            />
+          )}
+
+          {/* Interactive Ruler Distance HUD with Undo */}
           {rulerActive && (
             <RulerHud
               waypoints={rulerPoints}
               totalMeters={rulerTotalMeters}
+              onUndo={() => setRulerPoints(pts => pts.slice(0, -1))}
               onReset={() => setRulerPoints([])}
               onClose={() => {
                 setRulerActive(false);
@@ -1406,6 +1852,8 @@ export default function GisTopologyMap() {
             rulerActive={rulerActive}
             rulerPoints={rulerPoints}
             setRulerPoints={setRulerPoints}
+            targetPin={targetPin}
+            nearestOdp={nearestOdp}
             onSelectNode={node => setSelectedNode(node)}
             onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
             externalFlyToRef={externalFlyToRef}
@@ -1506,6 +1954,18 @@ export default function GisTopologyMap() {
           onClose={() => setStreetViewTarget(null)}
         />
       )}
+
+      {/* Target Client Coordinate Modal */}
+      <TargetCoordModal
+        isOpen={targetCoordModal}
+        onClose={() => setTargetCoordModal(false)}
+        onSetTarget={(target) => {
+          setTargetPin(target);
+          if (externalFlyToRef.current) {
+            externalFlyToRef.current(target.lat, target.lng, 17);
+          }
+        }}
+      />
     </div>
   );
 }
