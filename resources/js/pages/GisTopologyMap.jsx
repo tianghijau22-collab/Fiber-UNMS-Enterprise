@@ -977,118 +977,51 @@ function LeafletMap({
     const isPathTracingActive = tracedPath?.nodeIds && tracedPath.nodeIds.size > 1;
     const bounds = [];
 
-    // Draw Fiber Connections (Parent-Child)
-    nodes.forEach(node => {
-      if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
+    // 1. Draw Fiber Connections ONLY when Path Tracing is explicitly active (User clicks a node)
+    if (isPathTracingActive) {
+      nodes.forEach(node => {
+        if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
+        if (!tracedPath.nodeIds.has(node.id)) return;
 
-      let parent = null;
-      if (node.parent_node_id && nodeMap.has(node.parent_node_id)) {
-        parent = nodeMap.get(node.parent_node_id);
-      } else if (node.node_type === 'ODP') {
-        const potentialOdcs = nodes.filter(n => n.node_type === 'ODC' && n.latitude && n.longitude);
-        if (potentialOdcs.length > 0) parent = potentialOdcs[0];
-      }
-
-      if (parent && parent.latitude && parent.longitude) {
-        const pLat = parseFloat(parent.latitude);
-        const pLng = parseFloat(parent.longitude);
-        const nLat = parseFloat(node.latitude);
-        const nLng = parseFloat(node.longitude);
-
-        const isOdpLine = node.node_type === 'ODP';
-        let lineColor = '#2563eb'; // Clean Royal Blue for Feeder Backbone
-        let glowColor = 'rgba(37, 99, 235, 0.22)';
-
-        if (isOdpLine) {
-          const bestPower = node.best_rx_power != null 
-            ? parseFloat(node.best_rx_power) 
-            : (node.optical_power_dbm != null ? parseFloat(node.optical_power_dbm) : null);
-
-          const isLossLine = node.status === 'damaged' 
-            || (node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')))
-            || (bestPower != null && bestPower <= -27.5);
-
-          if (isLossLine) {
-            lineColor = '#e11d48'; // Rose Red
-            glowColor = 'rgba(225, 29, 72, 0.28)';
-          } else if (bestPower != null && bestPower <= -25.9) {
-            lineColor = '#d97706'; // Amber
-            glowColor = 'rgba(217, 119, 6, 0.25)';
-          } else if (bestPower != null && bestPower <= -23.9) {
-            lineColor = '#0284c7'; // Sky Azure
-            glowColor = 'rgba(2, 132, 199, 0.25)';
-          } else if (bestPower != null && bestPower > -23.9) {
-            lineColor = '#059669'; // Mint Emerald
-            glowColor = 'rgba(5, 150, 105, 0.25)';
-          } else {
-            lineColor = '#10b981';
-            glowColor = 'rgba(16, 185, 129, 0.22)';
-          }
+        let parent = null;
+        if (node.parent_node_id && nodeMap.has(node.parent_node_id)) {
+          parent = nodeMap.get(node.parent_node_id);
         }
 
-        const lineCoords = [[pLat, pLng], [nLat, nLng]];
-        const isInSelectedPath = isPathTracingActive && tracedPath.nodeIds.has(node.id) && tracedPath.nodeIds.has(parent.id);
+        if (parent && parent.latitude && parent.longitude && tracedPath.nodeIds.has(parent.id)) {
+          const lineCoords = [
+            [parseFloat(parent.latitude), parseFloat(parent.longitude)],
+            [parseFloat(node.latitude), parseFloat(node.longitude)]
+          ];
 
-        if (isInSelectedPath) {
-          // Highlight glowing laser line for selected end-to-end path
+          // Highlight path line for selected node
           Lf.polyline(lineCoords, {
-            color: '#38bdf8', // Cyan glow
-            weight: isOdpLine ? 10 : 12,
-            opacity: 0.6,
+            color: '#0284c7',
+            weight: 4,
+            opacity: 0.9,
             lineCap: 'round',
+            lineJoin: 'round',
           }).addTo(highlightGroup);
-
-          Lf.polyline(lineCoords, {
-            color: '#06b6d4', // Bright Cyan Laser
-            weight: isOdpLine ? 4.5 : 5.5,
-            opacity: 1,
-            dashArray: '10, 8',
-            className: 'animated-fiber-laser-flow',
-          }).addTo(highlightGroup);
-        } else {
-          // Standard / Dimmed connection
-          const opacityMultiplier = isPathTracingActive ? 0.2 : 1;
-
-          Lf.polyline(lineCoords, {
-            color: glowColor,
-            weight: isOdpLine ? 6 : 8,
-            opacity: 0.9 * opacityMultiplier,
-            lineCap: 'round',
-          }).addTo(cablesGroup);
-
-          Lf.polyline(lineCoords, {
-            color: lineColor,
-            weight: isOdpLine ? 3.5 : 4.5,
-            opacity: 1 * opacityMultiplier,
-            dashArray: '12, 10',
-            className: isPathTracingActive ? '' : 'animated-fiber-laser-flow',
-          }).addTo(cablesGroup);
         }
-      }
-    });
+      });
+    }
 
-    // Render actual Network Cables with route_coordinates from KML / Database
+    // 2. Render Actual Physical Network Cables (from KML / Database) - Lightweight & Smooth
     cables.forEach(cable => {
       let coords = cable.route_coordinates;
       if (typeof coords === 'string') {
         try { coords = JSON.parse(coords); } catch (e) { coords = null; }
       }
       if (Array.isArray(coords) && coords.length >= 2) {
-        const cableColor = cable.cable_color || '#3b82f6';
+        const cableColor = cable.cable_color || '#2563eb';
         
-        // Background glow
-        Lf.polyline(coords, {
-          color: cableColor,
-          weight: 6,
-          opacity: 0.35,
-          lineCap: 'round',
-        }).addTo(cablesGroup);
-
-        // Core line
+        // Single clean solid polyline - 60 FPS performance
         const poly = Lf.polyline(coords, {
           color: cableColor,
           weight: 3.5,
-          opacity: 0.95,
+          opacity: 0.85,
+          lineJoin: 'round',
+          lineCap: 'round',
         }).addTo(cablesGroup);
 
         const lenText = cable.length_meters
