@@ -64,6 +64,7 @@ function PublicRoute({ children }) {
 function AppContent() {
   const { currentUser } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -74,6 +75,15 @@ function AppContent() {
         .catch(() => {});
     }
   }, []);
+
+  // Dedicated Standalone Fullscreen GIS Map Route (No Sidebar, No Navbar, 100% pure viewport)
+  if (location.pathname === '/gis-map/fullscreen') {
+    return (
+      <PrivateRoute>
+        <GisTopologyMap isStandaloneFullscreen={true} />
+      </PrivateRoute>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-white dark:bg-black font-sans antialiased text-slate-900 dark:text-white transition-colors duration-200 overflow-x-hidden">

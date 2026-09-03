@@ -14,6 +14,7 @@ export const ROUTE_ROLES = {
   '/bts-management': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
   '/network': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
   '/gis-map': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
+  '/gis-map/fullscreen': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
   '/core-matrix': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
   '/customers': ['Super Administrator', 'Customer Service', 'Finance & Billing'],
   '/tickets': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer', 'Customer Service'],

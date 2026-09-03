@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { decimalToDms, parseCoordsInput } from '../utils/coordinateParser.js';
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1254,23 +1254,21 @@ function LeafletMap({
 
       <div
         ref={mapRef}
-        className={`w-full overflow-hidden relative z-0 transition-all ${isFullscreen ? 'rounded-none' : 'rounded-2xl shadow-inner'}`}
-        style={{ height: isFullscreen ? '100vh' : '640px', minHeight: isFullscreen ? '100vh' : '640px' }}
+        className={`w-full overflow-hidden relative z-0 transition-all ${isFullscreen ? 'h-full rounded-none' : 'rounded-2xl shadow-inner'}`}
+        style={{ height: isFullscreen ? '100%' : '640px', minHeight: isFullscreen ? '100%' : '640px' }}
       />
 
       {/* Floating Mode Controls */}
       <div className="absolute top-4 right-4 z-[999] flex flex-wrap items-center justify-end gap-2">
-        <button
-          onClick={onToggleFullscreen}
-          className={`px-3.5 py-2 text-xs font-bold rounded-xl border shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer ${
-            isFullscreen
-              ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-500 shadow-lg ring-2 ring-rose-400/50'
-              : 'bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 border-slate-200 dark:border-neutral-700'
-          }`}
-          title={isFullscreen ? 'Keluar Full Layar (Esc)' : 'Tampilkan Peta Layar Penuh'}
-        >
-          <span>{isFullscreen ? '↩️ Keluar Full Layar' : '⛶ Layar Penuh'}</span>
-        </button>
+        {!isFullscreen && (
+          <button
+            onClick={onToggleFullscreen}
+            className="px-3.5 py-2 text-xs font-bold rounded-xl border shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 border-slate-200 dark:border-neutral-700"
+            title="Buka Peta Mode Layar Penuh"
+          >
+            <span>⛶ Layar Penuh</span>
+          </button>
+        )}
 
         <button
           onClick={toggleMapMode}
@@ -1288,21 +1286,6 @@ function LeafletMap({
           </button>
         )}
       </div>
-
-      {/* Prominent Floating Exit Fullscreen Button (Top Left when fullscreen) */}
-      {isFullscreen && (
-        <div className="absolute top-4 left-4 z-[999] flex items-center gap-2 animate-in fade-in duration-200">
-          <button
-            onClick={onToggleFullscreen}
-            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl shadow-2xl border border-rose-400/80 flex items-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95"
-            title="Kembali ke tampilan normal (Atau tekan tombol ESC di keyboard)"
-          >
-            <span className="text-sm">↩️</span>
-            <span>KEMBALI (Keluar Layar Penuh)</span>
-            <span className="text-[10px] opacity-75 font-mono px-1.5 py-0.5 rounded bg-black/40">ESC</span>
-          </button>
-        </div>
-      )}
 
       <button
         onClick={handleRecenterMap}
@@ -1373,8 +1356,11 @@ function GisStatCards({ nodes }) {
 /* ══════════════════════════════════════════════════════════════════
    MAIN GIS PAGE CONTROLLER
 ══════════════════════════════════════════════════════════════════ */
-export default function GisTopologyMap() {
+export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isFullscreenPage = isStandaloneFullscreen || location.pathname.includes('/fullscreen');
   const oltFilterParam = searchParams.get('olt_id');
 
   const [allNodes, setAllNodes] = useState([]);
@@ -1399,19 +1385,16 @@ export default function GisTopologyMap() {
   const [targetCoordModal, setTargetCoordModal] = useState(false);
   const [targetPin, setTargetPin] = useState(null);
 
-  // Fullscreen state
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
   // Esc key listener to exit fullscreen
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isFullscreen) {
-        setIsFullscreen(false);
+      if (e.key === 'Escape' && isFullscreenPage) {
+        navigate('/gis-map');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFullscreen]);
+  }, [isFullscreenPage, navigate]);
 
   const fetchNodesAndCables = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -1576,6 +1559,237 @@ export default function GisTopologyMap() {
     }
   };
 
+  // Dedicated Clean Fullscreen View (No sidebar, no layout overlap, pure 100vw x 100vh)
+  if (isFullscreenPage) {
+    return (
+      <div className="fixed inset-0 w-screen h-screen z-[99999] bg-slate-950 flex flex-col overflow-hidden select-none font-sans">
+        {/* Top Control Bar for Fullscreen */}
+        <div className="bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 text-white z-[1000] shrink-0 shadow-lg">
+          <div className="flex items-center gap-2.5">
+            {/* Back to Standard GIS Map */}
+            <button
+              type="button"
+              onClick={() => navigate('/gis-map')}
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Kembali ke tampilan standar UNMS (Esc)"
+            >
+              <span className="text-sm">↩️</span>
+              <span>Kembali</span>
+              <span className="text-[10px] opacity-75 font-mono px-1.5 py-0.5 rounded bg-black/40">ESC</span>
+            </button>
+
+            <div className="hidden sm:flex items-center gap-2 border-l border-slate-700 pl-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="font-extrabold text-xs text-slate-200 tracking-tight">🗺️ GIS Peta Spasial (Layar Penuh)</span>
+            </div>
+          </div>
+
+          {/* Action Tools: Cek Koordinat & Ukur Jarak */}
+          <div className="flex items-center gap-2">
+            {/* Target Coordinate Button */}
+            <button
+              type="button"
+              onClick={() => setTargetCoordModal(true)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                targetPin
+                  ? 'bg-fuchsia-600 text-white border-fuchsia-500 shadow-md ring-2 ring-fuchsia-400/40'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+              title="Cek titik koordinat rumah client di peta"
+            >
+              <span>📍 {targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat'}</span>
+            </button>
+
+            {/* Ruler Tool Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !rulerActive;
+                setRulerActive(next);
+                if (!next) setRulerPoints([]);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                rulerActive
+                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md ring-2 ring-amber-400/40'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
+              title="Ukur total jarak bentangan kabel FO"
+            >
+              <span>📏 {rulerActive ? 'Tutup Penggaris' : 'Ukur Jarak FO'}</span>
+            </button>
+
+            {/* Fault Filter Button */}
+            <button
+              type="button"
+              onClick={() => setFaultOnlyFilter(!faultOnlyFilter)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                faultOnlyFilter
+                  ? 'bg-rose-600 text-white border-rose-500 shadow-md ring-2 ring-rose-400/40'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
+            >
+              <span>🚨 {faultOnlyFilter ? 'Filter: Gangguan' : 'Hanya Gangguan'}</span>
+            </button>
+          </div>
+
+          {/* Search & Type Filter */}
+          <div className="flex items-center gap-2">
+            {/* Smart Search */}
+            <div className="relative w-44 sm:w-60">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                placeholder="Cari ODP, ODC, POP..."
+                className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+              {isSearchFocused && searchSuggestions.length > 0 && (
+                <div className="absolute top-full right-0 mt-1.5 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-[1000] overflow-hidden">
+                  {searchSuggestions.map(s => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => handleSelectSuggestion(s)}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center justify-between border-b border-slate-800 last:border-0 cursor-pointer text-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] font-bold px-1.5 rounded bg-slate-800 text-blue-400 border border-blue-500/40">{s.node_type}</span>
+                          <span className="font-bold text-slate-200">{s.name}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 block">{s.code}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Filter Node Type */}
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none cursor-pointer"
+            >
+              <option value="">Semua Tipe</option>
+              <option value="POP">POP</option>
+              <option value="ODC">ODC</option>
+              <option value="ODP">ODP</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Fullscreen Map Canvas */}
+        <div className="flex-1 w-full relative overflow-hidden">
+          {/* Node Detail Drawer */}
+          <NodeDetailPanel
+            node={selectedNode}
+            onClose={() => setSelectedNode(null)}
+            onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
+            onTracePath={node => {
+              setSelectedNode(node);
+              if (node.latitude && node.longitude && externalFlyToRef.current) {
+                externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
+              }
+            }}
+          />
+
+          {/* Path Tracing Hierarchy Breadcrumb Banner */}
+          {tracedPath.pathNodes.length > 1 && (
+            <PathTracingBanner
+              pathNodes={tracedPath.pathNodes}
+              activeNodeId={selectedNode?.id}
+              onSelectNode={node => {
+                setSelectedNode(node);
+                if (node.latitude && node.longitude && externalFlyToRef.current) {
+                  externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
+                }
+              }}
+              onClose={() => setSelectedNode(null)}
+            />
+          )}
+
+          {/* Target House Pin Floating Banner */}
+          {targetPin && (
+            <TargetPinBanner
+              targetPin={targetPin}
+              onFlyToTarget={() => {
+                if (externalFlyToRef.current) {
+                  externalFlyToRef.current(targetPin.lat, targetPin.lng, 17);
+                }
+              }}
+              onClearTarget={() => setTargetPin(null)}
+            />
+          )}
+
+          {/* Interactive Ruler Distance HUD with Undo */}
+          {rulerActive && (
+            <RulerHud
+              waypoints={rulerPoints}
+              totalMeters={rulerTotalMeters}
+              onUndo={() => setRulerPoints(pts => pts.slice(0, -1))}
+              onReset={() => setRulerPoints([])}
+              onClose={() => {
+                setRulerActive(false);
+                setRulerPoints([]);
+              }}
+            />
+          )}
+
+          {/* Leaflet Map Component */}
+          <LeafletMap
+            nodes={nodesWithCoords}
+            cables={allCables}
+            selectedNode={selectedNode}
+            tracedPath={tracedPath}
+            rulerActive={rulerActive}
+            rulerPoints={rulerPoints}
+            setRulerPoints={setRulerPoints}
+            targetPin={targetPin}
+            isFullscreen={true}
+            onToggleFullscreen={() => navigate('/gis-map')}
+            onSelectNode={node => setSelectedNode(node)}
+            onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
+            externalFlyToRef={externalFlyToRef}
+          />
+        </div>
+
+        {/* Street View Modal */}
+        {streetViewTarget && (
+          <StreetViewModal
+            lat={streetViewTarget.lat}
+            lng={streetViewTarget.lng}
+            title={streetViewTarget.title}
+            onClose={() => setStreetViewTarget(null)}
+          />
+        )}
+
+        {/* Target Client Coordinate Modal */}
+        <TargetCoordModal
+          isOpen={targetCoordModal}
+          onClose={() => setTargetCoordModal(false)}
+          onSetTarget={(target) => {
+            setTargetPin(target);
+            if (externalFlyToRef.current) {
+              externalFlyToRef.current(target.lat, target.lng, 17);
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -1601,22 +1815,18 @@ export default function GisTopologyMap() {
                 ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-md ring-2 ring-fuchsia-400/40'
                 : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
             }`}
-            title="Cek lokasi rumah pelanggan dari koordinat GPS / cari nama pelanggan"
+            title="Cek lokasi rumah pelanggan dari koordinat GPS"
           >
             <span>📍 {targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat Rumah'}</span>
           </button>
 
-          {/* Fullscreen Button */}
+          {/* Dedicated Fullscreen Page Button */}
           <button
-            onClick={() => setIsFullscreen(prev => !prev)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
-              isFullscreen
-                ? 'bg-rose-600 text-white border-rose-500 shadow-md ring-2 ring-rose-400/40'
-                : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
-            }`}
-            title={isFullscreen ? 'Keluar mode layar penuh (Esc)' : 'Tampilkan peta dalam mode layar penuh'}
+            onClick={() => navigate('/gis-map/fullscreen')}
+            className="px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800 shadow-2xs"
+            title="Buka Peta GIS di Halaman Khusus Layar Penuh (100% Layar Bersih)"
           >
-            <span>{isFullscreen ? '↩️ Keluar Full Layar' : '⛶ Layar Penuh'}</span>
+            <span>⛶ Buka Layar Penuh</span>
           </button>
 
           {/* Ruler Button */}
@@ -1768,11 +1978,7 @@ export default function GisTopologyMap() {
           Memuat topologi spasial GIS &amp; data redaman...
         </div>
       ) : activeView === 'map' ? (
-        <div className={`transition-all duration-200 ${
-          isFullscreen 
-            ? 'fixed inset-0 z-[99999] w-screen h-screen bg-slate-950 overflow-hidden' 
-            : 'bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]'
-        }`}>
+        <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]">
           {/* Node Detail Drawer */}
           <NodeDetailPanel
             node={selectedNode}
@@ -1838,8 +2044,8 @@ export default function GisTopologyMap() {
             rulerPoints={rulerPoints}
             setRulerPoints={setRulerPoints}
             targetPin={targetPin}
-            isFullscreen={isFullscreen}
-            onToggleFullscreen={() => setIsFullscreen(prev => !prev)}
+            isFullscreen={false}
+            onToggleFullscreen={() => navigate('/gis-map/fullscreen')}
             onSelectNode={node => setSelectedNode(node)}
             onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
             externalFlyToRef={externalFlyToRef}
