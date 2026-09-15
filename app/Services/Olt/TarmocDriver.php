@@ -68,15 +68,18 @@ class TarmocDriver implements OltDeviceDriverInterface {
         return true;
     }
 
-    public function getOnuOpticalPower(string $serialNumber): array {
+    public function getOnuOpticalPower(string $serialNumber, ?string $port = null, ?int $onuId = null): array {
         return [
             'serial_number' => $serialNumber,
+            'port' => $port,
+            'onu_id' => $onuId,
             'rx_power_dbm' => -17.90,
             'tx_power_dbm' => 2.40,
             'olt_rx_power_dbm' => -17.50,
             'voltage_v' => 3.30,
             'bias_current_ma' => 13.9,
             'temperature_c' => 38.5,
+            'distance_meters' => 850,
             'status' => 'Normal',
         ];
     }

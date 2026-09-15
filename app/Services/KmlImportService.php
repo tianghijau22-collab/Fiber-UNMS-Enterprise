@@ -19,7 +19,7 @@ class KmlImportService
     /**
      * Parse KML/KMZ and return preview payload + cache token
      */
-    public function preview(UploadedFile $file): array
+    public function preview(UploadedFile $file, string $target = 'all'): array
     {
         $tempPath = $file->getRealPath();
         $ext = strtolower($file->getClientOriginalExtension());
@@ -55,205 +55,131 @@ class KmlImportService
             $this->deleteDirectory($extractedDir);
         }
 
-        // Store parsed data temporarily in storage/app/kml_imports
+        // Store parsed data temporarily in storage/app/private/kml_imports
         $token = Str::uuid()->toString();
-        Storage::disk('local')->put("kml_imports/{$token}.json", json_encode($parsed));
+        $targetDir = storage_path('app/private/kml_imports');
+        if (!is_dir($targetDir)) {
+            @mkdir($targetDir, 0775, true);
+        }
+
+        $encodedData = json_encode($parsed);
+        $written = Storage::disk('local')->put("kml_imports/{$token}.json", $encodedData);
+        if (!$written) {
+            // Direct write fallback
+            $fallbackFile = $targetDir . DIRECTORY_SEPARATOR . "{$token}.json";
+            @file_put_contents($fallbackFile, $encodedData);
+            if (!file_exists($fallbackFile)) {
+                throw new \Exception("Gagal menyimpan file cache sesi import KML. Pastikan direktori storage/app memiliki izin tulis.");
+            }
+        }
+
+        // Clean up old import sessions (> 2 hours)
+        $oldFiles = glob($targetDir . DIRECTORY_SEPARATOR . '*.json');
+        if (!empty($oldFiles)) {
+            $now = time();
+            foreach ($oldFiles as $of) {
+                if ($now - filemtime($of) > 7200) {
+                    @unlink($of);
+                }
+            }
+        }
 
         // Available OLTs in system
         $availableOlts = OltDevice::select('id', 'name', 'ip_address')->get()->toArray();
 
+        // Count totals
+        $allNodesCount = count($parsed['nodes']);
+        $cablesCount = count($parsed['cables']);
+
         return [
             'token' => $token,
+            'import_target' => $target,
             'summary' => [
-                'total_nodes' => count($parsed['nodes']),
-                'total_cables' => count($parsed['cables']),
+                'total_nodes' => $allNodesCount,
+                'total_cables' => $cablesCount,
                 'odp_count' => count(array_filter($parsed['nodes'], fn($n) => $n['node_type'] === 'ODP')),
                 'odc_count' => count(array_filter($parsed['nodes'], fn($n) => $n['node_type'] === 'ODC')),
                 'pop_count' => count(array_filter($parsed['nodes'], fn($n) => $n['node_type'] === 'POP')),
-                'jb_count' => count(array_filter($parsed['nodes'], fn($n) => $n['node_type'] === 'JOINT_CLOSURE')),
-                'pole_count' => count(array_filter($parsed['nodes'], fn($n) => $n['node_type'] === 'POLE')),
-                'olt_breakdown' => [
-                    'guguak_02' => count(array_filter($parsed['nodes'], fn($n) => $n['olt_key'] === '02')),
-                    'singkarak_05' => count(array_filter($parsed['nodes'], fn($n) => $n['olt_key'] === '05')),
-                    'solok_kota' => count(array_filter($parsed['nodes'], fn($n) => $n['olt_key'] === 'default')),
-                ],
-                'parent_detected_count' => count(array_filter($parsed['nodes'], fn($n) => !empty($n['power_from_raw']))),
             ],
-            'sample_nodes' => array_slice($parsed['nodes'], 0, 25),
-            'sample_cables' => array_slice($parsed['cables'], 0, 15),
+            'sample_nodes' => array_slice($parsed['nodes'], 0, 30),
+            'sample_cables' => array_slice($parsed['cables'], 0, 20),
             'available_olts' => $availableOlts,
         ];
     }
 
     /**
-     * Execute Import using stored preview token
+     * Execute Import using stored preview token with target filter and simplified logic
      */
     public function execute(string $token, array $options = []): array
     {
         $path = "kml_imports/{$token}.json";
-        if (!Storage::disk('local')->exists($path)) {
-            throw new \Exception("Sesi import KML sudah kadaluarsa. Silakan upload ulang file KML.");
+        $content = null;
+
+        if (Storage::disk('local')->exists($path)) {
+            $content = Storage::disk('local')->get($path);
+        } else {
+            // Fallback checking direct disk locations
+            $fallbackPaths = [
+                storage_path("app/private/kml_imports/{$token}.json"),
+                storage_path("app/kml_imports/{$token}.json"),
+            ];
+            foreach ($fallbackPaths as $fp) {
+                if (file_exists($fp)) {
+                    $content = @file_get_contents($fp);
+                    break;
+                }
+            }
         }
 
-        $parsed = json_decode(Storage::disk('local')->get($path), true);
-        if (!$parsed || empty($parsed['nodes'])) {
+        if (!$content) {
+            throw new \Exception("Sesi import KML sudah kadaluarsa atau file cache tidak ditemukan. Silakan upload ulang file KML.");
+        }
+
+        $parsed = json_decode($content, true);
+        if (!$parsed) {
             throw new \Exception("Data KML tidak valid atau kosong.");
         }
 
-        // 1. Resolve OLT mappings
-        $allOlts = OltDevice::all();
-        $oltSolok = $allOlts->first(fn($o) => stripos($o->name, 'SOLOK') !== false) ?? $allOlts->first();
-        $oltGuguak = $allOlts->first(fn($o) => stripos($o->name, 'GUGUAK') !== false);
-        $oltSingkarak = $allOlts->first(fn($o) => stripos($o->name, 'SINGKARAK') !== false);
-
-        // Allow user override OLT mapping from options
-        $oltMap = [
-            'default' => $options['olt_solok_id'] ?? ($oltSolok?->id),
-            '02'      => $options['olt_guguak_id'] ?? ($oltGuguak?->id ?? $oltSolok?->id),
-            '05'      => $options['olt_singkarak_id'] ?? ($oltSingkarak?->id ?? $oltSolok?->id),
-        ];
-
-        $autoLinkProximity = $options['auto_link_nearest'] ?? true;
+        // Target: 'all' | 'odp' | 'odc' | 'cable'
+        $target = $options['import_target'] ?? 'all';
+        $targetOltId = !empty($options['target_olt_id']) ? (int) $options['target_olt_id'] : null;
+        $defaultParentId = !empty($options['default_parent_id']) ? (int) $options['default_parent_id'] : null;
 
         $stats = [
             'nodes_created' => 0,
             'nodes_updated' => 0,
             'cables_created' => 0,
             'cables_updated' => 0,
-            'parents_linked' => 0,
         ];
 
         DB::beginTransaction();
         try {
-            // Stage 1: Insert or Update POP & BTS Nodes
-            $popMap = [];
-            foreach ($parsed['nodes'] as &$nodeData) {
-                if ($nodeData['node_type'] === 'POP') {
-                    $oltId = $oltMap[$nodeData['olt_key']] ?? null;
-                    $node = $this->upsertNode($nodeData, $oltId, null, $stats);
-                    $popMap[strtolower(trim($node->name))] = $node->id;
-                    $nodeData['db_id'] = $node->id;
+            // ── 1. IMPORT ODP SAJA ──────────────────────────────────────────
+            if ($target === 'odp') {
+                foreach ($parsed['nodes'] as $nodeData) {
+                    // Paksa semua point menjadi ODP
+                    $nodeData['node_type'] = 'ODP';
+                    $this->upsertNode($nodeData, $targetOltId, $defaultParentId, $stats);
                 }
             }
-            unset($nodeData);
-
-            // Stage 2: Insert or Update ODC Nodes
-            $odcMap = [];
-            foreach ($parsed['nodes'] as &$nodeData) {
-                if ($nodeData['node_type'] === 'ODC') {
-                    $oltId = $oltMap[$nodeData['olt_key']] ?? null;
-
-                    // Try link to POP if specified in power_from
-                    $parentId = null;
-                    if (!empty($nodeData['power_from_raw'])) {
-                        $target = strtolower(trim($nodeData['power_from_raw']));
-                        foreach ($popMap as $popName => $popId) {
-                            if (str_contains($target, $popName) || str_contains($popName, $target)) {
-                                $parentId = $popId;
-                                break;
-                            }
-                        }
-                    }
-
-                    $node = $this->upsertNode($nodeData, $oltId, $parentId, $stats);
-                    $odcMap[$nodeData['olt_key']][strtolower(trim($node->name))] = $node;
-                    $nodeData['db_id'] = $node->id;
+            // ── 2. IMPORT ODC SAJA ──────────────────────────────────────────
+            elseif ($target === 'odc') {
+                foreach ($parsed['nodes'] as $nodeData) {
+                    // Paksa semua point menjadi ODC
+                    $nodeData['node_type'] = 'ODC';
+                    $this->upsertNode($nodeData, $targetOltId, null, $stats);
                 }
             }
-            unset($nodeData);
-
-            // Stage 3: Insert or Update ODP, Joint Box, Pole Nodes
-            foreach ($parsed['nodes'] as &$nodeData) {
-                if (!in_array($nodeData['node_type'], ['POP', 'ODC'])) {
-                    $oltId = $oltMap[$nodeData['olt_key']] ?? null;
-                    $parentId = null;
-
-                    // A. Resolve Parent ODC by POWER FROM
-                    if (!empty($nodeData['power_from_raw'])) {
-                        $pRaw = strtolower(trim($nodeData['power_from_raw']));
-                        $candidates = $odcMap[$nodeData['olt_key']] ?? [];
-                        
-                        // Extract numbers from power from (e.g. "odc 4", "-02 ODC 4" -> 4)
-                        preg_match('/(?:odc\s*|dari\s*)?([0-9]+)/i', $pRaw, $numMatch);
-                        $targetNum = $numMatch[1] ?? null;
-
-                        foreach ($candidates as $candName => $candNode) {
-                            if (str_contains($pRaw, $candName)) {
-                                $parentId = $candNode->id;
-                                break;
-                            }
-                            if ($targetNum && preg_match('/(?:odc\s*)0*' . $targetNum . '(?:\b|-|\s|$)/i', $candName)) {
-                                $parentId = $candNode->id;
-                                break;
-                            }
-                        }
-                    }
-
-                    // B. Fallback: Spatial Proximity (Nearest ODC within same OLT cluster)
-                    if (!$parentId && $autoLinkProximity && $nodeData['node_type'] === 'ODP' && !empty($nodeData['lat'])) {
-                        $candidates = $odcMap[$nodeData['olt_key']] ?? [];
-                        $minDist = 9999999;
-                        $closestOdc = null;
-
-                        foreach ($candidates as $candNode) {
-                            if ($candNode->latitude && $candNode->longitude) {
-                                $dist = $this->haversineMeters(
-                                    $nodeData['lat'], $nodeData['lng'],
-                                    $candNode->latitude, $candNode->longitude
-                                );
-                                if ($dist < $minDist && $dist <= 3000) { // Within 3km
-                                    $minDist = $dist;
-                                    $closestOdc = $candNode;
-                                }
-                            }
-                        }
-
-                        if ($closestOdc) {
-                            $parentId = $closestOdc->id;
-                        }
-                    }
-
-                    if ($parentId) {
-                        $stats['parents_linked']++;
-                    }
-
-                    $node = $this->upsertNode($nodeData, $oltId, $parentId, $stats);
-                    $nodeData['db_id'] = $node->id;
-                }
+            // ── 3. IMPORT KABEL SAJA ────────────────────────────────────────
+            elseif ($target === 'cable') {
+                $this->importCablesList($parsed['cables'], $stats);
             }
-            unset($nodeData);
-
-            // Stage 4: Insert or Update Cables (LineStrings)
-            foreach ($parsed['cables'] as $cableData) {
-                $slug = Str::slug($cableData['name'] ?: 'cable');
-                $hash = substr(md5(json_encode($cableData['coordinates'])), 0, 6);
-                $code = 'CBL-' . substr($slug, 0, 28) . '-' . $hash;
-                
-                $cable = NetworkCable::withTrashed()->where('code', $code)->first();
-                $isNew = false;
-                if (!$cable) {
-                    $cable = new NetworkCable();
-                    $cable->code = $code;
-                    $isNew = true;
+            // ── 4. IMPORT SEMUA DATA (ODP, ODC, POP, KABEL) ─────────────────
+            else {
+                foreach ($parsed['nodes'] as $nodeData) {
+                    $this->upsertNode($nodeData, $targetOltId, null, $stats);
                 }
-
-                $cable->name = $cableData['name'];
-                $cable->route_coordinates = $cableData['coordinates'];
-                $cable->cable_color = $cableData['color'];
-                $cable->length_meters = $cableData['length_meters'];
-                $cable->core_count_total = $cableData['core_count'];
-                $cable->core_count_used = 0;
-                $cable->installation_type = $cableData['installation_type'];
-                $cable->route_description = $cableData['desc'];
-                $cable->status = 'active';
-                $cable->notes = $cableData['desc'];
-                $cable->save();
-
-                if ($isNew) {
-                    $stats['cables_created']++;
-                } else {
-                    $stats['cables_updated']++;
-                }
+                $this->importCablesList($parsed['cables'], $stats);
             }
 
             DB::commit();
@@ -261,9 +187,18 @@ class KmlImportService
             // Remove temp cache file
             Storage::disk('local')->delete($path);
 
+            $msgParts = [];
+            if ($stats['nodes_created'] > 0 || $stats['nodes_updated'] > 0) {
+                $msgParts[] = "{$stats['nodes_created']} node baru dibuat" . ($stats['nodes_updated'] > 0 ? ", {$stats['nodes_updated']} diperbarui" : "");
+            }
+            if ($stats['cables_created'] > 0 || $stats['cables_updated'] > 0) {
+                $msgParts[] = "{$stats['cables_created']} kabel baru dibuat" . ($stats['cables_updated'] > 0 ? ", {$stats['cables_updated']} diperbarui" : "");
+            }
+            $detailMsg = !empty($msgParts) ? implode(' dan ', $msgParts) : 'Tidak ada data baru yang diproses';
+
             return [
                 'success' => true,
-                'message' => "Import KML berhasil! {$stats['nodes_created']} node baru dibuat, {$stats['nodes_updated']} node diperbarui, {$stats['parents_linked']} ODP terhubung ke ODC induk, dan {$stats['cables_created']} kabel ditambahkan.",
+                'message' => "Import KML berhasil! {$detailMsg}. Anda dapat mengedit relasi node induk atau spesifikasi kabel sewaktu-waktu.",
                 'stats' => $stats,
             ];
 
@@ -275,29 +210,161 @@ class KmlImportService
     }
 
     /**
+     * Helper to import LineString cables and auto-generate core records
+     */
+    protected function importCablesList(array $cables, array &$stats): void
+    {
+        foreach ($cables as $cableData) {
+            $slug = Str::slug($cableData['name'] ?: 'cable');
+            $hash = substr(md5(json_encode($cableData['coordinates'])), 0, 6);
+            $code = 'CBL-' . substr($slug, 0, 26) . '-' . $hash;
+
+            $cable = NetworkCable::where('code', $code)->first();
+            $wasTrashed = false;
+            if (!$cable) {
+                $cable = NetworkCable::onlyTrashed()->where('code', $code)->first();
+                if (!$cable) {
+                    $cable = NetworkCable::onlyTrashed()->where('code', 'LIKE', $code . '_deleted_%')->first();
+                }
+                if ($cable) {
+                    $cable->restore();
+                    $wasTrashed = true;
+                }
+            }
+
+            $isNew = false;
+            if (!$cable) {
+                $cable = new NetworkCable();
+                $isNew = true;
+            } elseif ($cable->trashed()) {
+                $cable->restore();
+                $wasTrashed = true;
+            }
+
+            $cable->code = $code;
+            $cable->deleted_at = null;
+
+            $coreCount = (int) ($cableData['core_count'] ?: 24);
+            $cable->name = $cableData['name'] ?: 'Bentangan Kabel Fiber';
+            $cable->route_coordinates = $cableData['coordinates'];
+            $cable->cable_color = $cableData['color'] ?: '#2563eb';
+            $cable->length_meters = (float) $cableData['length_meters'];
+            $cable->core_count_total = $coreCount;
+            $cable->core_count_used = $cable->core_count_used ?? 0;
+            $cable->installation_type = $cableData['installation_type'] ?? 'Aerial';
+            $cable->route_description = $cableData['desc'] ?? null;
+            $cable->status = 'active';
+            $cable->notes = $cableData['desc'] ?? null;
+            $cable->save();
+
+            // Generate Cores if new or if cores missing
+            $existingCoresCount = DB::table('network_cable_cores')->where('cable_id', $cable->id)->count();
+            if ($isNew || $wasTrashed || $existingCoresCount === 0) {
+                if ($existingCoresCount === 0) {
+                    $this->generateDefaultCoresForCable($cable);
+                }
+                $stats['cables_created']++;
+            } else {
+                $stats['cables_updated']++;
+            }
+        }
+    }
+
+    /**
+     * Generate standard TIA-598-A cores for imported cable
+     */
+    protected function generateDefaultCoresForCable(NetworkCable $cable): void
+    {
+        $fiberColors = [
+            1 => 'Biru', 2 => 'Oranye', 3 => 'Hijau', 4 => 'Cokelat',
+            5 => 'Abu-abu', 6 => 'Putih', 7 => 'Merah', 8 => 'Hitam',
+            9 => 'Kuning', 10 => 'Ungu', 11 => 'Pink', 12 => 'Toska'
+        ];
+
+        $totalCores = $cable->core_count_total ?: 24;
+        $tubeCount = ($totalCores >= 48) ? 4 : 2;
+        $coresPerTube = (int) ceil($totalCores / $tubeCount);
+
+        $coresData = [];
+        for ($c = 1; $c <= $totalCores; $c++) {
+            $tubeNumber = (int) ceil($c / $coresPerTube);
+            $tubeColor = $fiberColors[(($tubeNumber - 1) % 12) + 1] ?? 'Biru';
+
+            $coreInTubeIndex = (($c - 1) % $coresPerTube) + 1;
+            $coreColor = $fiberColors[(($coreInTubeIndex - 1) % 12) + 1] ?? 'Biru';
+
+            $coresData[] = [
+                'cable_id' => $cable->id,
+                'core_number' => $c,
+                'tube_number' => $tubeNumber,
+                'tube_color' => $tubeColor,
+                'color' => $coreColor,
+                'status' => 'available',
+                'destination_type' => 'UNASSIGNED',
+                'destination_name' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        if (!empty($coresData)) {
+            DB::table('network_cable_cores')->insert($coresData);
+        }
+    }
+
+    /**
      * Upsert a NetworkNode record
      */
     protected function upsertNode(array $data, ?int $oltId, ?int $parentId, array &$stats): NetworkNode
     {
         // Generate consistent code based on node type and name
         $cleanName = trim($data['name']);
+        $cleanName = preg_replace('/\s+/', ' ', $cleanName);
+        if (preg_match('/^OD\s+\d+/i', $cleanName)) {
+            $cleanName = preg_replace('/^OD\s+/i', 'ODP ', $cleanName);
+        }
+        if (preg_match('/^ODP\s*[I|l](\d+)/i', $cleanName)) {
+            $cleanName = preg_replace('/^ODP\s*[I|l](\d+)/i', 'ODP 1$1', $cleanName);
+        }
+        $cleanName = preg_replace('/^(ODP|ODC|POP)[-_]?(\d+)/i', '$1 $2', $cleanName);
         $code = Str::slug($data['node_type'] . '-' . $cleanName);
         if (strlen($code) > 38) {
             $code = substr($code, 0, 32) . '-' . substr(md5($cleanName), 0, 5);
         }
 
-        $node = NetworkNode::withTrashed()->where('name', $cleanName)->first();
+        // 1. Search active first, then search trashed (in case previously deleted)
+        $node = NetworkNode::where('name', $cleanName)->first();
         if (!$node) {
-            $node = NetworkNode::withTrashed()->where('code', $code)->first();
+            $node = NetworkNode::where('code', $code)->first();
+        }
+
+        $wasTrashed = false;
+        if (!$node) {
+            $node = NetworkNode::onlyTrashed()->where('name', $cleanName)->first();
+            if (!$node) {
+                $node = NetworkNode::onlyTrashed()->where('code', $code)->first();
+            }
+            if (!$node) {
+                $node = NetworkNode::onlyTrashed()->where('code', 'LIKE', $code . '_deleted_%')->first();
+            }
+            if ($node) {
+                $node->restore();
+                $wasTrashed = true;
+            }
         }
 
         $isNew = false;
         if (!$node) {
             $node = new NetworkNode();
-            $node->code = $code;
             $isNew = true;
+        } elseif ($node->trashed()) {
+            $node->restore();
+            $wasTrashed = true;
         }
 
+        // Always ensure clean code & active status
+        $node->code = $code;
+        $node->deleted_at = null;
         $node->name = $cleanName;
         $node->node_type = $data['node_type'];
         $node->latitude = $data['lat'];
@@ -327,13 +394,51 @@ class KmlImportService
 
         $node->save();
 
-        if ($isNew) {
+        // Ensure physical ports exist
+        $this->ensurePhysicalPorts($node);
+
+        if ($isNew || $wasTrashed) {
             $stats['nodes_created']++;
         } else {
             $stats['nodes_updated']++;
         }
 
         return $node;
+    }
+
+    /**
+     * Ensure physical ports exist for an imported node
+     */
+    protected function ensurePhysicalPorts(NetworkNode $node): void
+    {
+        if ($node->total_ports <= 0) return;
+
+        $existingCount = DB::table('network_ports')->where('node_id', $node->id)->count();
+        if ($existingCount >= $node->total_ports) return;
+
+        $existingPorts = DB::table('network_ports')
+            ->where('node_id', $node->id)
+            ->pluck('port_number')
+            ->map(fn($v) => (int)$v)
+            ->toArray();
+
+        $newPorts = [];
+        for ($i = 1; $i <= $node->total_ports; $i++) {
+            if (!in_array($i, $existingPorts)) {
+                $newPorts[] = [
+                    'node_id'     => $node->id,
+                    'port_number' => (string) $i,
+                    'port_type'   => $node->node_type === 'ODP' ? 'SC_APC' : 'PON',
+                    'status'      => 'available',
+                    'created_at'  => now(),
+                    'updated_at'  => now(),
+                ];
+            }
+        }
+
+        if (!empty($newPorts)) {
+            DB::table('network_ports')->insert($newPorts);
+        }
     }
 
     /**
@@ -369,6 +474,14 @@ class KmlImportService
                     $pNode = new SimpleXMLElement($xml);
 
                     $name = trim((string)$pNode->name);
+                    $name = preg_replace('/\s+/', ' ', $name);
+                    if (preg_match('/^OD\s+\d+/i', $name)) {
+                        $name = preg_replace('/^OD\s+/i', 'ODP ', $name);
+                    }
+                    if (preg_match('/^ODP\s*[I|l](\d+)/i', $name)) {
+                        $name = preg_replace('/^ODP\s*[I|l](\d+)/i', 'ODP 1$1', $name);
+                    }
+                    $name = preg_replace('/^(ODP|ODC|POP)[-_]?(\d+)/i', '$1 $2', $name);
                     $desc = trim((string)$pNode->description);
                     $styleUrl = ltrim((string)$pNode->styleUrl, '#');
                     $cleanDesc = trim(strip_tags($desc));

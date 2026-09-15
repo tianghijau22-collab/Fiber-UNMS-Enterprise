@@ -7,6 +7,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import { dmsToDecimal, decimalToDms, parseCoordsInput } from '../utils/coordinateParser';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
+import { naturalNodeCompare } from '../utils/naturalSort';
 
 /* ══════════════════════════════════════════════════════════════════
    AUTO CODE GENERATOR HELPERS
@@ -2629,7 +2630,7 @@ function EditOdcPortModal({ port, odcName, onSave, onClose, loading }) {
    - Core Power & Multi Interface
    - Dynamic Splitter Grouping & Interactive Port Editing
 ══════════════════════════════════════════════════════════════════ */
-function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, refreshKey, onRefreshGlobal, scopedOltId }) {
+function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDeleteAllNodes, refreshKey, onRefreshGlobal, scopedOltId }) {
   const { hasRole } = useAuth();
   const canCrud = hasRole('Super Administrator', 'Operator Jaringan', 'NOC Operator');
   const [oltDevices, setOltDevices] = useState([]);
@@ -2828,8 +2829,12 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, refre
     setCurrentPage(1);
   }, [searchQuery, filterOlt, filterPop]);
 
-  const totalPages = Math.ceil(odcList.length / perPage) || 1;
-  const paginatedOdcs = odcList.slice((currentPage - 1) * perPage, currentPage * perPage);
+  const sortedOdcs = useMemo(() => {
+    return [...odcList].sort(naturalNodeCompare);
+  }, [odcList]);
+
+  const totalPages = Math.ceil(sortedOdcs.length / perPage) || 1;
+  const paginatedOdcs = sortedOdcs.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   return (
     <div className="space-y-4">
@@ -2845,7 +2850,7 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, refre
           </p>
         </div>
         {canCrud && (
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <button
               onClick={() => onAddNode('ODC')}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
@@ -2858,6 +2863,18 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, refre
             >
               <span>+</span> Tambah ODP/MS
             </button>
+            {odcList.length > 0 && onDeleteAllNodes && (
+              <button
+                onClick={() => onDeleteAllNodes('ODC')}
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-2xs"
+                title="Hapus seluruh data ODC dan ODP/MS"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Hapus Semua ODC</span>
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -3582,7 +3599,7 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, refre
 /* ══════════════════════════════════════════════════════════════════
    TAB 3: ODP (OPTICAL DISTRIBUTION POINT)
 ══════════════════════════════════════════════════════════════════ */
-function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, onRefreshGlobal }) {
+function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllNodes, refreshKey, onRefreshGlobal }) {
   const { hasRole } = useAuth();
   const canCrud = hasRole('Super Administrator', 'Operator Jaringan', 'NOC Operator');
 
@@ -3689,7 +3706,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, 
         const matchStatus = !filterStatus || odp.status === filterStatus;
         return matchSearch && matchStatus;
       })
-      .sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
+      .sort(naturalNodeCompare);
   }, [odps, searchQuery, filterStatus]);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -3720,12 +3737,26 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, refreshKey, 
             </p>
           </div>
           {canCrud && (
-            <button
-              onClick={() => onAddNode('ODP')}
-              className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5"
-            >
-              <span>+</span> Tambah ODP Baru
-            </button>
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              <button
+                onClick={() => onAddNode('ODP')}
+                className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5"
+              >
+                <span>+</span> Tambah ODP Baru
+              </button>
+              {odps.length > 0 && onDeleteAllNodes && (
+                <button
+                  onClick={() => onDeleteAllNodes('ODP')}
+                  className="w-full sm:w-auto px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                  title="Hapus seluruh data ODP"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Hapus Semua ODP</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
         <div className="flex flex-col sm:flex-row gap-2.5">
@@ -4437,19 +4468,19 @@ export default function NetworkInfrastructure() {
     const list = (scopedOltId && scopedPops.length > 0)
       ? scopedPops
       : allNodes.filter(n => n.node_type === 'POP');
-    return [...list].sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
+    return [...list].sort(naturalNodeCompare);
   }, [allNodes, scopedOltId]);
 
   const odcs = useMemo(() => {
     return filteredAllNodes
       .filter(n => n.node_type === 'ODC')
-      .sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
+      .sort(naturalNodeCompare);
   }, [filteredAllNodes]);
 
   const odps = useMemo(() => {
     return filteredAllNodes
       .filter(n => n.node_type === 'ODP')
-      .sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
+      .sort(naturalNodeCompare);
   }, [filteredAllNodes]);
 
   const [modalAddNode, setModalAddNode] = useState(null); // { type }
@@ -4762,6 +4793,60 @@ export default function NetworkInfrastructure() {
     });
   };
 
+  /* Delete All Nodes by Type (ODP / ODC) */
+  const handleDeleteAllNodes = (type) => {
+    const count = type === 'ODP' ? odps.length : type === 'ODC' ? odcs.length : 0;
+    const typeLabel = type === 'ODC' ? 'ODC & ODP/MS' : type;
+
+    openConfirm({
+      title: `Hapus SEMUA Data ${typeLabel}?`,
+      message: (
+        <div className="space-y-2 text-left">
+          <p>
+            Apakah Anda yakin ingin menghapus <strong className="text-rose-600 dark:text-rose-400">SEMUA {count} unit {typeLabel}</strong>?
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {type === 'ODC'
+              ? 'Relasi node induk pada ODP di bawah ODC ini akan dilepaskan secara aman, dan seluruh konfigurasi port ODC akan dibersihkan.'
+              : 'Seluruh konfigurasi port, riwayat redaman, dan penugasan pelanggan pada ODP ini akan dibersihkan.'}
+          </p>
+          <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-[11px] text-rose-700 dark:text-rose-300 font-bold">
+            ⚠️ PERINGATAN: Tindakan ini bersifat permanen dan tidak dapat dibatalkan!
+          </div>
+        </div>
+      ),
+      confirmText: `Ya, Hapus Semua ${typeLabel} (${count})`,
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await fetch('/api/network-nodes/delete-all', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+            },
+            body: JSON.stringify({
+              node_type: type,
+              scoped_olt_id: scopedOltId ? parseInt(scopedOltId) : null,
+            }),
+          });
+          const data = await res.json();
+          closeConfirm();
+          if (res.ok && data.status === 'success') {
+            showToast(`🗑️ ${data.message}`);
+            refreshAll();
+          } else {
+            showToast(`❌ ${data.message || 'Gagal menghapus data'}`, 'error');
+          }
+        } catch (err) {
+          closeConfirm();
+          showToast(`❌ Gagal menghapus: ${err.message}`, 'error');
+        }
+      },
+    });
+  };
+
   const totalCores = popCables.reduce((a, c) => a + c.core_count_total, 0);
   const usedCores = popCables.reduce((a, c) => a + (c.cores ?? []).filter(cr => cr.status === 'used').length, 0);
 
@@ -4882,6 +4967,7 @@ export default function NetworkInfrastructure() {
           onAddMsNode={() => setModalAddNode({ type: 'ODP', isMsCreation: true })}
           onEditNode={node => setModalAddNode({ type: node.is_ms_node ? 'ODP' : 'ODC', editNode: node })}
           onDeleteNode={handleDeleteNode}
+          onDeleteAllNodes={handleDeleteAllNodes}
           refreshKey={refreshKey}
           onRefreshGlobal={refreshAll}
           scopedOltId={scopedOltId}
@@ -4894,6 +4980,7 @@ export default function NetworkInfrastructure() {
           onAddNode={t => setModalAddNode({ type: t })}
           onEditNode={node => setModalAddNode({ type: 'ODP', editNode: node })}
           onDeleteNode={handleDeleteNode}
+          onDeleteAllNodes={handleDeleteAllNodes}
           refreshKey={refreshKey}
           onRefreshGlobal={refreshAll}
         />

@@ -101,6 +101,7 @@ Route::post('/fault-tracing/dispatch-telegram', [FaultTracingController::class, 
 Route::get('/fault-tracing/optical-diagnostics', [FaultTracingController::class, 'opticalDiagnostics']);
 
 // Network Infrastructure Resources — Topologi Hierarki Fiber FTTH & Core Matrix
+Route::get('gis/map-data',                               [NetworkNodeController::class, 'gisMapData']);
 Route::get('network-nodes/stats',                        [NetworkNodeController::class, 'stats']);
 Route::get('network-nodes/hierarchy',                    [NetworkNodeController::class, 'hierarchy']);
 Route::get('network-nodes/splitter-types',               [NetworkNodeController::class, 'splitterTypes']);
@@ -112,9 +113,12 @@ Route::get('network-nodes/{networkNode}/odc-ports',      [NetworkNodeController:
 Route::get('network-nodes/{networkNode}/pop-cables',     [NetworkCableController::class, 'popCables']);
 Route::put('network-cable-cores/{networkCableCore}',     [NetworkCableController::class, 'updateCore']);
 Route::put('network-cables/{networkCable}/route',            [NetworkCableController::class, 'updateRoute']);
+Route::delete('network-nodes/delete-all',                 [NetworkNodeController::class, 'deleteAll']);
 Route::apiResource('network-nodes', NetworkNodeController::class);
 Route::apiResource('network-ports', NetworkPortController::class);
 Route::apiResource('network-splitters', NetworkSplitterController::class);
+Route::get('network-cables/stats',                         [NetworkCableController::class, 'stats']);
+Route::delete('network-cables/delete-all',                 [NetworkCableController::class, 'deleteAll']);
 Route::apiResource('network-cables', NetworkCableController::class);
 Route::apiResource('network-cable-cores', NetworkCableCoreController::class);
 Route::apiResource('ont-registrations', OntRegistrationController::class);
@@ -130,6 +134,9 @@ Route::get('service-packages', function () {
 });
 Route::get('customers/unmapped-onus', [CustomerController::class, 'unmappedOnus']);
 Route::post('customers/batch-provision', [CustomerController::class, 'batchProvision']);
+Route::post('customers/sobok/scrape', [\App\Http\Controllers\SobokImportController::class, 'scrape']);
+Route::post('customers/sobok/import-single', [\App\Http\Controllers\SobokImportController::class, 'importSingle']);
+Route::post('customers/sobok/import-batch', [\App\Http\Controllers\SobokImportController::class, 'importBatch']);
 Route::post('customers/{id}/swap-onu', [CustomerController::class, 'swapOnu']);
 Route::match(['get', 'post'], 'customers/{id}/diagnostics', [CustomerController::class, 'diagnostics']);
 Route::apiResource('customers', CustomerController::class);

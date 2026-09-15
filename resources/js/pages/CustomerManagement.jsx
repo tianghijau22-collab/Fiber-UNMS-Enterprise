@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -7,6 +7,265 @@ import SearchableFilterDropdown from '../components/SearchableFilterDropdown';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
 import FtthFlowTopology from '../components/FtthFlowTopology.jsx';
+import SobokScraperModal from '../components/SobokScraperModal.jsx';
+
+// Memoized single row component for ultra-fast, zero-delay typing in Auto-Discovery
+const UnmappedOnuCard = React.memo(function UnmappedOnuCard({
+  item,
+  odpOptions,
+  defaultOdpId,
+  onProvision,
+  isSubmitting,
+  odpPortsCache,
+  onFetchPorts,
+}) {
+  const [customerNumber, setCustomerNumber] = useState('');
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('Solok, Sumatera Barat');
+  const [odpId, setOdpId] = useState(defaultOdpId || '');
+  const [odpPortNumber, setOdpPortNumber] = useState('');
+
+  // Fetch ports when odpId is set or changed
+  useEffect(() => {
+    if (odpId && onFetchPorts) {
+      onFetchPorts(odpId);
+    }
+  }, [odpId, onFetchPorts]);
+
+  const currentPorts = useMemo(() => {
+    if (!odpId || !odpPortsCache) return null;
+    return odpPortsCache[odpId] || null;
+  }, [odpPortsCache, odpId]);
+
+  const availablePortsCount = useMemo(() => {
+    if (!currentPorts) return 0;
+    return currentPorts.filter(p => {
+      const isOccupied = !!(
+        p.customer_service_id ||
+        p.customer_id ||
+        p.status === 'used' ||
+        p.status === 'connected' ||
+        (p.customer_name_cache && p.customer_name_cache.trim())
+      );
+      return !isOccupied;
+    }).length;
+  }, [currentPorts]);
+
+  // When ports load or change, auto-select the first available port if current is empty or occupied
+  useEffect(() => {
+    if (currentPorts && currentPorts.length > 0) {
+      const isCurrentValid = odpPortNumber && currentPorts.some(p => {
+        const isOccupied = !!(
+          p.customer_service_id ||
+          p.customer_id ||
+          p.status === 'used' ||
+          p.status === 'connected' ||
+          (p.customer_name_cache && p.customer_name_cache.trim())
+        );
+        return String(p.port_number) === String(odpPortNumber) && !isOccupied;
+      });
+
+      if (!isCurrentValid) {
+        const firstFree = currentPorts.find(p => {
+          const isOccupied = !!(
+            p.customer_service_id ||
+            p.customer_id ||
+            p.status === 'used' ||
+            p.status === 'connected' ||
+            (p.customer_name_cache && p.customer_name_cache.trim())
+          );
+          return !isOccupied;
+        });
+        if (firstFree) {
+          setOdpPortNumber(String(firstFree.port_number));
+        } else {
+          setOdpPortNumber('');
+        }
+      }
+    }
+  }, [currentPorts, odpPortNumber]);
+
+  const isOdpFull = odpId && currentPorts && availablePortsCount === 0;
+
+  const handleProvision = (e) => {
+    e.preventDefault();
+    if (!name.trim() || !odpPortNumber || isOdpFull) return;
+    onProvision(item, {
+      customer_number: customerNumber,
+      name,
+      address,
+      odp_id: odpId,
+      odp_port_number: odpPortNumber,
+    });
+  };
+
+  return (
+    <div className="p-4 bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3 transition-colors">
+      {/* Row 1: ONU Info Badge */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-teal-50 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+            {item.vendor || 'ONU'} {item.model || ''}
+          </span>
+          <span className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
+            {item.serial_number}
+          </span>
+          <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+            ({item.olt_name || 'OLT'} - Port {item.gpon_port || '—'})
+          </span>
+        </div>
+
+        <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+          Rx: {item.rx_power != null ? `${item.rx_power} dBm` : '—'}
+        </span>
+      </div>
+
+      {/* Row 2: Mapping Form Controls */}
+      <div className="space-y-2.5 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          {/* ID Pelanggan */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">ID Pelanggan (ID ISP)</label>
+            <input
+              type="text"
+              placeholder="misal: CMN 0001"
+              value={customerNumber}
+              onChange={e => setCustomerNumber(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          {/* Nama Pelanggan */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Pelanggan *</label>
+            <input
+              type="text"
+              required
+              placeholder="misal: Budi Santoso"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          {/* Daerah / Alamat Pemasangan */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Daerah / Alamat Pemasangan</label>
+            <input
+              type="text"
+              placeholder="misal: Koto Baru, Solok"
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+
+        {/* Line 2: Searchable ODP, Port ODP, Button */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
+          {/* Searchable ODP Dropdown */}
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Pilih Node ODP (Search)</label>
+            <SearchableSelect
+              value={odpId}
+              onChange={val => {
+                setOdpId(val);
+                setOdpPortNumber('');
+              }}
+              placeholder="-- Pilih Node ODP --"
+              searchPlaceholder="Cari nama ODP..."
+              options={odpOptions}
+            />
+          </div>
+
+          {/* Port ODP */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-bold text-slate-700 dark:text-slate-300">Port ODP *</label>
+              {currentPorts && (
+                <span className={`text-[10px] font-bold ${availablePortsCount > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                  {availablePortsCount > 0 ? `${availablePortsCount} Tersedia` : 'Semua Terisi'}
+                </span>
+              )}
+            </div>
+
+            <select
+              value={odpPortNumber}
+              onChange={e => setOdpPortNumber(e.target.value)}
+              disabled={!odpId || !currentPorts || isOdpFull}
+              className={`w-full px-3 py-2.5 rounded-xl border ${
+                isOdpFull
+                  ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+                  : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white'
+              } focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold disabled:opacity-60 cursor-pointer`}
+            >
+              {!odpId ? (
+                <option value="">-- Pilih ODP dahulu --</option>
+              ) : !currentPorts ? (
+                <option value="">Memuat port ODP...</option>
+              ) : isOdpFull ? (
+                <option value="">⚠️ Semua Port ODP Penuh ({currentPorts.length}/{currentPorts.length})</option>
+              ) : (
+                <>
+                  <option value="">-- Pilih Port --</option>
+                  {currentPorts.map(p => {
+                    const isOccupied = !!(
+                      p.customer_service_id ||
+                      p.customer_id ||
+                      p.status === 'used' ||
+                      p.status === 'connected' ||
+                      (p.customer_name_cache && p.customer_name_cache.trim())
+                    );
+                    const occupant = p.customer_name || p.customer_name_cache || 'Terisi';
+                    return (
+                      <option
+                        key={p.id || p.port_number}
+                        value={p.port_number}
+                        disabled={isOccupied}
+                        className={isOccupied ? 'text-slate-400 bg-slate-100 dark:bg-slate-800' : 'text-slate-900 dark:text-white font-bold'}
+                      >
+                        Port {p.port_number} {isOccupied ? `(Terisi: ${occupant}) ❌` : `(Tersedia) ✅`}
+                      </option>
+                    );
+                  })}
+                </>
+              )}
+            </select>
+          </div>
+
+          {/* Button */}
+          <div>
+            <button
+              type="button"
+              onClick={handleProvision}
+              disabled={isSubmitting || !name.trim() || !odpPortNumber || isOdpFull}
+              className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Menghubungkan...</span>
+                </>
+              ) : isOdpFull ? (
+                <span>⚠️ ODP Penuh</span>
+              ) : (
+                <span>Konekkan ODP {odpPortNumber ? `(Port ${odpPortNumber})` : ''}</span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Warning if ODP is full */}
+        {isOdpFull && (
+          <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-xl border border-rose-200 dark:border-rose-800 flex items-center gap-1.5">
+            <span>⚠️</span>
+            <span>Seluruh port ({currentPorts.length}/{currentPorts.length}) pada ODP ini sudah terisi. Silakan pilih ODP lain yang memiliki port kosong agar data pelanggan tidak berdempet.</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
 
 export default function CustomerManagement() {
   const { hasRole } = useAuth();
@@ -85,10 +344,70 @@ export default function CustomerManagement() {
 
   // OLT Auto-Discovery Wizard State
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
+  const [showSobokModal, setShowSobokModal] = useState(false);
   const [unmappedOnus, setUnmappedOnus] = useState([]);
   const [loadingDiscovery, setLoadingDiscovery] = useState(false);
-  const [provisionForms, setProvisionForms] = useState({});
-  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [discoverySearch, setDiscoverySearch] = useState('');
+  const [discoveryPage, setDiscoveryPage] = useState(1);
+  const [submittingSn, setSubmittingSn] = useState(null);
+  const DISCOVERY_PER_PAGE = 15;
+
+  // Shared ODP Ports cache to avoid redundant network requests across cards & modals
+  const [odpPortsCache, setOdpPortsCache] = useState({});
+  const pendingOdpFetches = useRef(new Set());
+
+  const fetchPortsForOdp = useCallback((nodeId) => {
+    if (!nodeId || odpPortsCache[nodeId] || pendingOdpFetches.current.has(nodeId)) return;
+    pendingOdpFetches.current.add(nodeId);
+
+    fetch(`/api/network-nodes/${nodeId}/port-detail`)
+      .then(r => r.json())
+      .then(d => {
+        const ports = d.ports ?? [];
+        setOdpPortsCache(prev => ({ ...prev, [nodeId]: ports }));
+      })
+      .catch(err => {
+        console.error('Error fetching ports for ODP', nodeId, err);
+      })
+      .finally(() => {
+        pendingOdpFetches.current.delete(nodeId);
+      });
+  }, [odpPortsCache]);
+
+  const odpSelectOptions = useMemo(() => {
+    return odpNodes.map(odp => {
+      const used = odp.used_ports || 0;
+      const total = odp.total_ports || 8;
+      const free = Math.max(0, total - used);
+      const isFull = used >= total;
+      return {
+        value: odp.id,
+        label: `${odp.name} ${isFull ? '🔴 (PENUH)' : `🟢 (${free} Port Kosong)`}`,
+        sublabel: `Kapasitas: ${used}/${total} Port Terpakai ${isFull ? '— SUDAH PENUH' : `(Sisa ${free} Port)`}`
+      };
+    });
+  }, [odpNodes]);
+
+  const filteredUnmappedOnus = useMemo(() => {
+    if (!discoverySearch.trim()) return unmappedOnus;
+    const q = discoverySearch.toLowerCase().trim();
+    return unmappedOnus.filter(o => {
+      const sn = (o.serial_number || '').toLowerCase();
+      const vendor = (o.vendor || '').toLowerCase();
+      const model = (o.model || '').toLowerCase();
+      const olt = (o.olt_name || '').toLowerCase();
+      const port = (o.gpon_port || '').toLowerCase();
+      return sn.includes(q) || vendor.includes(q) || model.includes(q) || olt.includes(q) || port.includes(q);
+    });
+  }, [unmappedOnus, discoverySearch]);
+
+  const totalDiscoveryPages = Math.max(1, Math.ceil(filteredUnmappedOnus.length / DISCOVERY_PER_PAGE));
+
+  const paginatedUnmappedOnus = useMemo(() => {
+    const start = (discoveryPage - 1) * DISCOVERY_PER_PAGE;
+    return filteredUnmappedOnus.slice(start, start + DISCOVERY_PER_PAGE);
+  }, [filteredUnmappedOnus, discoveryPage]);
+
 
   // Custom Confirm Dialog State
   const [confirmDialog, setConfirmDialog] = useState({
@@ -170,7 +489,7 @@ export default function CustomerManagement() {
   // Fetch ODP Nodes
   const fetchOdpNodes = useCallback(async () => {
     try {
-      const r = await fetch('/api/network-nodes?type=ODP');
+      const r = await fetch('/api/network-nodes?type=ODP&per_page=10000');
       const d = await r.json();
       if (d.data) setOdpNodes(d.data);
     } catch {
@@ -181,7 +500,7 @@ export default function CustomerManagement() {
   // Fetch ODC Nodes
   const fetchOdcNodes = useCallback(async () => {
     try {
-      const r = await fetch('/api/network-nodes?type=ODC');
+      const r = await fetch('/api/network-nodes?type=ODC&per_page=10000');
       const d = await r.json();
       if (d.data) setOdcNodes(d.data);
     } catch {
@@ -229,7 +548,7 @@ export default function CustomerManagement() {
     ]);
   }, [fetchCustomers, fetchOdpNodes, fetchOdcNodes, fetchOlts, fetchServicePackages]);
 
-  const isAnyModalOpen = showModal || showDiagnosticsModal || showDiscoveryModal || confirmDialog.isOpen;
+  const isAnyModalOpen = showModal || showDiagnosticsModal || showDiscoveryModal || showSobokModal || confirmDialog.isOpen;
 
   // Background polling specifically targets customer list & redaman (ultra fast & silent)
   const silentCustomerPoll = useCallback(async (silent = true) => {
@@ -245,23 +564,12 @@ export default function CustomerManagement() {
   // Fetch Unmapped ONUs from OLT Devices
   const fetchUnmappedOnus = async () => {
     setLoadingDiscovery(true);
+    setDiscoverySearch('');
+    setDiscoveryPage(1);
     try {
       const res = await fetch('/api/customers/unmapped-onus');
       const d = await res.json();
-      const onus = d.data ?? [];
-      setUnmappedOnus(onus);
-
-      const initialForms = {};
-      onus.forEach(o => {
-        initialForms[o.serial_number] = {
-          customer_number: '',
-          name: '',
-          address: 'Solok, Sumatera Barat',
-          odp_id: odpNodes.length > 0 ? odpNodes[0].id : '',
-          odp_port_number: '1',
-        };
-      });
-      setProvisionForms(initialForms);
+      setUnmappedOnus(d.data ?? []);
     } catch (e) {
       console.error('Error fetching unmapped ONUs:', e);
     } finally {
@@ -274,14 +582,17 @@ export default function CustomerManagement() {
     fetchUnmappedOnus();
   };
 
-  const handleSingleProvision = async (onu) => {
-    const itemData = provisionForms[onu.serial_number];
+  const handleSingleProvision = async (onu, itemData) => {
     if (!itemData || !itemData.name.trim()) {
       showToastMsg('Harap masukkan nama pelanggan terlebih dahulu!', 'error');
       return;
     }
+    if (!itemData.odp_port_number) {
+      showToastMsg('Harap pilih Port ODP yang masih tersedia!', 'error');
+      return;
+    }
 
-    setBatchSubmitting(true);
+    setSubmittingSn(onu.serial_number);
     try {
       const res = await fetch('/api/customers/batch-provision', {
         method: 'POST',
@@ -301,20 +612,44 @@ export default function CustomerManagement() {
       const d = await res.json();
       if (d.status === 'success') {
         showToastMsg(`Pelanggan ${itemData.name} berhasil terhubung dari OLT ke ODP!`);
-        fetchCustomers();
+        fetchCustomers(true);
+        fetchOdpNodes();
         setUnmappedOnus(prev => prev.filter(o => o.serial_number !== onu.serial_number));
+
+        // Instantly mark port as occupied in cache
+        if (itemData.odp_id && itemData.odp_port_number) {
+          setOdpPortsCache(prev => {
+            const ports = prev[itemData.odp_id];
+            if (!ports) return prev;
+            return {
+              ...prev,
+              [itemData.odp_id]: ports.map(p => {
+                if (String(p.port_number) === String(itemData.odp_port_number)) {
+                  return {
+                    ...p,
+                    status: 'used',
+                    customer_name: itemData.name,
+                    customer_name_cache: itemData.name,
+                    customer_service_id: 999999,
+                  };
+                }
+                return p;
+              })
+            };
+          });
+        }
       } else {
         showToastMsg(d.message || 'Gagal meregister pelanggan', 'error');
       }
     } catch (e) {
       showToastMsg('Terjadi kesalahan koneksi server', 'error');
     } finally {
-      setBatchSubmitting(false);
+      setSubmittingSn(null);
     }
   };
 
   // Fetch Ports when an ODP is selected in the modal
-  const fetchOdpPorts = async (nodeId) => {
+  const fetchOdpPorts = async (nodeId, keepPort = false) => {
     if (!nodeId) {
       setOdpPorts([]);
       return;
@@ -323,7 +658,37 @@ export default function CustomerManagement() {
     try {
       const r = await fetch(`/api/network-nodes/${nodeId}/port-detail`);
       const d = await r.json();
-      setOdpPorts(d.ports ?? []);
+      const ports = d.ports ?? [];
+      setOdpPorts(ports);
+      // Sync to shared cache
+      setOdpPortsCache(prev => ({ ...prev, [nodeId]: ports }));
+
+      // Auto-select first available port if not in edit mode
+      if (!keepPort) {
+        const firstFree = ports.find(p => {
+          const isOccupied = !!(
+            p.customer_service_id ||
+            p.customer_id ||
+            p.status === 'used' ||
+            p.status === 'connected' ||
+            (p.customer_name_cache && p.customer_name_cache.trim())
+          );
+          return !isOccupied;
+        });
+        if (firstFree) {
+          setForm(f => ({
+            ...f,
+            odp_port_number: String(firstFree.port_number),
+            odp_port_id: firstFree.id || '',
+          }));
+        } else {
+          setForm(f => ({
+            ...f,
+            odp_port_number: '',
+            odp_port_id: '',
+          }));
+        }
+      }
     } catch {
       setOdpPorts([]);
     } finally {
@@ -333,8 +698,8 @@ export default function CustomerManagement() {
 
   const handleOdpChange = (e) => {
     const odpId = e.target.value;
-    setForm(f => ({ ...f, odp_id: odpId, odp_port_number: '' }));
-    fetchOdpPorts(odpId);
+    setForm(f => ({ ...f, odp_id: odpId, odp_port_number: '', odp_port_id: '' }));
+    fetchOdpPorts(odpId, false);
   };
 
   // ─── Auto-open Add Customer modal if navigated from OLT Belum Terdaftar ──
@@ -392,7 +757,7 @@ export default function CustomerManagement() {
     setFormErr(null);
     setShowModal(true);
     if (c.odp_id) {
-      fetchOdpPorts(c.odp_id);
+      fetchOdpPorts(c.odp_id, true);
     } else {
       setOdpPorts([]);
     }
@@ -619,6 +984,13 @@ export default function CustomerManagement() {
     ...availableOdps.map(odp => ({ value: odp.id, label: odp.name }))
   ], [availableOdps, filterOlt, filterOdc]);
 
+  // Complete, naturally sorted list of all ODPs for Sobok Scraper & Manual Assignment
+  const allOdpListOptions = useMemo(() => {
+    return [...odpNodes]
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }))
+      .map(odp => ({ value: odp.id, label: odp.name }));
+  }, [odpNodes]);
+
   const statusOptions = useMemo(() => [
     { value: 'all', label: 'Semua Status' },
     { value: 'Online', label: '🟢 Online' },
@@ -706,6 +1078,13 @@ export default function CustomerManagement() {
           />
           {canCrud && (
             <>
+              <button
+                type="button"
+                onClick={() => setShowSobokModal(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>⚡ Tarik Data Sobok</span>
+              </button>
               <button
                 type="button"
                 onClick={handleOpenDiscoveryModal}
@@ -950,10 +1329,18 @@ export default function CustomerManagement() {
                         {/* 3. ODC & ODP */}
                         <td className="px-4 py-3.5 text-slate-700 dark:text-slate-300">
                           {c.odp_name ? (
-                            <span>
-                              {c.odc_name ? `${c.odc_name} / ` : ''}
-                              <strong>{c.odp_name}</strong>
-                            </span>
+                            <div className="flex flex-col gap-0.5">
+                              <span>
+                                {c.odc_name ? `${c.odc_name} / ` : ''}
+                                <strong>{c.odp_name}</strong>
+                              </span>
+                              {c.odp_port_number && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                  Port {c.odp_port_number}
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-slate-400 italic">Belum terhubung</span>
                           )}
@@ -1092,7 +1479,17 @@ export default function CustomerManagement() {
                     <div className="px-4 py-2.5 grid grid-cols-3 gap-2">
                       <span className="text-slate-400">ODC / ODP</span>
                       <span className="col-span-2 text-slate-800 dark:text-slate-200 font-medium">
-                        {c.odp_name ? `${c.odc_name ? `${c.odc_name} / ` : ''}${c.odp_name}` : '—'}
+                        {c.odp_name ? (
+                          <span>
+                            {c.odc_name ? `${c.odc_name} / ` : ''}
+                            <strong>{c.odp_name}</strong>
+                            {c.odp_port_number && (
+                              <span className="ml-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                                (Port {c.odp_port_number})
+                              </span>
+                            )}
+                          </span>
+                        ) : '—'}
                       </span>
                     </div>
 
@@ -1296,18 +1693,25 @@ export default function CustomerManagement() {
                       }}
                       placeholder="-- Pilih ODP --"
                       searchPlaceholder="Cari nama ODP..."
-                      options={odpNodes.map(odp => ({
-                        value: odp.id,
-                        label: odp.name,
-                        sublabel: `Kapasitas: ${odp.used_ports}/${odp.total_ports} Port Terpakai`
-                      }))}
+                      options={odpSelectOptions}
                     />
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1 text-[11px]">
-                      Port ODP *
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide text-[11px]">
+                        Port ODP *
+                      </label>
+                      {odpPorts.length > 0 && (
+                        <span className={`text-[10px] font-bold ${
+                          odpPorts.some(p => !p.customer_id && !p.customer_service_id && p.status !== 'used' && p.status !== 'connected' && (!p.customer_name_cache || !p.customer_name_cache.trim()))
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-rose-500'
+                        }`}>
+                          {odpPorts.filter(p => !p.customer_id && !p.customer_service_id && p.status !== 'used' && p.status !== 'connected' && (!p.customer_name_cache || !p.customer_name_cache.trim())).length} Port Tersedia
+                        </span>
+                      )}
+                    </div>
                     <select
                       value={form.odp_port_number}
                       disabled={!form.odp_id || loadingPorts}
@@ -1320,27 +1724,47 @@ export default function CustomerManagement() {
                           odp_port_id: selectedPortObj?.id || '',
                         }));
                       }}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 font-medium"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 font-medium cursor-pointer"
                     >
                       <option value="">-- Pilih Port --</option>
                       {loadingPorts ? (
                         <option disabled>Memuat port ODP...</option>
                       ) : (
                         odpPorts.map(p => {
-                          const isOccupied = !!(p.customer_id || p.customer_service_id || p.status === 'used');
-                          const isCurrentCustomer = editingCustomer && p.customer_name_cache === editingCustomer.name;
+                          const isOccupied = !!(
+                            p.customer_id ||
+                            p.customer_service_id ||
+                            p.status === 'used' ||
+                            p.status === 'connected' ||
+                            (p.customer_name_cache && p.customer_name_cache.trim())
+                          );
+                          const occupantName = p.customer_name || p.customer_name_cache || 'Terisi';
+                          const isCurrentCustomer = editingCustomer && (
+                            p.customer_id === editingCustomer.id ||
+                            p.customer_name_cache === editingCustomer.name ||
+                            (editingCustomer.customer_number && p.customer_number === editingCustomer.customer_number)
+                          );
                           return (
                             <option
                               key={p.id}
                               value={p.port_number}
                               disabled={isOccupied && !isCurrentCustomer}
                             >
-                              Port {p.port_number} {isOccupied ? (isCurrentCustomer ? '(Port Saat Ini)' : `(Terisi: ${p.customer_name || p.customer_name_cache})`) : '(Tersedia)'}
+                              Port {p.port_number} {isOccupied ? (isCurrentCustomer ? '🔹 (Port Pelanggan Ini Saat Ini)' : `❌ (Terisi: ${occupantName})`) : '✅ (Tersedia)'}
                             </option>
                           );
                         })
                       )}
                     </select>
+                    {form.odp_id && odpPorts.length > 0 && odpPorts.every(p => {
+                      const isOccupied = !!(p.customer_id || p.customer_service_id || p.status === 'used' || p.status === 'connected' || (p.customer_name_cache && p.customer_name_cache.trim()));
+                      const isCurrentCustomer = editingCustomer && (p.customer_id === editingCustomer.id || p.customer_name_cache === editingCustomer.name);
+                      return isOccupied && !isCurrentCustomer;
+                    }) && (
+                      <p className="text-[11px] font-bold text-rose-500 mt-1">
+                        ⚠️ Semua port pada ODP ini sudah terisi penuh! Silakan pilih ODP lain.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1421,7 +1845,7 @@ export default function CustomerManagement() {
         <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
           <div className="relative w-full max-w-4xl bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-h-[88vh] overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in duration-150">
             {/* Header */}
-            <div className="bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-200 dark:border-slate-800 text-slate-950 dark:text-white flex items-center justify-between">
+            <div className="bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-200 dark:border-slate-800 text-slate-950 dark:text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-lg">
                   ⚡
@@ -1442,8 +1866,78 @@ export default function CustomerManagement() {
               </button>
             </div>
 
+            {/* Filter / Search & Pagination Bar */}
+            <div className="px-6 py-3 bg-slate-50/80 dark:bg-slate-800/40 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="relative flex-1 min-w-[240px] max-w-md">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  placeholder="Cari SN, vendor, model, OLT, atau port..."
+                  value={discoverySearch}
+                  onChange={(e) => {
+                    setDiscoverySearch(e.target.value);
+                    setDiscoveryPage(1);
+                  }}
+                  className="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-950 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                {discoverySearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscoverySearch('');
+                      setDiscoveryPage(1);
+                    }}
+                    className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  {filteredUnmappedOnus.length > 0 ? (
+                    <>
+                      Menampilkan <span className="font-bold text-slate-900 dark:text-white">{(discoveryPage - 1) * DISCOVERY_PER_PAGE + 1}</span> - <span className="font-bold text-slate-900 dark:text-white">{Math.min(discoveryPage * DISCOVERY_PER_PAGE, filteredUnmappedOnus.length)}</span> dari <span className="font-bold text-emerald-600 dark:text-emerald-400">{filteredUnmappedOnus.length}</span>
+                      {discoverySearch && ` (total ${unmappedOnus.length})`}
+                    </>
+                  ) : (
+                    `0 modem ditemukan`
+                  )}
+                </span>
+
+                {totalDiscoveryPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={discoveryPage <= 1}
+                      onClick={() => setDiscoveryPage(p => Math.max(1, p - 1))}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      ◀ Prev
+                    </button>
+                    <span className="text-xs font-mono font-bold px-2 text-slate-700 dark:text-slate-300">
+                      {discoveryPage} / {totalDiscoveryPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={discoveryPage >= totalDiscoveryPages}
+                      onClick={() => setDiscoveryPage(p => Math.min(totalDiscoveryPages, p + 1))}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      Next ▶
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Content Body */}
-            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+            <div className="p-6 overflow-y-auto flex-1 space-y-3">
               {loadingDiscovery ? (
                 <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-3">
                   <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
@@ -1459,171 +1953,67 @@ export default function CustomerManagement() {
                     Semua SN ONU modem yang aktif di OLT sudah terhubung dengan data Pelanggan &amp; Port ODP.
                   </p>
                 </div>
+              ) : filteredUnmappedOnus.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-2 text-base">
+                    🔍
+                  </div>
+                  <p className="font-semibold text-slate-700 dark:text-slate-300">Tidak ada modem yang cocok dengan kata kunci</p>
+                  <p className="mt-1 text-slate-400">Coba ubah kata kunci pencarian SN, Vendor, atau OLT.</p>
+                </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider pb-2 border-b border-slate-100 dark:border-slate-800">
-                    <span>Modem ONU Ditemukan di OLT ({unmappedOnus.length})</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 text-[11px]">Siap Dipetakan ke ODP</span>
-                  </div>
-
-                  <div className="space-y-3">
-                    {unmappedOnus.map(item => {
-                      const formVal = provisionForms[item.serial_number] || { customer_number: '', name: '', address: 'Solok, Sumatera Barat', odp_id: '', odp_port_number: '1' };
-
-                      return (
-                        <div key={item.serial_number} className="p-4 bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-3 transition-colors">
-                          {/* Row 1: ONU Info Badge */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2.5 py-0.5 rounded-md text-[10px] font-extrabold bg-teal-50 dark:bg-teal-950/80 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
-                                {item.vendor} {item.model}
-                              </span>
-                              <span className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                                {item.serial_number}
-                              </span>
-                              <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                                ({item.olt_name} - Port {item.gpon_port})
-                              </span>
-                            </div>
-
-                            <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                              Rx: {item.rx_power} dBm
-                            </span>
-                          </div>
-
-                          {/* Row 2: Mapping Form Controls */}
-                          <div className="space-y-2.5 text-xs">
-                            {/* Line 1: ID Pelanggan, Nama, Alamat */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                              {/* ID Pelanggan */}
-                              <div>
-                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">ID Pelanggan (ID ISP)</label>
-                                <input
-                                  type="text"
-                                  placeholder="misal: CMN 0001"
-                                  value={formVal.customer_number || ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    setProvisionForms(prev => ({
-                                      ...prev,
-                                      [item.serial_number]: { ...prev[item.serial_number], customer_number: val }
-                                    }));
-                                  }}
-                                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                              </div>
-
-                              {/* Nama Pelanggan */}
-                              <div>
-                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nama Pelanggan *</label>
-                                <input
-                                  type="text"
-                                  placeholder="misal: Budi Santoso"
-                                  value={formVal.name || ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    setProvisionForms(prev => ({
-                                      ...prev,
-                                      [item.serial_number]: { ...prev[item.serial_number], name: val }
-                                    }));
-                                  }}
-                                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                              </div>
-
-                              {/* Daerah / Alamat Pemasangan */}
-                              <div>
-                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Daerah / Alamat Pemasangan</label>
-                                <input
-                                  type="text"
-                                  placeholder="misal: Koto Baru, Solok"
-                                  value={formVal.address || ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    setProvisionForms(prev => ({
-                                      ...prev,
-                                      [item.serial_number]: { ...prev[item.serial_number], address: val }
-                                    }));
-                                  }}
-                                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Line 2: Searchable ODP, Port ODP, Button */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
-                              {/* Searchable ODP Dropdown */}
-                              <div>
-                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Pilih Node ODP (Search)</label>
-                                <SearchableSelect
-                                  value={formVal.odp_id || ''}
-                                  onChange={val => {
-                                    setProvisionForms(prev => ({
-                                      ...prev,
-                                      [item.serial_number]: { ...prev[item.serial_number], odp_id: val }
-                                    }));
-                                  }}
-                                  placeholder="-- Pilih Node ODP --"
-                                  searchPlaceholder="Cari nama ODP..."
-                                  options={odpNodes.map(odp => ({
-                                    value: odp.id,
-                                    label: odp.name,
-                                    sublabel: `Kapasitas: ${odp.used_ports}/${odp.total_ports} Port Terpakai`
-                                  }))}
-                                />
-                              </div>
-
-                              {/* Port ODP */}
-                              <div>
-                                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Port ODP</label>
-                                <select
-                                  value={formVal.odp_port_number || '1'}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    setProvisionForms(prev => ({
-                                      ...prev,
-                                      [item.serial_number]: { ...prev[item.serial_number], odp_port_number: val }
-                                    }));
-                                  }}
-                                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
-                                >
-                                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16].map(pNum => (
-                                    <option key={pNum} value={pNum}>Port {pNum}</option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              {/* Button */}
-                              <div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSingleProvision(item)}
-                                  disabled={batchSubmitting || !formVal.name.trim()}
-                                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                                >
-                                  <span>Konekkan ODP</span>
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {paginatedUnmappedOnus.map(item => (
+                    <UnmappedOnuCard
+                      key={item.serial_number}
+                      item={item}
+                      odpOptions={odpSelectOptions}
+                      defaultOdpId={odpNodes[0]?.id}
+                      onProvision={handleSingleProvision}
+                      isSubmitting={submittingSn === item.serial_number}
+                      odpPortsCache={odpPortsCache}
+                      onFetchPorts={fetchPortsForOdp}
+                    />
+                  ))}
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs shrink-0">
               <span className="text-slate-500 dark:text-slate-400">Auto-Discovery Sync OLT Active Engine</span>
-              <button
-                type="button"
-                onClick={() => setShowDiscoveryModal(false)}
-                className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
-              >
-                Tutup
-              </button>
+              <div className="flex items-center gap-3">
+                {totalDiscoveryPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={discoveryPage <= 1}
+                      onClick={() => setDiscoveryPage(p => Math.max(1, p - 1))}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      ◀ Prev
+                    </button>
+                    <span className="text-xs font-mono font-bold px-2 text-slate-700 dark:text-slate-300">
+                      {discoveryPage} / {totalDiscoveryPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={discoveryPage >= totalDiscoveryPages}
+                      onClick={() => setDiscoveryPage(p => Math.min(totalDiscoveryPages, p + 1))}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      Next ▶
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowDiscoveryModal(false)}
+                  className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
           </div>
         </div>,
@@ -1883,6 +2273,18 @@ export default function CustomerManagement() {
         </div>,
         document.body
       )}
+
+      {/* Sobok Scraper & Import Modal */}
+      <SobokScraperModal
+        isOpen={showSobokModal}
+        onClose={() => setShowSobokModal(false)}
+        odpOptions={allOdpListOptions}
+        onCustomerImported={(newCust) => {
+          showToastMsg(`Pelanggan ${newCust.name} (${newCust.customer_number}) berhasil ditambahkan ke sistem!`);
+          fetchCustomers(true);
+          fetchOdpNodes();
+        }}
+      />
 
       {/* Confirm Dialog */}
       <ConfirmDialog

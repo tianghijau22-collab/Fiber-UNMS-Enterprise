@@ -244,16 +244,19 @@ class HuaweiDriver implements OltDeviceDriverInterface
         return true;
     }
 
-    public function getOnuOpticalPower(string $serialNumber): array
+    public function getOnuOpticalPower(string $serialNumber, ?string $port = null, ?int $onuId = null): array
     {
         return [
             'serial_number'    => $serialNumber,
+            'port'             => $port,
+            'onu_id'           => $onuId,
             'rx_power_dbm'     => -19.80,
             'tx_power_dbm'     => 2.15,
             'olt_rx_power_dbm' => -19.20,
             'voltage_v'        => 3.29,
             'bias_current_ma'  => 13.8,
             'temperature_c'    => 39.5,
+            'distance_meters'  => 850,
             'status'           => 'Normal',
         ];
     }

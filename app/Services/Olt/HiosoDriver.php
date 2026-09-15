@@ -66,15 +66,18 @@ class HiosoDriver implements OltDeviceDriverInterface {
         return true;
     }
 
-    public function getOnuOpticalPower(string $serialNumber): array {
+    public function getOnuOpticalPower(string $serialNumber, ?string $port = null, ?int $onuId = null): array {
         return [
             'serial_number' => $serialNumber,
+            'port' => $port,
+            'onu_id' => $onuId,
             'rx_power_dbm' => -22.40,
             'tx_power_dbm' => 1.80,
             'olt_rx_power_dbm' => -21.90,
             'voltage_v' => 3.25,
             'bias_current_ma' => 15.0,
             'temperature_c' => 43.0,
+            'distance_meters' => 850,
             'status' => 'Normal',
         ];
     }

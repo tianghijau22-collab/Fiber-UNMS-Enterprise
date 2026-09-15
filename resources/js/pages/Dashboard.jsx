@@ -307,8 +307,10 @@ export default function Dashboard() {
     cablesLayerGroupRef.current.clearLayers();
     nodesLayerGroupRef.current.clearLayers();
 
-    const nodes = gisData?.nodes ?? [];
-    const cables = gisData?.cables ?? [];
+    const rawNodes = gisData?.nodes;
+    const nodes = Array.isArray(rawNodes) ? rawNodes : (rawNodes && typeof rawNodes === 'object' ? Object.values(rawNodes) : []);
+    const rawCables = gisData?.cables;
+    const cables = Array.isArray(rawCables) ? rawCables : (rawCables && typeof rawCables === 'object' ? Object.values(rawCables) : []);
     const markerBounds = [];
 
     // Render Cable Polyline
@@ -484,7 +486,12 @@ export default function Dashboard() {
   }, [metrics?.gis_preview, renderGisLayers]);
 
   // 5. OLT Hardware Health & Telemetry
-  const oltHardwareList = metrics?.olt_hardware_health ?? [];
+  const oltHardwareList = useMemo(() => {
+    const raw = metrics?.olt_hardware_health;
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === 'object') return Object.values(raw);
+    return [];
+  }, [metrics]);
 
   // 6. Server & Gateway Health
   const serverHealth = metrics?.server_health ?? {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { decimalToDms, parseCoordsInput } from '../utils/coordinateParser.js';
+import { naturalNodeCompare } from '../utils/naturalSort.js';
 import KmlImportModal from '../components/KmlImportModal.jsx';
 
 /* ══════════════════════════════════════════════════════════════════
@@ -54,7 +55,7 @@ const STATUS_META = {
   },
   inactive: {
     label: 'Tidak Aktif',
-    badge: 'bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-neutral-700',
+    badge: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700',
     color: '#64748b',
   },
   damaged: {
@@ -76,7 +77,7 @@ const getNodeEffectiveStatus = (node) => {
     return {
       key: 'inactive',
       label: 'Tidak Aktif',
-      badge: 'bg-slate-100 dark:bg-neutral-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-neutral-700',
+      badge: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700',
       color: '#64748b',
       pinBg: '#64748b',
       nameBorder: '#94a3b8',
@@ -147,7 +148,7 @@ const getOpticalQuality = (dbm) => {
       pillBg: '#f8fafc',
       pillText: '#475569',
       pillBorder: '#e2e8f0',
-      badge: 'bg-slate-50 dark:bg-neutral-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-neutral-800'
+      badge: 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
     };
   }
 
@@ -279,8 +280,9 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
   };
 
   return (
-    <div className="absolute top-4 left-4 z-[999] w-84 sm:w-96 bg-white/95 dark:bg-black/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-200 dark:border-neutral-800 p-5 transition-all text-slate-800 dark:text-slate-100 max-h-[90vh] overflow-y-auto">
-      <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-neutral-800">
+    <div className="fixed sm:absolute bottom-0 sm:bottom-auto sm:top-4 left-0 sm:left-4 right-0 sm:right-auto z-[999] w-full sm:w-96 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-t-3xl sm:rounded-2xl shadow-2xl border-t sm:border border-slate-200 dark:border-slate-800 p-4 sm:p-5 transition-all text-slate-800 dark:text-slate-100 max-h-[75vh] sm:max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom sm:slide-in-from-left duration-200">
+      <div className="sm:hidden w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-3" />
+      <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${typeMeta.bg}`}>
@@ -297,7 +299,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
         </div>
         <button
           onClick={onClose}
-          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all text-xs font-bold cursor-pointer"
+          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all text-xs font-bold cursor-pointer"
         >
           ✕
         </button>
@@ -306,9 +308,9 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
       <div className="mt-4 space-y-4 text-xs">
         {/* Optical Telemetry Signal Box */}
         {node.node_type === 'ODP' && (
-          <div className="p-3.5 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800 space-y-2">
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Telemetry Redaman Rx</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Telemetry Redaman Rx</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${optMeta.badge}`}>
                 {optMeta.label}
               </span>
@@ -317,7 +319,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
               <span className="text-2xl font-black font-mono" style={{ color: optMeta.color }}>
                 {node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(2)} dBm` : '—')}
               </span>
-              <span className="text-[10px] font-mono text-slate-400">
+              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                 {node.used_ports} Klien Terhubung
               </span>
             </div>
@@ -326,18 +328,18 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
 
         {/* GPS Coordinates & Google Earth / Maps Navigation */}
         <div className="space-y-2">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block">
             Posisi Geografis GPS
           </span>
           {node.latitude && node.longitude ? (
-            <div className="p-3 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-200 dark:border-neutral-800 space-y-2.5">
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
                   Koordinat Desimal:
                 </span>
                 <button
                   onClick={handleCopyCoords}
-                  className="px-2.5 py-0.5 text-[10px] font-bold bg-white dark:bg-black border border-slate-200 dark:border-neutral-700 rounded-lg hover:bg-slate-100 dark:hover:bg-neutral-800 transition-all text-slate-700 dark:text-slate-300 cursor-pointer"
+                  className="px-2.5 py-0.5 text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all text-slate-700 dark:text-slate-300 cursor-pointer"
                 >
                   {copied ? 'Tersalin!' : 'Salin'}
                 </button>
@@ -345,19 +347,19 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
 
               <div className="grid grid-cols-1 gap-1.5 font-mono text-xs">
                 <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                  <span className="text-[10px] font-sans font-semibold text-slate-400">Google Maps:</span>
+                  <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400">Google Maps:</span>
                   <span className="font-bold">{parseFloat(node.latitude).toFixed(6)}, {parseFloat(node.longitude).toFixed(6)}</span>
                 </div>
-                <div className="flex items-center justify-between text-blue-600 dark:text-blue-400">
-                  <span className="text-[10px] font-sans font-semibold text-slate-400">Google Earth:</span>
+                <div className="flex items-center justify-between text-indigo-600 dark:text-indigo-400">
+                  <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400">Google Earth:</span>
                   <span className="font-bold">{dmsInfo.formattedDms || '—'}</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200/60 dark:border-neutral-800">
+              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200 dark:border-slate-800">
                 <button
                   onClick={() => onOpenStreetView(node.latitude, node.longitude, node.name)}
-                  className="py-2 px-2 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center col-span-3 sm:col-span-1 shadow-2xs cursor-pointer"
+                  className="py-2 px-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center col-span-3 sm:col-span-1 shadow-2xs cursor-pointer"
                 >
                   <span>👁️ Street View</span>
                 </button>
@@ -365,7 +367,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
                   href={`https://www.google.com/maps/search/?api=1&query=${node.latitude},${node.longitude}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="py-2 px-2 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center shadow-2xs"
+                  className="py-2 px-2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center shadow-2xs"
                 >
                   <span>🗺️ Maps</span>
                 </a>
@@ -373,7 +375,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
                   href={`https://earth.google.com/web/search/${node.latitude},${node.longitude}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="py-2 px-2 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 hover:bg-blue-100 border border-blue-200 dark:border-blue-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center shadow-2xs"
+                  className="py-2 px-2 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center shadow-2xs"
                 >
                   <span>🌍 Earth</span>
                 </a>
@@ -388,12 +390,12 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
 
         <div className="space-y-3">
           {node.total_ports > 0 && (
-            <div className="p-3 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-100 dark:border-neutral-800">
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800">
               <div className="flex justify-between items-center mb-1.5">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Kapasitas Port</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Kapasitas Port</span>
                 <span className="font-bold text-slate-700 dark:text-slate-300">{node.used_ports}/{node.total_ports} Port ({p}%)</span>
               </div>
-              <div className="w-full bg-slate-200 dark:bg-neutral-800 h-2 rounded-full overflow-hidden">
+              <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${p > 90 ? 'bg-rose-600' : p > 75 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                   style={{ width: `${p}%` }}
@@ -402,9 +404,9 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
             </div>
           )}
 
-          <div className="p-3 bg-slate-50 dark:bg-neutral-900 rounded-xl border border-slate-100 dark:border-neutral-800 text-slate-700 dark:text-slate-300">
-            <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">OLT &amp; Port Uplink</span>
-            <p className="font-bold">{node.olt_device?.name || node.parent_node?.olt_device?.name || 'OLT Region'}</p>
+          <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">OLT &amp; Port Uplink</span>
+            <p className="font-bold text-slate-900 dark:text-white">{node.olt_device?.name || node.parent_node?.olt_device?.name || 'OLT Region'}</p>
             <p className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{node.olt_port_ref || 'PON 1/1/1'}</p>
           </div>
         </div>
@@ -412,7 +414,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
         {/* Quick Action Button to Trace Path */}
         <button
           onClick={() => onTracePath && onTracePath(node)}
-          className="w-full py-2.5 px-3 bg-cyan-50 dark:bg-cyan-950/60 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+          className="w-full py-2.5 px-3 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
         >
           <span>🧭 Lacak Jalur Kabel (Path Tracing)</span>
         </button>
@@ -506,7 +508,7 @@ function TargetCoordModal({ isOpen, onClose, onSetTarget }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-neutral-800 overflow-hidden text-slate-800 dark:text-slate-100">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 overflow-hidden text-slate-800 dark:text-slate-100">
         <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-2">
             <span className="text-lg">📍</span>
@@ -535,7 +537,7 @@ function TargetCoordModal({ isOpen, onClose, onSetTarget }) {
               value={inputVal}
               onChange={e => setInputVal(e.target.value)}
               placeholder="Contoh: -0.785123, 100.654123 atau 0°47'5.96&quot;S 100°39'15.87&quot;T"
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-black border border-slate-200 dark:border-neutral-700 rounded-xl font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs"
+              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs"
             />
             {inputVal && (
               <div className="text-[11px] mt-1">
@@ -553,11 +555,11 @@ function TargetCoordModal({ isOpen, onClose, onSetTarget }) {
             )}
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-neutral-800">
+          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
+              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
             >
               Batal
             </button>
@@ -620,7 +622,7 @@ function PathTracingBanner({ pathNodes, activeNodeId, onSelectNode, onClose }) {
   if (!pathNodes || pathNodes.length <= 1) return null;
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[998] bg-slate-900/90 dark:bg-black/90 backdrop-blur-md border border-cyan-500/60 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 text-white text-xs max-w-[92vw] overflow-hidden">
+    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[998] bg-slate-900/95 text-white backdrop-blur-md border border-cyan-500/60 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 text-xs max-w-[92vw] overflow-hidden">
       <div className="flex items-center gap-1.5 font-bold text-cyan-400 shrink-0">
         <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
         <span>Jalur Traced:</span>
@@ -660,12 +662,12 @@ function PathTracingBanner({ pathNodes, activeNodeId, onSelectNode, onClose }) {
    FAST INTERACTIVE LEAFLET TOPOLOGY MAP
 ══════════════════════════════════════════════════════════════════ */
 function LeafletMap({
-  nodes,
+  nodes = [],
   cables = [],
   selectedNode,
   tracedPath,
   rulerActive,
-  rulerPoints,
+  rulerPoints = [],
   setRulerPoints,
   targetPin,
   isFullscreen,
@@ -674,6 +676,10 @@ function LeafletMap({
   onOpenStreetView,
   externalFlyToRef,
 }) {
+  const safeNodes = useMemo(() => Array.isArray(nodes) ? nodes : (nodes && typeof nodes === 'object' ? Object.values(nodes) : []), [nodes]);
+  const safeCables = useMemo(() => Array.isArray(cables) ? cables : (cables && typeof cables === 'object' ? Object.values(cables) : []), [cables]);
+  const safeRulerPoints = useMemo(() => Array.isArray(rulerPoints) ? rulerPoints : [], [rulerPoints]);
+
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const leafletRef = useRef(null);
@@ -685,6 +691,8 @@ function LeafletMap({
   const targetPinLayerGroupRef = useRef(null);
   const isFirstRenderRef = useRef(true);
   const rulerActiveRef = useRef(rulerActive);
+  const markersMapRef = useRef(new Map());
+  const currentZoomTierRef = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isSatellite, setIsSatellite] = useState(true);
 
@@ -728,8 +736,7 @@ function LeafletMap({
           zoom: 15,
           zoomControl: false,
           scrollWheelZoom: true,
-          preferCanvas: false,
-          renderer: Lf.svg(),
+          preferCanvas: true,
         });
 
         // Zoom control at bottom right
@@ -773,6 +780,7 @@ function LeafletMap({
         pathHighlightLayerGroupRef.current = null;
         rulerLayerGroupRef.current = null;
         targetPinLayerGroupRef.current = null;
+        markersMapRef.current.clear();
       }
     };
   }, []);
@@ -804,7 +812,7 @@ function LeafletMap({
   // 3. Recenter to all nodes
   const handleRecenterMap = useCallback(() => {
     if (!mapInstanceRef.current) return;
-    const validNodes = nodes.filter(n => n.latitude && n.longitude && parseFloat(n.latitude) !== 0);
+    const validNodes = safeNodes.filter(n => n?.latitude && n?.longitude && parseFloat(n.latitude) !== 0);
     if (validNodes.length === 0) return;
 
     const bounds = validNodes.map(n => [parseFloat(n.latitude), parseFloat(n.longitude)]);
@@ -813,7 +821,7 @@ function LeafletMap({
     } else {
       mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
     }
-  }, [nodes]);
+  }, [safeNodes]);
 
   // 4. Ruler Map Click Listener
   useEffect(() => {
@@ -843,10 +851,10 @@ function LeafletMap({
     const layer = rulerLayerGroupRef.current;
     layer.clearLayers();
 
-    if (!rulerActive || rulerPoints.length === 0) return;
+    if (!rulerActive || safeRulerPoints.length === 0) return;
 
     // Draw waypoints
-    rulerPoints.forEach((pt, idx) => {
+    safeRulerPoints.forEach((pt, idx) => {
       const icon = Lf.divIcon({
         className: 'custom-ruler-pin',
         html: `
@@ -875,15 +883,15 @@ function LeafletMap({
     });
 
     // Draw connecting line
-    if (rulerPoints.length >= 2) {
-      Lf.polyline(rulerPoints, {
+    if (safeRulerPoints.length >= 2) {
+      Lf.polyline(safeRulerPoints, {
         color: '#f97316',
         weight: 3.5,
         opacity: 0.95,
         dashArray: '8, 6',
       }).addTo(layer);
     }
-  }, [rulerActive, rulerPoints]);
+  }, [rulerActive, safeRulerPoints]);
 
   // 5b. Render Target House Pin & Guide Line to Nearest ODP
   useEffect(() => {
@@ -951,63 +959,15 @@ function LeafletMap({
     });
   }, [targetPin, setRulerPoints]);
 
-  // 6. In-Place Rendering of Nodes, Cables, & Path Tracing Highlights
+  // 6a. Render Physical Network Cables (Canvas Hardware-Accelerated)
   useEffect(() => {
-    if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current) return;
+    if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current || !cablesLayerGroupRef.current) return;
     const Lf = leafletRef.current;
-    const map = mapInstanceRef.current;
-
     const cablesGroup = cablesLayerGroupRef.current;
-    const highlightGroup = pathHighlightLayerGroupRef.current;
-    const nodesGroup = nodesLayerGroupRef.current;
-
-    if (!cablesGroup || !highlightGroup || !nodesGroup) return;
-
     cablesGroup.clearLayers();
-    highlightGroup.clearLayers();
-    nodesGroup.clearLayers();
 
-    const nodeMap = new Map();
-    nodes.forEach(n => {
-      if (n.latitude && n.longitude && parseFloat(n.latitude) !== 0) {
-        nodeMap.set(n.id, n);
-      }
-    });
-
-    const isPathTracingActive = tracedPath?.nodeIds && tracedPath.nodeIds.size > 1;
-    const bounds = [];
-
-    // 1. Draw Fiber Connections ONLY when Path Tracing is explicitly active (User clicks a node)
-    if (isPathTracingActive) {
-      nodes.forEach(node => {
-        if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
-        if (!tracedPath.nodeIds.has(node.id)) return;
-
-        let parent = null;
-        if (node.parent_node_id && nodeMap.has(node.parent_node_id)) {
-          parent = nodeMap.get(node.parent_node_id);
-        }
-
-        if (parent && parent.latitude && parent.longitude && tracedPath.nodeIds.has(parent.id)) {
-          const lineCoords = [
-            [parseFloat(parent.latitude), parseFloat(parent.longitude)],
-            [parseFloat(node.latitude), parseFloat(node.longitude)]
-          ];
-
-          // Highlight path line for selected node
-          Lf.polyline(lineCoords, {
-            color: '#0284c7',
-            weight: 4,
-            opacity: 0.9,
-            lineCap: 'round',
-            lineJoin: 'round',
-          }).addTo(highlightGroup);
-        }
-      });
-    }
-
-    // 2. Render Actual Physical Network Cables (from KML / Database) - Lightweight & Smooth
-    cables.forEach(cable => {
+    safeCables.forEach(cable => {
+      if (!cable) return;
       let coords = cable.route_coordinates;
       if (typeof coords === 'string') {
         try { coords = JSON.parse(coords); } catch (e) { coords = null; }
@@ -1015,7 +975,7 @@ function LeafletMap({
       if (Array.isArray(coords) && coords.length >= 2) {
         const cableColor = cable.cable_color || '#2563eb';
         
-        // Single clean solid polyline - 60 FPS performance
+        // Single clean solid polyline - hardware accelerated by Canvas
         const poly = Lf.polyline(coords, {
           color: cableColor,
           weight: 3.5,
@@ -1040,129 +1000,248 @@ function LeafletMap({
         `);
       }
     });
+  }, [mapLoaded, safeCables]);
 
-    // Draw Modern Clean Node Markers with Pulsing Radar for Faults
-    nodes.forEach(node => {
-      if (!node.latitude || !node.longitude || parseFloat(node.latitude) === 0) return;
+  // 6b. Ultra-Lightweight Unified Enterprise Marker System (Model Bulat / Circular Pin)
+  const buildCircleHtml = (node, effStatus, optMeta, isSelected, isBadgeMode) => {
+    const isOdp = node.node_type === 'ODP';
+    const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+    const hasOptical = isOdp && (effectivePower != null || node.rx_power_range != null) && !effStatus.isInactive;
+    const opticalDbmText = node.rx_power_range 
+      ? node.rx_power_range 
+      : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(1)} dBm` : '');
+
+    let statusCls = '';
+    if (effStatus.isLoss) statusCls = 'gis-circle-loss';
+    else if (effStatus.isInactive) statusCls = 'gis-circle-inactive';
+    else if (effStatus.key === 'maintenance') statusCls = 'gis-circle-maint';
+
+    const nodeTypeCls = node.node_type === 'POP' ? 'is-pop' : node.node_type === 'ODC' ? 'is-odc' : 'is-odp';
+
+    return `
+      <div class="gis-circle-marker ${nodeTypeCls} ${statusCls} ${isSelected ? 'is-selected' : ''}">
+        <div class="gis-circle-node" style="border-color: ${effStatus.pinBg};">
+          <span class="gis-circle-icon">${node.node_type}</span>
+          ${effStatus.hasRadar ? `<span class="gis-circle-ping" style="border-color: ${effStatus.pinBg};"></span>` : ''}
+        </div>
+        ${isBadgeMode ? `
+          <div class="gis-circle-badge">
+            <span class="gis-circle-name" title="${node.name} (${node.code})">${node.name}</span>
+            ${hasOptical ? `
+              <span class="gis-circle-dbm" style="color:${optMeta.color};background:${optMeta.pillBg};border:1px solid ${optMeta.pillBorder};">
+                ${opticalDbmText}
+              </span>
+            ` : ''}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  };
+
+  const buildDotHtml = (node, effStatus, isSelected) => {
+    return `
+      <div class="gis-micro-dot ${isSelected ? 'is-selected' : ''}" style="background:${effStatus.pinBg};">
+        ${effStatus.hasRadar ? '<span class="gis-micro-ping"></span>' : ''}
+      </div>
+    `;
+  };
+
+  const renderNodes = useCallback(() => {
+    if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current || !nodesLayerGroupRef.current) return;
+    const Lf = leafletRef.current;
+    const map = mapInstanceRef.current;
+    const nodesGroup = nodesLayerGroupRef.current;
+    const highlightGroup = pathHighlightLayerGroupRef.current;
+
+    if (highlightGroup) highlightGroup.clearLayers();
+
+    const zoom = map.getZoom();
+    const zoomTier = zoom >= 15 ? 'badge' : (zoom >= 13 ? 'circle-only' : 'dot');
+    const tierChanged = currentZoomTierRef.current !== zoomTier;
+    currentZoomTierRef.current = zoomTier;
+
+    const nodeMap = new Map();
+    safeNodes.forEach(n => {
+      if (n?.latitude && n?.longitude && parseFloat(n.latitude) !== 0) {
+        nodeMap.set(n.id, n);
+      }
+    });
+
+    // 1. Draw Fiber Connections ONLY when Path Tracing is explicitly active
+    const isPathTracingActive = tracedPath?.nodeIds && tracedPath.nodeIds.size > 1;
+    if (isPathTracingActive && highlightGroup) {
+      safeNodes.forEach(node => {
+        if (!node?.latitude || !node?.longitude || parseFloat(node.latitude) === 0) return;
+        if (!tracedPath.nodeIds.has(node.id)) return;
+
+        let parent = null;
+        if (node.parent_node_id && nodeMap.has(node.parent_node_id)) {
+          parent = nodeMap.get(node.parent_node_id);
+        }
+
+        if (parent && parent.latitude && parent.longitude && tracedPath.nodeIds.has(parent.id)) {
+          const lineCoords = [
+            [parseFloat(parent.latitude), parseFloat(parent.longitude)],
+            [parseFloat(node.latitude), parseFloat(node.longitude)]
+          ];
+
+          Lf.polyline(lineCoords, {
+            color: '#0284c7',
+            weight: 4,
+            opacity: 0.9,
+            lineCap: 'round',
+            lineJoin: 'round',
+          }).addTo(highlightGroup);
+        }
+      });
+    }
+
+    // 2. High-performance Persistent Marker Diffing (Zero DOM Thrashing on Pan)
+    const currentMarkers = markersMapRef.current;
+    const nextNodeIds = new Set();
+
+    safeNodes.forEach(node => {
+      if (!node?.latitude || !node?.longitude || parseFloat(node.latitude) === 0) return;
+      const id = node.id;
+      nextNodeIds.add(id);
 
       const lat = parseFloat(node.latitude);
       const lng = parseFloat(node.longitude);
-      bounds.push([lat, lng]);
-
-      const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
-      const isSelected = selectedNode?.id === node.id;
-      const isOdp = node.node_type === 'ODP';
-      const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
+      const isSelected = selectedNode?.id === id;
       const effStatus = getNodeEffectiveStatus(node);
+      const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
       const isFault = effStatus.isLoss;
-
       const optMeta = isFault 
-        ? { label: 'Loss / Kritis', color: '#ef4444', pillBg: '#fff1f2', pillText: '#be123c', pillBorder: '#fecdd3' } 
+        ? { label: 'Loss / Kritis', color: '#ef4444', pillBg: '#fff1f2', pillBorder: '#fecdd3' } 
         : getOpticalQuality(effectiveBestPower);
-      const opticalDbmText = node.rx_power_range ? node.rx_power_range : (effectiveBestPower != null ? `${effectiveBestPower > 0 ? '+' : ''}${parseFloat(effectiveBestPower).toFixed(2)} dBm` : '—');
 
-      const size = isSelected ? typeMeta.size + 4 : typeMeta.size;
-      const pinBg = effStatus.pinBg;
+      const opticalDbmText = node.rx_power_range 
+        ? node.rx_power_range 
+        : (effectiveBestPower != null ? `${parseFloat(effectiveBestPower).toFixed(1)} dBm` : '—');
 
-      const icon = Lf.divIcon({
-        className: `custom-gis-node-marker ${isSelected ? 'is-selected' : ''}`,
-        html: `
-          <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
-            ${(isOdp && node.used_ports > 0 && (node.optical_power_dbm != null || node.rx_power_range != null) && !effStatus.isInactive) ? `
-              <div style="
-                background: ${optMeta.pillBg};
-                color: ${optMeta.pillText};
-                border: 1.5px solid ${optMeta.pillBorder};
-                font-weight: 800;
-                font-size: 11px;
-                padding: 2px 8px;
-                border-radius: 9999px;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.18);
-                white-space: nowrap;
-                margin-bottom: 4px;
-                font-family: ui-monospace, monospace;
-              ">
-                ${opticalDbmText}
-              </div>
-            ` : ''}
+      const isBadgeMode = zoomTier === 'badge' || isSelected || node.node_type === 'POP' || node.node_type === 'ODC';
+      const isCircleMode = zoomTier !== 'dot' || isSelected || node.node_type === 'POP' || node.node_type === 'ODC';
 
-            <div style="
-              position: relative;
-              width: ${size * 2}px;
-              height: ${size * 2}px;
-              border-radius: 50%;
-              background: ${pinBg};
-              border: 3px solid ${effStatus.isInactive ? '#94a3b8' : '#ffffff'};
-              box-shadow: 0 3px 10px rgba(0,0,0,0.25);
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: #ffffff;
-              font-weight: 800;
-              font-size: ${size >= 20 ? '12px' : size >= 17 ? '11px' : '10px'};
-              opacity: ${effStatus.isInactive ? 0.82 : 1};
-            ">
-              ${effStatus.hasRadar ? '<div class="radar-ping-ring"></div>' : ''}
-              ${node.node_type}
-            </div>
+      let existing = currentMarkers.get(id);
 
-            <div style="
-              background: ${effStatus.isInactive ? '#f8fafc' : '#ffffff'};
-              color: ${effStatus.nameText};
-              padding: 2px 7px;
-              border-radius: 6px;
-              font-size: 11px;
-              font-weight: 700;
-              white-space: nowrap;
-              margin-top: 3px;
-              border: 1.5px solid ${effStatus.nameBorder};
-              box-shadow: 0 2px 6px rgba(0,0,0,0.16);
-            ">
-              ${node.name}
-              ${effStatus.isInactive ? ' <span style="font-size: 9px; color: #64748b; font-weight: 700;">(Nonaktif)</span>' : ''}
-              ${effStatus.key === 'active_loss' ? ' <span style="font-size: 9px; color: #ef4444; font-weight: 800;">(LOS)</span>' : ''}
-            </div>
-          </div>
-        `,
-        iconSize: [180, size * 2 + 55],
-        iconAnchor: [90, size * 2 + 30],
-      });
+      if (existing) {
+        // Visual update only if properties or zoom tier changed
+        const needsIconUpdate = tierChanged || 
+          existing.isSelected !== isSelected || 
+          existing.statusKey !== effStatus.key || 
+          existing.opticalDbm !== effectiveBestPower ||
+          existing.isBadgeMode !== isBadgeMode ||
+          existing.isCircleMode !== isCircleMode;
 
-      const marker = Lf.marker([lat, lng], { icon }).addTo(nodesGroup);
-      marker.on('click', (e) => {
-        if (rulerActiveRef.current) {
-          if (e.originalEvent) {
-            e.originalEvent.stopPropagation();
-          }
-          if (Lf.DomEvent) {
-            Lf.DomEvent.stopPropagation(e);
-          }
-          setRulerPoints(pts => [...pts, [lat, lng]]);
-          return;
+        if (needsIconUpdate) {
+          const iconHtml = isCircleMode
+            ? buildCircleHtml(node, effStatus, optMeta, isSelected, isBadgeMode)
+            : buildDotHtml(node, effStatus, isSelected);
+
+          const newIcon = Lf.divIcon({
+            className: 'gis-marker-container',
+            html: iconHtml,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          });
+
+          existing.marker.setIcon(newIcon);
+          existing.isSelected = isSelected;
+          existing.statusKey = effStatus.key;
+          existing.opticalDbm = effectiveBestPower;
+          existing.isBadgeMode = isBadgeMode;
+          existing.isCircleMode = isCircleMode;
         }
-        onSelectNode(node);
-      });
+
+        const curLatLng = existing.marker.getLatLng();
+        if (Math.abs(curLatLng.lat - lat) > 0.000001 || Math.abs(curLatLng.lng - lng) > 0.000001) {
+          existing.marker.setLatLng([lat, lng]);
+        }
+      } else {
+        // Create new marker once and cache
+        const iconHtml = isCircleMode
+          ? buildCircleHtml(node, effStatus, optMeta, isSelected, isBadgeMode)
+          : buildDotHtml(node, effStatus, isSelected);
+
+        const icon = Lf.divIcon({
+          className: 'gis-marker-container',
+          html: iconHtml,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0],
+        });
+
+        const marker = Lf.marker([lat, lng], { icon }).addTo(nodesGroup);
+
+        marker.bindTooltip(`<b>${node.name}</b> (${node.code})<br>Tipe: ${node.node_type} • Status: ${effStatus.label}${opticalDbmText !== '—' ? '<br>Rx: ' + opticalDbmText : ''}`, {
+          direction: 'top',
+          offset: [0, -18],
+          opacity: 0.95,
+        });
+
+        marker.on('click', (e) => {
+          if (rulerActiveRef.current) {
+            if (e.originalEvent) e.originalEvent.stopPropagation();
+            if (Lf.DomEvent) Lf.DomEvent.stopPropagation(e);
+            setRulerPoints(pts => [...pts, [lat, lng]]);
+            return;
+          }
+          onSelectNode(node);
+        });
+
+        currentMarkers.set(id, {
+          marker,
+          isSelected,
+          statusKey: effStatus.key,
+          opticalDbm: effectiveBestPower,
+          isBadgeMode,
+          isCircleMode,
+        });
+      }
     });
 
-    // Fit bounds ONLY ONCE on first load
-    if (bounds.length > 0) {
-      map.invalidateSize();
-      if (isFirstRenderRef.current) {
-        if (bounds.length === 1) {
-          map.setView(bounds[0], 16);
-        } else {
-          try {
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
-          } catch { }
-        }
+    // Remove markers that are filtered out
+    for (const [id, record] of currentMarkers.entries()) {
+      if (!nextNodeIds.has(id)) {
+        nodesGroup.removeLayer(record.marker);
+        currentMarkers.delete(id);
+      }
+    }
+  }, [mapLoaded, safeNodes, selectedNode, tracedPath, onSelectNode, setRulerPoints]);
+
+  // 6c. Attach Smooth Viewport & Zoom Listeners (NO moveend listener = 60 FPS silky smooth panning)
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+
+    const handleZoom = () => {
+      renderNodes();
+    };
+
+    map.on('zoomend', handleZoom);
+
+    // Initial render
+    renderNodes();
+
+    // Fit bounds on first render
+    if (isFirstRenderRef.current && safeNodes.length > 0) {
+      const validNodes = safeNodes.filter(n => n?.latitude && n?.longitude && parseFloat(n.latitude) !== 0);
+      if (validNodes.length > 0) {
+        const bounds = validNodes.map(n => [parseFloat(n.latitude), parseFloat(n.longitude)]);
+        try {
+          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+        } catch { }
         isFirstRenderRef.current = false;
       }
     }
-  }, [mapLoaded, nodes, selectedNode, tracedPath]);
+
+    return () => {
+      map.off('zoomend', handleZoom);
+    };
+  }, [renderNodes, safeNodes]);
 
   return (
     <div className="relative w-full h-full">
-      {/* CSS Keyframes for Pulsing Radar & Smooth Laser Flow */}
+      {/* Sleek GPU-Accelerated GIS Chip Styles */}
       <style>{`
         @keyframes fiberFlowAnimation {
           0% { stroke-dashoffset: 44; }
@@ -1174,45 +1253,226 @@ function LeafletMap({
           animation: fiberFlowAnimation 1.1s linear infinite !important;
         }
 
-        @keyframes radarPing {
-          0% {
-            transform: scale(0.85);
-            opacity: 0.9;
-          }
-          70% {
-            transform: scale(2.3);
-            opacity: 0;
-          }
-          100% {
-            transform: scale(2.5);
-            opacity: 0;
-          }
+        /* Marker Zero-Size Anchor with GPU Translate */
+        .gis-marker-container {
+          width: 0 !important;
+          height: 0 !important;
+          border: none !important;
+          background: transparent !important;
         }
-        .radar-ping-ring {
+
+        /* ── CIRCULAR GIS NODE MARKER ── */
+        .gis-circle-marker {
           position: absolute;
-          top: -3px;
-          left: -3px;
-          width: calc(100% + 6px);
-          height: calc(100% + 6px);
+          left: 0;
+          top: 0;
+          transform: translate3d(-50%, -50%, 0);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          cursor: pointer;
+          user-select: none;
+          transition: transform 0.14s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.14s ease;
+          pointer-events: auto;
+          will-change: transform;
+        }
+
+        .gis-circle-marker:hover {
+          transform: translate3d(-50%, -50%, 0) scale(1.15);
+          z-index: 1000 !important;
+        }
+
+        .gis-circle-marker.is-selected {
+          transform: translate3d(-50%, -50%, 0) scale(1.22);
+          z-index: 1001 !important;
+        }
+
+        .gis-circle-node {
+          width: 26px;
+          height: 26px;
           border-radius: 50%;
-          border: 3px solid #ef4444;
-          animation: radarPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 2.5px solid #10b981;
+          background: #ffffff;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+          position: relative;
+          transition: all 0.14s ease;
+        }
+        .dark .gis-circle-node {
+          background: #0f172a;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+        }
+
+        .gis-circle-marker.is-pop .gis-circle-node {
+          width: 34px;
+          height: 34px;
+          border-width: 3px;
+        }
+        .gis-circle-marker.is-odc .gis-circle-node {
+          width: 30px;
+          height: 30px;
+          border-width: 2.5px;
+        }
+
+        .gis-circle-icon {
+          font-size: 8.5px;
+          font-weight: 900;
+          letter-spacing: -0.02em;
+          color: #0f172a;
+          line-height: 1;
+        }
+        .dark .gis-circle-icon {
+          color: #f8fafc;
+        }
+        .gis-circle-marker.is-pop .gis-circle-icon {
+          font-size: 10px;
+          color: #4f46e5;
+        }
+        .dark .gis-circle-marker.is-pop .gis-circle-icon {
+          color: #818cf8;
+        }
+        .gis-circle-marker.is-odc .gis-circle-icon {
+          font-size: 9px;
+          color: #2563eb;
+        }
+        .dark .gis-circle-marker.is-odc .gis-circle-icon {
+          color: #60a5fa;
+        }
+        .gis-circle-marker.is-odp .gis-circle-icon {
+          font-size: 8px;
+          color: #059669;
+        }
+        .dark .gis-circle-marker.is-odp .gis-circle-icon {
+          color: #34d399;
+        }
+
+        .gis-circle-ping {
+          position: absolute;
+          inset: -4px;
+          border-radius: 50%;
+          border: 2px solid #ef4444;
+          animation: radarPing 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
           pointer-events: none;
         }
 
+        .gis-circle-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 3.5px;
+          margin-top: 3px;
+          padding: 1.5px 6px;
+          border-radius: 9999px;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(4px);
+          border: 1px solid #cbd5e1;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+          white-space: nowrap;
+          max-width: 170px;
+        }
+        .dark .gis-circle-badge {
+          background: rgba(15, 23, 42, 0.94);
+          border-color: #334155;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .gis-circle-name {
+          font-size: 10px;
+          font-weight: 700;
+          color: #0f172a;
+          max-width: 85px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .dark .gis-circle-name {
+          color: #f1f5f9;
+        }
+
+        .gis-circle-dbm {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 8.5px;
+          font-weight: 800;
+          padding: 0.5px 4px;
+          border-radius: 9999px;
+          line-height: 1.2;
+        }
+
+        .gis-circle-loss .gis-circle-node {
+          border-color: #ef4444 !important;
+          background: #fff1f2 !important;
+        }
+        .dark .gis-circle-loss .gis-circle-node {
+          background: #2b0b14 !important;
+        }
+        .gis-circle-loss .gis-circle-icon {
+          color: #ef4444 !important;
+        }
+        .gis-circle-loss .gis-circle-badge {
+          border-color: #fca5a5 !important;
+          background: #fff1f2 !important;
+        }
+        .dark .gis-circle-loss .gis-circle-badge {
+          border-color: #e11d48 !important;
+          background: #2b0b14 !important;
+        }
+        .gis-circle-loss .gis-circle-name {
+          color: #e11d48 !important;
+        }
+        .dark .gis-circle-loss .gis-circle-name {
+          color: #fb7185 !important;
+        }
+
+        .gis-circle-inactive {
+          opacity: 0.75;
+        }
+        .gis-circle-inactive .gis-circle-node {
+          border-color: #94a3b8 !important;
+        }
+
+        .gis-micro-dot {
+          position: absolute;
+          left: 0;
+          top: 0;
+          transform: translate3d(-50%, -50%, 0);
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          border: 2px solid #ffffff;
+          box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+          cursor: pointer;
+          transition: transform 0.1s ease;
+          will-change: transform;
+        }
+        .gis-micro-dot:hover {
+          transform: translate3d(-50%, -50%, 0) scale(1.6);
+          z-index: 1000 !important;
+        }
+        .gis-micro-dot.is-selected {
+          transform: translate3d(-50%, -50%, 0) scale(1.8);
+          box-shadow: 0 0 0 3px #3b82f6;
+          z-index: 1001 !important;
+        }
+        .gis-micro-ping {
+          position: absolute;
+          inset: -3px;
+          border-radius: 50%;
+          border: 2px solid #ef4444;
+          animation: radarPing 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+          pointer-events: none;
+        }
+
+        @keyframes radarPing {
+          0% { transform: scale(0.85); opacity: 0.9; }
+          70% { transform: scale(2.2); opacity: 0; }
+          100% { transform: scale(2.4); opacity: 0; }
+        }
+
         @keyframes targetPing {
-          0% {
-            transform: scale(0.85);
-            opacity: 0.9;
-          }
-          70% {
-            transform: scale(2.2);
-            opacity: 0;
-          }
-          100% {
-            transform: scale(2.4);
-            opacity: 0;
-          }
+          0% { transform: scale(0.85); opacity: 0.9; }
+          70% { transform: scale(2.2); opacity: 0; }
+          100% { transform: scale(2.4); opacity: 0; }
         }
         .target-house-ping {
           position: absolute;
@@ -1238,7 +1498,7 @@ function LeafletMap({
         {!isFullscreen && (
           <button
             onClick={onToggleFullscreen}
-            className="px-3.5 py-2 text-xs font-bold rounded-xl border shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 border-slate-200 dark:border-neutral-700"
+            className="px-3.5 py-2 text-xs font-bold rounded-xl border shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer bg-white/95 dark:bg-slate-900/95 hover:bg-white dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700"
             title="Buka Peta Mode Layar Penuh"
           >
             <span>⛶ Layar Penuh</span>
@@ -1247,7 +1507,7 @@ function LeafletMap({
 
         <button
           onClick={toggleMapMode}
-          className="px-3.5 py-2 bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer"
+          className="px-3.5 py-2 bg-white/95 dark:bg-slate-900/95 hover:bg-white dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer"
         >
           <span>{isSatellite ? '🗺️ Mode Vektor' : '🛰️ Mode Satelit'}</span>
         </button>
@@ -1255,7 +1515,7 @@ function LeafletMap({
         {selectedNode && selectedNode.latitude && selectedNode.longitude && (
           <button
             onClick={() => onOpenStreetView(selectedNode.latitude, selectedNode.longitude, selectedNode.name)}
-            className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <span>👁️ Street View 360°</span>
           </button>
@@ -1264,7 +1524,7 @@ function LeafletMap({
 
       <button
         onClick={handleRecenterMap}
-        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-white/95 dark:bg-neutral-900/95 hover:bg-white text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 shadow-md backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer"
+        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-white/95 dark:bg-slate-900/95 hover:bg-white dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 shadow-md backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer"
         title="Pusatkan Peta ke Lokasi Node"
       >
         <span>🎯 Pusatkan Peta</span>
@@ -1276,22 +1536,24 @@ function LeafletMap({
 /* ══════════════════════════════════════════════════════════════════
    STATS CARDS BAR (CLEAN OLT-MANAGEMENT STYLE)
 ══════════════════════════════════════════════════════════════════ */
-function GisStatCards({ nodes }) {
-  const pops = nodes.filter(n => n.node_type === 'POP');
-  const odcs = nodes.filter(n => n.node_type === 'ODC');
-  const odps = nodes.filter(n => n.node_type === 'ODP');
+function GisStatCards({ nodes = [] }) {
+  const safeNodes = Array.isArray(nodes) ? nodes : (nodes && typeof nodes === 'object' ? Object.values(nodes) : []);
+  const pops = safeNodes.filter(n => n?.node_type === 'POP');
+  const odcs = safeNodes.filter(n => n?.node_type === 'ODC');
+  const odps = safeNodes.filter(n => n?.node_type === 'ODP');
 
-  const activeOdps = odps.filter(n => n.used_ports > 0 && n.optical_power_dbm != null);
+  const activeOdps = odps.filter(n => n?.used_ports > 0 && n?.optical_power_dbm != null);
   const odpOptValues = activeOdps.map(n => parseFloat(n.optical_power_dbm));
   const avgOdpDbm = odpOptValues.length > 0 ? (odpOptValues.reduce((a, b) => a + b, 0) / odpOptValues.length).toFixed(2) : '—';
 
   // Count optical loss faults (active loss or damaged)
-  const lossNodes = nodes.filter(n => {
+  const lossNodes = safeNodes.filter(n => {
+    if (!n) return false;
     const eff = getNodeEffectiveStatus(n);
     return eff.isLoss;
   });
 
-  const inactiveNodes = nodes.filter(n => n.status === 'inactive');
+  const inactiveNodes = safeNodes.filter(n => n?.status === 'inactive');
 
   const cards = [
     { label: 'POP Central', value: pops.length, sub: `${pops.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Core Headend', badgeCls: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800' },
@@ -1311,7 +1573,7 @@ function GisStatCards({ nodes }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 stagger-enter">
       {cards.map((c, i) => (
-        <div key={i} className="bg-white dark:bg-black rounded-2xl border border-slate-200 dark:border-neutral-800 shadow-2xs p-4 transition-colors duration-300">
+        <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs p-4 transition-colors duration-300">
           <div className="flex justify-between items-start mb-1">
             <span className={`text-2xl font-black leading-none ${c.label.includes('Bermasalah') && c.value > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
               {c.value}
@@ -1377,18 +1639,22 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   const fetchNodesAndCables = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [resNodes, resCables] = await Promise.allSettled([
-        fetch('/api/network-nodes?per_page=5000').then(r => r.json()),
-        fetch('/api/network-cables').then(r => r.json()),
-      ]);
+      const res = await fetch('/api/gis/map-data').then(r => r.json());
+      if (res?.data) {
+        const rawNodes = res.data.nodes;
+        const rawCables = res.data.cables;
+        const parsedNodes = Array.isArray(rawNodes)
+          ? rawNodes
+          : (rawNodes && typeof rawNodes === 'object' ? Object.values(rawNodes) : []);
+        const parsedCables = Array.isArray(rawCables)
+          ? rawCables
+          : (rawCables && typeof rawCables === 'object' ? Object.values(rawCables) : []);
 
-      if (resNodes.status === 'fulfilled' && resNodes.value?.data) {
-        setAllNodes(resNodes.value.data);
+        setAllNodes(parsedNodes);
+        setAllCables(parsedCables);
       }
-      if (resCables.status === 'fulfilled' && resCables.value?.data) {
-        setAllCables(resCables.value.data);
-      }
-    } catch {
+    } catch (err) {
+      console.warn('Failed to load GIS map data:', err);
       if (!silent) {
         setAllNodes([]);
         setAllCables([]);
@@ -1398,17 +1664,20 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     }
   }, []);
 
+  const safeAllNodes = useMemo(() => Array.isArray(allNodes) ? allNodes : (allNodes && typeof allNodes === 'object' ? Object.values(allNodes) : []), [allNodes]);
+  const safeAllCables = useMemo(() => Array.isArray(allCables) ? allCables : (allCables && typeof allCables === 'object' ? Object.values(allCables) : []), [allCables]);
+
   useEffect(() => {
     fetchNodesAndCables();
   }, [fetchNodesAndCables]);
 
-  // Live polling telemetry: silent fetch setiap 6 detik (kamera peta persisten)
+  // Live polling telemetry: silent fetch setiap 25 detik (hemat resource server & camera persisten)
   useEffect(() => {
     if (!livePolling) return;
     const timer = setInterval(() => {
       if (document.hidden) return;
       fetchNodesAndCables(true);
-    }, 6000);
+    }, 25000);
 
     return () => clearInterval(timer);
   }, [livePolling, fetchNodesAndCables]);
@@ -1416,17 +1685,17 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   // Update selectedNode live values smoothly
   useEffect(() => {
     if (selectedNode) {
-      const updated = allNodes.find(n => n.id === selectedNode.id);
+      const updated = safeAllNodes.find(n => n?.id === selectedNode.id);
       if (updated && updated.optical_power_dbm !== selectedNode.optical_power_dbm) {
         setSelectedNode(updated);
       }
     }
-  }, [allNodes, selectedNode]);
+  }, [safeAllNodes, selectedNode]);
 
   // Compute End-to-End Traced Path Hierarchy for Selected Node
   const tracedPath = useMemo(() => {
     if (!selectedNode) return { nodeIds: new Set(), pathNodes: [] };
-    const nodeMap = new Map(allNodes.map(n => [n.id, n]));
+    const nodeMap = new Map(safeAllNodes.map(n => [n.id, n]));
     const path = [];
     let curr = selectedNode;
     const visited = new Set();
@@ -1437,7 +1706,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
       if (curr.parent_node_id && nodeMap.has(curr.parent_node_id)) {
         curr = nodeMap.get(curr.parent_node_id);
       } else if (curr.node_type === 'ODP') {
-        const potentialOdc = allNodes.find(n => n.node_type === 'ODC' && n.olt_device_id === curr.olt_device_id);
+        const potentialOdc = safeAllNodes.find(n => n?.node_type === 'ODC' && n?.olt_device_id === curr.olt_device_id);
         if (potentialOdc && !visited.has(potentialOdc.id)) {
           curr = potentialOdc;
         } else {
@@ -1452,7 +1721,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
       nodeIds: visited,
       pathNodes: path,
     };
-  }, [selectedNode, allNodes]);
+  }, [selectedNode, safeAllNodes]);
 
   // Calculate Total Distance for Ruler Tool
   const rulerTotalMeters = useMemo(() => {
@@ -1482,8 +1751,8 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
   // Filtered Nodes
   const filteredNodes = useMemo(() => {
-    return allNodes.filter(n => {
-      if (!['POP', 'ODC', 'ODP'].includes(n.node_type)) return false;
+    return safeAllNodes.filter(n => {
+      if (!n || !['POP', 'ODC', 'ODP'].includes(n.node_type)) return false;
       if (oltFilterParam) {
         if (String(n.olt_device_id) !== String(oltFilterParam) && String(n.parent_node?.olt_device_id) !== String(oltFilterParam)) {
           return false;
@@ -1512,8 +1781,8 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         if (!match) return false;
       }
       return true;
-    }).sort((a, b) => (a.name || a.code || '').localeCompare(b.name || b.code || '', undefined, { numeric: true, sensitivity: 'base' }));
-  }, [allNodes, oltFilterParam, typeFilter, statusFilter, faultOnlyFilter, searchQuery]);
+    }).sort(naturalNodeCompare);
+  }, [safeAllNodes, oltFilterParam, typeFilter, statusFilter, faultOnlyFilter, searchQuery]);
 
   const nodesWithCoords = useMemo(() => {
     return filteredNodes.filter(n => n.latitude && n.longitude && parseFloat(n.latitude) !== 0);
@@ -1523,10 +1792,10 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   const searchSuggestions = useMemo(() => {
     if (!searchQuery || searchQuery.trim().length === 0) return [];
     const q = searchQuery.toLowerCase();
-    return allNodes.filter(n => {
-      return n.name?.toLowerCase().includes(q) || n.code?.toLowerCase().includes(q) || n.address?.toLowerCase().includes(q) || n.olt_port_ref?.toLowerCase().includes(q);
+    return safeAllNodes.filter(n => {
+      return n?.name?.toLowerCase().includes(q) || n?.code?.toLowerCase().includes(q) || n?.address?.toLowerCase().includes(q) || n?.olt_port_ref?.toLowerCase().includes(q);
     }).slice(0, 6);
-  }, [allNodes, searchQuery]);
+  }, [safeAllNodes, searchQuery]);
 
   const handleSelectSuggestion = (node) => {
     setSelectedNode(node);
@@ -1735,21 +2004,30 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           )}
 
           {/* Leaflet Map Component */}
-          <LeafletMap
-            nodes={nodesWithCoords}
-            cables={allCables}
-            selectedNode={selectedNode}
-            tracedPath={tracedPath}
-            rulerActive={rulerActive}
-            rulerPoints={rulerPoints}
-            setRulerPoints={setRulerPoints}
-            targetPin={targetPin}
-            isFullscreen={true}
-            onToggleFullscreen={() => navigate('/gis-map')}
-            onSelectNode={node => setSelectedNode(node)}
-            onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
-            externalFlyToRef={externalFlyToRef}
-          />
+          {loading && safeAllNodes.length === 0 ? (
+            <div className="flex items-center justify-center h-full w-full bg-slate-950 text-slate-400">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-xs font-semibold">Memuat peta spasial GIS...</span>
+              </div>
+            </div>
+          ) : (
+            <LeafletMap
+              nodes={nodesWithCoords}
+              cables={safeAllCables}
+              selectedNode={selectedNode}
+              tracedPath={tracedPath}
+              rulerActive={rulerActive}
+              rulerPoints={rulerPoints}
+              setRulerPoints={setRulerPoints}
+              targetPin={targetPin}
+              isFullscreen={true}
+              onToggleFullscreen={() => navigate('/gis-map')}
+              onSelectNode={node => setSelectedNode(node)}
+              onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
+              externalFlyToRef={externalFlyToRef}
+            />
+          )}
         </div>
 
         {/* Street View Modal */}
@@ -1773,6 +2051,13 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             }
           }}
         />
+
+        {/* KML / KMZ Import Modal in Fullscreen */}
+        <KmlImportModal
+          isOpen={kmlImportModal}
+          onClose={() => setKmlImportModal(false)}
+          onSuccess={() => fetchNodesAndCables(true)}
+        />
       </div>
     );
   }
@@ -1780,7 +2065,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 p-5 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -1809,7 +2094,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
               targetPin
                 ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-md ring-2 ring-fuchsia-400/40'
-                : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
             title="Cek lokasi rumah pelanggan dari koordinat GPS"
           >
@@ -1819,7 +2104,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           {/* Dedicated Fullscreen Page Button */}
           <button
             onClick={() => navigate('/gis-map/fullscreen')}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800 shadow-2xs"
+            className="px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs"
             title="Buka Peta GIS di Halaman Khusus Layar Penuh (100% Layar Bersih)"
           >
             <span>⛶ Buka Layar Penuh</span>
@@ -1835,7 +2120,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
               rulerActive
                 ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md ring-2 ring-amber-400/40'
-                : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
             <span>📏 {rulerActive ? 'Tutup Penggaris' : 'Ukur Jarak FO'}</span>
@@ -1845,7 +2130,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             onClick={() => setActiveView('map')}
             className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${activeView === 'map'
               ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-              : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
+              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
           >
             Peta GIS Interaktif
@@ -1854,7 +2139,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             onClick={() => setActiveView('list')}
             className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${activeView === 'list'
               ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-              : 'bg-white dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-neutral-700 hover:bg-slate-50 dark:hover:bg-neutral-800'
+              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
           >
             Tabel Telemetry Redaman
@@ -1862,10 +2147,10 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         </div>
       </div>
 
-      <GisStatCards nodes={allNodes} />
+      <GisStatCards nodes={safeAllNodes} />
 
       {/* Main Controls Filter Bar with Smart Search & Fault Filter */}
-      <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 p-4 rounded-2xl shadow-2xs transition-colors duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-2xs transition-colors duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3 relative">
           {/* Smart Search Input with Floating Dropdown Suggestions */}
           <div className="relative w-full sm:w-72">
@@ -1876,7 +2161,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               onFocus={() => setIsSearchFocused(true)}
               onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
               placeholder="Cari ODP, ODC, POP, OLT, Port..."
-              className="px-3.5 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+              className="px-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
             />
             {searchQuery && (
               <button
@@ -1889,7 +2174,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
             {/* Suggestions Dropdown */}
             {isSearchFocused && searchSuggestions.length > 0 && (
-              <div className="absolute top-full left-0 mt-1.5 w-full bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl shadow-2xl z-[1000] overflow-hidden">
+              <div className="absolute top-full left-0 mt-1.5 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-[1000] overflow-hidden">
                 {searchSuggestions.map(s => {
                   const tm = TYPE_META[s.node_type] ?? TYPE_META.ODC;
                   return (
@@ -1897,7 +2182,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                       key={s.id}
                       type="button"
                       onClick={() => handleSelectSuggestion(s)}
-                      className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-neutral-800 flex items-center justify-between border-b border-slate-100 dark:border-neutral-800 last:border-0 cursor-pointer"
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 last:border-0 cursor-pointer"
                     >
                       <div>
                         <div className="flex items-center gap-1.5">
@@ -1919,7 +2204,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
             <option value="">Semua Tipe Node</option>
             <option value="POP">POP Central</option>
@@ -1930,7 +2215,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
             <option value="">Semua Status Node</option>
             <option value="active">🟢 Aktif Normal</option>
@@ -1959,7 +2244,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             onClick={() => setLivePolling(!livePolling)}
             className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${livePolling
               ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-              : 'bg-slate-100 dark:bg-neutral-900 border-slate-200 dark:border-neutral-700 text-slate-600 dark:text-slate-400'
+              : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
               }`}
           >
             <span className={`w-2 h-2 rounded-full ${livePolling ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
@@ -1970,11 +2255,11 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
       {/* Main Content Area */}
       {loading ? (
-        <div className="bg-white dark:bg-black rounded-2xl border border-slate-200 dark:border-neutral-800 p-12 text-center text-slate-400 dark:text-slate-500 text-xs animate-pulse">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center text-slate-400 dark:text-slate-500 text-xs animate-pulse">
           Memuat topologi spasial GIS &amp; data redaman...
         </div>
       ) : activeView === 'map' ? (
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]">
           {/* Node Detail Drawer */}
           <NodeDetailPanel
             node={selectedNode}
@@ -2033,7 +2318,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           {/* Leaflet Map Component */}
           <LeafletMap
             nodes={nodesWithCoords}
-            cables={allCables}
+            cables={safeAllCables}
             selectedNode={selectedNode}
             tracedPath={tracedPath}
             rulerActive={rulerActive}
@@ -2049,11 +2334,11 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         </div>
       ) : (
         /* Tabel Telemetry Redaman */
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xs overflow-hidden transition-colors duration-300">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs overflow-hidden transition-colors duration-300">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50/50 dark:bg-neutral-950 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="px-5 py-3.5">Node &amp; Kode</th>
                   <th className="px-4 py-3.5">Tipe</th>
                   <th className="px-4 py-3.5">Status</th>
@@ -2063,7 +2348,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                   <th className="px-4 py-3.5 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-neutral-900 text-xs">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
                 {filteredNodes.map(node => {
                   const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
                   const effStatus = getNodeEffectiveStatus(node);
@@ -2074,7 +2359,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                     : getOpticalQuality(effectivePower);
 
                   return (
-                    <tr key={node.id} className="hover:bg-slate-50/60 dark:hover:bg-neutral-900/50 transition-colors">
+                    <tr key={node.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors">
                       <td className="px-5 py-3">
                         <span className="font-bold text-slate-800 dark:text-slate-200 block">{node.name}</span>
                         <span className="text-[10px] font-mono text-slate-400">{node.code}</span>

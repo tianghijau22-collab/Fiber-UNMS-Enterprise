@@ -1,20 +1,24 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
-export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
-  const [step, setStep] = useState(1); // 1: Upload, 2: Preview, 3: Processing, 4: Done
+export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarget = 'all' }) {
+  const [step, setStep] = useState(1); // 1: Upload & Target, 2: Preview, 3: Processing, 4: Done
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [previewData, setPreviewData] = useState(null);
   const [resultData, setResultData] = useState(null);
 
-  // User Options in Step 2
-  const [oltSolokId, setOltSolokId] = useState('');
-  const [oltGuguakId, setOltGuguakId] = useState('');
-  const [oltSingkarakId, setOltSingkarakId] = useState('');
-  const [autoLinkNearest, setAutoLinkNearest] = useState(true);
+  // User Options
+  const [importTarget, setImportTarget] = useState(initialTarget); // 'all' | 'odp' | 'odc' | 'cable'
+  const [targetOltId, setTargetOltId] = useState('');
 
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setImportTarget(initialTarget || 'all');
+    }
+  }, [isOpen, initialTarget]);
 
   if (!isOpen) return null;
 
@@ -47,6 +51,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('import_target', importTarget);
 
     try {
       const res = await fetch('/api/kml-import/preview', {
@@ -60,17 +65,6 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
       }
 
       setPreviewData(data.data);
-
-      // Pre-select OLT IDs based on name matching
-      const olts = data.data.available_olts || [];
-      const solok = olts.find(o => o.name.toLowerCase().includes('solok')) || olts[0];
-      const guguak = olts.find(o => o.name.toLowerCase().includes('guguak')) || olts[0];
-      const singkarak = olts.find(o => o.name.toLowerCase().includes('singkarak')) || olts[0];
-
-      if (solok) setOltSolokId(solok.id);
-      if (guguak) setOltGuguakId(guguak.id);
-      if (singkarak) setOltSingkarakId(singkarak.id);
-
       setStep(2);
     } catch (err) {
       setError(err.message);
@@ -90,13 +84,14 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
     try {
       const res = await fetch('/api/kml-import/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
         body: JSON.stringify({
           token: previewData.token,
-          olt_solok_id: oltSolokId ? parseInt(oltSolokId) : null,
-          olt_guguak_id: oltGuguakId ? parseInt(oltGuguakId) : null,
-          olt_singkarak_id: oltSingkarakId ? parseInt(oltSingkarakId) : null,
-          auto_link_nearest: autoLinkNearest,
+          import_target: importTarget,
+          target_olt_id: targetOltId ? parseInt(targetOltId) : null,
         }),
       });
 
@@ -124,6 +119,37 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
     setError(null);
   };
 
+  const TARGET_OPTIONS = [
+    {
+      id: 'all',
+      title: 'Semua Data (Otomatis)',
+      desc: 'Import ODP, ODC, POP, dan Garis Kabel sekaligus',
+      icon: '🌐',
+      badgeColor: 'border-slate-300 dark:border-neutral-700'
+    },
+    {
+      id: 'odp',
+      title: 'Hanya ODP',
+      desc: 'Semua titik lokasi (point) diimpor sebagai node ODP',
+      icon: '📍',
+      badgeColor: 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+    },
+    {
+      id: 'odc',
+      title: 'Hanya ODC',
+      desc: 'Semua titik lokasi (point) diimpor sebagai kabinet ODC',
+      icon: '📦',
+      badgeColor: 'border-blue-400 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+    },
+    {
+      id: 'cable',
+      title: 'Hanya Kabel Fiber',
+      desc: 'Semua garis rute (LineString) diimpor sebagai bentangan kabel',
+      icon: '〰️',
+      badgeColor: 'border-violet-400 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300'
+    },
+  ];
+
   return (
     <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -135,10 +161,10 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
             </span>
             <div>
               <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
-                Import Data Jaringan KML / KMZ (Google Earth)
+                Import KML / KMZ (Google Earth)
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                Normalisasi otomatis titik ODP, ODC, POP, dan rute kabel ke skema Fiber-UNMS
+                Pilih kategori data yang ingin diimpor secara spesifik atau sekaligus
               </p>
             </div>
           </div>
@@ -162,242 +188,261 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
           )}
 
           {/* ══════════════════════════════════════════════════════════
-              STEP 1: UPLOAD FILE
+              STEP 1: UPLOAD FILE & PILIH TARGET
           ══════════════════════════════════════════════════════════ */}
           {step === 1 && (
             <div className="space-y-4">
-              <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
-                  file
-                    ? 'border-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20'
-                    : 'border-slate-300 dark:border-neutral-700 hover:border-blue-500 bg-slate-50/50 dark:bg-neutral-900/50'
-                }`}
-              >
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept=".kml,.kmz"
-                  className="hidden"
-                />
-
-                <div className="text-4xl mb-2">{file ? '📄' : '☁️'}</div>
-                {file ? (
-                  <div>
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{file.name}</p>
-                    <p className="text-xs text-slate-500 mt-1 font-mono">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB • Klik untuk ganti file
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                      Tarik &amp; Lepaskan file .kml atau .kmz ke sini
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      atau klik di sini untuk memilih file dari komputer
-                    </p>
-                  </div>
-                )}
+              {/* Target Selection Pills */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-wide">
+                  1. Pilih Kategori Data yang Diimport:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {TARGET_OPTIONS.map((opt) => {
+                    const isSelected = importTarget === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setImportTarget(opt.id)}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/40 ring-2 ring-blue-500/20 dark:ring-blue-400/20'
+                            : 'border-slate-200 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-neutral-800/60'
+                        }`}
+                      >
+                        <span className="text-2xl shrink-0 mt-0.5">{opt.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs font-bold ${isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-slate-800 dark:text-slate-200'}`}>
+                              {opt.title}
+                            </span>
+                            {isSelected && (
+                              <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                            {opt.desc}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Information Notes */}
-              <div className="p-4 bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl space-y-2 text-xs text-slate-700 dark:text-slate-300">
-                <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300">
-                  <span>ℹ️</span>
-                  <span>Fitur Normalisasi Otomatis UNMS:</span>
+              {/* Upload Dropzone */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2 uppercase tracking-wide">
+                  2. Pilih File KML / KMZ:
+                </label>
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition-all ${
+                    file
+                      ? 'border-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20'
+                      : 'border-slate-300 dark:border-neutral-700 hover:border-blue-500 bg-slate-50/50 dark:bg-neutral-900/50'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept=".kml,.kmz"
+                    className="hidden"
+                  />
+
+                  <div className="text-3xl mb-1.5">{file ? '📄' : '☁️'}</div>
+                  {file ? (
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{file.name}</p>
+                      <p className="text-xs text-slate-500 mt-1 font-mono">
+                        {(file.size / 1024 / 1024).toFixed(2)} MB • Klik untuk ganti file
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                        Tarik &amp; Lepaskan file .kml atau .kmz ke sini
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        atau klik di sini untuk memilih file dari komputer
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600 dark:text-slate-400">
-                  <li><strong>Pemilahan OLT Otomatis:</strong> Node berakhiran <code className="text-blue-600 font-bold">-02</code> ke OLT Guguak, <code className="text-blue-600 font-bold">-05</code> ke OLT Singkarak, dan tanpa akhiran ke OLT Solok Kota.</li>
-                  <li><strong>Node Induk Otomatis:</strong> Tulisan <code className="text-emerald-600 font-bold">POWER FROM</code> pada catatan ODP otomatis menautkan ODP ke ODC induknya.</li>
-                  <li><strong>Informasi Core &amp; Tube:</strong> Teks <code className="text-amber-600 font-bold">CORE</code> dan <code className="text-amber-600 font-bold">TUBE</code> otomatis masuk ke spesifikasi teknis node.</li>
-                  <li><strong>Warna Asli Kabel:</strong> Garis kabel di peta akan mempertahankan warna asli yang sudah digambar di Google Earth.</li>
-                </ul>
+              </div>
+
+              {/* Clean Import Info Box */}
+              <div className="p-3.5 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 rounded-xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 text-xs">
+                  <span>💡</span>
+                  <span>Logika Import Bersih &amp; Praktis:</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  Sistem akan mengekstrak nama dan koordinat geografis secara langsung tanpa pembacaan catatan berbelit. Penentuan node induk (ODC / MS / POP) dapat Anda atur secara leluasa dan presisi nanti melalui form edit node.
+                </p>
               </div>
             </div>
           )}
 
           {/* ══════════════════════════════════════════════════════════
-              STEP 2: PREVIEW & VERIFICATION
+              STEP 2: PREVIEW & OPSIONAL OLT
           ══════════════════════════════════════════════════════════ */}
           {step === 2 && previewData && (
             <div className="space-y-5">
+              {/* Target Mode Badge */}
+              <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🎯</span>
+                  <div>
+                    <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                      Target Import: {TARGET_OPTIONS.find(o => o.id === importTarget)?.title}
+                    </span>
+                    <span className="text-[11px] text-blue-700 dark:text-blue-400 block">
+                      {TARGET_OPTIONS.find(o => o.id === importTarget)?.desc}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 dark:text-blue-300 underline"
+                >
+                  Ubah Target
+                </button>
+              </div>
+
               {/* Summary Metric Cards */}
               <div>
                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2.5">
-                  1. Rangkuman Elemen Jaringan Terdeteksi:
+                  Rangkuman Elemen di File KML:
                 </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl">
-                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 block">ODP Point</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className={`p-3 rounded-xl border ${importTarget === 'odp' ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-400 ring-2 ring-emerald-500/20' : 'bg-slate-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700'}`}>
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 block">Titik ODP</span>
                     <span className="text-2xl font-black text-emerald-800 dark:text-emerald-200">
-                      {previewData.summary.odp_count}
+                      {importTarget === 'odp' ? previewData.summary.total_nodes : previewData.summary.odp_count}
                     </span>
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block mt-0.5">Terminal Akses Pelanggan</span>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">Terminal Akses</span>
                   </div>
 
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl">
-                    <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 block">ODC Cabinet</span>
+                  <div className={`p-3 rounded-xl border ${importTarget === 'odc' ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-400 ring-2 ring-blue-500/20' : 'bg-slate-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700'}`}>
+                    <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 block">Titik ODC</span>
                     <span className="text-2xl font-black text-blue-800 dark:text-blue-200">
-                      {previewData.summary.odc_count}
+                      {importTarget === 'odc' ? previewData.summary.total_nodes : previewData.summary.odc_count}
                     </span>
-                    <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">Kabinet Distribusi Feeder</span>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">Kabinet Feeder</span>
                   </div>
 
-                  <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl">
-                    <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 block">POP &amp; BTS</span>
-                    <span className="text-2xl font-black text-indigo-800 dark:text-indigo-200">
-                      {previewData.summary.pop_count}
+                  <div className={`p-3 rounded-xl border ${importTarget === 'cable' ? 'bg-violet-50 dark:bg-violet-950/60 border-violet-400 ring-2 ring-violet-500/20' : 'bg-slate-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700'}`}>
+                    <span className="text-[10px] font-bold text-violet-700 dark:text-violet-300 block">Garis Kabel FO</span>
+                    <span className="text-2xl font-black text-violet-800 dark:text-violet-200">
+                      {previewData.summary.total_cables}
                     </span>
-                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 block mt-0.5">Core Headend / Tower</span>
-                  </div>
-
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl">
-                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 block">Joint Box (JB)</span>
-                    <span className="text-2xl font-black text-amber-800 dark:text-amber-200">
-                      {previewData.summary.jb_count}
-                    </span>
-                    <span className="text-[10px] text-amber-600 dark:text-amber-400 block mt-0.5">Sambungan Splicing Kabel</span>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">Bentangan Jalur</span>
                   </div>
 
                   <div className="p-3 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl">
-                    <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 block">Tiang / Crossing</span>
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block">Total Node Titik</span>
                     <span className="text-2xl font-black text-slate-800 dark:text-slate-200">
-                      {previewData.summary.pole_count}
+                      {previewData.summary.total_nodes}
                     </span>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">Tiang Tumpu / Rute Jalan</span>
-                  </div>
-
-                  <div className="p-3 bg-fuchsia-50 dark:bg-fuchsia-950/40 border border-fuchsia-200 dark:border-fuchsia-800 rounded-xl">
-                    <span className="text-[10px] font-bold text-fuchsia-700 dark:text-fuchsia-300 block">Bentangan Kabel FO</span>
-                    <span className="text-2xl font-black text-fuchsia-800 dark:text-fuchsia-200">
-                      {previewData.summary.total_cables}
-                    </span>
-                    <span className="text-[10px] text-fuchsia-600 dark:text-fuchsia-400 block mt-0.5">Figure-8, ADSS, Jalur</span>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">Semua Point</span>
                   </div>
                 </div>
               </div>
 
-              {/* OLT Mapping Setup */}
-              <div className="p-4 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 rounded-xl space-y-3">
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
-                  <span>2. Pemilahan OLT Berdasarkan Inisial Nama:</span>
-                  <span className="text-[10px] font-normal text-emerald-600 font-mono">✓ Terdeteksi Otomatis</span>
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                      Tanpa Akhiran ({previewData.summary.olt_breakdown.solok_kota} Node):
-                    </label>
-                    <select
-                      value={oltSolokId}
-                      onChange={(e) => setOltSolokId(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200"
-                    >
-                      {previewData.available_olts?.map(o => (
-                        <option key={o.id} value={o.id}>{o.name} ({o.ip_address})</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                      Inisial <code className="text-blue-600">-02</code> ({previewData.summary.olt_breakdown.guguak_02} Node):
-                    </label>
-                    <select
-                      value={oltGuguakId}
-                      onChange={(e) => setOltGuguakId(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200"
-                    >
-                      {previewData.available_olts?.map(o => (
-                        <option key={o.id} value={o.id}>{o.name} ({o.ip_address})</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                      Inisial <code className="text-blue-600">-05</code> ({previewData.summary.olt_breakdown.singkarak_05} Node):
-                    </label>
-                    <select
-                      value={oltSingkarakId}
-                      onChange={(e) => setOltSingkarakId(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200"
-                    >
-                      {previewData.available_olts?.map(o => (
-                        <option key={o.id} value={o.id}>{o.name} ({o.ip_address})</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Node Induk Detection Banner */}
-              <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl flex items-start gap-2.5 text-xs">
-                <span className="text-emerald-600 text-base">🎯</span>
-                <div className="space-y-1">
-                  <p className="font-bold text-emerald-800 dark:text-emerald-200">
-                    {previewData.summary.parent_detected_count} ODP memiliki catatan "POWER FROM" yang valid!
-                  </p>
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                    Sistem akan langsung menghubungkan ODP tersebut ke ODC induknya secara presisi.
-                  </p>
-                  <label className="flex items-center gap-2 mt-1.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={autoLinkNearest}
-                      onChange={(e) => setAutoLinkNearest(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500"
-                    />
-                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                      Tautkan sisa ODP yang tanpa catatan ke ODC terdekat dalam kluster yang sama (Maksimal 3 km).
-                    </span>
-                  </label>
-                </div>
+              {/* OLT Mapping Setup (Simplified Single Dropdown) */}
+              <div className="p-4 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 rounded-xl space-y-2">
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                  Hubungkan ke Perangkat OLT (Opsional):
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Jika dipilih, semua node yang diimpor akan otomatis terafiliasi ke OLT ini. Boleh dikosongkan jika Anda ingin mengaturnya nanti.
+                </p>
+                <select
+                  value={targetOltId}
+                  onChange={(e) => setTargetOltId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200"
+                >
+                  <option value="">— Kosongkan / Tetapkan Nanti —</option>
+                  {previewData.available_olts?.map(o => (
+                    <option key={o.id} value={o.id}>
+                      {o.name} {o.ip_address ? `(${o.ip_address})` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Sample Data Table */}
               <div>
                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                  3. Pratinjau Sampel Node yang Akan Masuk (10 Titik Pertama):
+                  Pratinjau Sampel Data (10 Item Pertama):
                 </h4>
                 <div className="border border-slate-200 dark:border-neutral-800 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
-                  <table className="w-full text-left text-[11px]">
-                    <thead className="bg-slate-100 dark:bg-neutral-800 font-bold text-slate-600 dark:text-slate-300">
-                      <tr>
-                        <th className="px-3 py-2">Nama Node</th>
-                        <th className="px-2 py-2">Tipe</th>
-                        <th className="px-2 py-2">Inisial OLT</th>
-                        <th className="px-2 py-2">Power From (Induk)</th>
-                        <th className="px-2 py-2">Spesifikasi Core/Tube</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-neutral-800 text-slate-700 dark:text-slate-300">
-                      {previewData.sample_nodes?.slice(0, 10).map((n, i) => (
-                        <tr key={i} className="hover:bg-slate-50 dark:hover:bg-neutral-800/50">
-                          <td className="px-3 py-1.5 font-bold">{n.name}</td>
-                          <td className="px-2 py-1.5">
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
-                              {n.node_type}
-                            </span>
-                          </td>
-                          <td className="px-2 py-1.5 font-mono text-[10px]">
-                            {n.olt_key === '02' ? 'Guguak (-02)' : n.olt_key === '05' ? 'Singkarak (-05)' : 'Solok Kota'}
-                          </td>
-                          <td className="px-2 py-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
-                            {n.power_from_raw || '—'}
-                          </td>
-                          <td className="px-2 py-1.5 text-slate-500 font-mono text-[10px]">
-                            {[n.tube_info, n.core_color].filter(Boolean).join(' • ') || '—'}
-                          </td>
+                  {importTarget === 'cable' ? (
+                    <table className="w-full text-left text-[11px]">
+                      <thead className="bg-slate-100 dark:bg-neutral-800 font-bold text-slate-600 dark:text-slate-300">
+                        <tr>
+                          <th className="px-3 py-2">Nama Kabel</th>
+                          <th className="px-2 py-2">Warna Garis</th>
+                          <th className="px-2 py-2">Estimasi Panjang</th>
+                          <th className="px-2 py-2">Titik Koordinat</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-neutral-800 text-slate-700 dark:text-slate-300">
+                        {previewData.sample_cables?.slice(0, 10).map((c, i) => (
+                          <tr key={i} className="hover:bg-slate-50 dark:hover:bg-neutral-800/50">
+                            <td className="px-3 py-1.5 font-bold">{c.name}</td>
+                            <td className="px-2 py-1.5">
+                              <span className="inline-flex items-center gap-1.5 font-mono text-[10px]">
+                                <span className="w-3 h-3 rounded-full border border-black/20" style={{ backgroundColor: c.color }} />
+                                {c.color}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1.5 font-mono text-[10px]">
+                              {c.length_meters ? `${c.length_meters.toLocaleString()} m` : '—'}
+                            </td>
+                            <td className="px-2 py-1.5 text-slate-500 font-mono text-[10px]">
+                              {c.coordinates?.length || 0} titik rute
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table className="w-full text-left text-[11px]">
+                      <thead className="bg-slate-100 dark:bg-neutral-800 font-bold text-slate-600 dark:text-slate-300">
+                        <tr>
+                          <th className="px-3 py-2">Nama Node</th>
+                          <th className="px-2 py-2">Tipe Target</th>
+                          <th className="px-2 py-2">Latitude</th>
+                          <th className="px-2 py-2">Longitude</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-neutral-800 text-slate-700 dark:text-slate-300">
+                        {previewData.sample_nodes?.slice(0, 10).map((n, i) => (
+                          <tr key={i} className="hover:bg-slate-50 dark:hover:bg-neutral-800/50">
+                            <td className="px-3 py-1.5 font-bold">{n.name}</td>
+                            <td className="px-2 py-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                                {importTarget === 'odp' ? 'ODP' : importTarget === 'odc' ? 'ODC' : n.node_type}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1.5 font-mono text-[10px] text-slate-600 dark:text-slate-400">
+                              {n.lat}
+                            </td>
+                            <td className="px-2 py-1.5 font-mono text-[10px] text-slate-600 dark:text-slate-400">
+                              {n.lng}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             </div>
@@ -411,10 +456,10 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
               <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
               <div>
                 <h4 className="text-sm font-black text-slate-900 dark:text-white">
-                  Menyimpan &amp; Menghubungkan Topologi Jaringan...
+                  Menyimpan Data KML ke Database...
                 </h4>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Menyimpan ribuan ODP, ODC, POP, kabel fiber optik, dan menautkan struktur hierarki pohon jaringan secara aman.
+                  Memproses titik node dan bentangan rute kabel sesuai kategori yang Anda pilih.
                 </p>
               </div>
             </div>
@@ -430,7 +475,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
               </div>
               <div>
                 <h4 className="text-base font-black text-slate-900 dark:text-white">
-                  Import KML Berhasil Disimpan!
+                  Import KML Selesai!
                 </h4>
                 <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 max-w-md mx-auto">
                   {resultData.message}
@@ -447,13 +492,13 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
                     <span className="text-xs text-slate-400 block font-medium">Node Diperbarui</span>
                     <span className="text-lg font-black text-slate-900 dark:text-white">{resultData.stats.nodes_updated}</span>
                   </div>
-                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                    <span className="text-xs text-emerald-600 block font-medium">Taut Induk ODC</span>
-                    <span className="text-lg font-black text-emerald-700 dark:text-emerald-300">{resultData.stats.parents_linked}</span>
+                  <div className="p-2.5 bg-slate-50 dark:bg-neutral-800 rounded-xl border border-slate-200 dark:border-neutral-700">
+                    <span className="text-xs text-slate-400 block font-medium">Kabel Baru</span>
+                    <span className="text-lg font-black text-slate-900 dark:text-white">{resultData.stats.cables_created}</span>
                   </div>
                   <div className="p-2.5 bg-slate-50 dark:bg-neutral-800 rounded-xl border border-slate-200 dark:border-neutral-700">
-                    <span className="text-xs text-slate-400 block font-medium">Kabel Disimpan</span>
-                    <span className="text-lg font-black text-slate-900 dark:text-white">{resultData.stats.cables_created + resultData.stats.cables_updated}</span>
+                    <span className="text-xs text-slate-400 block font-medium">Kabel Diperbarui</span>
+                    <span className="text-lg font-black text-slate-900 dark:text-white">{resultData.stats.cables_updated}</span>
                   </div>
                 </div>
               )}
@@ -483,7 +528,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
                     : 'bg-slate-200 dark:bg-neutral-800 text-slate-400 cursor-not-allowed'
                 }`}
               >
-                {loading ? 'Membaca File...' : '🔍 Baca & Pratinjau KML'}
+                {loading ? 'Membaca File...' : '🔍 Lanjut ke Pratinjau KML'}
               </button>
             </>
           )}
@@ -496,7 +541,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
                 disabled={loading}
                 className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-700 dark:text-slate-300 cursor-pointer"
               >
-                ↩️ Ganti File KML
+                ↩️ Ganti File / Kategori
               </button>
 
               <button
@@ -505,7 +550,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
                 disabled={loading}
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
               >
-                <span>🚀 Konfirmasi &amp; Simpan ke Database UNMS</span>
+                <span>🚀 Simpan Data ke Database</span>
               </button>
             </>
           )}
@@ -517,7 +562,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess }) {
                 onClick={onClose}
                 className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md cursor-pointer"
               >
-                🗺️ Tutup &amp; Lihat Langsung di Peta GIS
+                Tutup Selesai
               </button>
             </div>
           )}

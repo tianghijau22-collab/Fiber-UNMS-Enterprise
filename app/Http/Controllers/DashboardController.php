@@ -12,6 +12,7 @@ use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
@@ -19,7 +20,8 @@ class DashboardController extends Controller
     {
         Carbon::setLocale('id');
 
-        $totalOlts = OltDevice::count();
+        $data = Cache::remember('dashboard_metrics_payload', 15, function () {
+            $totalOlts = OltDevice::count();
         $totalPop  = NetworkNode::where('node_type', 'POP')->count();
         $totalOdc  = NetworkNode::where('node_type', 'ODC')->count();
         $totalOdp  = NetworkNode::where('node_type', 'ODP')->count();
@@ -238,69 +240,85 @@ class DashboardController extends Controller
         ];
 
         // ── 6. Mini Live GIS Map Preview Data with Real-Time Health ──
-        $gisNodes = NetworkNode::with('oltDevice')
+        $rawGisNodes = NetworkNode::with('oltDevice')
             ->select('id', 'name', 'code', 'node_type', 'latitude', 'longitude', 'status', 'core_power', 'olt_device_id', 'parent_node_id')
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
-            ->get()
-            ->map(function ($node) use ($liveOnuMap) {
-                $status = strtolower($node->status);
-                $rxPower = $node->core_power;
-                if ($node->node_type === 'ODP') {
-                    $onts = DB::table('ont_registrations')
-                        ->join('network_ports', 'network_ports.customer_service_id', '=', 'ont_registrations.customer_service_id')
-                        ->where('network_ports.node_id', $node->id)
-                        ->select('ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'ont_registrations.status', 'ont_registrations.rx_power')
-                        ->get();
+            ->get();
 
-                    if ($onts->isNotEmpty()) {
-                        $hasOffline = false;
-                        $powers = [];
-                        foreach ($onts as $ont) {
-                            $snKey = strtolower(trim($ont->onu_serial ?? ''));
-                            $macKey = strtolower(trim($ont->onu_mac ?? ''));
-                            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
-                            $isOnline = false;
-                            if ($liveData) {
-                                $st = strtolower($liveData['status'] ?? '');
-                                $rawRx = $liveData['rx_power'] ?? null;
-                                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                            } else {
-                                $st = strtolower($ont->status ?? '');
-                                $rawRx = $ont->rx_power;
-                                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                            }
+        $odpNodeIds = $rawGisNodes->where('node_type', 'ODP')->pluck('id')->toArray();
+        $ontsByOdpNode = [];
+        if (!empty($odpNodeIds)) {
+            $allNodeOnts = DB::table('ont_registrations')
+                ->join('network_ports', 'network_ports.customer_service_id', '=', 'ont_registrations.customer_service_id')
+                ->whereIn('network_ports.node_id', $odpNodeIds)
+                ->select(
+                    'network_ports.node_id',
+                    'ont_registrations.onu_serial',
+                    'ont_registrations.onu_mac',
+                    'ont_registrations.status',
+                    'ont_registrations.rx_power'
+                )
+                ->get();
 
-                            if ($isOnline) {
-                                $powers[] = (float)($liveData['rx_power'] ?? $ont->rx_power);
-                            } else {
-                                $hasOffline = true;
-                            }
+            foreach ($allNodeOnts as $ontItem) {
+                $ontsByOdpNode[$ontItem->node_id][] = $ontItem;
+            }
+        }
+
+        $gisNodes = $rawGisNodes->map(function ($node) use ($liveOnuMap, $ontsByOdpNode) {
+            $status = strtolower($node->status);
+            $rxPower = $node->core_power;
+            if ($node->node_type === 'ODP') {
+                $onts = $ontsByOdpNode[$node->id] ?? [];
+                if (!empty($onts)) {
+                    $hasOffline = false;
+                    $powers = [];
+                    foreach ($onts as $ont) {
+                        $snKey = strtolower(trim($ont->onu_serial ?? ''));
+                        $macKey = strtolower(trim($ont->onu_mac ?? ''));
+                        $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
+                        $isOnline = false;
+                        if ($liveData) {
+                            $st = strtolower($liveData['status'] ?? '');
+                            $rawRx = $liveData['rx_power'] ?? null;
+                            $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                        } else {
+                            $st = strtolower($ont->status ?? '');
+                            $rawRx = $ont->rx_power;
+                            $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
                         }
 
-                        if ($hasOffline) {
-                            $status = 'offline';
-                            $rxPower = '-40.00';
+                        if ($isOnline) {
+                            $powers[] = (float)($liveData['rx_power'] ?? $ont->rx_power);
                         } else {
-                            $status = 'active';
-                            $rxPower = count($powers) > 0 ? number_format(array_sum($powers) / count($powers), 2, '.', '') : '-18.50';
+                            $hasOffline = true;
                         }
                     }
-                }
 
-                return [
-                    'id'            => $node->id,
-                    'name'          => $node->name,
-                    'code'          => $node->code,
-                    'node_type'     => $node->node_type,
-                    'latitude'      => (float)$node->latitude,
-                    'longitude'     => (float)$node->longitude,
-                    'status'        => $status,
-                    'core_power'    => $rxPower,
-                    'olt_device_id' => $node->olt_device_id,
-                    'olt_name'      => $node->oltDevice?->name,
-                ];
-            });
+                    if ($hasOffline) {
+                        $status = 'offline';
+                        $rxPower = '-40.00';
+                    } else {
+                        $status = 'active';
+                        $rxPower = count($powers) > 0 ? number_format(array_sum($powers) / count($powers), 2, '.', '') : '-18.50';
+                    }
+                }
+            }
+
+            return [
+                'id'            => $node->id,
+                'name'          => $node->name,
+                'code'          => $node->code,
+                'node_type'     => $node->node_type,
+                'latitude'      => (float)$node->latitude,
+                'longitude'     => (float)$node->longitude,
+                'status'        => $status,
+                'core_power'    => $rxPower,
+                'olt_device_id' => $node->olt_device_id,
+                'olt_name'      => $node->oltDevice?->name,
+            ];
+        });
 
         $gisCables = NetworkCable::select('id', 'name', 'code', 'route_coordinates', 'status', 'core_count_total', 'core_count_used')
             ->get();
@@ -395,10 +413,8 @@ class DashboardController extends Controller
             ];
         });
 
-        return response()->json([
-            'status' => 'success',
-            'data'   => [
-                'overview' => [
+        return [
+            'overview' => [
                     'total_olts'          => $totalOlts,
                     'total_pop'           => $totalPop,
                     'total_odc'           => $totalOdc,
@@ -439,8 +455,8 @@ class DashboardController extends Controller
                 ],
                 'server_health'           => $serverHealth,
                 'gis_preview'             => [
-                    'nodes'               => $gisNodes,
-                    'cables'              => $gisCables,
+                    'nodes'               => is_array($gisNodes) ? array_values($gisNodes) : $gisNodes->values()->all(),
+                    'cables'              => is_array($gisCables) ? array_values($gisCables) : $gisCables->values()->all(),
                 ],
                 'rx_power' => [
                     'sangat_baik' => $sangatBaik,
@@ -452,9 +468,14 @@ class DashboardController extends Controller
                     'moderate'    => $warning,
                     'avg_power'   => $avgPower,
                 ],
-                'recent_alerts'     => $recentAlerts,
-                'recent_activities' => $recentActivities,
-            ]
+                'recent_alerts'     => array_values($recentAlerts),
+                'recent_activities' => is_array($recentActivities) ? array_values($recentActivities) : $recentActivities->values()->all(),
+            ];
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $data
         ]);
     }
 }

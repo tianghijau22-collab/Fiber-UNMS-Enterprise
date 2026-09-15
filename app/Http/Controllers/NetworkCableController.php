@@ -51,8 +51,82 @@ class NetworkCableController extends Controller
             });
         }
 
+        if ($request->filled('from_node_id')) {
+            $query->where('from_node_id', $request->from_node_id);
+        }
+
+        if ($request->filled('to_node_id')) {
+            $query->where('to_node_id', $request->to_node_id);
+        }
+
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('installation_type') && $request->installation_type !== 'all') {
+            $query->where('installation_type', $request->installation_type);
+        }
+
+        if ($request->filled('q')) {
+            $search = trim($request->q);
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'ilike', "%{$search}%")
+                  ->orWhere('code', 'ilike', "%{$search}%")
+                  ->orWhere('route_description', 'ilike', "%{$search}%")
+                  ->orWhere('notes', 'ilike', "%{$search}%");
+            });
+        }
+
+        if ($request->boolean('with_cores')) {
+            $query->with(['cores' => fn($q) => $q->orderBy('core_number')]);
+        }
+
         $cables = $query->orderBy('name')->get();
         return response()->json(['data' => $cables]);
+    }
+
+    /**
+     * Comprehensive Cable Network Statistics
+     */
+    public function stats()
+    {
+        $totalCables = NetworkCable::count();
+        $totalLengthMeters = (float) NetworkCable::sum('length_meters');
+        $totalCores = (int) NetworkCable::sum('core_count_total');
+        $usedCores = (int) NetworkCable::sum('core_count_used');
+        $usedPct = $totalCores > 0 ? round(($usedCores / $totalCores) * 100, 1) : 0;
+
+        $byStatus = NetworkCable::select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        $byInstallation = NetworkCable::select('installation_type', DB::raw('count(*) as count'))
+            ->groupBy('installation_type')
+            ->pluck('count', 'installation_type')
+            ->toArray();
+
+        return response()->json([
+            'total_cables' => $totalCables,
+            'total_length_meters' => $totalLengthMeters,
+            'total_length_km' => round($totalLengthMeters / 1000, 2),
+            'total_cores' => $totalCores,
+            'used_cores' => $usedCores,
+            'available_cores' => max(0, $totalCores - $usedCores),
+            'used_percentage' => $usedPct,
+            'by_status' => [
+                'active' => $byStatus['active'] ?? 0,
+                'maintenance' => $byStatus['maintenance'] ?? 0,
+                'damaged' => $byStatus['damaged'] ?? 0,
+                'inactive' => $byStatus['inactive'] ?? 0,
+            ],
+            'by_installation' => [
+                'Aerial' => $byInstallation['Aerial'] ?? 0,
+                'Underground' => $byInstallation['Underground'] ?? 0,
+                'Duct' => $byInstallation['Duct'] ?? 0,
+                'Wall' => $byInstallation['Wall'] ?? 0,
+            ],
+        ]);
     }
 
     /**
@@ -274,6 +348,68 @@ class NetworkCableController extends Controller
         );
 
         return response(null, Response::HTTP_NO_CONTENT);
+    }
+
+    /**
+     * Mass Delete All Cables & Associated Cores
+     */
+    public function deleteAll(Request $request)
+    {
+        $this->checkCrudPermission();
+
+        $query = NetworkCable::query();
+        if ($request->filled('installation_type') && $request->installation_type !== 'all') {
+            $query->where('installation_type', $request->installation_type);
+        }
+
+        $cables = $query->get();
+        $count = $cables->count();
+
+        if ($count === 0) {
+            return response()->json([
+                'status'        => 'success',
+                'message'       => "Tidak ada bentangan kabel yang ditemukan untuk dihapus.",
+                'deleted_count' => 0,
+            ]);
+        }
+
+        $cableIds = $cables->pluck('id')->toArray();
+
+        DB::beginTransaction();
+        try {
+            // 1. Hapus seluruh core matrix yang terkait
+            DB::table('network_cable_cores')->whereIn('cable_id', $cableIds)->delete();
+
+            // 2. Ubah code kabel dengan suffix deleted dan hapus
+            $now = time();
+            foreach ($cables as $cable) {
+                $cable->code = $cable->code . '_deleted_' . $cable->id . '_' . $now;
+                $cable->save();
+                $cable->delete();
+            }
+
+            DB::commit();
+
+            AuditLog::record(
+                'DELETE',
+                'Infrastruktur Kabel Optik',
+                "Menghapus massal seluruh bentangan kabel ({$count} kabel) beserta seluruh data core matrix-nya",
+                null,
+                ['deleted_count' => $count]
+            );
+
+            return response()->json([
+                'status'        => 'success',
+                'message'       => "Berhasil menghapus {$count} bentangan kabel beserta seluruh data core matrix-nya.",
+                'deleted_count' => $count,
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'status'  => 'error',
+                'message' => "Gagal menghapus bentangan kabel: " . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function updateRoute(Request $request, NetworkCable $networkCable)

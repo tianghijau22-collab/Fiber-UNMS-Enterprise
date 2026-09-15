@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 
 /**
  * Reusable SearchableSelect Component
@@ -30,25 +30,59 @@ export default function SearchableSelect({
   const searchInputRef = useRef(null);
 
   // Normalize options array
-  const normalizedOptions = options.map(opt => {
-    if (typeof opt === 'object' && opt !== null) {
-      return {
-        value: opt.value,
-        label: opt.label !== undefined ? String(opt.label) : String(opt.value),
-        sublabel: opt.sublabel,
-        disabled: opt.disabled || false
-      };
-    }
-    return { value: opt, label: String(opt), disabled: false };
-  });
+  const normalizedOptions = useMemo(() => {
+    return options.map(opt => {
+      if (typeof opt === 'object' && opt !== null) {
+        return {
+          value: opt.value,
+          label: opt.label !== undefined ? String(opt.label) : String(opt.value),
+          sublabel: opt.sublabel,
+          disabled: opt.disabled || false
+        };
+      }
+      return { value: opt, label: String(opt), disabled: false };
+    });
+  }, [options]);
 
   const selectedOption = normalizedOptions.find(o => String(o.value) === String(value));
 
-  // Filter options based on search input
-  const filteredOptions = normalizedOptions.filter(o =>
-    o.label.toLowerCase().includes(search.toLowerCase()) ||
-    (o.sublabel && o.sublabel.toLowerCase().includes(search.toLowerCase()))
-  );
+  // Filter & rank options based on search input
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return normalizedOptions;
+    const q = search.trim().toLowerCase();
+
+    return normalizedOptions
+      .filter(o =>
+        o.label.toLowerCase().includes(q) ||
+        (o.sublabel && o.sublabel.toLowerCase().includes(q))
+      )
+      .sort((a, b) => {
+        const aLabel = a.label.toLowerCase();
+        const bLabel = b.label.toLowerCase();
+
+        // 1. Exact match on label
+        if (aLabel === q) return -1;
+        if (bLabel === q) return 1;
+
+        // 2. Starts with query or "odp <query>" / "odc <query>"
+        const aStarts = aLabel.startsWith(q) || aLabel.startsWith(`odp ${q}`) || aLabel.startsWith(`odc ${q}`);
+        const bStarts = bLabel.startsWith(q) || bLabel.startsWith(`odp ${q}`) || bLabel.startsWith(`odc ${q}`);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+
+        return 0;
+      });
+  }, [normalizedOptions, search]);
+
+  // Limit displayed options for rendering performance while keeping selected visible
+  const displayedOptions = useMemo(() => {
+    if (search.trim()) return filteredOptions.slice(0, 150);
+    const top = filteredOptions.slice(0, 150);
+    if (selectedOption && !top.some(o => String(o.value) === String(selectedOption.value))) {
+      return [selectedOption, ...top];
+    }
+    return top;
+  }, [filteredOptions, search, selectedOption]);
 
   // Auto focus search input on open
   useEffect(() => {
@@ -178,36 +212,43 @@ export default function SearchableSelect({
                 Data tidak ditemukan
               </div>
             ) : (
-              filteredOptions.map((opt) => {
-                const isSelected = String(opt.value) === String(value);
-                return (
-                  <button
-                    key={String(opt.value)}
-                    type="button"
-                    disabled={opt.disabled}
-                    onClick={() => !opt.disabled && handleSelect(opt.value)}
-                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
-                      opt.disabled
-                        ? 'opacity-40 cursor-not-allowed'
-                        : isSelected
-                        ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200 dark:border-indigo-800'
-                        : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
-                    }`}
-                  >
-                    <div>
-                      <div className="truncate">{opt.label}</div>
-                      {opt.sublabel && (
-                        <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{opt.sublabel}</div>
+              <>
+                {displayedOptions.map((opt) => {
+                  const isSelected = String(opt.value) === String(value);
+                  return (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      disabled={opt.disabled}
+                      onClick={() => !opt.disabled && handleSelect(opt.value)}
+                      className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
+                        opt.disabled
+                          ? 'opacity-40 cursor-not-allowed'
+                          : isSelected
+                          ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200 dark:border-indigo-800'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      <div>
+                        <div className="truncate">{opt.label}</div>
+                        {opt.sublabel && (
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate">{opt.sublabel}</div>
+                        )}
+                      </div>
+                      {isSelected && (
+                        <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
                       )}
-                    </div>
-                    {isSelected && (
-                      <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                );
-              })
+                    </button>
+                  );
+                })}
+                {filteredOptions.length > 150 && (
+                  <div className="px-3 py-2 text-[10px] text-center text-slate-400 dark:text-slate-500 italic bg-slate-50/60 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800">
+                    Menampilkan 150 dari {filteredOptions.length} opsi. Ketik kata kunci untuk mencari lebih spesifik...
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

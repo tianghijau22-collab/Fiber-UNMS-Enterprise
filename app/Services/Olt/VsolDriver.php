@@ -150,16 +150,19 @@ class VsolDriver implements OltDeviceDriverInterface
         return true;
     }
 
-    public function getOnuOpticalPower(string $serialNumber): array
+    public function getOnuOpticalPower(string $serialNumber, ?string $port = null, ?int $onuId = null): array
     {
         return [
             'serial_number'    => $serialNumber,
+            'port'             => $port,
+            'onu_id'           => $onuId,
             'rx_power_dbm'     => -20.15,
             'tx_power_dbm'     => 2.18,
             'olt_rx_power_dbm' => -19.75,
             'voltage_v'        => 3.30,
             'bias_current_ma'  => 14.1,
             'temperature_c'    => 41.0,
+            'distance_meters'  => 850,
             'status'           => 'Normal',
         ];
     }

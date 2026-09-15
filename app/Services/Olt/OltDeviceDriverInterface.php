@@ -8,6 +8,7 @@ interface OltDeviceDriverInterface {
     public function getOnuListByPort(string $portId): array;
     public function getUnconfiguredOnus(): array;
     public function authorizeOnu(string $serialNumber, string $profileId): bool;
-    public function getOnuOpticalPower(string $serialNumber): array;
+    public function getOnuOpticalPower(string $serialNumber, ?string $port = null, ?int $onuId = null): array;
 }
+
 ?>

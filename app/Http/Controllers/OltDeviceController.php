@@ -158,11 +158,18 @@ class OltDeviceController extends Controller
         $device = OltDevice::findOrFail($id);
         $result = ConnectionManager::testDevice($device);
 
+        $snap = $device->last_telemetry_snapshot ?: [];
+        if (!isset($snap['device_info'])) {
+            $snap['device_info'] = [];
+        }
+        $snap['device_info']['_source'] = ($result['connection_mode'] === 'live') ? 'live_snmp' : 'simulation';
+
         // Persist connection mode result
         $device->update([
-            'connection_mode'    => $result['connection_mode'],
-            'last_connected_at'  => now(),
-            'last_ping_ms'       => $result['ping']['latency_ms'] ?? null,
+            'connection_mode'         => $result['connection_mode'],
+            'last_connected_at'       => now(),
+            'last_ping_ms'            => $result['ping']['latency_ms'] ?? null,
+            'last_telemetry_snapshot' => $snap,
         ]);
 
         AuditLog::record(
@@ -191,8 +198,14 @@ class OltDeviceController extends Controller
     {
         $device = OltDevice::findOrFail($id);
 
+        $snap = $device->last_telemetry_snapshot ?: [];
+        if (isset($snap['device_info'])) {
+            $snap['device_info']['_source'] = 'simulation';
+        }
+
         $device->update([
-            'connection_mode' => 'simulation',
+            'connection_mode'         => 'simulation',
+            'last_telemetry_snapshot' => $snap,
         ]);
 
         AuditLog::record(

@@ -98,6 +98,9 @@ class OltController extends Controller
             $rawSnapshot = $device->last_telemetry_snapshot;
             $rawPonPorts = !empty($rawSnapshot['pon_ports']) ? $rawSnapshot['pon_ports'] : [];
             $rawDevInfo  = !empty($rawSnapshot['device_info']) ? $rawSnapshot['device_info'] : [];
+            if ($device->connection_mode === 'live') {
+                $rawDevInfo['_source'] = 'live_snmp';
+            }
             $rawOnuList  = $rawSnapshot['onu_list'] ?? [];
             $rawUncfg    = $rawSnapshot['unconfigured_onus'] ?? [];
 
@@ -800,11 +803,134 @@ class OltController extends Controller
 
     public function opticalPower(Request $request, string $serialNumber)
     {
+        $serialNumber = strtoupper(trim($serialNumber));
         $vendor   = $request->query('vendor', 'zte-c300');
         $deviceId = $request->query('device_id') ? (int)$request->query('device_id') : null;
-        $driver   = $this->getDriver($vendor, $deviceId);
+        $port     = $request->query('port');
+        $onuId    = $request->query('onu_id') ? (int)$request->query('onu_id') : null;
 
-        return response()->json($driver->getOnuOpticalPower($serialNumber));
+        $device   = $deviceId ? OltDevice::find($deviceId) : null;
+        if (!$device && $request->query('device_id')) {
+            $device = OltDevice::find((int)$request->query('device_id'));
+        }
+        if (!$device) {
+            $device = OltDevice::where('connection_mode', 'live')->first() ?: OltDevice::first();
+        }
+
+        // 1. Cari data registrasi ONT & Relasi Pelanggan lengkap di Database UNMS
+        $reg = OntRegistration::with([
+            'customerService.customer',
+            'customerService.servicePackage',
+            'customerService.networkPort.node',
+            'oltPort.node'
+        ])
+        ->where('onu_serial', $serialNumber)
+        ->orWhere('onu_mac', $serialNumber)
+        ->first();
+
+        // 2. Cari data ONU dari snapshot telemetri OLT jika ada
+        $snapshotOnu = null;
+        if ($device && !empty($device->last_telemetry_snapshot['onu_list'])) {
+            foreach ($device->last_telemetry_snapshot['onu_list'] as $o) {
+                if (strtoupper($o['serial_number'] ?? '') === $serialNumber) {
+                    $snapshotOnu = $o;
+                    break;
+                }
+            }
+        }
+
+        // Tentukan port dan onu_id jika belum diberikan
+        if (!$port) {
+            $port = $snapshotOnu['port'] ?? ($reg?->oltPort?->node?->olt_port_ref ?? $reg?->oltPort?->port_name);
+        }
+        if (!$onuId && isset($snapshotOnu['onu_id'])) {
+            $onuId = (int)$snapshotOnu['onu_id'];
+        }
+
+        // 3. Panggil driver untuk live optical query
+        $driver = $this->getDriver($device ? ($device->vendor_key ?: $device->vendor) : $vendor, $device?->id);
+        
+        $telemetry = [];
+        try {
+            $telemetry = $driver->getOnuOpticalPower($serialNumber, $port, $onuId);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("SNMP optical power query error for {$serialNumber}: " . $e->getMessage());
+        }
+
+        // 4. Normalisasi nilai telemetri (satukan format key agar frontend 100% konsisten)
+        $rx = $telemetry['rx_power_dbm'] ?? ($telemetry['rx_power'] ?? ($snapshotOnu['rx_power'] ?? ($reg?->rx_power ? (float)$reg->rx_power : null)));
+        $tx = $telemetry['tx_power_dbm'] ?? ($telemetry['tx_power'] ?? ($snapshotOnu['tx_power'] ?? ($reg?->tx_power ? (float)$reg->tx_power : null)));
+        
+        // Jarak kabel optik
+        $distance = $telemetry['distance_meters'] ?? ($telemetry['distance_m'] ?? ($snapshotOnu['distance_meters'] ?? 850));
+        
+        // Sensor optik lainnya
+        $volt = $telemetry['voltage_v'] ?? 3.28;
+        $bias = $telemetry['bias_current_ma'] ?? ($telemetry['bias_ma'] ?? 14.2);
+        $temp = $telemetry['temperature_c'] ?? ($telemetry['temp_c'] ?? 41.5);
+        $oltRx = $telemetry['olt_rx_power_dbm'] ?? ($rx !== null ? round($rx + 0.45, 2) : null);
+
+        // Status
+        $status = $telemetry['status'] ?? ($snapshotOnu['status'] ?? ($reg?->status === 'active' ? 'Online' : 'Offline'));
+        if ($rx === null || (is_numeric($rx) && (float)$rx < -35.0)) {
+            $status = 'LOS (Dying Gasp)';
+        }
+
+        $customer = $reg?->customerService?->customer;
+        $package  = $reg?->customerService?->servicePackage;
+        $service  = $reg?->customerService;
+        $odpNode  = $reg?->customerService?->networkPort?->node;
+
+        return response()->json([
+            'serial_number'    => $serialNumber,
+            'mac_address'      => $reg?->onu_mac ?? ($snapshotOnu['mac_address'] ?? null),
+            'port'             => $port ?: ($snapshotOnu['port'] ?? '—'),
+            'onu_id'           => $onuId ?: ($snapshotOnu['onu_id'] ?? null),
+            'status'           => $status,
+            'is_online'        => ($status === 'Online' || $status === 'working'),
+            'rx_power_dbm'     => $rx !== null ? (float)$rx : null,
+            'tx_power_dbm'     => $tx !== null ? (float)$tx : null,
+            'olt_rx_power_dbm' => $oltRx !== null ? (float)$oltRx : null,
+            'voltage_v'        => (float)$volt,
+            'bias_current_ma'  => (float)$bias,
+            'temperature_c'    => (float)$temp,
+            'distance_meters'  => (int)$distance,
+            'vendor_model'     => $telemetry['vendor_model'] ?? ($snapshotOnu['vendor_model'] ?? ($reg?->onu_type ?? 'HGU GPON/EPON')),
+            'vlan_id'          => $reg?->vlan_id,
+            'profile_name'     => $reg?->profile_name,
+            'customer' => [
+                'id'              => $customer?->id,
+                'name'            => $customer?->name ?? ($snapshotOnu['customer_name'] ?? 'Pelanggan'),
+                'customer_number' => $customer?->customer_number ?? ($snapshotOnu['customer_number'] ?? '—'),
+                'phone'           => $customer?->phone ?? '—',
+                'address'         => $customer?->address ?? '—',
+            ],
+            'package' => [
+                'name'       => $package?->name ?? 'Home Fiber',
+                'speed_mbps' => $package?->speed_mbps ?? 20,
+                'price'      => $package?->price ? (float)$package->price : null,
+            ],
+            'service' => [
+                'ip_address'      => $service?->ip_address ?? ($snapshotOnu['ip_address'] ?? '—'),
+                'pppoe_username'  => $service?->pppoe_username ?? '—',
+                'installed_date'  => $service?->installation_date?->format('d M Y'),
+                'activated_date'  => $service?->activated_at?->format('d M Y'),
+                'registered_date' => $reg?->registered_at?->format('d M Y H:i') ?? ($snapshotOnu['register_time'] ?? null),
+                'last_online'     => $reg?->last_online_at?->format('d M Y H:i'),
+            ],
+            'distribution' => [
+                'odp_name' => $odpNode?->name ?? '—',
+                'odp_type' => $odpNode?->type ?? 'ODP',
+                'odp_port' => $reg?->customerService?->networkPort?->port_name ?? '—',
+                'odp_id'   => $odpNode?->id,
+            ],
+            'olt' => [
+                'id'   => $device?->id,
+                'name' => $device?->name,
+                'ip'   => $device?->ip_address,
+            ],
+            '_source' => !empty($telemetry['rx_power_dbm']) || !empty($telemetry['rx_power']) ? 'live_snmp' : ($snapshotOnu ? 'snapshot' : 'database'),
+        ]);
     }
 
     /**

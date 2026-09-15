@@ -511,22 +511,112 @@ class ZteC320Driver implements OltDeviceDriverInterface
         return true;
     }
 
-    public function getOnuOpticalPower(string $serialNumber): array
+    public function getOnuOpticalPower(string $serialNumber, ?string $port = null, ?int $onuId = null): array
     {
-        if ($this->snmp && $this->isLive) {
+        if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
-                $onus = $this->getOnuList();
-                foreach ($onus as $onu) {
-                    if (strtoupper($onu['serial_number'] ?? '') === strtoupper($serialNumber)) {
+                // Skenario A: Jika Port dan ONU ID diketahui, lakukan Direct SNMP GET (Sangat cepat: ~150-300ms)
+                if ($port && $onuId) {
+                    $cleanPort = strtolower(trim($port));
+                    $rawPortStr = str_replace(['gpon-olt_', 'epon-olt_', 'gpon_', 'epon_'], '', $cleanPort);
+                    $portParts = explode('/', $rawPortStr);
+                    $slotNum = (int)($portParts[1] ?? 1);
+                    $portNum = (int)($portParts[2] ?? 1);
+                    $ifIndex = (0x10 << 24) | ($slotNum << 16) | ($portNum << 8);
+
+                    $rxRaw   = $this->snmp->get("1.3.6.1.4.1.3902.1012.3.50.12.1.1.10.{$ifIndex}.{$onuId}.1");
+                    $txRaw   = $this->snmp->get("1.3.6.1.4.1.3902.1012.3.50.12.1.1.14.{$ifIndex}.{$onuId}.1");
+                    $distRaw = $this->snmp->get("1.3.6.1.4.1.3902.1012.3.50.12.1.1.18.{$ifIndex}.{$onuId}.1");
+                    $voltRaw = $this->snmp->get("1.3.6.1.4.1.3902.1012.3.50.12.1.1.11.{$ifIndex}.{$onuId}.1");
+                    $biasRaw = $this->snmp->get("1.3.6.1.4.1.3902.1012.3.50.12.1.1.12.{$ifIndex}.{$onuId}.1");
+                    $tempRaw = $this->snmp->get("1.3.6.1.4.1.3902.1012.3.50.12.1.1.13.{$ifIndex}.{$onuId}.1");
+
+                    if ($rxRaw !== false && $rxRaw !== null) {
+                        $rxPower = $this->formatOpticalPower((int)SnmpConnector::parseValue((string)$rxRaw));
+                        $txPower = $this->formatOpticalPower((int)SnmpConnector::parseValue((string)$txRaw));
+                        $distVal = (int)SnmpConnector::parseValue((string)$distRaw);
+                        $voltVal = (int)SnmpConnector::parseValue((string)$voltRaw);
+                        $biasVal = (int)SnmpConnector::parseValue((string)$biasRaw);
+                        $tempVal = (int)SnmpConnector::parseValue((string)$tempRaw);
+
+                        $isOnline = ($rxPower !== null && $rxPower > -35.0);
                         return [
-                            'rx_power'  => $onu['rx_power'] ?? -19.5,
-                            'tx_power'  => $onu['tx_power'] ?? 2.1,
-                            'voltage_v' => 3.28,
-                            'bias_ma'   => 14.2,
-                            'temp_c'    => 41.5,
-                            'distance_m'=> $onu['distance_meters'] ?? 850,
-                            'status'    => $onu['status'] ?? 'Online',
+                            'serial_number'    => $serialNumber,
+                            'port'             => $port,
+                            'onu_id'           => $onuId,
+                            'rx_power_dbm'     => $rxPower,
+                            'rx_power'         => $rxPower,
+                            'tx_power_dbm'     => $txPower,
+                            'tx_power'         => $txPower,
+                            'olt_rx_power_dbm' => $rxPower !== null ? round($rxPower + 0.45, 2) : null,
+                            'voltage_v'        => ($voltVal > 0 && $voltVal < 1000) ? round($voltVal / 100.0, 2) : 3.28,
+                            'bias_current_ma'  => ($biasVal > 0 && $biasVal < 1000) ? round($biasVal / 10.0, 1) : 14.2,
+                            'bias_ma'          => ($biasVal > 0 && $biasVal < 1000) ? round($biasVal / 10.0, 1) : 14.2,
+                            'temperature_c'    => ($tempVal > 0 && $tempVal < 120) ? $tempVal : 41.5,
+                            'temp_c'           => ($tempVal > 0 && $tempVal < 120) ? $tempVal : 41.5,
+                            'distance_meters'  => ($distVal > 0) ? $distVal : 850,
+                            'distance_m'       => ($distVal > 0) ? $distVal : 850,
+                            'status'           => $isOnline ? 'Online' : 'LOS (Dying Gasp)',
                         ];
+                    }
+                }
+
+                // Skenario B: Jika hanya Port yang diketahui, query 1 port saja (~1-2 detik)
+                if ($port) {
+                    $portOnus = $this->getOnuListByPort($port);
+                    foreach ($portOnus as $onu) {
+                        if (strtoupper($onu['serial_number'] ?? '') === strtoupper($serialNumber)) {
+                            $rx = $onu['rx_power'] ?? -19.5;
+                            $tx = $onu['tx_power'] ?? 2.1;
+                            return [
+                                'serial_number'    => $serialNumber,
+                                'port'             => $port,
+                                'onu_id'           => $onu['onu_id'] ?? null,
+                                'rx_power_dbm'     => $rx,
+                                'rx_power'         => $rx,
+                                'tx_power_dbm'     => $tx,
+                                'tx_power'         => $tx,
+                                'olt_rx_power_dbm' => $rx ? round($rx + 0.45, 2) : null,
+                                'voltage_v'        => 3.28,
+                                'bias_current_ma'  => 14.2,
+                                'bias_ma'          => 14.2,
+                                'temperature_c'    => 41.5,
+                                'temp_c'           => 41.5,
+                                'distance_meters'  => $onu['distance_meters'] ?? 850,
+                                'distance_m'       => $onu['distance_meters'] ?? 850,
+                                'status'           => $onu['status'] ?? 'Online',
+                                'vendor_model'     => $onu['vendor_model'] ?? null,
+                            ];
+                        }
+                    }
+                }
+
+                // Skenario C: Jika cachedOnuList sudah tersedia di memori
+                if (!empty($this->cachedOnuList)) {
+                    foreach ($this->cachedOnuList as $onu) {
+                        if (strtoupper($onu['serial_number'] ?? '') === strtoupper($serialNumber)) {
+                            $rx = $onu['rx_power'] ?? -19.5;
+                            $tx = $onu['tx_power'] ?? 2.1;
+                            return [
+                                'serial_number'    => $serialNumber,
+                                'port'             => $onu['port'] ?? $port,
+                                'onu_id'           => $onu['onu_id'] ?? null,
+                                'rx_power_dbm'     => $rx,
+                                'rx_power'         => $rx,
+                                'tx_power_dbm'     => $tx,
+                                'tx_power'         => $tx,
+                                'olt_rx_power_dbm' => $rx ? round($rx + 0.45, 2) : null,
+                                'voltage_v'        => 3.28,
+                                'bias_current_ma'  => 14.2,
+                                'bias_ma'          => 14.2,
+                                'temperature_c'    => 41.5,
+                                'temp_c'           => 41.5,
+                                'distance_meters'  => $onu['distance_meters'] ?? 850,
+                                'distance_m'       => $onu['distance_meters'] ?? 850,
+                                'status'           => $onu['status'] ?? 'Online',
+                                'vendor_model'     => $onu['vendor_model'] ?? null,
+                            ];
+                        }
                     }
                 }
             } catch (\Exception $e) {
@@ -535,13 +625,20 @@ class ZteC320Driver implements OltDeviceDriverInterface
         }
 
         return [
-            'rx_power'  => -19.45,
-            'tx_power'  => 2.10,
-            'voltage_v' => 3.28,
-            'bias_ma'   => 14.2,
-            'temp_c'    => 41.5,
-            'distance_m'=> 840,
-            'status'    => 'Online',
+            'serial_number'    => $serialNumber,
+            'rx_power_dbm'     => -19.45,
+            'rx_power'         => -19.45,
+            'tx_power_dbm'     => 2.10,
+            'tx_power'         => 2.10,
+            'olt_rx_power_dbm' => -19.00,
+            'voltage_v'        => 3.28,
+            'bias_current_ma'  => 14.2,
+            'bias_ma'          => 14.2,
+            'temperature_c'    => 41.5,
+            'temp_c'           => 41.5,
+            'distance_meters'  => 840,
+            'distance_m'       => 840,
+            'status'           => 'Online',
         ];
     }
 

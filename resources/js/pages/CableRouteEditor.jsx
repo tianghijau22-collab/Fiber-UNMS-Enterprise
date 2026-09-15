@@ -283,8 +283,12 @@ export default function CableRouteEditor() {
         const data = res.data || [];
         setCables(data);
         if (data.length > 0) {
-          setSelectedCableId(data[0].id);
-          setWaypoints(data[0].route_coordinates || []);
+          const urlParams = new URLSearchParams(window.location.search);
+          const paramCableId = urlParams.get('cable_id');
+          const matched = paramCableId ? data.find(c => String(c.id) === String(paramCableId)) : null;
+          const target = matched || data[0];
+          setSelectedCableId(target.id);
+          setWaypoints(target.route_coordinates || []);
         }
         setLoading(false);
       })

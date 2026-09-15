@@ -23,10 +23,12 @@ class KmlImportController extends Controller
     {
         $request->validate([
             'file' => 'required|file|max:61440', // Max 60MB
+            'import_target' => 'nullable|string|in:all,odp,odc,cable',
         ]);
 
         try {
-            $result = $this->kmlService->preview($request->file('file'));
+            $target = $request->input('import_target', 'all');
+            $result = $this->kmlService->preview($request->file('file'), $target);
             return response()->json([
                 'success' => true,
                 'data' => $result,
@@ -47,6 +49,9 @@ class KmlImportController extends Controller
     {
         $request->validate([
             'token' => 'required|string',
+            'import_target' => 'nullable|string|in:all,odp,odc,cable',
+            'target_olt_id' => 'nullable|integer',
+            'default_parent_id' => 'nullable|integer',
         ]);
 
         try {

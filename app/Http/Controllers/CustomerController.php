@@ -190,7 +190,7 @@ class CustomerController extends Controller
 
             // 3. Buat Customer Service (Layanan Aktif)
             $service = CustomerService::create([
-                'service_number'     => sprintf('SVC-2026-%04d', rand(1000, 9999)),
+                'service_number'     => CustomerService::generateUniqueServiceNumber(),
                 'customer_id'        => $customer->id,
                 'service_package_id' => $packageId,
                 'status'             => 'active',
@@ -214,11 +214,17 @@ class CustomerController extends Controller
                 $targetPort = $portQuery->first();
 
                 if ($targetPort) {
+                    if ($targetPort->customer_service_id && $targetPort->customer_service_id != $service->id) {
+                        $occupant = $targetPort->customer_name_cache ?: 'pelanggan lain';
+                        throw new \Exception("Port {$targetPort->port_number} pada ODP ini sudah terisi oleh {$occupant}. Silakan pilih port yang masih kosong.");
+                    }
+
                     $targetPort->update([
                         'customer_service_id' => $service->id,
                         'customer_name_cache' => $customer->name,
                         'status'              => 'used',
                     ]);
+                    NetworkPort::recalculateNodeUsedPorts($odpId);
                 }
             }
 
@@ -313,7 +319,7 @@ class CustomerController extends Controller
             $service = $customer->services->first();
             if (!$service) {
                 $service = CustomerService::create([
-                    'service_number'     => sprintf('SVC-2026-%04d', rand(1000, 9999)),
+                    'service_number'     => CustomerService::generateUniqueServiceNumber(),
                     'customer_id'        => $customer->id,
                     'service_package_id' => $validated['service_package_id'] ?? ServicePackage::first()?->id,
                     'status'             => 'active',
@@ -356,11 +362,17 @@ class CustomerController extends Controller
                     $targetPort = $portQuery->first();
 
                     if ($targetPort) {
+                        if ($targetPort->customer_service_id && $targetPort->customer_service_id != $service->id) {
+                            $occupant = $targetPort->customer_name_cache ?: 'pelanggan lain';
+                            throw new \Exception("Port {$targetPort->port_number} pada ODP ini sudah terisi oleh {$occupant}. Silakan pilih port yang masih kosong.");
+                        }
+
                         $targetPort->update([
                             'customer_service_id' => $service->id,
                             'customer_name_cache' => $customer->name,
                             'status'              => 'used',
                         ]);
+                        NetworkPort::recalculateNodeUsedPorts($odpId);
                     }
                 }
             }
@@ -554,7 +566,7 @@ class CustomerController extends Controller
                 $pkgId = $item['service_package_id'] ?? 1;
                 $service = CustomerService::create([
                     'customer_id'        => $customer->id,
-                    'service_number'     => 'SRV-' . rand(100000, 999999),
+                    'service_number'     => CustomerService::generateUniqueServiceNumber(),
                     'service_package_id' => $pkgId,
                     'status'             => 'active',
                     'onu_serial'         => $item['onu_serial'],
@@ -568,11 +580,17 @@ class CustomerController extends Controller
                         ->first();
 
                     if ($port) {
+                        if ($port->customer_service_id && $port->customer_service_id != $service->id) {
+                            $occupant = $port->customer_name_cache ?: 'pelanggan lain';
+                            throw new \Exception("Port {$item['odp_port_number']} pada ODP ini sudah terisi oleh {$occupant}. Silakan pilih port yang masih kosong.");
+                        }
+
                         $port->update([
                             'customer_service_id' => $service->id,
                             'customer_name_cache' => $customer->name,
-                            'status'              => 'connected',
+                            'status'              => 'used',
                         ]);
+                        NetworkPort::recalculateNodeUsedPorts($item['odp_id']);
                     }
                 }
 

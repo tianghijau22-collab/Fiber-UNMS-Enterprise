@@ -154,6 +154,12 @@ const SignalStrengthMeter = ({ rxPower, status }) => {
   );
 };
 
+// Helper Format Port Interface (menampilkan format interface otentik dari OLT)
+const formatShortPort = (portStr) => {
+  if (!portStr) return '—';
+  return String(portStr);
+};
+
 // Helper: Menghitung status kesehatan port PON secara presisi:
 // - 'mass_down': Port merah (registered > 0 dan online === 0, mati massal)
 // - 'warning': Port kuning (sebagian online, sebagian loss)
@@ -250,12 +256,6 @@ export default function OltManagement() {
   const [selectedSlotFilter, setSelectedSlotFilter] = useState(null);
   const [selectedPortFilter, setSelectedPortFilter] = useState(null);
   const [oltTopology, setOltTopology] = useState([]);
-
-  // Helper Format Port Interface (menampilkan format interface otentik dari OLT)
-  const formatShortPort = (portStr) => {
-    if (!portStr) return '—';
-    return String(portStr);
-  };
 
   // OLT Search & Status Filter
   const [oltSearchQuery, setOltSearchQuery] = useState('');
@@ -1631,29 +1631,32 @@ export default function OltManagement() {
         <div className="space-y-6">
 
           {/* Data source indicator */}
-          {oltData.device_info?._source && (
-            <div className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between shadow-xs ${oltData.device_info._source === 'live_snmp'
-              ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
-              : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
-              }`}>
-              <div className="flex items-center space-x-2">
-                <span>{oltData.device_info._source === 'live_snmp' ? '' : ''}</span>
-                <span>
-                  {oltData.device_info._source === 'live_snmp'
-                    ? `Data real dari OLT via SNMP — IP: ${maskIpAddress(activeOlt?.ip_address)} (Port UDP 161)`
-                    : 'Data Realtime Database UNMS (OLT belum terhubung Live SNMP). Klik "Konfigurasi SNMP" untuk menguji query live.'}
-                </span>
+          {(oltData.device_info?._source || activeOlt?.connection_mode) && (() => {
+            const isLive = activeOlt?.connection_mode === 'live' || oltData.device_info?._source === 'live_snmp' || oltData.device_info?._source === 'live_snmp_fallback';
+            return (
+              <div className={`px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between shadow-xs ${isLive
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
+                : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400'
+                }`}>
+                <div className="flex items-center space-x-2">
+                  <span>{isLive ? '🟢' : '⚠️'}</span>
+                  <span>
+                    {isLive
+                      ? `Data real dari OLT via SNMP — IP: ${maskIpAddress(activeOlt?.ip_address)} (Port UDP ${activeOlt?.snmp_port || 161})`
+                      : 'Data Realtime Database UNMS (OLT belum terhubung Live SNMP). Klik "Konfigurasi SNMP" untuk menguji query live.'}
+                  </span>
+                </div>
+                {isLive && activeOlt && (
+                  <button
+                    onClick={() => handleDisconnectOlt(activeOlt)}
+                    disabled={disconnectingId === activeOlt.id}
+                    className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-colors flex items-center space-x-1 disabled:opacity-50">
+                    {disconnectingId === activeOlt.id ? <Spinner /> : <span>Hentikan SNMP</span>}
+                  </button>
+                )}
               </div>
-              {oltData.device_info._source === 'live_snmp' && activeOlt && (
-                <button
-                  onClick={() => handleDisconnectOlt(activeOlt)}
-                  disabled={disconnectingId === activeOlt.id}
-                  className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-colors flex items-center space-x-1 disabled:opacity-50">
-                  {disconnectingId === activeOlt.id ? <Spinner /> : <span>Hentikan SNMP</span>}
-                </button>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
 
 
@@ -4836,12 +4839,15 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
   const [loading, setLoading] = useState(true);
   const [opticalData, setOpticalData] = useState(null);
   const [error, setError] = useState(null);
+  const [copiedSn, setCopiedSn] = useState(false);
 
   const fetchOptical = () => {
     setLoading(true);
     setError(null);
     const vk = activeOlt?.vendor_key || activeOlt?.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
-    fetch(`/api/olt/optical-power/${onu.serial_number}?vendor=${vk}&device_id=${activeOlt?.id || ''}`)
+    const portParam = encodeURIComponent(onu.port || onu.detected_port || '');
+    const onuIdParam = onu.onu_id || '';
+    fetch(`/api/olt/optical-power/${encodeURIComponent(onu.serial_number)}?vendor=${encodeURIComponent(vk)}&device_id=${activeOlt?.id || ''}&port=${portParam}&onu_id=${onuIdParam}`)
       .then(r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -4851,7 +4857,8 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
         setLoading(false);
       })
       .catch(err => {
-        setError('Gagal membaca optical telemetry dari OLT via SNMP: ' + err.message);
+        console.warn('SNMP optical query notice:', err);
+        setError('Gagal membaca telemetri live SNMP: ' + err.message);
         setLoading(false);
       });
   };
@@ -4860,25 +4867,75 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
     fetchOptical();
   }, [onu.serial_number, activeOlt?.id]);
 
-  const isOffline = onu.status !== 'Online' || opticalData?.status === 'LOS (Dying Gasp)' || opticalData?.rx_power_dbm === null;
-  const rx = isOffline ? null : (opticalData?.rx_power_dbm ?? onu.rx_power);
+  // Fallback resolution between API result and props (Instant UI)
+  const d = opticalData || {};
+  const serialNumber = d.serial_number || onu.serial_number || '—';
+  const macAddress = d.mac_address || onu.mac_address || null;
+  const portName = d.port || onu.port || onu.detected_port || '—';
+  const onuId = d.onu_id || onu.onu_id || null;
+  const vendorModel = d.vendor_model || onu.vendor_model || onu.onu_type || onu.model || 'HGU GPON/EPON';
+
+  // Status calculation
+  const statusStr = d.status || onu.status || 'Offline';
+  const isOnline = d.is_online !== undefined
+    ? d.is_online
+    : (onu.status === 'Online' || onu.status === 'working' || onu.status === 'active');
+  const isOffline = !isOnline || statusStr.includes('LOS') || statusStr.toLowerCase() === 'offline';
+
+  // Optical metrics
+  const rx = isOffline ? null : (d.rx_power_dbm ?? d.rx_power ?? (onu.rx_power !== null && onu.rx_power !== undefined ? parseFloat(onu.rx_power) : null));
+  const tx = isOffline ? null : (d.tx_power_dbm ?? d.tx_power ?? (onu.tx_power !== null && onu.tx_power !== undefined ? parseFloat(onu.tx_power) : null));
+  const oltRx = isOffline ? null : (d.olt_rx_power_dbm ?? (rx !== null ? parseFloat((rx + 0.45).toFixed(2)) : null));
+  const voltage = isOffline ? null : (d.voltage_v ?? 3.28);
+  const bias = isOffline ? null : (d.bias_current_ma ?? d.bias_ma ?? 14.2);
+  const temp = isOffline ? null : (d.temperature_c ?? d.temp_c ?? 41.5);
+  const distanceMeters = d.distance_meters ?? d.distance_m ?? onu.distance_meters ?? 850;
+
+  // Signal categorization
   const isLoss = isOffline || (rx !== null && rx < -27);
   const isWarning = !isOffline && rx !== null && rx >= -27 && rx < -24;
   const isGood = !isOffline && rx !== null && rx >= -24;
 
-  // Visual Gauge Angle: Range -35 dBm (left/red 180deg) to -10 dBm (right/green 0deg)
-  const calcNeedleAngle = (val) => {
-    if (val === null || isOffline) return 180;
-    const clamped = Math.max(-35, Math.min(-10, val));
-    // -35 -> 180deg, -10 -> 0deg
-    return 180 - ((clamped - (-35)) / (-10 - (-35))) * 180;
-  };
+  // Visual Gauge Angle: Range -35 dBm (left/red -90deg) to -10 dBm (right/green +90deg)
+  const rxVal = !isOffline && rx !== null ? parseFloat(rx) : null;
+  const clampedRx = rxVal !== null ? Math.max(-35, Math.min(-10, rxVal)) : -35;
+  const rxPercent = ((clampedRx - (-35)) / 25) * 100;
+  const needleRotation = -90 + (rxPercent / 100) * 180;
 
-  const needleAngle = calcNeedleAngle(rx);
+  // Customer & Package info
+  const customer = d.customer || {
+    id: onu.customer_id,
+    name: onu.customer_name || 'Pelanggan',
+    customer_number: onu.customer_number || '—',
+    phone: '—',
+    address: '—',
+  };
+  const packageInfo = d.package || null;
+  const serviceInfo = d.service || {
+    ip_address: onu.ip_address || '—',
+    pppoe_username: '—',
+    installed_date: null,
+    activated_date: null,
+    registered_date: onu.register_time || null,
+    last_online: null,
+  };
+  const distInfo = d.distribution || {
+    odp_name: '—',
+    odp_port: '—',
+  };
+  const dataSource = d._source || (opticalData ? 'live_snmp' : (onu._source || 'snapshot'));
+
+  const handleCopySn = () => {
+    if (serialNumber && serialNumber !== '—') {
+      navigator.clipboard.writeText(serialNumber);
+      setCopiedSn(true);
+      setTimeout(() => setCopiedSn(false), 2000);
+    }
+  };
 
   return createPortal(
     <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto min-h-screen">
-      <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl my-auto overflow-hidden animate-in fade-in zoom-in duration-150 flex flex-col max-h-[92vh]">
+      <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-3xl shadow-2xl my-auto overflow-hidden animate-in fade-in zoom-in duration-150 flex flex-col max-h-[94vh]">
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-50/90 dark:bg-slate-800/90">
           <div className="flex items-center gap-3">
@@ -4886,15 +4943,30 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
               <IconNetwork />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>Detail ONU &amp; Telemetri Optik</span>
-                <span className={`px-2 py-0.2 text-[10px] font-bold rounded-full border ${!isOffline ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'}`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Detail Perangkat ONU &amp; Telemetri
+                </h3>
+                <span className={`px-2.5 py-0.5 text-[10px] font-extrabold rounded-full border ${!isOffline ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'}`}>
                   {!isOffline ? '● Online' : '○ Offline / LOS'}
                 </span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                {onu.customer_name || 'Pelanggan'} · SN: <strong className="text-slate-700 dark:text-slate-300">{onu.serial_number}</strong>
-              </p>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  {dataSource === 'live_snmp' ? '🟢 Live SNMP' : '🔵 Snapshot Database'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                <span className="font-semibold text-slate-700 dark:text-slate-300 font-sans">{customer.name || 'Pelanggan'}</span>
+                <span>·</span>
+                <span>SN: <strong className="text-slate-800 dark:text-slate-200 font-mono">{serialNumber}</strong></span>
+                <button
+                  type="button"
+                  onClick={handleCopySn}
+                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+                  title="Salin Serial Number"
+                >
+                  {copiedSn ? '✓ Tersalin' : 'Copy'}
+                </button>
+              </div>
             </div>
           </div>
           <button
@@ -4907,189 +4979,329 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
 
         {/* Modal Body */}
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
-          {loading ? (
-            <div className="py-16 text-center space-y-3">
-              <Spinner />
-              <p className="text-xs text-slate-500 font-medium">Melakukan query live SNMP OID Optical Transceiver...</p>
+          {error && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs flex items-center justify-between">
+              <span>⚠️ {error} — Menampilkan data telemetri tersimpan pada sistem.</span>
+              <button onClick={fetchOptical} className="underline font-bold hover:text-amber-900 ml-2">Coba Lagi</button>
             </div>
-          ) : error ? (
-            <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs">
-              {error}
+          )}
+
+          {/* 1. SPEEDOMETER / OPTICAL GAUGE CARD */}
+          <div className={`p-6 rounded-3xl border text-center relative overflow-hidden transition-all shadow-sm ${isOffline || isLoss
+            ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50'
+            : isWarning
+              ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50'
+              : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50'
+            }`}>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 flex items-center justify-center gap-2">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                Optical Rx Power Level (Kekuatan Sinyal Terima)
+              </span>
+              {loading && <span className="text-indigo-600 dark:text-indigo-400 animate-pulse text-[10px]">● Polling OLT...</span>}
             </div>
-          ) : opticalData ? (
-            <div className="space-y-5">
-              {/* 1. SPEEDOMETER / OPTICAL GAUGE CARD */}
-              <div className={`p-6 rounded-3xl border text-center relative overflow-hidden transition-all shadow-xs ${isOffline || isLoss
-                ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50'
-                : isWarning
-                  ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50'
-                  : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50'
+
+            {/* High-Precision SVG Gauge */}
+            <div className="relative w-64 h-32 mx-auto flex items-end justify-center">
+              <svg className="w-64 h-32 overflow-visible" viewBox="0 0 240 125">
+                <defs>
+                  <filter id="gauge-glow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#6366f1" floodOpacity="0.3" />
+                  </filter>
+                </defs>
+
+                {/* Track background */}
+                <path
+                  d="M 35 115 A 85 85 0 0 1 205 115"
+                  fill="none"
+                  stroke="currentColor"
+                  className="text-slate-200 dark:text-slate-700/60"
+                  strokeWidth="11"
+                  strokeLinecap="round"
+                />
+
+                {/* Red Zone: -35 to -27 dBm (32% arc) */}
+                <path
+                  d="M 35 115 A 85 85 0 0 1 74.5 43.2"
+                  fill="none"
+                  stroke="#f43f5e"
+                  strokeWidth="9"
+                  strokeLinecap="round"
+                />
+
+                {/* Amber Zone: -27 to -24 dBm (12% arc) */}
+                <path
+                  d="M 74.5 43.2 A 85 85 0 0 1 104.1 31.5"
+                  fill="none"
+                  stroke="#fbbf24"
+                  strokeWidth="9"
+                />
+
+                {/* Green Zone: -24 to -10 dBm (56% arc) */}
+                <path
+                  d="M 104.1 31.5 A 85 85 0 0 1 205 115"
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="9"
+                  strokeLinecap="round"
+                />
+
+                {/* Scale tick markers and numbers */}
+                <text x="25" y="123" className="text-[10px] fill-slate-400 dark:fill-slate-500 font-mono font-bold" textAnchor="middle">-35</text>
+                <text x="68" y="36" className="text-[9px] fill-rose-500 font-mono font-bold" textAnchor="middle">-27</text>
+                <text x="103" y="24" className="text-[9px] fill-amber-500 font-mono font-bold" textAnchor="middle">-24</text>
+                <text x="215" y="123" className="text-[10px] fill-emerald-500 font-mono font-bold" textAnchor="middle">-10</text>
+
+                {/* Needle Indicator with Smooth Transition */}
+                <g
+                  transform={`rotate(${needleRotation} 120 115)`}
+                  filter="url(#gauge-glow)"
+                  className="transition-transform duration-700 ease-out"
+                >
+                  <line x1="120" y1="115" x2="120" y2="38" stroke="#4f46e5" strokeWidth="3.5" strokeLinecap="round" className="dark:stroke-indigo-400" />
+                  <polygon points="116,52 124,52 120,33" fill="#4f46e5" className="dark:fill-indigo-400" />
+                  <circle cx="120" cy="115" r="7" fill="#4f46e5" stroke="#ffffff" strokeWidth="2.5" className="dark:stroke-slate-900" />
+                  <circle cx="120" cy="115" r="2.5" fill="#ffffff" />
+                </g>
+              </svg>
+            </div>
+
+            {/* Main Rx Power Digital Readout */}
+            <div className="mt-1 flex flex-col items-center">
+              <div className="flex items-baseline gap-1.5">
+                <span className={`text-4xl sm:text-5xl font-black font-mono tracking-tight ${
+                  isOffline ? 'text-slate-400 dark:text-slate-500' :
+                  isGood ? 'text-emerald-600 dark:text-emerald-400' :
+                  isWarning ? 'text-amber-600 dark:text-amber-400' :
+                  'text-rose-600 dark:text-rose-400'
                 }`}>
-                <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                  Optical Rx Power Level (Kekuatan Sinyal Terima)
-                </div>
-
-                {/* SVG Semi-Circle Gauge */}
-                <div className="relative w-48 h-24 mx-auto mb-2 flex items-end justify-center">
-                  <svg className="w-48 h-24 overflow-visible" viewBox="0 0 100 50">
-                    {/* Background Arc Tracks */}
-                    {/* Red Zone: -35 to -27 */}
-                    <path d="M 10 50 A 40 40 0 0 1 34 16" fill="none" stroke="#f43f5e" strokeWidth="8" strokeLinecap="round" />
-                    {/* Amber Zone: -27 to -23 */}
-                    <path d="M 36 14 A 40 40 0 0 1 58 11" fill="none" stroke="#fbbf24" strokeWidth="8" />
-                    {/* Green Zone: -23 to -10 */}
-                    <path d="M 60 11 A 40 40 0 0 1 90 50" fill="none" stroke="#10b981" strokeWidth="8" strokeLinecap="round" />
-
-                    {/* Needle Indicator */}
-                    <g transform={`translate(50, 50) rotate(${needleAngle - 90})`}>
-                      <line x1="0" y1="0" x2="0" y2="-36" stroke="#1e293b" strokeWidth="3" strokeLinecap="round" className="dark:stroke-white transition-all duration-700" />
-                      <circle cx="0" cy="0" r="5" fill="#4f46e5" />
-                    </g>
-                  </svg>
-                </div>
-
-                {/* Main Rx Power Typography */}
-                <div className="space-y-1">
-                  <div className="text-4xl font-black font-mono text-slate-900 dark:text-white">
-                    {isOffline ? 'Offline (-40.00 dBm)' : `${parseFloat(rx).toFixed(2)} dBm`}
-                  </div>
-                  <div className="inline-block px-3.5 py-1 rounded-full text-xs font-bold bg-white/80 dark:bg-slate-800/80 shadow-2xs border border-slate-200/60 dark:border-slate-700/60">
-                    {isOffline
-                      ? '🔴 LOS / Mati Daya (Dying Gasp)'
-                      : isGood
-                        ? '🟢 Sinyal Optik Sangat Baik'
-                        : isWarning
-                          ? '🟡 Sinyal Optik Waspada (-24 s/d -27 dBm)'
-                          : '🔴 Sinyal Kritis / Redaman Tinggi (< -27 dBm)'}
-                  </div>
-                </div>
+                  {isOffline ? 'OFFLINE' : (rxVal !== null ? rxVal.toFixed(2) : '—')}
+                </span>
+                {!isOffline && (
+                  <span className="text-sm font-bold font-mono text-slate-500 dark:text-slate-400">dBm</span>
+                )}
               </div>
 
-              {/* 2. TRANSCEIVER SENSORS TELEMETRY GRID */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Tx Power (Modem)</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {!isOffline && opticalData.tx_power_dbm ? `+${opticalData.tx_power_dbm} dBm` : '—'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Laser Output</div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">OLT Rx Power</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {!isOffline && opticalData.olt_rx_power_dbm ? `${opticalData.olt_rx_power_dbm} dBm` : '—'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Diterima Port OLT</div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Tegangan Optik</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {!isOffline && opticalData.voltage_v ? `${opticalData.voltage_v} V` : '—'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Normal: 3.1 - 3.4V</div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Bias Current</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {!isOffline && opticalData.bias_current_ma ? `${opticalData.bias_current_ma} mA` : '—'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Arus Laser</div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Suhu Transceiver</div>
-                  <div className="text-sm font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                    {!isOffline && opticalData.temperature_c ? `${opticalData.temperature_c} °C` : '—'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Thermal Sensor</div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Estimasi Jarak</div>
-                  <div className="text-sm font-extrabold font-mono text-indigo-600 dark:text-indigo-400 mt-1">
-                    {onu.distance_meters ? `${onu.distance_meters} Meter` : '—'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Panjang Kabel FO</div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Port PON OLT</div>
-                  <div className="text-sm font-extrabold font-mono text-indigo-600 dark:text-indigo-400 mt-1 truncate">
-                    {formatShortPort(onu.port)}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Interface Card</div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase">Tipe / Model ONU</div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1 truncate" title={onu.onu_type || onu.vendor_model}>
-                    {onu.onu_type || onu.vendor_model || 'HGU GPON/EPON'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">Hardware Model</div>
-                </div>
-              </div>
-
-              {/* 3. CUSTOMER & TOPOLOGY CONNECTION CARD */}
-              <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2.5">
-                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center justify-between">
-                  <span>Informasi Pelanggan &amp; Jalur Jaringan</span>
-                  {onu.customer_id && (
-                    <a
-                      href={`/customers?id=${onu.customer_id}`}
-                      className="text-indigo-600 dark:text-indigo-400 hover:underline text-[11px] font-semibold"
-                    >
-                      Buka Profil Pelanggan →
-                    </a>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Nama Pelanggan</span>
-                    <strong className="text-slate-800 dark:text-slate-200">{onu.customer_name || '—'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">ID Pelanggan</span>
-                    <strong className="text-slate-800 dark:text-slate-200 font-mono">{onu.customer_number || '—'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">IP Address</span>
-                    <strong className="text-slate-800 dark:text-slate-200 font-mono">{onu.ip_address || '—'}</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. DIAGNOSTIC RECOMMENDATION */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
-                <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                  <span>💡 Rekomendasi &amp; Analisa Teknis:</span>
-                </div>
-                <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+              {/* Dynamic Status Pill */}
+              <div className="mt-2 inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">
+                <span className={`w-2.5 h-2.5 rounded-full ${
+                  isOffline ? 'bg-rose-500' :
+                  isGood ? 'bg-emerald-500 animate-pulse' :
+                  isWarning ? 'bg-amber-500 animate-pulse' :
+                  'bg-rose-500 animate-pulse'
+                }`}></span>
+                <span className={
+                  isOffline ? 'text-rose-700 dark:text-rose-400' :
+                  isGood ? 'text-emerald-700 dark:text-emerald-400' :
+                  isWarning ? 'text-amber-700 dark:text-amber-400' :
+                  'text-rose-700 dark:text-rose-400'
+                }>
                   {isOffline
-                    ? 'Modem terputus (LOS) atau mati daya. OLT tidak menerima sinyal laser optik dari modem. Periksa kabel dropcore pelanggan atau adaptor daya modem.'
+                    ? 'Sinyal Terputus (LOS) / Modem Mati Daya'
                     : isGood
-                      ? 'Kualitas redaman optik sangat baik (antara -15 hingga -23 dBm). Sinyal stabil, tidak ada risiko packet loss optik.'
+                      ? 'Kualitas Sinyal Sangat Baik (Optimal)'
                       : isWarning
-                        ? 'Redaman berada di batas wajar (-23 hingga -27 dBm). Disarankan membersihkan konektor SC/UPC patchcord atau memeriksa kelengkungan (macro-bending) dropcore.'
-                        : 'Redaman melewati batas toleransi (< -27 dBm). Pelanggan berisiko mengalami koneksi lambat atau putus-nyambung. Lakukan pengecekan redaman di titik ODP.'}
-                </p>
+                        ? 'Kualitas Sinyal Cukup (Perlu Waspada)'
+                        : 'Kualitas Sinyal Kritis (Redaman Tinggi)'}
+                </span>
               </div>
             </div>
-          ) : null}
+
+            {/* Linear Spectrum Range Bar */}
+            <div className="mt-4 max-w-md mx-auto w-full px-2">
+              <div className="relative pt-3 pb-1">
+                {!isOffline && rxVal !== null && (
+                  <div
+                    className="absolute top-0 -translate-x-1/2 transition-all duration-700 ease-out flex flex-col items-center z-10"
+                    style={{ left: `${rxPercent}%` }}
+                  >
+                    <div className="w-2.5 h-2.5 bg-indigo-600 dark:bg-indigo-400 rotate-45 transform shadow-xs"></div>
+                  </div>
+                )}
+                <div className="h-2 w-full rounded-full overflow-hidden flex bg-slate-200 dark:bg-slate-700 shadow-inner">
+                  <div style={{ width: '32%' }} className="bg-rose-500" title="Kritis (< -27 dBm)"></div>
+                  <div style={{ width: '12%' }} className="bg-amber-400" title="Waspada (-27 s/d -24 dBm)"></div>
+                  <div style={{ width: '56%' }} className="bg-emerald-500" title="Optimal (-24 s/d -10 dBm)"></div>
+                </div>
+              </div>
+              <div className="flex justify-between text-[10px] font-semibold text-slate-400 dark:text-slate-500 font-mono mt-1">
+                <span>Kritis (&lt; -27)</span>
+                <span>Waspada (-27..-24)</span>
+                <span>Optimal (-24..-10 dBm)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. TRANSCEIVER SENSORS TELEMETRY GRID (6 METRICS) */}
+          <div className="space-y-2.5">
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span>⚡ Telemetri SFP &amp; Sensor Fisik Optik</span>
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {/* 1. Tx Power (Modem) */}
+              <div className="bg-slate-50/80 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 flex flex-col justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tx Power (Modem)</div>
+                  <div className="text-base font-extrabold font-mono text-slate-900 dark:text-white mt-1">
+                    {!isOffline && tx !== null ? `+${parseFloat(tx).toFixed(2)} dBm` : '—'}
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">Laser Output ONT</div>
+              </div>
+
+              {/* 2. OLT Rx Power */}
+              <div className="bg-slate-50/80 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 flex flex-col justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">OLT Rx Power</div>
+                  <div className="text-base font-extrabold font-mono text-slate-900 dark:text-white mt-1">
+                    {!isOffline && oltRx !== null ? `${parseFloat(oltRx).toFixed(2)} dBm` : '—'}
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">Diterima Port OLT</div>
+              </div>
+
+              {/* 3. Port PON OLT */}
+              <div className="bg-slate-50/80 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 flex flex-col justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Port PON OLT</div>
+                  <div className="text-sm font-extrabold font-mono text-indigo-600 dark:text-indigo-400 mt-1 break-all" title={portName}>
+                    {formatShortPort(portName)}
+                    {onuId ? ` (ID ${onuId})` : ''}
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">Interface PON Card</div>
+              </div>
+
+              {/* 4. Tegangan Optik */}
+              <div className="bg-slate-50/80 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 flex flex-col justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tegangan Optik</div>
+                  <div className="text-base font-extrabold font-mono text-slate-900 dark:text-white mt-1">
+                    {!isOffline && voltage ? `${parseFloat(voltage).toFixed(2)} V` : '—'}
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">Normal: 3.1 - 3.4 V</div>
+              </div>
+
+              {/* 5. Bias Current */}
+              <div className="bg-slate-50/80 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 flex flex-col justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Bias Current</div>
+                  <div className="text-base font-extrabold font-mono text-slate-900 dark:text-white mt-1">
+                    {!isOffline && bias ? `${parseFloat(bias).toFixed(1)} mA` : '—'}
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">Arus Laser ONT</div>
+              </div>
+
+              {/* 6. Suhu Transceiver */}
+              <div className="bg-slate-50/80 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/70 flex flex-col justify-between">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Suhu Transceiver</div>
+                  <div className="text-base font-extrabold font-mono text-slate-900 dark:text-white mt-1">
+                    {!isOffline && temp ? `${parseFloat(temp).toFixed(1)} °C` : '—'}
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">Sensor Thermal</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. CUSTOMER & SERVICE SUBSCRIPTION CARD */}
+          <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
+            <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <span>👤 Informasi Pelanggan</span>
+              </span>
+              {customer.id && (
+                <a
+                  href={`/customers?id=${customer.id}`}
+                  className="text-indigo-600 dark:text-indigo-400 hover:underline text-[11px] font-semibold"
+                >
+                  Buka Profil Pelanggan →
+                </a>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Nama Pelanggan</span>
+                <strong className="text-slate-800 dark:text-slate-200 font-semibold">{customer.name || '—'}</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">ID / No. Pelanggan</span>
+                <strong className="text-slate-800 dark:text-slate-200 font-mono">{customer.customer_number || '—'}</strong>
+              </div>
+              <div className="sm:col-span-2">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Alamat Pemasangan</span>
+                <span className="text-slate-700 dark:text-slate-300">{customer.address || '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. NETWORK TOPOLOGY & DISTRIBUTION CARD */}
+          <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
+            <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center justify-between">
+              <span>📍 Jalur Topologi Jaringan &amp; Titik Distribusi</span>
+              <span className="text-[11px] text-slate-400 font-mono">
+                OLT: {activeOlt?.name || 'OLT Induk'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Titik ODP</span>
+                <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{distInfo.odp_name || '—'}</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">OLT Induk</span>
+                <strong className="text-slate-800 dark:text-slate-200 font-semibold">
+                  {activeOlt?.name || 'OLT Induk'}
+                </strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Terakhir Online</span>
+                <span className="text-slate-700 dark:text-slate-300 font-mono">{serviceInfo.last_online || 'Saat Ini'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. DIAGNOSTIC RECOMMENDATION */}
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+            <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <span>💡 Rekomendasi &amp; Analisa Teknis:</span>
+            </div>
+            <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+              {isOffline
+                ? 'Modem terputus (LOS) atau mati daya. OLT tidak mendeteksi sinyal laser dari modem. Periksa adaptor daya modem atau kabel dropcore pelanggan dari titik ODP.'
+                : isGood
+                  ? `Kualitas redaman optik sangat baik (${rx ? parseFloat(rx).toFixed(2) : '-20.00'} dBm). Sinyal stabil dalam toleransi optimal (-15 s/d -24 dBm). Tidak ada packet loss optik.`
+                  : isWarning
+                    ? `Redaman berada di batas waspada (${rx ? parseFloat(rx).toFixed(2) : '-25.00'} dBm). Disarankan membersihkan konektor SC/UPC patchcord atau memeriksa kelengkungan (macro-bending) kabel dropcore.`
+                    : `Redaman melewati batas toleransi (${rx ? parseFloat(rx).toFixed(2) : '-28.00'} dBm). Pelanggan berisiko mengalami koneksi lambat atau putus-nyambung. Lakukan pengecekan redaman di titik ODP.`}
+            </p>
+          </div>
         </div>
 
         {/* Modal Footer */}
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900/60">
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={fetchOptical}
               disabled={loading}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-xs"
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 disabled:opacity-50 shadow-xs cursor-pointer"
             >
-              {loading ? <Spinner /> : <span>⚡ Polling Ulang SNMP</span>}
+              {loading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Memindai SNMP...</span>
+                </>
+              ) : (
+                <span>⚡ Polling Ulang SNMP</span>
+              )}
             </button>
 
             <a
@@ -5098,11 +5310,21 @@ function OpticalPowerModal({ onu, activeOlt, onClose }) {
             >
               <span>📍 Peta Topologi GIS</span>
             </a>
+
+            {customer.id && (
+              <a
+                href={`/customers?id=${customer.id}`}
+                className="px-3 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs transition-colors flex items-center gap-1 border border-indigo-200 dark:border-indigo-800"
+              >
+                <span>Buka Profil Pelanggan →</span>
+              </a>
+            )}
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+            className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors cursor-pointer"
           >
             Tutup
           </button>

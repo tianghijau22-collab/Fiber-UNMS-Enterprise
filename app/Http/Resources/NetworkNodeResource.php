@@ -14,7 +14,7 @@ class NetworkNodeResource extends JsonResource
      */
     public function toArray($request)
     {
-        $opticalData = $this->getClientRxPowers();
+        $opticalData = $this->preloaded_client_rx_powers ?? $this->getClientRxPowers();
         $bestPower = !empty($opticalData['powers']) ? max($opticalData['powers']) : null;
         $worstPower = !empty($opticalData['powers']) ? min($opticalData['powers']) : null;
         $opticalDbm = $worstPower;
@@ -32,7 +32,7 @@ class NetworkNodeResource extends JsonResource
             }
         }
 
-        $autoData = $this->getAutoDetectedInterfaceAndOlt();
+        $autoData = $this->preloaded_auto_detected ?? $this->getAutoDetectedInterfaceAndOlt();
         $autoPort = $autoData['port_ref'];
         $effectivePortRef = $this->olt_port_ref ?: $autoPort;
         $isAuto = empty($this->olt_port_ref) && !empty($autoPort);

@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 
 /**
  * Reusable SearchableFilterDropdown Component
@@ -20,14 +20,41 @@ export default function SearchableFilterDropdown({
   // Find currently selected option
   const selectedOption = options.find(o => String(o.value) === String(value)) || options[0];
 
-  // Filter options based on search
-  const filteredOptions = options.filter(o => {
-    if (!search.trim()) return true;
-    const labelStr = String(o.label || '').toLowerCase();
-    const sublabelStr = String(o.sublabel || '').toLowerCase();
-    const query = search.toLowerCase();
-    return labelStr.includes(query) || sublabelStr.includes(query);
-  });
+  // Filter & rank options based on search
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return options;
+    const q = search.trim().toLowerCase();
+
+    return options
+      .filter(o => {
+        const labelStr = String(o.label || '').toLowerCase();
+        const sublabelStr = String(o.sublabel || '').toLowerCase();
+        return labelStr.includes(q) || sublabelStr.includes(q);
+      })
+      .sort((a, b) => {
+        const aLabel = String(a.label || '').toLowerCase();
+        const bLabel = String(b.label || '').toLowerCase();
+
+        if (aLabel === q) return -1;
+        if (bLabel === q) return 1;
+
+        const aStarts = aLabel.startsWith(q) || aLabel.startsWith(`odp ${q}`) || aLabel.startsWith(`odc ${q}`);
+        const bStarts = bLabel.startsWith(q) || bLabel.startsWith(`odp ${q}`) || bLabel.startsWith(`odc ${q}`);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+
+        return 0;
+      });
+  }, [options, search]);
+
+  const displayedOptions = useMemo(() => {
+    if (search.trim()) return filteredOptions.slice(0, 150);
+    const top = filteredOptions.slice(0, 150);
+    if (selectedOption && !top.some(o => String(o.value) === String(selectedOption.value))) {
+      return [selectedOption, ...top];
+    }
+    return top;
+  }, [filteredOptions, search, selectedOption]);
 
   // Auto-focus search input when open
   useEffect(() => {
@@ -137,28 +164,35 @@ export default function SearchableFilterDropdown({
                 Data tidak ditemukan
               </div>
             ) : (
-              filteredOptions.map((opt) => {
-                const isSelected = String(opt.value) === String(value);
-                return (
-                  <button
-                    key={String(opt.value)}
-                    type="button"
-                    onClick={() => handleSelect(opt.value)}
-                    className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white font-bold shadow-xs'
-                        : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium'
-                    }`}
-                  >
-                    <span className="truncate">{opt.label}</span>
-                    {isSelected && (
-                      <svg className="w-4 h-4 shrink-0 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </button>
-                );
-              })
+              <>
+                {displayedOptions.map((opt) => {
+                  const isSelected = String(opt.value) === String(value);
+                  return (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      onClick={() => handleSelect(opt.value)}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium'
+                      }`}
+                    >
+                      <span className="truncate">{opt.label}</span>
+                      {isSelected && (
+                        <svg className="w-4 h-4 shrink-0 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+                {filteredOptions.length > 150 && (
+                  <div className="px-3 py-2 text-[10px] text-center text-slate-400 dark:text-slate-500 italic bg-slate-50/60 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800">
+                    Menampilkan 150 dari {filteredOptions.length} opsi. Ketik untuk mencari lebih spesifik...
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

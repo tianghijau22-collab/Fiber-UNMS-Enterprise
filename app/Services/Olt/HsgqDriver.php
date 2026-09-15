@@ -352,7 +352,7 @@ class HsgqDriver implements OltDeviceDriverInterface
         return true;
     }
 
-    public function getOnuOpticalPower(string $serialNumber): array
+    public function getOnuOpticalPower(string $serialNumber, ?string $port = null, ?int $onuId = null): array
     {
         $liveApi = $this->fetchHsgqLiveApiData();
         $targetMac = strtolower(trim($serialNumber));
