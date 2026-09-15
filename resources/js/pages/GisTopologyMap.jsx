@@ -66,13 +66,9 @@ const STATUS_META = {
 };
 
 const getNodeEffectiveStatus = (node) => {
-  if (!node) return { key: 'active', label: 'Aktif Normal', badge: STATUS_META.active.badge, color: '#059669', pinBg: '#059669', isLoss: false, isInactive: false, hasRadar: false };
+  if (!node) return { key: 'active', label: 'Aktif Normal', badge: STATUS_META.active.badge, color: '#059669', pinBg: '#059669', isLoss: false, isTotalLoss: false, isInactive: false, hasRadar: false };
 
-  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
-  const isLossRange = node.rx_power_range && (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS'));
-  const isOpticalLoss = isLossRange || (effectivePower != null && parseFloat(effectivePower) <= -27.5);
-
-  // 1. Status TIDAK AKTIF (Offline / Nonaktif) - Warna Abu-abu Netral, BUKAN Gangguan Loss
+  // 1. Status TIDAK AKTIF (Offline / Nonaktif) - Warna Abu-abu Netral
   if (node.status === 'inactive') {
     return {
       key: 'inactive',
@@ -83,6 +79,7 @@ const getNodeEffectiveStatus = (node) => {
       nameBorder: '#94a3b8',
       nameText: '#475569',
       isLoss: false,
+      isTotalLoss: false,
       isInactive: true,
       hasRadar: false,
     };
@@ -99,42 +96,56 @@ const getNodeEffectiveStatus = (node) => {
       nameBorder: '#f59e0b',
       nameText: '#0f172a',
       isLoss: false,
+      isTotalLoss: false,
       isInactive: false,
       hasRadar: false,
     };
   }
 
-  // 3. Status DAMAGED atau STATUS AKTIF TETAPI SEDANG GANGGUAN LOSS
-  if (node.status === 'damaged' || isOpticalLoss) {
-    const isActuallyActive = node.status === 'active';
+  // Check optical clients status
+  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+  const rangeStr = (node.rx_power_range || '').trim();
+  const hasNumbersInRange = rangeStr && /-?\d+(\.\d+)?/.test(rangeStr);
+  const hasActiveSignal = (effectivePower != null && !isNaN(parseFloat(effectivePower)) && parseFloat(effectivePower) > -32.0) || hasNumbersInRange;
+  const isOnlyLossText = rangeStr === 'Loss' || rangeStr === 'LOS' || rangeStr === 'Loss Total' || rangeStr === 'Semua Loss';
+
+  // Total Loss ONLY when:
+  // - Node status is explicitly damaged, OR
+  // - Node is strictly Loss with 0 working clients (no numbers in range and isOnlyLossText)
+  const isTotalLoss = node.status === 'damaged' || (isOnlyLossText && !hasActiveSignal);
+
+  // 3. Status LOSS TOTAL (Merah dengan Radar Ping)
+  if (isTotalLoss) {
     return {
-      key: isActuallyActive ? 'active_loss' : 'damaged',
-      label: isActuallyActive ? 'Aktif (Gangguan Loss)' : 'Gangguan Loss',
+      key: node.status === 'active' ? 'active_loss' : 'damaged',
+      label: 'Loss Total (Semua Klien)',
       badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse font-bold',
       color: '#ef4444',
       pinBg: '#ef4444',
       nameBorder: '#f87171',
       nameText: '#991b1b',
       isLoss: true,
-      isInactive: false,
+      isTotalLoss: true,
       hasRadar: true,
+      isInactive: false,
     };
   }
 
-  // 4. Status AKTIF NORMAL
+  // 4. Status AKTIF NORMAL (Tetap Hijau / Biru / Indigo selama ada pelanggan yang memiliki redaman)
   let pinColor = '#059669'; // Emerald
   if (node.node_type === 'POP') pinColor = '#4f46e5'; // Indigo
   else if (node.node_type === 'ODC') pinColor = '#2563eb'; // Royal Blue
 
   return {
     key: 'active',
-    label: 'Online / Aktif Normal',
+    label: 'Aktif Normal',
     badge: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
     color: pinColor,
     pinBg: pinColor,
     nameBorder: '#cbd5e1',
     nameText: '#0f172a',
     isLoss: false,
+    isTotalLoss: false,
     isInactive: false,
     hasRadar: false,
   };
@@ -1002,23 +1013,29 @@ function LeafletMap({
     });
   }, [mapLoaded, safeCables]);
 
-  // Helper to format concise optical text
+  // Helper to format concise optical text: redaman terkecil - redaman terbesar
   const formatCompactOptical = (node, effStatus) => {
-    if (effStatus.isLoss) return 'LOS';
+    if (effStatus.isTotalLoss) return 'LOS';
     if (effStatus.isInactive) return '';
+
+    if (node.rx_power_range) {
+      const numbers = node.rx_power_range.match(/-?\d+(\.\d+)?/g);
+      if (numbers && numbers.length >= 2) {
+        const val1 = parseFloat(numbers[0]);
+        const val2 = parseFloat(numbers[1]);
+        const minVal = Math.max(val1, val2); // redaman terbaik / terkecil e.g. -19.5
+        const maxVal = Math.min(val1, val2); // redaman terbesar e.g. -24.2
+        return `${minVal.toFixed(1)} - ${maxVal.toFixed(1)} dBm`;
+      } else if (numbers && numbers.length === 1) {
+        return `${parseFloat(numbers[0]).toFixed(1)} dBm`;
+      }
+    }
+
     const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
     if (effectivePower != null && !isNaN(parseFloat(effectivePower))) {
       return `${parseFloat(effectivePower).toFixed(1)} dBm`;
     }
-    if (node.rx_power_range) {
-      if (node.rx_power_range.includes('Loss') || node.rx_power_range.includes('LOS')) return 'LOS';
-      const match = node.rx_power_range.match(/-?\d+(\.\d+)?/g);
-      if (match && match.length >= 2) {
-        return `${parseFloat(match[0]).toFixed(1)} ~ ${parseFloat(match[1]).toFixed(1)}`;
-      } else if (match && match.length === 1) {
-        return `${parseFloat(match[0]).toFixed(1)} dBm`;
-      }
-    }
+
     return '';
   };
 
@@ -1028,7 +1045,7 @@ function LeafletMap({
     const compactDbm = isOdp && !effStatus.isInactive ? formatCompactOptical(node, effStatus) : '';
 
     let statusCls = '';
-    if (effStatus.isLoss) statusCls = 'gis-circle-loss';
+    if (effStatus.isTotalLoss) statusCls = 'gis-circle-loss';
     else if (effStatus.isInactive) statusCls = 'gis-circle-inactive';
     else if (effStatus.key === 'maintenance') statusCls = 'gis-circle-maint';
 
@@ -1072,7 +1089,7 @@ function LeafletMap({
     if (highlightGroup) highlightGroup.clearLayers();
 
     const zoom = map.getZoom();
-    const zoomTier = zoom >= 16 ? 'badge' : (zoom >= 14 ? 'circle-only' : 'dot');
+    const zoomTier = zoom >= 15 ? 'badge' : (zoom >= 13 ? 'circle-only' : 'dot');
     const tierChanged = currentZoomTierRef.current !== zoomTier;
     currentZoomTierRef.current = zoomTier;
 
@@ -1126,14 +1143,12 @@ function LeafletMap({
       const isSelected = selectedNode?.id === id;
       const effStatus = getNodeEffectiveStatus(node);
       const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
-      const isFault = effStatus.isLoss;
+      const isFault = effStatus.isTotalLoss;
       const optMeta = isFault 
         ? { label: 'Loss / Kritis', color: '#ef4444', pillBg: '#fff1f2', pillBorder: '#fecdd3' } 
         : getOpticalQuality(effectiveBestPower);
 
-      const opticalDbmText = node.rx_power_range 
-        ? node.rx_power_range 
-        : (effectiveBestPower != null ? `${parseFloat(effectiveBestPower).toFixed(1)} dBm` : '—');
+      const opticalDbmText = formatCompactOptical(node, effStatus) || '—';
 
       const isBadgeMode = zoomTier === 'badge' || isSelected || node.node_type === 'POP' || node.node_type === 'ODC';
       const isCircleMode = zoomTier !== 'dot' || isSelected || node.node_type === 'POP' || node.node_type === 'ODC';
@@ -1305,8 +1320,8 @@ function LeafletMap({
         }
 
         .gis-circle-node {
-          width: 26px;
-          height: 26px;
+          width: 28px;
+          height: 28px;
           border-radius: 50%;
           display: flex;
           align-items: center;
@@ -1324,18 +1339,18 @@ function LeafletMap({
         }
 
         .gis-circle-marker.is-pop .gis-circle-node {
-          width: 32px;
-          height: 32px;
+          width: 36px;
+          height: 36px;
           border-width: 3px;
         }
         .gis-circle-marker.is-odc .gis-circle-node {
-          width: 28px;
-          height: 28px;
+          width: 32px;
+          height: 32px;
           border-width: 2.5px;
         }
 
         .gis-circle-icon {
-          font-size: 8px;
+          font-size: 8.5px;
           font-weight: 900;
           letter-spacing: -0.02em;
           color: #0f172a;
@@ -1345,21 +1360,21 @@ function LeafletMap({
           color: #f8fafc;
         }
         .gis-circle-marker.is-pop .gis-circle-icon {
-          font-size: 9.5px;
+          font-size: 11px;
           color: #4f46e5;
         }
         .dark .gis-circle-marker.is-pop .gis-circle-icon {
           color: #818cf8;
         }
         .gis-circle-marker.is-odc .gis-circle-icon {
-          font-size: 8.5px;
+          font-size: 9.5px;
           color: #2563eb;
         }
         .dark .gis-circle-marker.is-odc .gis-circle-icon {
           color: #60a5fa;
         }
         .gis-circle-marker.is-odp .gis-circle-icon {
-          font-size: 7.5px;
+          font-size: 8.5px;
           color: #059669;
         }
         .dark .gis-circle-marker.is-odp .gis-circle-icon {
@@ -1382,44 +1397,44 @@ function LeafletMap({
           align-items: center;
           justify-content: center;
           gap: 1.5px;
-          margin-top: 2px;
-          padding: 1.5px 5px;
-          border-radius: 6px;
-          background: rgba(255, 255, 255, 0.94);
+          margin-top: 3px;
+          padding: 2.5px 7px;
+          border-radius: 7px;
+          background: rgba(255, 255, 255, 0.95);
           backdrop-filter: blur(4px);
           border: 1px solid #cbd5e1;
-          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.16);
+          box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2);
           white-space: nowrap;
-          max-width: 90px;
+          max-width: 130px;
           text-align: center;
         }
         .dark .gis-circle-stack {
-          background: rgba(15, 23, 42, 0.92);
+          background: rgba(15, 23, 42, 0.94);
           border-color: #334155;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
         }
 
         .gis-circle-name {
-          font-size: 9px;
+          font-size: 10.5px;
           font-weight: 800;
           color: #0f172a;
-          max-width: 78px;
+          max-width: 115px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          line-height: 1.1;
+          line-height: 1.2;
         }
         .dark .gis-circle-name {
-          color: #f1f5f9;
+          color: #f8fafc;
         }
 
         .gis-circle-dbm {
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-          font-size: 7.5px;
+          font-size: 9px;
           font-weight: 800;
-          padding: 0.5px 3.5px;
-          border-radius: 4px;
-          line-height: 1.1;
+          padding: 1px 4.5px;
+          border-radius: 5px;
+          line-height: 1.2;
           border: 1px solid transparent;
           white-space: nowrap;
         }
@@ -1571,11 +1586,11 @@ function GisStatCards({ nodes = [] }) {
   const odpOptValues = activeOdps.map(n => parseFloat(n.optical_power_dbm));
   const avgOdpDbm = odpOptValues.length > 0 ? (odpOptValues.reduce((a, b) => a + b, 0) / odpOptValues.length).toFixed(2) : '—';
 
-  // Count optical loss faults (active loss or damaged)
+  // Count optical loss faults (total loss or damaged)
   const lossNodes = safeNodes.filter(n => {
     if (!n) return false;
     const eff = getNodeEffectiveStatus(n);
-    return eff.isLoss;
+    return eff.isTotalLoss;
   });
 
   const inactiveNodes = safeNodes.filter(n => n?.status === 'inactive');
@@ -1585,9 +1600,9 @@ function GisStatCards({ nodes = [] }) {
     { label: 'ODC Cabinet', value: odcs.length, sub: `${odcs.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Distribution', badgeCls: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800' },
     { label: 'ODP Point', value: odps.length, sub: `${odps.filter(n => n.status === 'active').length} Total Point ODP`, badge: 'Access Terminal', badgeCls: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' },
     { 
-      label: 'Gangguan Loss Optik', 
+      label: 'Gangguan Loss Total', 
       value: lossNodes.length, 
-      sub: inactiveNodes.length > 0 ? `${lossNodes.length} Loss • ${inactiveNodes.length} Tidak Aktif` : (lossNodes.length > 0 ? 'Perlu Investigasi Lapangan' : 'Seluruh Jalur Sehat'), 
+      sub: inactiveNodes.length > 0 ? `${lossNodes.length} Total Loss • ${inactiveNodes.length} Tidak Aktif` : (lossNodes.length > 0 ? 'Perlu Investigasi Lapangan' : 'Seluruh Jalur Sehat'), 
       badge: lossNodes.length > 0 ? '🚨 Gangguan' : (inactiveNodes.length > 0 ? `${inactiveNodes.length} Nonaktif` : 'Aman Normal'), 
       badgeCls: lossNodes.length > 0 
         ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800' 
