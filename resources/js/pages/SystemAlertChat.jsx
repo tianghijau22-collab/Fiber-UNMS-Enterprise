@@ -243,16 +243,41 @@ export default function SystemAlertChat() {
     if (!cardElement) return;
     setCapturingId(msgId);
     try {
-      const dataUrl = await toPng(cardElement, {
-        pixelRatio: 2,
+      const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
+      
+      // Create off-screen container with ideal Telegram/mobile proportions (600px width)
+      const wrapper = document.createElement('div');
+      if (isDark) {
+        wrapper.classList.add('dark');
+      }
+      wrapper.style.position = 'fixed';
+      wrapper.style.top = '-99999px';
+      wrapper.style.left = '-99999px';
+      wrapper.style.zIndex = '-99999';
+      wrapper.style.width = '600px';
+      wrapper.style.padding = '0';
+      wrapper.style.margin = '0';
+      wrapper.style.background = isDark ? '#0b0f19' : '#ffffff';
+
+      const clone = cardElement.cloneNode(true);
+      clone.querySelectorAll('.no-screenshot').forEach(el => el.remove());
+      clone.style.width = '100%';
+      clone.style.maxWidth = '100%';
+      clone.style.margin = '0';
+      clone.style.boxShadow = 'none';
+
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      // Capture high-DPI crisp snapshot
+      const dataUrl = await toPng(wrapper, {
+        pixelRatio: 2.5,
         cacheBust: true,
-        filter: (node) => {
-          if (node?.classList && node.classList.contains('no-screenshot')) {
-            return false;
-          }
-          return true;
-        }
+        backgroundColor: isDark ? '#0b0f19' : '#ffffff',
       });
+
+      document.body.removeChild(wrapper);
+
       const link = document.createElement('a');
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       link.download = `alert-${msgId}-${timestamp}.png`;
