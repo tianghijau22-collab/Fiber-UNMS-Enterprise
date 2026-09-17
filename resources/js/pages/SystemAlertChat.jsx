@@ -462,24 +462,24 @@ export default function SystemAlertChat() {
                 <div className={`flex-1 bg-white dark:bg-slate-900 border ${bubbleBorder} rounded-2xl rounded-tl-sm shadow-2xs overflow-hidden transition-all duration-200 hover:border-slate-300 dark:hover:border-slate-700`}>
                   
                   {/* Bubble Header */}
-                  <div className={`px-4 py-2.5 ${headerBg} flex items-center justify-between`}>
+                  <div className={`px-3.5 py-2 ${headerBg} flex items-center justify-between`}>
                     <div className="flex items-center space-x-2">
-                      <span className="text-xs font-bold text-sky-700 dark:text-sky-400">
-                        {botInfo.name}
+                      <span className="text-[11px] font-bold text-sky-700 dark:text-sky-400 capitalize">
+                        alert monitoring realtime
                       </span>
-                      <span className="text-[10px] px-2 py-0.2 rounded-full font-extrabold bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700">
-                        BOT
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-md font-bold bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 tracking-wider">
+                        REALTIME
                       </span>
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      <span className="text-[11px] font-mono font-medium text-slate-500 dark:text-slate-400">
+                      <span className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400">
                         {msg.time_seconds || msg.time_human}
                       </span>
                       {/* Copy Formatted Text Button */}
                       <button
                         onClick={() => handleCopyText(msg.telegram_text, msg.id)}
-                        title="Salin Teks Persis Telegram"
+                        title="Salin Teks Pesan"
                         className="opacity-70 group-hover:opacity-100 hover:opacity-100 p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
                       >
                         {copiedId === msg.id ? (
@@ -493,54 +493,35 @@ export default function SystemAlertChat() {
                     </div>
                   </div>
 
-                  {/* Bubble Content - Exact Telegram Output */}
-                  <div className="p-4 space-y-3">
+                  {/* Bubble Content - Formatted Telegram Output */}
+                  <div className="p-3.5 space-y-2.5">
                     
                     {/* Title */}
-                    <div className={`text-sm tracking-tight flex items-center gap-1.5 ${titleColor}`}>
-                      {msg.title}
-                    </div>
+                    <div 
+                      className={`text-xs sm:text-sm font-extrabold tracking-tight flex items-center gap-1.5 ${titleColor}`}
+                      dangerouslySetInnerHTML={{ __html: msg.title }}
+                    />
 
-                    {/* Divider 1 */}
-                    <div className="text-slate-200 dark:text-slate-800 font-mono select-none text-xs leading-none">
-                      ────────────────────────────
-                    </div>
+                    {/* Subtle Divider */}
+                    <div className="border-t border-slate-100 dark:border-slate-800" />
 
-                    {/* Body Text */}
-                    <div className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 font-mono whitespace-pre-line bg-slate-50 dark:bg-slate-950/70 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800/80">
-                      {msg.body}
-                    </div>
+                    {/* Body Text with Clean HTML Elements */}
+                    <div 
+                      className="text-[11px] sm:text-xs leading-relaxed text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap bg-slate-50/80 dark:bg-slate-950/60 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800/80 [&_b]:font-bold [&_b]:text-slate-900 dark:[&_b]:text-white [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-slate-200/80 dark:[&_code]:bg-slate-800 [&_code]:text-sky-600 dark:[&_code]:text-sky-300 [&_code]:border [&_code]:border-slate-300 dark:[&_code]:border-slate-700/60 [&_code]:font-mono [&_code]:text-[11px] [&_i]:italic [&_i]:text-slate-600 dark:[&_i]:text-slate-400"
+                      dangerouslySetInnerHTML={{ __html: msg.body }}
+                    />
 
-                    {/* Divider 2 */}
-                    <div className="text-slate-200 dark:text-slate-800 font-mono select-none text-xs leading-none">
-                      ────────────────────────────
-                    </div>
+                    {/* Subtle Divider */}
+                    <div className="border-t border-slate-100 dark:border-slate-800" />
 
-                    {/* Footer Info & Telegram Signature */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 gap-1">
-                      <div>
-                        <span className="font-semibold text-slate-400 dark:text-slate-500">Waktu: </span>
+                    {/* Footer Info */}
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 pt-0.5">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-semibold text-slate-400 dark:text-slate-500">Waktu:</span>
                         <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{msg.datetime_human}</span>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-slate-400 dark:text-slate-500">Sistem: </span>
-                        <span className="text-sky-600 dark:text-sky-400 font-semibold">Fiber-UNMS Enterprise</span>
-                        <IconCheckCheck className="w-3.5 h-3.5 text-sky-500 dark:text-sky-400" title="Terkirim & Tersinkronisasi" />
-                      </div>
                     </div>
 
-                    {/* Direct Action Link (if applicable) */}
-                    {msg.url && (
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                        <a
-                          href={msg.url}
-                          className="inline-flex items-center space-x-1.5 text-xs font-bold text-sky-600 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300 bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/60 px-3 py-1.5 rounded-xl border border-sky-200 dark:border-sky-800 transition shadow-2xs"
-                        >
-                          <span>Buka Detail Gangguan</span>
-                          <IconExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
