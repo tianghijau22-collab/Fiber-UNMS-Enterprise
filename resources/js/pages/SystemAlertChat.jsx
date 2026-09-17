@@ -454,29 +454,8 @@ export default function SystemAlertChat() {
                   {/* Card Header */}
                   <div className={`px-3 py-1.5 ${headerBg} flex items-center justify-between`}>
                     <div className="flex items-center space-x-1.5">
-                      <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 capitalize tracking-tight">
+                      <span className="text-[10.5px] font-bold text-slate-800 dark:text-slate-200 capitalize tracking-tight">
                         alert monitoring realtime
-                      </span>
-
-                      {/* Source Identifier Badge */}
-                      {msg.source === 'SNMP_TRAP' ? (
-                        <span className="text-[8px] px-1.5 py-0.2 rounded font-extrabold bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 tracking-wider flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></span>
-                          SNMP TRAP
-                        </span>
-                      ) : msg.source === 'POLL_TELEMETRY' ? (
-                        <span className="text-[8px] px-1.5 py-0.2 rounded font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 tracking-wider flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                          POLLING TELEMETRI
-                        </span>
-                      ) : (
-                        <span className="text-[8px] px-1.5 py-0.2 rounded font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 tracking-wider">
-                          SISTEM
-                        </span>
-                      )}
-
-                      <span className="text-[8px] px-1.5 py-0.2 rounded font-bold bg-sky-50 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 tracking-wider">
-                        REALTIME
                       </span>
                     </div>
 
