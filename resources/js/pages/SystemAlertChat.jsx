@@ -520,7 +520,7 @@ export default function SystemAlertChat() {
                 
                 {/* Bot Small Avatar */}
                 <div className="flex-shrink-0 mt-0.5">
-                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center border shadow-2xs ${avatarCls}`}>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center border shadow-2xs ${avatarCls}`}>
                     {badgeIcon}
                   </div>
                 </div>
@@ -532,17 +532,17 @@ export default function SystemAlertChat() {
                 >
                   
                   {/* Card Header */}
-                  <div className={`px-3 py-1.5 ${headerBg} flex items-center justify-between`}>
+                  <div className={`px-3.5 py-2 ${headerBg} flex items-center justify-between`}>
                     <div className="flex items-center space-x-1.5">
-                      <span className="text-[11px] sm:text-[11.5px] font-bold text-slate-800 dark:text-slate-200 capitalize tracking-tight">
+                      <span className="text-xs sm:text-[12.5px] font-bold text-slate-800 dark:text-slate-200 capitalize tracking-tight">
                         alert monitoring sistem
                       </span>
                     </div>
 
-                    <div className="flex items-center space-x-1.5">
+                    <div className="flex items-center space-x-2">
                       {/* Timestamp (hidden if hideTime is active) */}
                       {!hideTime && (
-                        <span className="text-[10px] sm:text-[10.5px] font-mono font-medium text-slate-500 dark:text-slate-400 mr-1">
+                        <span className="text-[11px] sm:text-[11.5px] font-mono font-medium text-slate-500 dark:text-slate-400 mr-1">
                           {msg.time_seconds || msg.time_human}
                         </span>
                       )}
@@ -553,7 +553,7 @@ export default function SystemAlertChat() {
                           onClick={() => handleScreenshotCard(msg.id)}
                           disabled={capturingId === msg.id}
                           title="Ambil Screenshot Card Alert"
-                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
                         >
                           {capturingId === msg.id ? (
                             <IconRefresh className="w-3.5 h-3.5 animate-spin text-sky-500" />
@@ -566,10 +566,10 @@ export default function SystemAlertChat() {
                         <button
                           onClick={() => handleCopyText(msg.telegram_text, msg.id)}
                           title="Salin Teks Pesan"
-                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
                         >
                           {copiedId === msg.id ? (
-                            <span className="text-[9.5px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
                               <IconCheck className="w-3.5 h-3.5" />
                             </span>
                           ) : (
@@ -581,24 +581,24 @@ export default function SystemAlertChat() {
                   </div>
 
                   {/* Card Content */}
-                  <div className="p-3 space-y-2.5">
+                  <div className="p-3.5 space-y-3">
                     
                     {/* Title */}
                     <div 
-                      className={`text-xs sm:text-[13px] font-bold tracking-tight flex items-center gap-1.5 ${titleColor}`}
+                      className={`text-[13px] sm:text-[14px] font-bold tracking-tight flex items-center gap-1.5 ${titleColor}`}
                       dangerouslySetInnerHTML={{ __html: msg.title }}
                     />
 
                     {/* Body Text with Clean Monospace Text (No Blue Background on SN/Redaman) */}
                     <div 
-                      className={`text-[11px] sm:text-[12px] leading-relaxed text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap ${bodyBg} p-3 rounded-lg border [&_b]:font-bold [&_b]:text-slate-900 dark:[&_b]:text-white [&_code]:font-mono [&_code]:font-medium [&_code]:text-inherit [&_code]:bg-transparent [&_code]:border-0 [&_code]:p-0 [&_i]:italic [&_i]:text-slate-600 dark:[&_i]:text-slate-400`}
+                      className={`text-[12px] sm:text-[13px] leading-relaxed text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap ${bodyBg} p-3.5 rounded-lg border [&_b]:font-bold [&_b]:text-slate-900 dark:[&_b]:text-white [&_code]:font-mono [&_code]:font-medium [&_code]:text-inherit [&_code]:bg-transparent [&_code]:border-0 [&_code]:p-0 [&_i]:italic [&_i]:text-slate-600 dark:[&_i]:text-slate-400`}
                       dangerouslySetInnerHTML={{ __html: msg.body }}
                     />
 
                     {/* Footer Info (Hidden if hideTime is active) */}
                     {!hideTime && (
-                      <div className="flex items-center justify-between text-[9.5px] sm:text-[10px] text-slate-400 dark:text-slate-500 pt-0.5">
-                        <div className="flex items-center space-x-1">
+                      <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-500 pt-0.5">
+                        <div className="flex items-center space-x-1.5">
                           <IconClock className="w-3 h-3 text-slate-400" />
                           <span className="font-semibold text-slate-400 dark:text-slate-500">Waktu:</span>
                           <span className="font-mono font-medium text-slate-600 dark:text-slate-400">{msg.datetime_human}</span>
