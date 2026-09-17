@@ -54,6 +54,11 @@ export default function ServerMonitoring() {
   const [isClearingLogs, setIsClearingLogs] = useState(false);
   const [daemonActionMessage, setDaemonActionMessage] = useState(null);
 
+  // SNMP Trap Control & Action States
+  const [isRestartingTrap, setIsRestartingTrap] = useState(false);
+  const [isClearingTrapLogs, setIsClearingTrapLogs] = useState(false);
+  const [trapActionMessage, setTrapActionMessage] = useState(null);
+
   // Log filters & export
   const [selectedOltLogFilter, setSelectedOltLogFilter] = useState('ALL');
   const [selectedLogLevelFilter, setSelectedLogLevelFilter] = useState('ALL');
@@ -237,6 +242,60 @@ export default function ServerMonitoring() {
     } finally {
       setIsClearingLogs(false);
       setTimeout(() => setDaemonActionMessage(null), 4000);
+    }
+  };
+
+  const handleRestartTrapListener = async () => {
+    if (!window.confirm('Restart service SNMP Trap & Syslog Listener (fiber-event-listener) sekarang? Socket UDP 162 & 514 akan diinisialisasi ulang.')) return;
+    setIsRestartingTrap(true);
+    setTrapActionMessage(null);
+    try {
+      const res = await fetch('/api/server-monitoring/snmp-trap/restart', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setTrapActionMessage(`✅ ${json.message}`);
+        fetchMetrics(true);
+      } else {
+        setTrapActionMessage(`❌ ${json.message || 'Gagal me-restart trap listener'}`);
+      }
+    } catch (err) {
+      setTrapActionMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setIsRestartingTrap(false);
+      setTimeout(() => setTrapActionMessage(null), 6000);
+    }
+  };
+
+  const handleClearTrapLogs = async () => {
+    if (!window.confirm('Bersihkan seluruh riwayat log SNMP Trap di memori cache?')) return;
+    setIsClearingTrapLogs(true);
+    setTrapActionMessage(null);
+    try {
+      const res = await fetch('/api/server-monitoring/snmp-trap/clear-logs', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setTrapActionMessage(`✅ ${json.message}`);
+        fetchMetrics(true);
+      }
+    } catch (err) {
+      setTrapActionMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setIsClearingTrapLogs(false);
+      setTimeout(() => setTrapActionMessage(null), 4000);
     }
   };
 
@@ -477,10 +536,12 @@ export default function ServerMonitoring() {
   const net = metrics?.network || {};
   const vpn = metrics?.vpn || {};
   const worker = metrics?.worker || {};
+  const snmpTrap = metrics?.snmp_trap || {};
   const sys = metrics?.system || {};
   const gateway = metrics?.gateway || {};
   const topProcesses = metrics?.top_processes || [];
   const workerLogs = worker.logs || [];
+  const trapLogs = snmpTrap.recent_logs || [];
 
   // Filter logs by OLT, Level & Search Text
   const filteredLogs = useMemo(() => {
@@ -1376,6 +1437,236 @@ export default function ServerMonitoring() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* ── PANEL: MONITORING SNMP TRAP & SYSLOG LISTENER (SUB-SECOND DETECTOR) ── */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs space-y-4">
+        {/* Header HUD */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 rounded-xl bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-800">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
+                    Monitoring SNMP Trap &amp; Syslog Listener
+                  </h3>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                    snmpTrap.is_running
+                      ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-rose-50 dark:bg-rose-950/80 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${snmpTrap.is_running ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+                    {snmpTrap.is_running ? 'SUB-SECOND LISTENER ACTIVE' : 'LISTENER DOWN'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Daemon penangkap sinyal trap instan (UDP 162 &amp; 514) • Penanggung jawab utama deteksi kabel putus per detik.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleRestartTrapListener}
+              disabled={isRestartingTrap}
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+              title="Restart systemd daemon service fiber-event-listener"
+            >
+              <svg
+                className={`w-3.5 h-3.5 ${isRestartingTrap ? 'animate-spin text-cyan-500' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>{isRestartingTrap ? 'Restarting...' : 'Restart Trap Listener'}</span>
+            </button>
+
+            <button
+              onClick={handleClearTrapLogs}
+              disabled={isClearingTrapLogs}
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+              title="Bersihkan riwayat log trap"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              <span>Bersihkan Log</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Action Message Banner */}
+        {trapActionMessage && (
+          <div className="p-3 rounded-xl bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-200 dark:border-cyan-800 text-xs font-bold text-cyan-900 dark:text-cyan-200 flex items-center justify-between animate-in fade-in">
+            <span>{trapActionMessage}</span>
+            <button onClick={() => setTrapActionMessage(null)} className="text-cyan-400 hover:text-cyan-600 text-sm">✕</button>
+          </div>
+        )}
+
+        {/* KPI Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Socket Status */}
+          <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">Socket Port Listener</span>
+            <div className="font-mono text-sm font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              UDP 162 &amp; 514
+            </div>
+            <p className="text-[10px] text-slate-500">SNMP Trap &amp; Syslog Ready</p>
+          </div>
+
+          {/* Paket Hari Ini */}
+          <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">Paket Diterima Hari Ini</span>
+            <div className="font-mono text-sm font-black text-cyan-600 dark:text-cyan-400">
+              {snmpTrap.total_packets_today ?? 0} Paket
+            </div>
+            <p className="text-[10px] text-slate-500">Total Trap Masuk</p>
+          </div>
+
+          {/* Terakhir Diterima */}
+          <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">Terakhir Menerima Trap</span>
+            <div className="font-mono text-sm font-black text-slate-900 dark:text-white">
+              {snmpTrap.last_received_human || 'Belum ada paket'}
+            </div>
+            <p className="text-[10px] text-slate-500 truncate">{snmpTrap.last_received_at ? new Date(snmpTrap.last_received_at).toLocaleTimeString() : 'Standby'}</p>
+          </div>
+
+          {/* OLT Terhubung */}
+          <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">Konektivitas OLT Target</span>
+            <div className="font-mono text-sm font-black text-indigo-600 dark:text-indigo-400">
+              {snmpTrap.connected_olts ?? 0} / {snmpTrap.total_olts ?? 0} OLT
+            </div>
+            <p className="text-[10px] text-slate-500">Jalur Trap Aktif</p>
+          </div>
+        </div>
+
+        {/* Tabel Status Sinyal Trap per OLT */}
+        {snmpTrap.olts && snmpTrap.olts.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Status Konektivitas &amp; Sinyal Trap dari Perangkat OLT:
+              </span>
+              <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Port UDP 162 terbuka mendengarkan trap dari IP OLT
+              </span>
+            </div>
+            <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
+                    <th className="p-2.5">Nama OLT</th>
+                    <th className="p-2.5">IP Address</th>
+                    <th className="p-2.5">Vendor</th>
+                    <th className="p-2.5">Ping RTT</th>
+                    <th className="p-2.5">Terakhir Mengirim Sinyal</th>
+                    <th className="p-2.5">Event Terakhir</th>
+                    <th className="p-2.5">Status Trap</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono">
+                  {snmpTrap.olts.map((o, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
+                      <td className="p-2.5 text-slate-900 dark:text-white font-sans font-bold">{o.name}</td>
+                      <td className="p-2.5 text-slate-600 dark:text-slate-300">{o.ip}</td>
+                      <td className="p-2.5 text-slate-500 font-sans">{o.vendor}</td>
+                      <td className="p-2.5">
+                        {o.is_reachable ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold">{o.ping_ms} ms</span>
+                        ) : (
+                          <span className="text-rose-500 font-bold">Unreachable</span>
+                        )}
+                      </td>
+                      <td className="p-2.5 text-slate-600 dark:text-slate-300 font-sans">{o.last_trap_text}</td>
+                      <td className="p-2.5 text-slate-500 font-sans text-[11px] truncate max-w-[200px]">{o.last_event || '—'}</td>
+                      <td className="p-2.5 font-sans">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          o.status_badge === 'emerald'
+                            ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400'
+                            : o.status_badge === 'cyan'
+                            ? 'bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-400'
+                            : 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-400'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${o.status_badge === 'rose' ? 'bg-rose-500' : 'bg-emerald-500'}`}></span>
+                          {o.status_label}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Live Event Stream Logs */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+              Live Feed: Sinyal Trap &amp; Syslog yang Baru Masuk
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">
+              Menampilkan hingga 50 aktivitas sinyal trap terkini
+            </span>
+          </div>
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-[11px] h-60 overflow-y-auto space-y-1.5">
+            {trapLogs.length === 0 ? (
+              <div className="text-slate-500 text-center py-10">
+                📡 Menunggu sinyal SNMP Trap / Syslog dari OLT... (Socket aktif pada UDP 162/514)
+              </div>
+            ) : (
+              trapLogs.map((log, idx) => {
+                const isLoss = log.is_loss || log.event_level === 'critical';
+                const isRec = log.is_recovery || log.event_level === 'success';
+                const badgeBg = isLoss
+                  ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                  : isRec
+                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                  : 'bg-cyan-950 text-cyan-400 border border-cyan-800';
+
+                return (
+                  <div key={idx} className="flex items-center gap-2 hover:bg-slate-900/60 p-1 rounded transition-colors text-slate-300">
+                    <span className="text-slate-500 shrink-0">{log.time}</span>
+                    <span className="text-indigo-400 font-bold shrink-0">[{log.olt_name}]</span>
+                    <span className="text-slate-400 shrink-0">({log.from_ip})</span>
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-black tracking-wider shrink-0 ${badgeBg}`}>
+                      {log.source_type || 'TRAP'}
+                    </span>
+                    <span className="text-white font-semibold">
+                      {log.port ? `Port ${log.port}` : ''}{log.onu_id ? `:${log.onu_id}` : ''}
+                    </span>
+                    {log.target_sn && (
+                      <span className="text-amber-400 shrink-0">[{log.target_sn}]</span>
+                    )}
+                    {log.target_name && (
+                      <span className="text-slate-200">"{log.target_name}"</span>
+                    )}
+                    <span className="text-slate-400">➔ {log.event_label}</span>
+                    {log.rx_power !== null && log.rx_power !== undefined && (
+                      <span className={`font-bold ${isLoss ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        [{log.rx_power} dBm]
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ── PANEL: DETAIL KESEHATAN & LATENSI VPN TUNNEL KE OLT ── */}

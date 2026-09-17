@@ -24,6 +24,7 @@ export const ROUTE_ROLES = {
   '/database-backup': ['Super Administrator'],
   '/audit-logs': ['*'],
   '/broadcast-notifications': ['Super Administrator', 'Operator Jaringan', 'NOC Operator'],
+  '/system-alerts': ['*'],
 };
 
 export function AuthProvider({ children }) {

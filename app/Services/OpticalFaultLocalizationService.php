@@ -33,74 +33,197 @@ class OpticalFaultLocalizationService
     /**
      * 1. Deteksi Client Mati Massal pada ODP atau Port PON OLT
      */
-    public static function detectMassClientDown(int $minThreshold = 3, float $downPercentageThreshold = 60.0): array
+    public static function detectMassClientDown(int $minThreshold = 2, float $downPercentageThreshold = 100.0): array
     {
         $alerts = [];
-        $odps = NetworkNode::where('node_type', 'ODP')->with(['parent', 'oltDevice'])->get();
 
-        foreach ($odps as $odp) {
-            // Dapatkan seluruh ONU yang terhubung ke port ODP ini
-            $onus = OntRegistration::whereHas('customerService.networkPort', function ($q) use ($odp) {
-                $q->where('node_id', $odp->id);
-            })->get();
+        // 🚀 OPTIMIZED: 1 single query untuk mengambil seluruh ONU yang terhubung ke ODP beserta relasinya
+        $allOnus = \Illuminate\Support\Facades\DB::table('ont_registrations')
+            ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
+            ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
+            ->join('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
+            ->join('network_nodes as odp', 'odp.id', '=', 'network_ports.node_id')
+            ->leftJoin('network_nodes as odc', 'odc.id', '=', 'odp.parent_node_id')
+            ->leftJoin('olt_devices', 'olt_devices.id', '=', 'odp.olt_device_id')
+            ->where('odp.node_type', 'ODP')
+            ->select([
+                'odp.id as odp_id',
+                'odp.name as odp_name',
+                'odp.code as odp_code',
+                'odp.olt_port_ref',
+                'odc.name as odc_name',
+                'olt_devices.name as olt_name',
+                'ont_registrations.id as ont_id',
+                'ont_registrations.onu_serial',
+                'ont_registrations.onu_mac',
+                'ont_registrations.status',
+                'ont_registrations.rx_power',
+                'customers.id as customer_id',
+                'customers.customer_number',
+                'customers.name as customer_name',
+            ])
+            ->get();
 
+        $groupedByOdp = $allOnus->groupBy('odp_id');
+
+        foreach ($groupedByOdp as $odpId => $onus) {
             $totalOnus = $onus->count();
             if ($totalOnus < $minThreshold) {
                 continue;
             }
 
+            $first = $onus->first();
+            $odpName = $first->odp_name;
+            $odpCode = $first->odp_code;
+            $odcName = $first->odc_name ?: 'ODC Induk';
+            $oltName = $first->olt_name ?: 'OLT';
+            $portRef = $first->olt_port_ref ?: 'PON Port';
+            $massKey = "notif_mass_down_{$odpId}";
+
             // Hitung ONU yang down / LOS / offline
             $downOnus = $onus->filter(function ($onu) {
                 return $onu->status !== 'active' 
                     || $onu->rx_power === null 
-                    || $onu->rx_power <= -30.0 
-                    || ($onu->last_online_at && $onu->last_online_at->diffInMinutes(now()) > 10);
+                    || !is_numeric($onu->rx_power)
+                    || (float)$onu->rx_power <= -32.0;
             });
 
             $downCount = $downOnus->count();
-            $downPercentage = ($downCount / $totalOnus) * 100.0;
 
-            if ($downCount >= $minThreshold && $downPercentage >= $downPercentageThreshold) {
-                $odcName = $odp->parent ? $odp->parent->name : 'ODC Induk';
-                $oltName = $odp->oltDevice ? $odp->oltDevice->name : 'OLT';
-                $portRef = $odp->olt_port_ref ?: 'PON Port';
+            // 🚨 Deteksi ODP Down:
+            // 1. 100% seluruh pelanggan pada ODP tersebut LOS, ATAU
+            // 2. Untuk ODP dengan >= 6 pelanggan: jika >= 85% pelanggan LOS (mengantisipasi jika ada 1 entri ghost di OLT)
+            $isOdpDown = ($totalOnus >= $minThreshold && $downCount === $totalOnus)
+                || ($totalOnus >= 6 && $downCount >= ($totalOnus - 1) && ($downCount / $totalOnus) >= 0.85);
 
+            if ($isOdpDown) {
+                $pctVal = round(($downCount / $totalOnus) * 100.0, 1);
                 $alertItem = [
-                    'odp_id'          => $odp->id,
-                    'odp_name'        => $odp->name,
-                    'odp_code'        => $odp->code,
+                    'odp_id'          => $odpId,
+                    'odp_name'        => $odpName,
+                    'odp_code'        => $odpCode,
                     'odc_name'        => $odcName,
                     'olt_name'        => $oltName,
                     'olt_port_ref'    => $portRef,
                     'total_clients'   => $totalOnus,
                     'down_clients'    => $downCount,
-                    'down_percentage' => round($downPercentage, 1),
-                    'sample_onus'     => $downOnus->take(5)->pluck('onu_serial')->toArray(),
+                    'down_percentage' => $pctVal,
+                    'sample_onus'     => $downOnus->take(10)->pluck('onu_serial')->toArray(),
                 ];
 
                 $alerts[] = $alertItem;
 
                 // Anti-spam key: hanya kirim sekali saat pertama kali terdeteksi (cooldown 12 jam)
-                $massKey = "notif_mass_down_{$odp->id}";
                 if (!\Illuminate\Support\Facades\Cache::has($massKey)) {
                     \Illuminate\Support\Facades\Cache::put($massKey, true, now()->addHours(12));
 
-                    $cleanMassMsg = "<b>• Node ODP:</b> {$odp->name} ({$odp->code})\n" .
-                                    "<b>• ODC Induk:</b> {$odcName}\n" .
-                                    "<b>• Interface OLT:</b> {$portRef}\n" .
-                                    "<b>• Klien Terdampak:</b> 🔴 {$downCount} dari {$totalOnus} Pelanggan ({$alertItem['down_percentage']}% LOS)\n\n" .
-                                    "<i>Status: Seluruh pelanggan pada ODP ini terdeteksi mengalami pemutusan sinyal bersamaan.</i>";
+                    // 🛡️ HIERARCHY GUARD: Jika Interface OLT induk sedang dalam status Gangguan Massal Interface
+                    // (misal SFP dicabut atau kabel feeder utama putus total),
+                    // TAHAN notifikasi ODP individual ini agar grup NOC tidak dibanjiri puluhan alert ODP sekaligus!
+                    $isParentInterfaceInMassOutage = false;
+                    if (!empty($portRef)) {
+                        $cleanP = strtolower(trim($portRef));
+                        $allDevs = \App\Models\OltDevice::all(['id']);
+                        foreach ($allDevs as $dev) {
+                            if (\Illuminate\Support\Facades\Cache::has("interface_in_mass_outage_{$dev->id}_{$cleanP}") ||
+                                \Illuminate\Support\Facades\Cache::has("interface_in_mass_outage_{$dev->id}_gpon-olt_{$cleanP}")) {
+                                $isParentInterfaceInMassOutage = true;
+                                break;
+                            }
+                        }
+                    }
 
-                    AppNotification::notifyAll(
-                        "🚨 ALARM GANGGUAN MASSAL: ODP {$odp->name}",
-                        $cleanMassMsg,
-                        'NOC',
-                        '/network'
-                    );
+                    if (!$isParentInterfaceInMassOutage) {
+                        $cleanOdpTitle = preg_match('/^odp/i', $odpName) ? $odpName : "ODP {$odpName}";
+
+                        // Susun daftar seluruh pelanggan beserta ID Pelanggan dan nilai redamannya
+                        $clientLines = [];
+                        $idx = 1;
+                        foreach ($onus as $onu) {
+                            $cName = $onu->customer_name ?: "Pelanggan #{$onu->ont_id}";
+                            $cId   = $onu->customer_number ?: ($onu->customer_id ? "ID-{$onu->customer_id}" : "ID-{$onu->ont_id}");
+                            $sn    = $onu->onu_serial ?: ($onu->onu_mac ?: '—');
+                            $isDown = ($onu->status !== 'active' || $onu->rx_power === null || !is_numeric($onu->rx_power) || (float)$onu->rx_power <= -32.0);
+                            $badge = $isDown ? "🔴" : "🟢";
+                            $rxStr = ($onu->rx_power !== null && is_numeric($onu->rx_power) && (float)$onu->rx_power > -35.0) ? "{$onu->rx_power} dBm" : "-40.00 dBm (LOS)";
+                            $clientLines[] = "{$idx}. {$badge} [{$cId}] <b>{$cName}</b>\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
+                            $idx++;
+                        }
+                        $clientListText = implode("\n", $clientLines);
+
+                        $cleanMassMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
+                                        "<b>• ODC Induk:</b> {$odcName}\n" .
+                                        "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
+                                        "<b>• Klien Terdampak:</b> 🔴 <b>{$downCount} dari {$totalOnus} Pelanggan ({$pctVal}% LOS)</b>\n\n" .
+                                        "<b>Daftar Klien Terdampak:</b>\n" .
+                                        "{$clientListText}\n\n" .
+                                        "<i>Status: Pelanggan pada ODP ini terdeteksi mengalami pemutusan sinyal bersamaan.</i>";
+
+                        AppNotification::notifyAll(
+                            "🚨 ALARM GANGGUAN MASSAL: {$cleanOdpTitle}",
+                            $cleanMassMsg,
+                            'NOC',
+                            '/network'
+                        );
+                    }
+                    \Illuminate\Support\Facades\Cache::forget('dashboard_metrics_payload');
                 }
             } else {
-                // Jika sudah normal kembali, bersihkan key agar alarm bisa berbunyi lagi di masa depan
-                \Illuminate\Support\Facades\Cache::forget("notif_mass_down_{$odp->id}");
+                // Jika sebelumnya ODP ini tercatat sedang gangguan massal dan sekarang telah pulih (downCount < totalOnus):
+                if (\Illuminate\Support\Facades\Cache::has($massKey)) {
+                    \Illuminate\Support\Facades\Cache::forget($massKey);
+                    \Illuminate\Support\Facades\Cache::forget('dashboard_metrics_payload');
+
+                    // Jika port induk sedang dalam pemulihan massal interface, jangan kirim per ODP agar tidak spam
+                    $isParentInterfaceInMassOutage = false;
+                    if (!empty($portRef)) {
+                        $cleanP = strtolower(trim($portRef));
+                        $allDevs = \App\Models\OltDevice::all(['id']);
+                        foreach ($allDevs as $dev) {
+                            if (\Illuminate\Support\Facades\Cache::has("interface_in_mass_outage_{$dev->id}_{$cleanP}") ||
+                                \Illuminate\Support\Facades\Cache::has("interface_in_mass_outage_{$dev->id}_gpon-olt_{$cleanP}")) {
+                                $isParentInterfaceInMassOutage = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!$isParentInterfaceInMassOutage) {
+                        $cleanOdpTitle = preg_match('/^odp/i', $odpName) ? $odpName : "ODP {$odpName}";
+
+                        // Susun daftar seluruh pelanggan yang telah pulih beserta ID Pelanggan dan nilai redaman sehatnya
+                        $clientRecoveryLines = [];
+                        $recoveredCount = 0;
+                        $idx = 1;
+                        foreach ($onus as $onu) {
+                            $cName = $onu->customer_name ?: "Pelanggan #{$onu->ont_id}";
+                            $cId   = $onu->customer_number ?: ($onu->customer_id ? "ID-{$onu->customer_id}" : "ID-{$onu->ont_id}");
+                            $sn    = $onu->onu_serial ?: ($onu->onu_mac ?: '—');
+                            $isUp  = ($onu->status === 'active' && $onu->rx_power !== null && is_numeric($onu->rx_power) && (float)$onu->rx_power > -32.0);
+                            if ($isUp) $recoveredCount++;
+                            $badge = $isUp ? "🟢" : "🔴";
+                            $rxStr = $isUp ? "{$onu->rx_power} dBm" : "-40.00 dBm (LOS)";
+                            $clientRecoveryLines[] = "{$idx}. {$badge} [{$cId}] <b>{$cName}</b>\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
+                            $idx++;
+                        }
+                        $recoveryDetailText = implode("\n", $clientRecoveryLines);
+
+                        $cleanRecoveryMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
+                                            "<b>• ODC Induk:</b> {$odcName}\n" .
+                                            "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
+                                            "<b>• Status:</b> 🟢 <b>LAYANAN ODP PULIH NORMAL ({$recoveredCount}/{$totalOnus} Klien Online)</b>\n\n" .
+                                            "<b>Daftar Pelanggan Pulih:</b>\n" .
+                                            "{$recoveryDetailText}\n\n" .
+                                            "<i>Koneksi optik pada splitter ODP {$cleanOdpTitle} telah kembali normal dan stabil.</i>";
+
+                        AppNotification::notifyAll(
+                            "🟢 PEMULIHAN GANGGUAN MASSAL: {$cleanOdpTitle}",
+                            $cleanRecoveryMsg,
+                            'NOC',
+                            '/network'
+                        );
+                    }
+                }
             }
         }
 

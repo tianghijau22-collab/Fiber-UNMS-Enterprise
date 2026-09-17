@@ -402,6 +402,7 @@ export default function SobokScraperModal({
         onu_serial: row.onu_serial,
         rx_power: row.rx_power,
         phone: row.phone || '-',
+        interface: row.interface || null,
       };
 
       const res = await fetch('/api/customers/sobok/import-single', {

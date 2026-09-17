@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\CustomerController;
 use App\Models\Customer;
 use App\Models\CustomerService;
 use App\Models\NetworkNode;
@@ -63,6 +64,7 @@ class SobokImportController extends Controller
             'odp_id'          => 'nullable|integer|exists:network_nodes,id',
             'onu_serial'      => 'nullable|string|max:100',
             'rx_power'        => 'nullable|numeric',
+            'interface'       => 'nullable|string',
         ]);
 
         try {
@@ -157,8 +159,18 @@ class SobokImportController extends Controller
                     }
                 }
 
-                // 5. Create OntRegistration
-                $notes = 'Diimpor dari Sobok';
+                // 5. Deteksi otomatis port fisik OLT, redaman riil, dan sinkronkan ODP
+                $detected = CustomerController::resolveOnuPhysicalPortAndSync(
+                    $sn,
+                    $odpId,
+                    $request->input('interface')
+                );
+
+                $rxPowerVal = $detected['rx_power'] ?? ($validated['rx_power'] ?? -19.50);
+                $txPowerVal = $detected['tx_power'] ?? 2.10;
+                $statusVal  = (strtolower($detected['status']) === 'online') ? 'active' : 'active';
+
+                $notes = 'Diimpor dari Sobok' . ($detected['port'] ? " (Port OLT: {$detected['port']})" : '');
                 if ($duplicateSnNote) {
                     $notes .= " ({$duplicateSnNote})";
                 }
@@ -166,26 +178,43 @@ class SobokImportController extends Controller
                 OntRegistration::create([
                     'customer_service_id' => $service->id,
                     'onu_serial'          => $sn,
-                    'onu_type'            => 'HGU GPON/EPON',
-                    'status'              => 'active',
+                    'onu_type'            => $detected['vendor_model'] ?: 'HGU GPON/EPON',
+                    'status'              => $statusVal,
                     'registered_at'       => now(),
                     'last_online_at'      => now(),
-                    'rx_power'            => $validated['rx_power'] ?? -19.50,
-                    'tx_power'            => 2.10,
+                    'rx_power'            => $rxPowerVal,
+                    'tx_power'            => $txPowerVal,
                     'notes'               => $notes,
                 ]);
+
+                // Sinkronkan ke Telemetry Snapshot OLT
+                if ($detected['olt_id'] && $detected['port']) {
+                    CustomerController::injectCustomerIntoOltSnapshot($detected['olt_id'], [
+                        'customer_id'     => $customer->id,
+                        'customer_name'   => $customer->name,
+                        'customer_number' => $customer->customer_number,
+                        'serial_number'   => $sn,
+                        'port'            => $detected['port'],
+                        'rx_power'        => $rxPowerVal,
+                        'tx_power'        => $txPowerVal,
+                        'status'          => ($statusVal === 'active') ? 'Online' : 'Offline',
+                        'onu_id'          => $detected['onu_id'] ?? (string)$customer->id,
+                        'vendor_model'    => $detected['vendor_model'] ?: 'HGU GPON/EPON',
+                    ]);
+                }
 
                 AuditLog::record(
                     'IMPORT',
                     'Customer Management',
-                    "Menambahkan pelanggan dari Sobok: {$customer->name} ({$customer->customer_number})" . ($boundPort ? " ke Port ODP {$boundPort}" : "") . ($duplicateSnNote ? " [{$duplicateSnNote}]" : ""),
+                    "Menambahkan pelanggan dari Sobok: {$customer->name} ({$customer->customer_number})" . ($boundPort ? " ke Port ODP {$boundPort}" : "") . ($detected['port'] ? " [Port OLT: {$detected['port']}]" : "") . ($duplicateSnNote ? " [{$duplicateSnNote}]" : ""),
                     null,
-                    ['customer_id' => $customer->id, 'customer_number' => $customer->customer_number, 'onu_serial' => $sn]
+                    ['customer_id' => $customer->id, 'customer_number' => $customer->customer_number, 'onu_serial' => $sn, 'olt_port' => $detected['port']]
                 );
 
                 return [
                     'customer'   => $customer,
                     'bound_port' => $boundPort,
+                    'olt_port'   => $detected['port'],
                 ];
             });
 

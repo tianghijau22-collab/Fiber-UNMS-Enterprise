@@ -186,8 +186,10 @@ class OltController extends Controller
 
             $dbOntsCountByPort = [];
             foreach ($dbOnts as $ont) {
-                $p = $ont->customerService?->networkPort?->node?->olt_port_ref ?: ($ont->oltPort?->node?->olt_port_ref ?: 'gpon-olt_1/1/1');
-                $dbOntsCountByPort[$p] = ($dbOntsCountByPort[$p] ?? 0) + 1;
+                $p = $ont->customerService?->networkPort?->node?->olt_port_ref ?: ($ont->oltPort?->node?->olt_port_ref ?: null);
+                if ($p && $p !== 'gpon-olt_1/1/1') {
+                    $dbOntsCountByPort[$p] = ($dbOntsCountByPort[$p] ?? 0) + 1;
+                }
             }
 
             $snapshotPorts = $device?->last_telemetry_snapshot['pon_ports'] ?? [];
@@ -253,10 +255,10 @@ class OltController extends Controller
     {
         $vendor   = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
         $deviceId = $request->input('device_id') ?: ($request->query('device_id') ?: null);
-        $port     = $request->input('port') ?: $request->query('port', 'gpon-olt_1/1/1');
+        $device   = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
+        $port     = $request->input('port') ?: ($request->query('port') ?: ($device?->last_telemetry_snapshot['pon_ports'][0]['port_id'] ?? 'gpon-olt_1/2/1'));
         $isFresh  = $request->boolean('fresh') || $request->boolean('force');
 
-        $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
         $driver = $this->getDriver($vendor, $device?->id);
 
         $cleanPort = strtolower(trim($port));
@@ -286,17 +288,22 @@ class OltController extends Controller
                 $portUncfg
             );
 
+            $portFilteredOnus = array_values(array_filter($partitioned['onu_list'] ?? [], function ($o) use ($normalizedPort) {
+                $p = strtolower($o['port'] ?? '');
+                return $this->portsMatch($p, $normalizedPort);
+            }));
+
             return response()->json([
                 'status'            => 'success',
                 'port'              => $port,
-                'onu_list'          => $partitioned['onu_list'] ?? [],
-                'unconfigured_onus' => $partitioned['unconfigured_onus'] ?? [],
+                'onu_list'          => $portFilteredOnus,
+                'unconfigured_onus' => $portUncfg,
                 'orphaned_onus'     => $partitioned['orphaned_onus'] ?? [],
                 'polled_at'         => $rawSnapshot['polled_at'] ?? now()->toIso8601String(),
             ]);
         }
 
-        // Live Query khusus port ini
+        // Live Query khusus port ini via Driver (SNMP/API)
         $driverOnuList = $driver->getOnuListByPort($port);
         $allUncfg      = $driver->getUnconfiguredOnus();
         $driverUncfg   = array_values(array_filter($allUncfg, function ($o) use ($normalizedPort) {
@@ -312,6 +319,20 @@ class OltController extends Controller
             $driverUncfg
         );
 
+        $freshPortOnus = array_values(array_filter($partitioned['onu_list'] ?? [], function ($o) use ($normalizedPort) {
+            $p = strtolower($o['port'] ?? '');
+            return $this->portsMatch($p, $normalizedPort);
+        }));
+
+        // Tambahkan ONU fisik yang belum terikat customer namun terdeteksi di driverOnuList
+        $matchedSns = array_map(fn($o) => strtoupper(trim((string)($o['serial_number'] ?? ''))), $freshPortOnus);
+        foreach ($driverOnuList as $dOnu) {
+            $dSn = strtoupper(trim((string)($dOnu['serial_number'] ?? '')));
+            if ($dSn && !in_array($dSn, $matchedSns)) {
+                $freshPortOnus[] = $dOnu;
+            }
+        }
+
         // Update database registrations & snapshot
         if ($device) {
             $this->syncOntRegistrations($device, $driverOnuList);
@@ -324,26 +345,36 @@ class OltController extends Controller
                 $currentSnapshot['device_info'] = $driver->getDeviceInfo();
             }
 
-            // Merge unconfigured onus ke snapshot
+            // 1. Merge ONU List (Registered/Detected) ke Snapshot: buang ONU lama di port ini, masukkan data segar
+            $existingOnus = $currentSnapshot['onu_list'] ?? [];
+            $filteredExistingOnus = array_values(array_filter($existingOnus, function ($o) use ($normalizedPort) {
+                $p = strtolower($o['port'] ?? '');
+                return !$this->portsMatch($p, $normalizedPort);
+            }));
+            $currentSnapshot['onu_list'] = array_merge($filteredExistingOnus, $freshPortOnus);
+
+            // 2. Merge unconfigured onus ke snapshot
             $existingUncfg = $currentSnapshot['unconfigured_onus'] ?? [];
             $filteredUncfg = array_values(array_filter($existingUncfg, function ($o) use ($normalizedPort) {
                 $p = strtolower($o['detected_port'] ?? ($o['port'] ?? ''));
-                return !str_contains($p, $normalizedPort) && !str_contains($normalizedPort, $p);
+                return !$this->portsMatch($p, $normalizedPort);
             }));
             $currentSnapshot['unconfigured_onus'] = array_merge($filteredUncfg, $driverUncfg);
 
-            // Update status dan hitungan di pon_ports snapshot
-            $totalFound = count($driverOnuList) + count($driverUncfg);
+            // 3. Update status dan hitungan di pon_ports snapshot
+            $totalFound = count($freshPortOnus) + count($driverUncfg);
+            $onlineCount = count(array_filter($freshPortOnus, fn($o) => in_array(strtolower($o['status'] ?? ''), ['online', 'active', 'working']) && isset($o['rx_power']) && (float)$o['rx_power'] > -38.0));
+
             $currentPorts = $currentSnapshot['pon_ports'] ?? [];
-            $currentSnapshot['pon_ports'] = array_map(function ($p) use ($normalizedPort, $driverOnuList, $driverUncfg, $totalFound) {
+            $currentSnapshot['pon_ports'] = array_map(function ($p) use ($normalizedPort, $totalFound, $onlineCount, $driverUncfg) {
                 $pId = strtolower($p['port_id'] ?? '');
                 if ($this->portsMatch($pId, $normalizedPort)) {
                     $isUp = $totalFound > 0 || ($p['status'] ?? '') === 'Up';
                     return array_merge($p, [
                         'status'            => $isUp ? 'Up' : 'Down',
-                        'registered_onus'   => count($driverOnuList),
+                        'registered_onus'   => max(0, $totalFound - count($driverUncfg)),
                         'unconfigured_onus' => count($driverUncfg),
-                        'online_onus'       => $isUp ? max($p['online_onus'] ?? 0, $totalFound) : 0,
+                        'online_onus'       => $isUp ? $onlineCount : 0,
                     ]);
                 }
                 return $p;
@@ -355,13 +386,16 @@ class OltController extends Controller
                 'last_telemetry_snapshot' => $currentSnapshot,
                 'last_connected_at'       => now(),
             ]);
+
+            // Invalidate GIS Map cache payload agar GIS Map seketika menampilkan redaman baru
+            \Illuminate\Support\Facades\Cache::forget('gis_map_data_payload_v1');
         }
 
         return response()->json([
             'status'            => 'success',
             'port'              => $port,
-            'onu_list'          => $partitioned['onu_list'] ?? [],
-            'unconfigured_onus' => $partitioned['unconfigured_onus'] ?? [],
+            'onu_list'          => $freshPortOnus,
+            'unconfigured_onus' => $driverUncfg,
             'orphaned_onus'     => $partitioned['orphaned_onus'] ?? [],
             'polled_at'         => now()->toIso8601String(),
         ]);
@@ -482,8 +516,20 @@ class OltController extends Controller
             $matchedOntIds[] = $ont->id;
             $customerName = $ont->customerService?->customer?->name ?: ('Pelanggan #' . $ont->id);
             $customerCode = $ont->customerService?->customer?->customer_number ?: ('CUST-' . $ont->id);
-            $nodePort     = $ont->oltPort?->node?->olt_port_ref ?: 'gpon-olt_1/1/1';
-            $portClean    = str_replace('gpon_olt_', 'gpon-olt_', $nodePort);
+
+            // Prioritas resolusi port:
+            // 1. Live port dari OLT driver SNMP ($liveOnu['port'])
+            // 2. Port ODP node ($odpNode->olt_port_ref)
+            // 3. Port Parent ODC node ($odpNode->parent->olt_port_ref)
+            // 4. Ont oltPort ($ont->oltPort->node->olt_port_ref)
+            // 5. Default null (JANGAN pernah 'gpon-olt_1/1/1'!)
+            $odpNode  = $ont->customerService?->networkPort?->node;
+            $nodePort = $liveOnu['port'] ?? ($odpNode?->olt_port_ref ?: ($odpNode?->parent?->olt_port_ref ?: ($ont->oltPort?->node?->olt_port_ref ?: null)));
+            if ($nodePort === 'gpon-olt_1/1/1') {
+                $nodePort = null;
+            }
+            $portClean = $nodePort ? str_replace('gpon_olt_', 'gpon-olt_', $nodePort) : null;
+            $finalPort = $portClean ? (explode(',', $portClean)[0] ?? $portClean) : null;
 
             $rawStatus = $liveOnu['status'] ?? ($ont->status === 'active' ? 'Online' : 'Offline');
             $statusClean = (strtoupper($rawStatus) === 'ONLINE') ? 'Online' : 'Offline';
@@ -492,7 +538,7 @@ class OltController extends Controller
                 '_source'         => $liveOnu ? 'live_snmp' : 'database',
                 'ont_id'          => $ont->id,
                 'onu_id'          => $liveOnu['onu_id'] ?? ($liveOnu['onu_index'] ?? (string)$ont->id),
-                'port'            => $liveOnu['port'] ?? (explode(',', $portClean)[0] ?? $nodePort),
+                'port'            => $finalPort,
                 'customer_id'     => $ont->customerService?->customer?->id,
                 'customer_name'   => $customerName,
                 'customer_number' => $customerCode,
@@ -524,12 +570,14 @@ class OltController extends Controller
             $isRegistered = (!empty($sn) && isset($registeredMap[$sn])) || (!empty($mac) && isset($registeredMap[$mac]));
             if (!$isRegistered) {
                 $seenUnregSns[$sn] = true;
+                $unregPort = $onu['port'] ?? ($onu['detected_port'] ?? null);
+                if ($unregPort === 'gpon-olt_1/1/1') $unregPort = null;
                 $unregisteredOnus[] = [
                     '_source'                  => 'live_snmp',
                     'onu_name'                 => $onu['onu_name'] ?? ($onu['customer_name'] ?? ('ONU ' . ($onu['serial_number'] ?? ''))),
                     'serial_number'            => $onu['serial_number'] ?? null,
                     'mac_address'              => $onu['mac_address'] ?? ($onu['onu_mac'] ?? ($onu['serial_number'] ?? null)),
-                    'detected_port'            => $onu['port'] ?? ($onu['detected_port'] ?? 'gpon-olt_1/1/1'),
+                    'detected_port'            => $unregPort,
                     'onu_index'                => $onu['onu_id'] ?? ($onu['onu_index'] ?? '1'),
                     'onu_id'                   => $onu['onu_id'] ?? ($onu['onu_index'] ?? '1'),
                     'vendor_model'             => $onu['vendor_model'] ?? ($onu['onu_type'] ?? 'HGU EPON/GPON'),
@@ -637,23 +685,27 @@ class OltController extends Controller
     public function syncOntRegistrations(OltDevice $device, array $onuList): void
     {
         if (empty($onuList)) return;
-        $serials = array_values(array_filter(array_map(fn($o) => strtoupper(trim((string)($o['serial_number'] ?? ''))), $onuList)));
+        $serials = array_values(array_filter(array_map(fn($o) => strtoupper(trim((string)($o['serial_number'] ?? ($o['mac_address'] ?? '')))), $onuList)));
         if (empty($serials)) return;
 
         $regs = OntRegistration::whereIn('onu_serial', $serials)
             ->orWhereIn('onu_mac', $serials)
-            ->get()
-            ->keyBy(fn($r) => strtoupper($r->onu_serial));
+            ->get();
+
+        $regsBySn = $regs->keyBy(fn($r) => strtoupper(trim($r->onu_serial)));
+        $regsByMac = $regs->keyBy(fn($r) => strtoupper(trim($r->onu_mac)));
 
         foreach ($onuList as $onuData) {
             $sn = strtoupper(trim((string)($onuData['serial_number'] ?? '')));
-            if (!$sn || !isset($regs[$sn])) continue;
+            $mac = strtoupper(trim((string)($onuData['mac_address'] ?? ($onuData['onu_mac'] ?? ''))));
+            $ontReg = ($sn && isset($regsBySn[$sn])) ? $regsBySn[$sn] : (($mac && isset($regsByMac[$mac])) ? $regsByMac[$mac] : null);
+            if (!$ontReg) continue;
 
-            $newStatus = ($onuData['status'] === 'Online') ? 'active' : 'inactive';
-            $newRx     = isset($onuData['rx_power']) ? (float)$onuData['rx_power'] : null;
-            $newTx     = isset($onuData['tx_power']) ? (float)$onuData['tx_power'] : null;
+            $isOnline = ($onuData['status'] === 'Online' || strtolower($onuData['status'] ?? '') === 'working') && isset($onuData['rx_power']) && (float)$onuData['rx_power'] > -38.0;
+            $newStatus = $isOnline ? 'active' : 'inactive';
+            $newRx     = $isOnline ? (float)$onuData['rx_power'] : -40.00;
+            $newTx     = $isOnline ? ($onuData['tx_power'] ?? 1.95) : 0.0;
 
-            $ontReg = $regs[$sn];
             $ontReg->update([
                 'rx_power' => $newRx,
                 'tx_power' => $newTx,
@@ -735,13 +787,16 @@ class OltController extends Controller
 
         return $onus->map(function ($reg) {
             $customerName = $reg->customerService?->customer?->name ?: ('Pelanggan ONT #' . $reg->id);
-            $nodePort = $reg->oltPort?->node?->olt_port_ref ?: 'gpon-olt_1/1/1';
-            $portClean = str_replace('gpon_olt_', 'gpon-olt_', $nodePort);
+            $odpNode  = $reg->customerService?->networkPort?->node;
+            $nodePort = $odpNode?->olt_port_ref ?: ($reg->oltPort?->node?->olt_port_ref ?: null);
+            if ($nodePort === 'gpon-olt_1/1/1') $nodePort = null;
+            $portClean = $nodePort ? str_replace('gpon_olt_', 'gpon-olt_', $nodePort) : null;
+            $finalPort = $portClean ? (explode(',', $portClean)[0] ?? $portClean) : null;
 
             return [
                 '_source'         => 'database',
                 'onu_id'          => $reg->onu_serial,
-                'port'            => explode(',', $portClean)[0] ?? 'gpon-olt_1/1/1',
+                'port'            => $finalPort,
                 'customer_name'   => $customerName,
                 'serial_number'   => $reg->onu_serial,
                 'status'          => $reg->status === 'active' ? 'Online' : 'LOS (Dying Gasp)',
@@ -766,7 +821,7 @@ class OltController extends Controller
                 '_source'       => 'database',
                 'serial_number' => $reg->onu_serial,
                 'vendor_model'  => $reg->onu_type ?: 'Generic ONU',
-                'detected_port' => 'gpon-olt_1/1/1',
+                'detected_port' => null,
                 'detected_at'   => $reg->created_at?->diffForHumans() ?: 'Baru saja',
             ];
         })->toArray();
@@ -841,7 +896,7 @@ class OltController extends Controller
 
         // Tentukan port dan onu_id jika belum diberikan
         if (!$port) {
-            $port = $snapshotOnu['port'] ?? ($reg?->oltPort?->node?->olt_port_ref ?? $reg?->oltPort?->port_name);
+            $port = $snapshotOnu['port'] ?? ($reg?->customerService?->networkPort?->node?->olt_port_ref ?? ($reg?->oltPort?->node?->olt_port_ref ?? $reg?->oltPort?->port_name));
         }
         if (!$onuId && isset($snapshotOnu['onu_id'])) {
             $onuId = (int)$snapshotOnu['onu_id'];
@@ -1199,7 +1254,7 @@ class OltController extends Controller
 
                     if (empty($sn)) continue;
 
-                    $portRef = "gpon-olt_1/1/1";
+                    $portRef = null;
                     if (preg_match('/^(\d+\/\d+\/\d+)/', $iface, $m)) {
                         $portRef = "gpon-olt_" . $m[1];
                     }
@@ -1370,7 +1425,7 @@ class OltController extends Controller
 
                 if (empty($sn)) continue;
 
-                $portRef = "gpon-olt_1/1/1";
+                $portRef = null;
                 if (preg_match('/^(\d+\/\d+\/\d+)/', $iface, $m)) {
                     $portRef = "gpon-olt_" . $m[1];
                 }

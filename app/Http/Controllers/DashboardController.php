@@ -86,16 +86,30 @@ class DashboardController extends Controller
 
             $isOnline = false;
             $rxPower = -40.0;
+
+            $ontStatus = strtolower($ont->status ?? '');
+            $ontRx = ($ont->rx_power !== null && is_numeric($ont->rx_power)) ? (float)$ont->rx_power : -40.0;
+            $ontIsOnline = ($ontStatus === 'active' || $ontStatus === 'online') && $ontRx > -38.0;
+
             if ($liveData) {
                 $st = strtolower($liveData['status'] ?? '');
                 $rawRx = $liveData['rx_power'] ?? null;
-                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                $rxPower = $isOnline ? (float)$rawRx : -40.00;
+                $liveIsOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+
+                if ($liveIsOnline) {
+                    $isOnline = true;
+                    $rxPower = (float)$rawRx;
+                } elseif ($ontIsOnline) {
+                    // Terbantu oleh real-time trap recovery di database ont_registrations
+                    $isOnline = true;
+                    $rxPower = $ontRx;
+                } else {
+                    $isOnline = false;
+                    $rxPower = -40.00;
+                }
             } else {
-                $st = strtolower($ont->status ?? '');
-                $rawRx = $ont->rx_power;
-                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                $rxPower = $isOnline ? (float)$rawRx : -40.00;
+                $isOnline = $ontIsOnline;
+                $rxPower = $isOnline ? $ontRx : -40.00;
             }
 
             // Pelacakan status per port PON
@@ -279,18 +293,32 @@ class DashboardController extends Controller
                         $macKey = strtolower(trim($ont->onu_mac ?? ''));
                         $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
                         $isOnline = false;
+                        $rxPowerVal = -40.0;
+                        $ontStatus = strtolower($ont->status ?? '');
+                        $ontRx = ($ont->rx_power !== null && is_numeric($ont->rx_power)) ? (float)$ont->rx_power : -40.0;
+                        $ontIsOnline = ($ontStatus === 'active' || $ontStatus === 'online') && $ontRx > -38.0;
+
                         if ($liveData) {
                             $st = strtolower($liveData['status'] ?? '');
                             $rawRx = $liveData['rx_power'] ?? null;
-                            $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                            $liveIsOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                            if ($liveIsOnline) {
+                                $isOnline = true;
+                                $rxPowerVal = (float)$rawRx;
+                            } elseif ($ontIsOnline) {
+                                $isOnline = true;
+                                $rxPowerVal = $ontRx;
+                            } else {
+                                $isOnline = false;
+                                $rxPowerVal = -40.0;
+                            }
                         } else {
-                            $st = strtolower($ont->status ?? '');
-                            $rawRx = $ont->rx_power;
-                            $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+                            $isOnline = $ontIsOnline;
+                            $rxPowerVal = $isOnline ? $ontRx : -40.0;
                         }
 
                         if ($isOnline) {
-                            $powers[] = (float)($liveData['rx_power'] ?? $ont->rx_power);
+                            $powers[] = $rxPowerVal;
                         } else {
                             $hasOffline = true;
                         }

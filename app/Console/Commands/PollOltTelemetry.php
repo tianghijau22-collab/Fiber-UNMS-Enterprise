@@ -7,6 +7,9 @@ use App\Models\OltDevice;
 use App\Http\Controllers\OltController;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use App\Services\TelegramService;
 use Symfony\Component\Process\Process;
 
 class PollOltTelemetry extends Command
@@ -158,7 +161,7 @@ class PollOltTelemetry extends Command
                 }
             }
 
-            usleep(15000); // 15ms non-blocking check
+            usleep(150000); // 150ms non-blocking check (low CPU overhead)
         }
 
         $totalCycleDurationMs = round((microtime(true) - $cycleStart) * 1000, 1);
@@ -171,7 +174,7 @@ class PollOltTelemetry extends Command
             'last_run_human'       => now()->format('d M Y, H:i:s'),
             'cycle_duration_ms'    => $totalCycleDurationMs,
             'cycle_duration_human' => ($totalCycleDurationMs < 1000) ? "{$totalCycleDurationMs} ms" : round($totalCycleDurationMs / 1000, 2) . " s",
-            'throttling_delay_ms'  => 15,
+            'throttling_delay_ms'  => 150,
             'mode'                 => 'Continuous Port-by-Port Loop',
             'total_devices'        => count($devices),
             'total_ports_polled'   => $totalPortsPolled > 0 ? $totalPortsPolled : ($prevStats['total_ports_polled'] ?? 8),
@@ -197,6 +200,17 @@ class PollOltTelemetry extends Command
             $cycleHistory = array_slice($cycleHistory, -15);
         }
         Cache::put('backend_worker_history', $cycleHistory, 86400);
+
+        // 🛡️ Evaluasi Deteksi Gangguan Massal ODP (100% LOS) secara berkala (interval 20 detik)
+        $lastMassCheck = (int)Cache::get('last_mass_client_down_check_ts', 0);
+        if (time() - $lastMassCheck >= 20) {
+            Cache::put('last_mass_client_down_check_ts', time(), 120);
+            try {
+                \App\Services\OpticalFaultLocalizationService::detectMassClientDown(2, 100.0);
+            } catch (\Throwable $e) {
+                // Ignore error agar tidak menghambat worker loop
+            }
+        }
 
         return 0;
     }
@@ -463,15 +477,33 @@ class PollOltTelemetry extends Command
                     $physicalOnuMap[$key] = $onuData;
 
                     // Cari kecocokan data pelanggan
-                    $ontReg = \App\Models\OntRegistration::with(['customerService.customer', 'oltPort.node'])
+                    $ontReg = \App\Models\OntRegistration::with(['customerService.customer', 'customerService.networkPort.node', 'oltPort.node'])
                         ->whereRaw('LOWER(onu_serial) = ?', [strtolower($sn)])
                         ->orWhereRaw('LOWER(onu_mac) = ?', [strtolower($sn)])
                         ->first();
 
                     if ($ontReg) {
+                        // 🛡️ LAYER 1.5: GHOST PORT MISMATCH GUARD
+                        // Ambil port resmi OLT dari ODP pelanggan atau ONT registration
+                        $officialPort = $ontReg->customerService?->networkPort?->node?->olt_port_ref 
+                            ?: ($ontReg->oltPort?->node?->olt_port_ref ?: null);
+
+                        // Jika modem terbaca offline/LOS pada port $p, tetapi port resmi pelanggan adalah port lain:
+                        // Ini 100% ghost config sisa di OLT! Lewati agar tidak merusak status riil pelanggan!
+                        if (!$isOnline && $officialPort && !$oltCtrl->portsMatch($p, $officialPort)) {
+                            $this->warn("[GHOST_PORT_IGNORED] Serial {$sn} resmi terdaftar di {$officialPort} (ODP " . ($ontReg->customerService?->networkPort?->node?->name ?? 'N/A') . "), namun terbaca offline di port {$p}. Mengabaikan status ghost.");
+                            $ghostKey = $sn . '@' . $p;
+                            unset($physicalOnuMap[$ghostKey]);
+                            continue;
+                        }
+
                         $oldStatus = $ontReg->status;
                         $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
                         $portName  = $onuData['port'] ?? ($ontReg->oltPort?->node?->olt_port_ref ?: ($targetPorts[0] ?? 'PON'));
+                        $onuIdVal  = $onuData['onu_id'] ?? null;
+                        $portDesc  = $portName . ($onuIdVal ? ":{$onuIdVal}" : "");
+                        $odpName   = $ontReg->customerService?->networkPort?->node?->name;
+                        $odpInfo   = $odpName ? "\n<b>Lokasi ODP:</b> {$odpName}" : "";
 
                         // Cek perubahan status untuk deteksi Alarm & Anti-Flapping
                         if ($oldStatus !== $newStatus) {
@@ -496,16 +528,9 @@ class PollOltTelemetry extends Command
                                         "⚠️ PERINGATAN FLAPPING: Modem {$custName} Tidak Stabil!",
                                         "Modem {$custName} (SN: {$sn}) pada port {$portName} mengalami status putus-nyambung berulang kali. Notifikasi peringatan untuk modem ini otomatis diredam selama 30 menit demi mencegah spam.",
                                         'NOC',
-                                        '/customers'
-                                    );
-                                    \App\Services\TelegramService::send(
-                                        "⚠️ PERINGATAN KONEKSI FLAPPING",
-                                        "<b>Pelanggan:</b> {$custName}\n" .
-                                        "<b>Serial Number:</b> <code>{$sn}</code>\n" .
-                                        "<b>OLT / Port:</b> {$device->name} ({$portName})\n" .
-                                        "<b>Peringatan:</b> Koneksi berfluktuasi putus-nyambung (" . count($flaps) . "x dalam 15 mnt).\n" .
-                                        "<i>Notifikasi untuk modem ini otomatis diredam selama 30 menit demi mencegah spam.</i>",
-                                        'NOC'
+                                        '/customers',
+                                        null,
+                                        false
                                     );
                                 }
                             }
@@ -525,15 +550,9 @@ class PollOltTelemetry extends Command
                                         "🚨 ALARM GANGGUAN: Modem {$custName} Putus / LOS!",
                                         "Modem pelanggan {$custName} (SN: {$sn}) pada port {$portName} mengalami putus sinyal mendadak (redaman jatuh ke -40.00 dBm). Port otomatis dimasukkan ke Jalur Prioritas Cepat.",
                                         'NOC',
-                                        '/customers'
-                                    );
-                                    \App\Services\TelegramService::send(
-                                        "🚨 ALARM GANGGUAN OPTIK (LOS)",
-                                        "<b>Pelanggan:</b> {$custName}\n" .
-                                        "<b>Serial Number:</b> <code>{$sn}</code>\n" .
-                                        "<b>OLT / Port:</b> {$device->name} ({$portName})\n" .
-                                        "<b>Status:</b> 🔴 OFFLINE / LOS (-40.00 dBm)",
-                                        'NOC'
+                                        '/customers',
+                                        null,
+                                        false
                                     );
 
                                     // Masukkan port ini ke antrean prioritas cepat
@@ -549,16 +568,9 @@ class PollOltTelemetry extends Command
                                         "🟢 PEMULIHAN LAYANAN: Modem {$custName} Online Kembali!",
                                         "Koneksi optik pelanggan {$custName} (SN: {$sn}) pada port {$portName} telah kembali pulih dengan redaman sehat {$newRx} dBm.",
                                         'NOC',
-                                        '/customers'
-                                    );
-                                    \App\Services\TelegramService::send(
-                                        "🟢 PEMULIHAN LAYANAN (RECOVERY)",
-                                        "<b>Pelanggan:</b> {$custName}\n" .
-                                        "<b>Serial Number:</b> <code>{$sn}</code>\n" .
-                                        "<b>OLT / Port:</b> {$device->name} ({$portName})\n" .
-                                        "<b>Status:</b> 🟢 ONLINE (Normal)\n" .
-                                        "<b>Redaman Rx:</b> <code>{$newRx} dBm</code>",
-                                        'NOC'
+                                        '/customers',
+                                        null,
+                                        false
                                     );
                                 }
                             }
@@ -622,7 +634,7 @@ class PollOltTelemetry extends Command
             Cache::put($priorityKey, array_values(array_unique($activePriorityPorts)), 86400);
 
             // 4. Perbarui status port fisik di pon_ports snapshot (Termasuk deteksi Mati Massal)
-            $allPonPorts = array_map(function ($p) use ($portsResults) {
+            $allPonPorts = array_map(function ($p) use ($portsResults, $device) {
                 $pId = $p['port_id'] ?? '';
                 if (isset($portsResults[$pId])) {
                     $found = $portsResults[$pId]['count'];
@@ -635,6 +647,9 @@ class PollOltTelemetry extends Command
                     $p['registered_onus'] = $found;
                     $p['online_onus'] = $onlineCount;
                     $p['is_mass_outage'] = $isMassDown;
+
+                    // Evaluasi fail-safe alert gangguan massal via background poller
+                    $this->handleInterfaceMassOutagePollCheck($device, $pId, $found, $onlineCount, $onus);
                 }
                 return $p;
             }, $allPonPorts);
@@ -682,6 +697,196 @@ class PollOltTelemetry extends Command
             );
             $this->error("Failed to poll port on {$device->name}: " . $e->getMessage());
             return 1;
+        }
+    }
+
+    /**
+     * Evaluasi gangguan massal interface via background poller (Fail-safe backup untuk SNMP trap)
+     */
+    protected function handleInterfaceMassOutagePollCheck(OltDevice $device, string $pId, int $found, int $onlineCount, array $onus): void
+    {
+        $oltId = $device->id;
+        $oltName = $device->name;
+        $activeMassKey = "interface_in_mass_outage_{$oltId}_{$pId}";
+        $alertSentKey = "interface_mass_alert_sent_{$oltId}_{$pId}";
+        $recAlertCooldownKey = "interface_mass_recovery_alert_{$oltId}_{$pId}";
+
+        $isCurrentlyInMassOutage = (bool)Cache::get($activeMassKey, false);
+
+        // Kriteria Gangguan Massal via Polling:
+        // Ada >= 3 pelanggan terdaftar pada port, dan:
+        // 1) onlineCount == 0 (100% mati), ATAU
+        // 2) jika pelanggan >= 8 dan yang online <= 15% (artinya kabel distribusi utama putus)
+        $isMassDown = ($found >= 3 && $onlineCount === 0) || ($found >= 8 && $onlineCount <= (int)ceil($found * 0.15));
+
+        if ($isMassDown) {
+            Cache::put($activeMassKey, true, 3600); // Kunci hierarki agar ODP alerts tidak spamming
+
+            if (!Cache::has($alertSentKey)) {
+                Cache::put($alertSentKey, true, 900); // 15 menit cooldown
+                Cache::forget($recAlertCooldownKey);
+
+                // Ambil data pelanggan dari DB untuk port ini
+                $serials = array_filter(array_map(fn($o) => $o['serial_number'] ?? $o['sn'] ?? '', $onus));
+                $dbClients = DB::table('ont_registrations')
+                    ->leftJoin('odps', 'ont_registrations.odp_id', '=', 'odps.id')
+                    ->whereIn('ont_registrations.onu_serial', $serials)
+                    ->orWhere(function ($q) use ($oltId, $pId) {
+                        $q->where('ont_registrations.olt_device_id', $oltId)
+                          ->where('ont_registrations.port', $pId);
+                    })
+                    ->select(
+                        'ont_registrations.customer_name',
+                        'ont_registrations.customer_id',
+                        'ont_registrations.customer_number',
+                        'ont_registrations.onu_serial',
+                        'odps.name as odp_name'
+                    )
+                    ->get()
+                    ->keyBy('onu_serial');
+
+                $affectedOnus = array_filter($onus, fn($o) => !in_array(strtolower($o['status'] ?? ''), ['online', 'working']));
+                $displayCount = count($affectedOnus);
+                $sampleList = [];
+                foreach (array_slice(array_values($affectedOnus), 0, 30) as $idx => $o) {
+                    $sn = $o['serial_number'] ?? $o['sn'] ?? '—';
+                    $matched = $dbClients->get($sn);
+                    $cName = $matched->customer_name ?? ($o['customer_name'] ?? ($o['name'] ?? 'Pelanggan'));
+                    $cId = !empty($matched->customer_number) ? $matched->customer_number : (!empty($matched->customer_id) ? "ID-{$matched->customer_id}" : "");
+                    $cIdStr = $cId ? "[{$cId}] " : "";
+                    $odpStr = !empty($matched->odp_name) ? " (ODP: {$matched->odp_name})" : "";
+
+                    $sampleList[] = ($idx + 1) . ". 🔴 {$cIdStr}<b>{$cName}</b>{$odpStr}\n   └ SN: <code>{$sn}</code> • <code>-40.00 dBm (LOS)</code>";
+                }
+                if ($displayCount > 30) {
+                    $sampleList[] = "<i>... dan " . ($displayCount - 30) . " pelanggan terdampak lainnya pada interface {$pId}</i>";
+                }
+                $sampleListText = implode("\n", $sampleList);
+                $pctDown = $found > 0 ? round((($found - $onlineCount) / $found) * 100) : 100;
+                $totalTerdampakText = "🔴 <b>" . ($found - $onlineCount) . " dari {$found} Pelanggan ({$pctDown}% Terdampak)</b>";
+
+                TelegramService::send(
+                    "🚨🚨 ALARM GANGGUAN MASSAL INTERFACE 🚨🚨",
+                    "<b>• OLT:</b> {$oltName}\n" .
+                    "<b>• Interface / Port:</b> <code>{$pId}</code>\n" .
+                    "<b>• Penyebab:</b> Kabel Feeder Putus / SFP Port Down\n" .
+                    "<b>• Total Terdampak:</b> {$totalTerdampakText}\n\n" .
+                    "<b>Daftar Pelanggan Terdampak:</b>\n{$sampleListText}\n\n" .
+                    "<b>Diagnosa NOC:</b> Seluruh atau mayoritas pelanggan pada interface {$pId} kehilangan sinyal optik secara bersamaan.\n" .
+                    "<b>Tindakan:</b> ⚠️ <i>Segera verifikasi jalur backbone/feeder interface {$pId}!</i>",
+                    'NOC'
+                );
+
+                // Push ke Live Events Queue untuk UI
+                $recentEvents = Cache::get('telemetry_live_events', []);
+                $recentEvents[] = [
+                    'id'            => (string)Str::uuid(),
+                    'timestamp'     => now()->toIso8601String(),
+                    'time_human'    => now()->format('H:i:s'),
+                    'olt_id'        => $oltId,
+                    'olt_name'      => $oltName,
+                    'event_type'    => 'MASS_OUTAGE',
+                    'event_label'   => "GANGGUAN MASSAL: Port {$pId} (" . ($found - $onlineCount) . "/{$found} Pelanggan)",
+                    'event_level'   => 'critical',
+                    'is_loss'       => true,
+                    'serial_number' => 'MASS_OUTAGE',
+                    'customer_name' => ($found - $onlineCount) . " dari {$found} Pelanggan pada {$pId}",
+                    'node_id'       => null,
+                    'node_name'     => "Feeder {$pId}",
+                    'port'          => $pId,
+                    'onu_id'        => null,
+                    'rx_power'      => -40.00,
+                ];
+                Cache::put('telemetry_live_events', $recentEvents, 300);
+                Cache::forget('dashboard_metrics_payload');
+
+                try {
+                    DB::table('audit_logs')->insert([
+                        'user_name'   => 'SYSTEM_POLLER_MASS_DETECTOR',
+                        'user_role'   => 'system',
+                        'action'      => 'MASS_OUTAGE',
+                        'module'      => 'POLL_TELEMETRY',
+                        'description' => "Gangguan massal terdeteksi via Polling pada {$oltName} Port {$pId}: " . ($found - $onlineCount) . "/{$found} modem down",
+                        'ip_address'  => $device->ip_address ?? '127.0.0.1',
+                        'created_at'  => now(),
+                        'updated_at'  => now(),
+                    ]);
+                } catch (\Throwable $e) {}
+            }
+        } elseif ($isCurrentlyInMassOutage && $onlineCount >= (int)ceil($found * 0.50)) {
+            // Port yang tadinya mass outage sekarang sudah pulih (>= 50% online)
+            Cache::forget($activeMassKey);
+            Cache::forget($alertSentKey);
+
+            if (!Cache::has($recAlertCooldownKey)) {
+                Cache::put($recAlertCooldownKey, true, 900); // 15 menit cooldown
+                Cache::forget('dashboard_metrics_payload');
+
+                $serials = array_filter(array_map(fn($o) => $o['serial_number'] ?? $o['sn'] ?? '', $onus));
+                $dbClients = DB::table('ont_registrations')
+                    ->leftJoin('odps', 'ont_registrations.odp_id', '=', 'odps.id')
+                    ->whereIn('ont_registrations.onu_serial', $serials)
+                    ->orWhere(function ($q) use ($oltId, $pId) {
+                        $q->where('ont_registrations.olt_device_id', $oltId)
+                          ->where('ont_registrations.port', $pId);
+                    })
+                    ->select(
+                        'ont_registrations.customer_name',
+                        'ont_registrations.customer_id',
+                        'ont_registrations.customer_number',
+                        'ont_registrations.onu_serial',
+                        'odps.name as odp_name'
+                    )
+                    ->get()
+                    ->keyBy('onu_serial');
+
+                $recList = [];
+                $displayRecCount = count($onus);
+                foreach (array_slice(array_values($onus), 0, 30) as $idx => $o) {
+                    $sn = $o['serial_number'] ?? $o['sn'] ?? '—';
+                    $matched = $dbClients->get($sn);
+                    $cName = $matched->customer_name ?? ($o['customer_name'] ?? ($o['name'] ?? 'Pelanggan'));
+                    $cId = !empty($matched->customer_number) ? $matched->customer_number : (!empty($matched->customer_id) ? "ID-{$matched->customer_id}" : "");
+                    $cIdStr = $cId ? "[{$cId}] " : "";
+                    $odpStr = !empty($matched->odp_name) ? " (ODP: {$matched->odp_name})" : "";
+
+                    $status = strtolower($o['status'] ?? '');
+                    $rxVal = isset($o['rx_power']) ? (float)$o['rx_power'] : null;
+                    $isUp = ($rxVal !== null && $rxVal > -35.0 && $rxVal < -5.0) && in_array($status, ['online', 'working']);
+
+                    if ($isUp) {
+                        $badge = "🟢";
+                        $rxStr = number_format($rxVal, 2, '.', '') . " dBm";
+                    } else {
+                        $badge = "🔴";
+                        $rxStr = "-40.00 dBm (LOS)";
+                    }
+
+                    $recList[] = ($idx + 1) . ". {$badge} {$cIdStr}<b>{$cName}</b>{$odpStr}\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
+                }
+                if ($displayRecCount > 30) {
+                    $recList[] = "<i>... dan " . ($displayRecCount - 30) . " pelanggan lainnya pada interface {$pId}</i>";
+                }
+                $recListText = implode("\n", $recList);
+
+                if ($onlineCount === $found) {
+                    $totalKlienText = "<b>{$onlineCount} dari {$found} Pelanggan (100% Pulih Normal)</b>";
+                } else {
+                    $losCount = max(0, $found - $onlineCount);
+                    $totalKlienText = "<b>{$onlineCount} dari {$found} Pelanggan Pulih Online</b> (🔴 {$losCount} Klien Masih LOS)";
+                }
+
+                TelegramService::send(
+                    "🟢🟢 PEMULIHAN GANGGUAN MASSAL INTERFACE 🟢🟢",
+                    "<b>• OLT:</b> {$oltName}\n" .
+                    "<b>• Interface / Port:</b> <code>{$pId}</code>\n" .
+                    "<b>• Status:</b> 🟢 <b>JALUR TRANSMISI UTAMA PULIH NORMAL</b>\n" .
+                    "<b>• Klien Pulih:</b> {$totalKlienText}\n\n" .
+                    "<b>Daftar Pelanggan Pulih & Nilai Redaman:</b>\n{$recListText}\n\n" .
+                    "<b>Keterangan:</b> Sinyal optik pada interface <code>{$pId}</code> telah stabil dan normal kembali.",
+                    'NOC'
+                );
+            }
         }
     }
 

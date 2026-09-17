@@ -1722,6 +1722,42 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     return () => clearInterval(timer);
   }, [livePolling, fetchNodesAndCables]);
 
+  // Sub-Second Real-Time SNMP Trap & Telemetry Event Stream Listener (Polling ringan tiap 3.5s)
+  const [recentTrapAlert, setRecentTrapAlert] = useState(null);
+  const lastEventTimestampRef = useRef(null);
+
+  useEffect(() => {
+    if (!livePolling) return;
+    const trapCheckTimer = setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        const sinceParam = lastEventTimestampRef.current ? `?since=${encodeURIComponent(lastEventTimestampRef.current)}` : '';
+        const res = await fetch(`/api/telemetry/live-events${sinceParam}`).then(r => r.json());
+        if (res?.data?.events && res.data.events.length > 0) {
+          const newest = res.data.events[0];
+          lastEventTimestampRef.current = newest.timestamp;
+          
+          // Tampilkan alert banner instan pada UI peta
+          setRecentTrapAlert(newest);
+          
+          // Refresh data node seketika tanpa delay 25s
+          fetchNodesAndCables(true);
+        }
+      } catch (err) {
+        // silent fail
+      }
+    }, 3500);
+
+    return () => clearInterval(trapCheckTimer);
+  }, [livePolling, fetchNodesAndCables]);
+
+  // Auto-dismiss alert banner setelah 10 detik
+  useEffect(() => {
+    if (!recentTrapAlert) return;
+    const t = setTimeout(() => setRecentTrapAlert(null), 10000);
+    return () => clearTimeout(t);
+  }, [recentTrapAlert]);
+
   // Update selectedNode live values smoothly
   useEffect(() => {
     if (selectedNode) {
@@ -2043,8 +2079,55 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             />
           )}
 
+          {/* Sub-Second Real-Time SNMP Trap Live Alert Banner */}
+          {recentTrapAlert && (
+            <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-[1000] max-w-lg w-[92%] sm:w-auto px-4 py-2.5 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center gap-3 transition-all animate-in slide-in-from-top-4 duration-300 ${
+              recentTrapAlert.is_loss
+                ? 'bg-rose-950/90 border-rose-500 text-white ring-2 ring-rose-500/50'
+                : 'bg-emerald-950/90 border-emerald-500 text-white ring-2 ring-emerald-500/50'
+            }`}>
+              <span className="text-xl shrink-0 animate-bounce">
+                {recentTrapAlert.is_loss ? (recentTrapAlert.event_type === 'DYING_GASP' ? '⚡' : '🚨') : '🟢'}
+              </span>
+              <div className="text-xs">
+                <div className="font-extrabold flex items-center gap-1.5">
+                  <span>{recentTrapAlert.event_label}</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/20">
+                    {recentTrapAlert.time_human}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-200 mt-0.5 truncate max-w-sm">
+                  <b>{recentTrapAlert.customer_name}</b> {recentTrapAlert.node_name ? `• ODP ${recentTrapAlert.node_name}` : `• Port ${recentTrapAlert.port}`}
+                </div>
+              </div>
+              {recentTrapAlert.node_id && (
+                <button
+                  onClick={() => {
+                    const matched = safeAllNodes.find(n => n.id === recentTrapAlert.node_id);
+                    if (matched) {
+                      setSelectedNode(matched);
+                      if (externalFlyToRef.current && matched.latitude && matched.longitude) {
+                        externalFlyToRef.current(matched.latitude, matched.longitude, 18);
+                      }
+                    }
+                  }}
+                  className="ml-auto px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-[10px] font-bold shrink-0 cursor-pointer"
+                >
+                  Lihat ODP ➔
+                </button>
+              )}
+              <button
+                onClick={() => setRecentTrapAlert(null)}
+                className="text-white/60 hover:text-white text-xs font-bold ml-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Leaflet Map Component */}
           {loading && safeAllNodes.length === 0 ? (
+
             <div className="flex items-center justify-center h-full w-full bg-slate-950 text-slate-400">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
@@ -2355,8 +2438,55 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             />
           )}
 
+          {/* Sub-Second Real-Time SNMP Trap Live Alert Banner */}
+          {recentTrapAlert && (
+            <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-[1000] max-w-lg w-[92%] sm:w-auto px-4 py-2.5 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center gap-3 transition-all animate-in slide-in-from-top-4 duration-300 ${
+              recentTrapAlert.is_loss
+                ? 'bg-rose-950/90 border-rose-500 text-white ring-2 ring-rose-500/50'
+                : 'bg-emerald-950/90 border-emerald-500 text-white ring-2 ring-emerald-500/50'
+            }`}>
+              <span className="text-xl shrink-0 animate-bounce">
+                {recentTrapAlert.is_loss ? (recentTrapAlert.event_type === 'DYING_GASP' ? '⚡' : '🚨') : '🟢'}
+              </span>
+              <div className="text-xs">
+                <div className="font-extrabold flex items-center gap-1.5">
+                  <span>{recentTrapAlert.event_label}</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/20">
+                    {recentTrapAlert.time_human}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-200 mt-0.5 truncate max-w-sm">
+                  <b>{recentTrapAlert.customer_name}</b> {recentTrapAlert.node_name ? `• ODP ${recentTrapAlert.node_name}` : `• Port ${recentTrapAlert.port}`}
+                </div>
+              </div>
+              {recentTrapAlert.node_id && (
+                <button
+                  onClick={() => {
+                    const matched = safeAllNodes.find(n => n.id === recentTrapAlert.node_id);
+                    if (matched) {
+                      setSelectedNode(matched);
+                      if (externalFlyToRef.current && matched.latitude && matched.longitude) {
+                        externalFlyToRef.current(matched.latitude, matched.longitude, 18);
+                      }
+                    }
+                  }}
+                  className="ml-auto px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-[10px] font-bold shrink-0 cursor-pointer"
+                >
+                  Lihat ODP ➔
+                </button>
+              )}
+              <button
+                onClick={() => setRecentTrapAlert(null)}
+                className="text-white/60 hover:text-white text-xs font-bold ml-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Leaflet Map Component */}
           <LeafletMap
+
             nodes={nodesWithCoords}
             cables={safeAllCables}
             selectedNode={selectedNode}

@@ -24,6 +24,8 @@ use App\Http\Controllers\BtsSiteController;
 use App\Http\Controllers\VpsBridgeController;
 use App\Http\Controllers\LiveMonitorController;
 use App\Http\Controllers\ServerMonitoringController;
+use App\Http\Controllers\TelemetryEventStreamController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -50,6 +52,10 @@ Route::post('/notifications/channels', [NotificationController::class, 'storeCha
 Route::put('/notifications/channels/{id}', [NotificationController::class, 'updateChannel']);
 Route::delete('/notifications/channels/{id}', [NotificationController::class, 'deleteChannel']);
 Route::post('/notifications/channels/{id}/test', [NotificationController::class, 'testChannel']);
+
+// System Alert Feed & Dual Real-Time Log
+Route::get('/system-alerts/feed', [NotificationController::class, 'getAlertFeed']);
+Route::post('/system-alerts/clear', [NotificationController::class, 'clearAlertFeed']);
 
 // Dashboard Overview Metrics
 Route::get('/dashboard/metrics', [DashboardController::class, 'index']);
@@ -91,7 +97,14 @@ Route::post('/server-monitoring/worker/restart', [ServerMonitoringController::cl
 Route::post('/server-monitoring/worker/pause-resume', [ServerMonitoringController::class, 'togglePauseWorker']);
 Route::post('/server-monitoring/worker/set-interval', [ServerMonitoringController::class, 'setLoopDelay']);
 Route::post('/server-monitoring/worker/clear-logs', [ServerMonitoringController::class, 'clearLogs']);
+Route::post('/server-monitoring/snmp-trap/restart', [ServerMonitoringController::class, 'restartTrapListener']);
+Route::post('/server-monitoring/snmp-trap/clear-logs', [ServerMonitoringController::class, 'clearTrapLogs']);
 Route::post('/monitoring/ping-sweep', [LiveMonitorController::class, 'pingSweep']);
+
+// Realtime SNMP Trap & Telemetry Event Streaming
+Route::get('/telemetry/live-events', [TelemetryEventStreamController::class, 'getLiveEvents']);
+Route::post('/telemetry/live-events/clear', [TelemetryEventStreamController::class, 'clearLiveEvents']);
+
 
 // OTDR Fault Tracing Engine
 Route::get('/fault-tracing/cables', [FaultTracingController::class, 'cables']);

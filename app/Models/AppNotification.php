@@ -36,7 +36,7 @@ class AppNotification extends Model
     /**
      * Kirim notifikasi siaran (Broadcast) ke SELURUH USER di sistem
      */
-    public static function notifyAll(string $title, string $body, string $type = 'NOC', ?string $url = null, ?string $icon = null): self
+    public static function notifyAll(string $title, string $body, string $type = 'NOC', ?string $url = null, ?string $icon = null, bool $sendTelegram = true): self
     {
         $notif = self::create([
             'user_id' => null, // null = broadcast ke seluruh user
@@ -49,7 +49,9 @@ class AppNotification extends Model
         ]);
 
         // Otomatis sinkronisasi kirim ke Telegram Bot jika diaktifkan
-        \App\Services\TelegramService::send($title, $body, $type, $url);
+        if ($sendTelegram) {
+            \App\Services\TelegramService::send($title, $body, $type, $url);
+        }
 
         return $notif;
     }

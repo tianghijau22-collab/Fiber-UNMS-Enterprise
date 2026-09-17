@@ -19,6 +19,7 @@ const TicketManagement = lazy(() => import('./pages/TicketManagement.jsx'));
 const InventoryManagement = lazy(() => import('./pages/InventoryManagement.jsx'));
 const OltManagement = lazy(() => import('./pages/OltManagement.jsx'));
 const ServerMonitoring = lazy(() => import('./pages/ServerMonitoring.jsx'));
+const SystemAlertChat = lazy(() => import('./pages/SystemAlertChat.jsx'));
 const OtdrFaultTracing = lazy(() => import('./pages/OtdrFaultTracing.jsx'));
 const CableRouteEditor = lazy(() => import('./pages/CableRouteEditor.jsx'));
 const CableManagement = lazy(() => import('./pages/CableManagement.jsx'));
@@ -114,6 +115,7 @@ function AppContent() {
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard"         element={<PrivateRoute><Dashboard /></PrivateRoute>} />
                 <Route path="/server-monitoring" element={<PrivateRoute><ServerMonitoring /></PrivateRoute>} />
+                <Route path="/system-alerts"     element={<PrivateRoute><SystemAlertChat /></PrivateRoute>} />
                 <Route path="/olt-management"    element={<PrivateRoute><OltManagement /></PrivateRoute>} />
                 <Route path="/network-bridge-setup" element={<PrivateRoute><NetworkBridgeSetup /></PrivateRoute>} />
                 <Route path="/otdr-tracing"   element={<PrivateRoute><OtdrFaultTracing /></PrivateRoute>} />

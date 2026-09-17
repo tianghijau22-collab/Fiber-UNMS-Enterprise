@@ -35,11 +35,14 @@ class ServerMonitoringController extends Controller
         // 6. Background Telemetry Poller Worker Metrics
         $workerData = $this->getWorkerMetrics();
 
+        // 6b. SNMP Trap & Syslog Listener Metrics (UDP 162/514)
+        $snmpTrapData = $this->getSnmpTrapMetrics();
+
         // 7. System, OS & Uptime Info
         $sysData = $this->getSystemInfo();
 
         // 8. Gateway & UNMS Background Services Health
-        $gatewayData = $this->getGatewayServicesHealth($diskData, $vpnData, $workerData);
+        $gatewayData = $this->getGatewayServicesHealth($diskData, $vpnData, $workerData, $snmpTrapData);
 
         // 9. Top Processes Consumers
         $topProcesses = $this->getTopProcesses();
@@ -65,6 +68,7 @@ class ServerMonitoringController extends Controller
                 'network'       => $netData,
                 'vpn'           => $vpnData,
                 'worker'        => $workerData,
+                'snmp_trap'     => $snmpTrapData,
                 'system'        => $sysData,
                 'gateway'       => $gatewayData,
                 'top_processes' => $topProcesses,
@@ -199,6 +203,49 @@ class ServerMonitoringController extends Controller
         return response()->json([
             'status'  => 'success',
             'message' => 'Riwayat Live Activity Log berhasil dibersihkan.',
+        ]);
+    }
+
+    /**
+     * Restart service fiber-event-listener (SNMP Trap & Syslog Listener)
+     */
+    public function restartTrapListener()
+    {
+        try {
+            $output = [];
+            $exitCode = 0;
+            exec('sudo -n /usr/bin/systemctl restart fiber-event-listener 2>&1', $output, $exitCode);
+            if ($exitCode !== 0) {
+                exec('sudo -n /bin/systemctl restart fiber-event-listener 2>&1', $output, $exitCode);
+            }
+
+            $success = ($exitCode === 0);
+            $msg = $success 
+                ? 'SNMP Trap & Syslog Listener (fiber-event-listener) berhasil di-restart!' 
+                : ('Gagal restart service: ' . implode(' ', $output));
+
+            return response()->json([
+                'status'  => $success ? 'success' : 'error',
+                'message' => $msg,
+                'output'  => $output,
+            ], $success ? 200 : 500);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Error: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Clear SNMP Trap recent logs
+     */
+    public function clearTrapLogs()
+    {
+        Cache::forget('snmp_trap_recent_logs');
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Riwayat log SNMP Trap berhasil dibersihkan.',
         ]);
     }
 
@@ -699,7 +746,7 @@ class ServerMonitoringController extends Controller
     /**
      * Status Gateway & Layanan Infrastruktur UNMS
      */
-    protected function getGatewayServicesHealth(array $diskData, array $vpnData = [], array $workerData = []): array
+    protected function getGatewayServicesHealth(array $diskData, array $vpnData = [], array $workerData = [], array $snmpTrapData = []): array
     {
         // 1. SNMP Poller & Background Telemetry Worker
         $lastWorkerActivity = $workerData['last_run_human'] ?? (Cache::get('last_olt_polling_time') ?: now()->subSeconds(rand(5, 25))->toIso8601String());
@@ -725,7 +772,18 @@ class ServerMonitoringController extends Controller
         // 5. VPN Gateway Tunnel
         $vpnStatus = $vpnData['status'] ?? 'CONNECTED';
 
+        // 6. SNMP Trap Listener Status
+        $trapStatus = ($snmpTrapData['status'] ?? 'ACTIVE') === 'ACTIVE' ? 'ACTIVE' : 'DOWN';
+
         return [
+            'snmp_trap' => [
+                'name'        => 'SNMP Trap & Syslog Listener',
+                'status'      => $trapStatus,
+                'detail'      => 'Sub-Second Detector: ' . ($snmpTrapData['last_received_human'] ?? 'Standby (Port UDP 162/514)'),
+                'driver'      => 'socket_select Asynchronous Non-Blocking Engine',
+                'last_active' => $snmpTrapData['last_received_human'] ?? 'Standby',
+                'duration'    => 'Sub-detik (~0.5s)',
+            ],
             'snmp_daemon' => [
                 'name'        => 'SNMP Poller Background Worker',
                 'status'      => $snmpStatus,
@@ -847,5 +905,140 @@ class ServerMonitoringController extends Controller
             }
         }
         return $history;
+    }
+
+    /**
+     * Membaca status, metrik, konektivitas OLT, dan live stream SNMP Trap Listener (UDP 162/514)
+     */
+    protected function getSnmpTrapMetrics(): array
+    {
+        // 1. Status Service Systemd (fiber-event-listener.service)
+        $systemdStatus = 'INACTIVE';
+        $systemdOutput = [];
+        $exitCode = 0;
+        @exec('systemctl is-active fiber-event-listener 2>/dev/null', $systemdOutput, $exitCode);
+        $rawStatus = trim($systemdOutput[0] ?? '');
+        if ($rawStatus === 'active') {
+            $systemdStatus = 'ACTIVE';
+        }
+
+        // 2. Heartbeat check (Daemon menulis timestamp setiap 5 detik)
+        $lastHeartbeat = (int)Cache::get('snmp_trap_listener_heartbeat', 0);
+        $isHeartbeatAlive = (time() - $lastHeartbeat) <= 15;
+        $listenerStatus = Cache::get('snmp_trap_listener_status', []);
+
+        $isActive = ($systemdStatus === 'ACTIVE') || $isHeartbeatAlive;
+
+        // 3. Status Port UDP 162 & 514
+        $portsListening = [
+            'trap_162' => [
+                'port'     => 162,
+                'protocol' => 'UDP',
+                'service'  => 'SNMP Trap',
+                'status'   => $isActive ? 'LISTENING' : 'CLOSED',
+            ],
+            'syslog_514' => [
+                'port'     => 514,
+                'protocol' => 'UDP',
+                'service'  => 'Syslog',
+                'status'   => $isActive ? 'LISTENING' : 'CLOSED',
+            ],
+        ];
+
+        // 4. Statistik Paket Masuk Hari Ini
+        $todayKey = 'snmp_trap_packets_today_' . now()->toDateString();
+        $packetsToday = (int)Cache::get($todayKey, 0);
+
+        // 5. Waktu Paket Terakhir Diterima
+        $lastReceivedAt = Cache::get('snmp_trap_last_received_at');
+        $lastReceivedHuman = 'Belum ada paket';
+        $secondsAgo = null;
+        if ($lastReceivedAt) {
+            $carbon = Carbon::parse($lastReceivedAt);
+            $secondsAgo = (int)$carbon->diffInSeconds(now());
+            $lastReceivedHuman = $secondsAgo < 60 ? "{$secondsAgo} detik lalu" : ($secondsAgo < 3600 ? round($secondsAgo / 60) . " menit lalu" : round($secondsAgo / 3600) . " jam lalu");
+        }
+
+        // 6. Monitoring Konektivitas Perangkat OLT ke SNMP Trap
+        $activeOlts = \App\Models\OltDevice::where('status', 'active')->get();
+        $oltTrapStatus = [];
+        $totalConnectedOlts = 0;
+
+        foreach ($activeOlts as $olt) {
+            $ip = $olt->ip_address;
+            $lastFromOlt = Cache::get("snmp_trap_last_from_{$ip}");
+
+            // Cek reachability OLT via ping/network
+            $isPingable = false;
+            $pingOutput = @shell_exec("ping -c 1 -W 1 {$ip} 2>&1") ?: '';
+            $pingLatency = null;
+            if (preg_match('/time=([\d\.]+)\s*ms/', $pingOutput, $m)) {
+                $isPingable = true;
+                $pingLatency = round((float)$m[1], 1);
+            }
+
+            $hasSentTrap = !empty($lastFromOlt);
+            $oltSecAgo = null;
+            $oltLastHuman = 'Belum pernah kirim trap';
+            if ($hasSentTrap && isset($lastFromOlt['timestamp'])) {
+                $oltCarbon = Carbon::parse($lastFromOlt['timestamp']);
+                $oltSecAgo = (int)$oltCarbon->diffInSeconds(now());
+                $oltLastHuman = $oltSecAgo < 60 ? "{$oltSecAgo} detik lalu" : ($oltSecAgo < 3600 ? round($oltSecAgo / 60) . " menit lalu" : round($oltSecAgo / 3600) . " jam lalu");
+            }
+
+            $statusLabel = 'READY';
+            $statusBadge = 'emerald';
+            if (!$isPingable) {
+                $statusLabel = 'UNREACHABLE';
+                $statusBadge = 'rose';
+            } elseif ($hasSentTrap && $oltSecAgo !== null && $oltSecAgo <= 3600) {
+                $statusLabel = 'ACTIVE_TRAPPING';
+                $statusBadge = 'cyan';
+                $totalConnectedOlts++;
+            } else {
+                $totalConnectedOlts++;
+            }
+
+            $oltTrapStatus[] = [
+                'id'             => $olt->id,
+                'name'           => $olt->name,
+                'ip'             => $ip,
+                'vendor'         => $olt->vendor,
+                'ping_ms'        => $pingLatency,
+                'is_reachable'   => $isPingable,
+                'last_trap_at'   => $lastFromOlt['timestamp'] ?? null,
+                'last_trap_text' => $oltLastHuman,
+                'last_event'     => $lastFromOlt['event_label'] ?? null,
+                'status_label'   => $statusLabel,
+                'status_badge'   => $statusBadge,
+            ];
+        }
+
+        // 7. Recent Trap Logs (maksimal 50 log terakhir)
+        $recentLogs = Cache::get('snmp_trap_recent_logs', []);
+
+        // 8. Health Summary
+        $overallHealth = 'HEALTHY';
+        if (!$isActive) {
+            $overallHealth = 'DOWN';
+        } elseif ($totalConnectedOlts < count($activeOlts)) {
+            $overallHealth = 'WARNING';
+        }
+
+        return [
+            'status'               => $isActive ? 'ACTIVE' : 'INACTIVE',
+            'health'               => $overallHealth,
+            'is_running'           => $isActive,
+            'systemd_status'       => $systemdStatus,
+            'ports'                => $portsListening,
+            'total_packets_today'  => $packetsToday,
+            'last_received_at'     => $lastReceivedAt,
+            'last_received_human'  => $lastReceivedHuman,
+            'seconds_ago'          => $secondsAgo,
+            'olts'                 => $oltTrapStatus,
+            'total_olts'           => count($activeOlts),
+            'connected_olts'       => $totalConnectedOlts,
+            'recent_logs'          => $recentLogs,
+        ];
     }
 }

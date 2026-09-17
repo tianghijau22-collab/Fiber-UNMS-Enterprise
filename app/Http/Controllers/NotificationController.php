@@ -7,6 +7,7 @@ use App\Models\AppNotification;
 use App\Models\PushSubscription;
 use App\Models\AuditLog;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class NotificationController extends Controller
 {
@@ -371,5 +372,130 @@ class NotificationController extends Controller
         $result  = \App\Services\TelegramService::testChannel($channel);
 
         return response()->json($result);
+    }
+
+    /**
+     * Mengambil feed pesan alert sistem dengan format teks Telegram & metadata lengkap
+     */
+    public function getAlertFeed(Request $request)
+    {
+        Carbon::setLocale('id');
+
+        $type = $request->query('type', 'ALL');
+        $search = $request->query('search', '');
+        $limit = (int)$request->query('limit', 50);
+        if ($limit < 10) $limit = 10;
+        if ($limit > 100) $limit = 100;
+
+        $query = AppNotification::query()
+            ->orderBy('created_at', 'desc');
+
+        if ($type !== 'ALL') {
+            if ($type === 'OUTAGE') {
+                $query->where(function ($q) {
+                    $q->where('title', 'like', '%GANGGUAN MASSAL%')
+                      ->orWhere('title', 'like', '%ALARM%')
+                      ->orWhere('title', 'like', '%LOS%')
+                      ->orWhere('title', 'like', '%DOWN%');
+                });
+            } elseif ($type === 'RECOVERY') {
+                $query->where(function ($q) {
+                    $q->where('title', 'like', '%PEMULIHAN%')
+                      ->orWhere('title', 'like', '%PULIH%')
+                      ->orWhere('title', 'like', '%RECOVERY%');
+                });
+            } else {
+                $query->where('type', $type);
+            }
+        }
+
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('body', 'like', "%{$search}%");
+            });
+        }
+
+        $notifications = $query->limit($limit)->get();
+
+        // Format pesan agar teks persis dengan format Telegram
+        $formatted = $notifications->map(function ($n) {
+            $createdCarbon = Carbon::parse($n->created_at);
+            $timeStr = $createdCarbon->format('d/m/Y, H.i.s');
+            
+            // Format pesan persis Telegram
+            $telegramText = "<b>" . htmlspecialchars($n->title, ENT_QUOTES, 'UTF-8') . "</b>\n";
+            $telegramText .= "────────────────────────────\n\n";
+            $telegramText .= $n->body . "\n\n";
+            $telegramText .= "────────────────────────────\n";
+            $telegramText .= "<b>Waktu:</b> {$timeStr}\n";
+            $telegramText .= "<b>Sistem:</b> Fiber-UNMS Enterprise";
+
+            $isOutage = str_contains($n->title, 'GANGGUAN MASSAL') || str_contains($n->title, 'ALARM') || str_contains($n->title, 'LOS');
+            $isRecovery = str_contains($n->title, 'PEMULIHAN') || str_contains($n->title, 'PULIH');
+
+            return [
+                'id'                 => $n->id,
+                'type'               => $n->type,
+                'title'              => $n->title,
+                'body'               => $n->body,
+                'url'                => $n->url,
+                'is_read'            => (bool)$n->is_read,
+                'created_at'         => $n->created_at->toIso8601String(),
+                'time_human'         => $createdCarbon->format('H:i'),
+                'time_seconds'       => $createdCarbon->format('H:i:s'),
+                'date_human'         => $createdCarbon->isoFormat('D MMMM Y'),
+                'datetime_human'     => $createdCarbon->format('d/m/Y H:i:s'),
+                'is_outage'          => $isOutage,
+                'is_recovery'        => $isRecovery,
+                'level'              => $isOutage ? 'critical' : ($isRecovery ? 'recovery' : 'info'),
+                'telegram_text'      => $telegramText,
+            ];
+        });
+
+        // Metrik Statistik
+        $todayStart = now()->startOfDay();
+        $totalToday = AppNotification::where('created_at', '>=', $todayStart)->count();
+        $outagesToday = AppNotification::where('created_at', '>=', $todayStart)
+            ->where(function ($q) {
+                $q->where('title', 'like', '%GANGGUAN MASSAL%')
+                  ->orWhere('title', 'like', '%ALARM%');
+            })->count();
+        $recoveryToday = AppNotification::where('created_at', '>=', $todayStart)
+            ->where(function ($q) {
+                $q->where('title', 'like', '%PEMULIHAN%');
+            })->count();
+
+        $lastNotif = AppNotification::latest('created_at')->first();
+
+        return response()->json([
+            'status'   => 'success',
+            'messages' => $formatted,
+            'stats'    => [
+                'total_all'      => AppNotification::count(),
+                'total_today'    => $totalToday,
+                'outages_today'  => $outagesToday,
+                'recovery_today' => $recoveryToday,
+                'last_alert_at'  => $lastNotif?->created_at?->toIso8601String(),
+                'last_alert_ago' => $lastNotif ? Carbon::parse($lastNotif->created_at)->diffForHumans() : 'Belum ada',
+            ],
+            'bot_info' => [
+                'name'     => 'Fiber-UNMS NOC Alert Bot',
+                'username' => '@FiberUNMS_NOC_bot',
+                'status'   => 'ONLINE',
+            ],
+        ]);
+    }
+
+    /**
+     * Bersihkan seluruh pesan feed notifikasi alert sistem
+     */
+    public function clearAlertFeed()
+    {
+        AppNotification::query()->delete();
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Seluruh riwayat pesan alert sistem berhasil dibersihkan.',
+        ]);
     }
 }

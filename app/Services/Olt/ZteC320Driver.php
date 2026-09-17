@@ -283,7 +283,11 @@ class ZteC320Driver implements OltDeviceDriverInterface
                         $rxPower = $this->formatOpticalPower($rxRaw);
                         $txPower = $this->formatOpticalPower($txRaw);
 
-                        $status = ($stateCode === 3 && ($rxPower === null || $rxPower > -35.0)) ? 'Online' : 'LOS (Dying Gasp)';
+                        $isOnline = ($stateCode === 3 && $rxPower !== null && (float)$rxPower > -35.0 && (float)$rxPower < -5.0);
+                        $status = $isOnline ? 'Online' : 'LOS';
+                        if (!$isOnline) {
+                            $rxPower = -40.00;
+                        }
 
                         $onus[] = [
                             '_source'         => 'live_snmp',
@@ -441,7 +445,11 @@ class ZteC320Driver implements OltDeviceDriverInterface
                         $rxPower = $this->formatOpticalPower($rxRaw);
                         $txPower = $this->formatOpticalPower($txRaw);
 
-                        $status = ($stateCode === 3 && ($rxPower === null || $rxPower > -35.0)) ? 'Online' : 'LOS (Dying Gasp)';
+                        $isOnline = ($stateCode === 3 && $rxPower !== null && (float)$rxPower > -35.0 && (float)$rxPower < -5.0);
+                        $status = $isOnline ? 'Online' : 'LOS';
+                        if (!$isOnline) {
+                            $rxPower = -40.00;
+                        }
 
                         $onus[] = [
                             '_source'         => 'live_snmp',
@@ -685,7 +693,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
     protected function formatOpticalPower(?int $val): ?float
     {
         if ($val === null || $val === 0 || $val === 65535 || $val === 2147483647 || $val === 655355) {
-            return null;
+            return -40.00;
         }
 
         // Jika bernilai negatif (signed integer dari vendor/MIB lain)
@@ -698,10 +706,11 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
         // Rumus standar resmi ZTE GPON MIB: (RAW * 0.002) - 30.0 dBm
         if ($val > 0 && $val < 65535) {
-            return round(($val * 0.002) - 30.0, 2);
+            $dbm = round(($val * 0.002) - 30.0, 2);
+            return ($dbm > -35.0 && $dbm < -5.0) ? $dbm : -40.00;
         }
 
-        return null;
+        return -40.00;
     }
 
     protected function extractFirmware(string $sysDescr): string
@@ -734,7 +743,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
             $port = ($num >> 8) & 0xFF ?: ($num & 0xFF ?: 1);
             return "gpon-olt_1/{$slot}/{$port}";
         }
-        return "gpon-olt_1/1/1";
+        return "";
     }
 
     protected function getCpuUsage(): ?int

@@ -79,6 +79,20 @@ const IconPlay = ({ className = "w-4 h-4" }) => (
   </svg>
 );
 
+// Helper untuk membersihkan tag HTML Telegram (<b>, <code>, <i>, dll)
+const cleanNotificationText = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/<br\s*[\/]?>/gi, '\n')
+    .replace(/<[^>]*>?/gm, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 const IconBell = ({ className = "w-5 h-5" }) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -1161,7 +1175,7 @@ export default function PushNotificationBroadcast() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-bold text-slate-800 dark:text-slate-100">{item.title}</div>
-                        <div className="text-slate-500 dark:text-slate-400 line-clamp-1">{item.body}</div>
+                        <div className="text-slate-500 dark:text-slate-400 line-clamp-1">{cleanNotificationText(item.body)}</div>
                       </td>
                       <td className="px-4 py-3 font-mono text-indigo-600 dark:text-indigo-400 font-bold">{item.url || '—'}</td>
                       <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono">

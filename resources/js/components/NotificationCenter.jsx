@@ -83,6 +83,20 @@ const playUNMSAlertSound = (type = 'NOC') => {
   }
 };
 
+// Helper untuk membersihkan tag HTML Telegram (<b>, <code>, <i>, dll) agar tampilan di web rapi & profesional
+const cleanNotificationText = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/<br\s*[\/]?>/gi, '\n')
+    .replace(/<[^>]*>?/gm, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
 export default function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -401,7 +415,7 @@ export default function NotificationCenter() {
                         )}
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-snug">
-                        {n.body || ''}
+                        {cleanNotificationText(n.body)}
                       </p>
                       <p className="text-[10px] text-slate-400 dark:text-slate-500 pt-0.5">
                         {timeStr}

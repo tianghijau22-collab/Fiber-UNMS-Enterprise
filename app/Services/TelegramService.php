@@ -84,14 +84,40 @@ class TelegramService
     public static function send(string $title, string $body, string $type = 'NOC', ?string $url = null): bool
     {
         try {
+            // 1. Selalu catat notifikasi ke Database Sistem (system_notifications)
+            // agar data alert tersimpan secara permanen untuk halaman NOTIFIKASI ALERT SISTEM
+            try {
+                $recentExists = \Illuminate\Support\Facades\DB::table('system_notifications')
+                    ->where('title', $title)
+                    ->where('created_at', '>=', now()->subSeconds(5))
+                    ->exists();
+
+                if (!$recentExists) {
+                    \Illuminate\Support\Facades\DB::table('system_notifications')->insert([
+                        'user_id'    => null, // Broadcast untuk seluruh operator/NOC
+                        'type'       => $type,
+                        'title'      => $title,
+                        'body'       => $body,
+                        'url'        => $url,
+                        'icon'       => $type,
+                        'is_read'    => false,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            } catch (\Throwable $dbErr) {
+                Log::warning('TelegramService DB Log Warning: ' . $dbErr->getMessage());
+            }
+
+            // 2. Lanjutkan pengiriman ke Telegram Bot
             $enabled = SystemSetting::get('telegram_enabled', env('TELEGRAM_ENABLED', 'false'));
             if ($enabled !== 'true' && $enabled !== true && $enabled !== '1') {
-                return false;
+                return true;
             }
 
             $botToken = SystemSetting::get('telegram_bot_token', env('TELEGRAM_BOT_TOKEN'));
             if (empty($botToken)) {
-                return false;
+                return true;
             }
 
             $topic = static::determineTopic($type);
@@ -145,19 +171,6 @@ class TelegramService
                 'parse_mode'               => 'HTML',
                 'disable_web_page_preview' => false,
             ];
-
-            if ($targetUrl) {
-                $payload['reply_markup'] = json_encode([
-                    'inline_keyboard' => [
-                        [
-                            [
-                                'text' => 'Buka Detail di Sistem UNMS',
-                                'url'  => $targetUrl,
-                            ]
-                        ]
-                    ]
-                ]);
-            }
 
             // Pengiriman paralel cepat (Concurrent cURL pool)
             Http::pool(function ($pool) use ($targetChatIds, $botToken, $payload) {
