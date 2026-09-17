@@ -400,40 +400,45 @@ export default function SystemAlertChat() {
             }
 
             const msg = item.data;
-            const isOutage = msg.is_outage;
-            const isRecovery = msg.is_recovery;
+            const isOutage = msg.is_outage || /GANGGUAN|ALARM|LOS|DOWN|PUTUS|DYING GASP|CRITICAL/i.test(msg.title);
+            const isRecovery = msg.is_recovery || /PEMULIHAN|PULIH|RECOVERY|UP|NORMAL/i.test(msg.title);
             const isTrap = msg.source === 'SNMP_TRAP';
             const isPoll = msg.source === 'POLL_TELEMETRY';
 
             // Distinctive Enterprise Card Styling with Left Border Accent
-            let cardAccentBorder = 'border-l-4 border-l-slate-400 border border-slate-200 dark:border-slate-800';
+            let cardAccentBorder = 'border-l-4 border-l-slate-400 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900';
             let headerBg = 'bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200/60 dark:border-slate-800/60';
             let titleColor = 'text-slate-900 dark:text-white';
+            let bodyBg = 'bg-slate-50/70 dark:bg-slate-950/50 border-slate-200/70 dark:border-slate-800/70';
             let avatarCls = 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700';
             let badgeIcon = <IconBot className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />;
 
             if (isOutage) {
-              cardAccentBorder = 'border-l-4 border-l-rose-500 border border-rose-200/80 dark:border-rose-900/40 bg-white dark:bg-slate-900 shadow-2xs';
-              headerBg = 'bg-rose-500/[0.06] dark:bg-rose-500/[0.08] text-rose-700 dark:text-rose-300 border-b border-rose-200/60 dark:border-rose-900/40';
+              cardAccentBorder = 'border-l-4 border-l-rose-500 border border-rose-300/80 dark:border-rose-900/60 bg-rose-500/[0.02] dark:bg-rose-500/[0.04] shadow-2xs';
+              headerBg = 'bg-rose-500/[0.08] dark:bg-rose-500/[0.15] text-rose-700 dark:text-rose-300 border-b border-rose-200/70 dark:border-rose-900/50';
               titleColor = 'text-rose-600 dark:text-rose-400 font-extrabold';
-              avatarCls = 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800';
+              bodyBg = 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/60 dark:border-rose-900/40';
+              avatarCls = 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-800';
               badgeIcon = <IconShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
             } else if (isRecovery) {
-              cardAccentBorder = 'border-l-4 border-l-emerald-500 border border-emerald-200/80 dark:border-emerald-900/40 bg-white dark:bg-slate-900 shadow-2xs';
-              headerBg = 'bg-emerald-500/[0.06] dark:bg-emerald-500/[0.08] text-emerald-700 dark:text-emerald-300 border-b border-emerald-200/60 dark:border-emerald-900/40';
+              cardAccentBorder = 'border-l-4 border-l-emerald-500 border border-emerald-300/80 dark:border-emerald-900/60 bg-emerald-500/[0.02] dark:bg-emerald-500/[0.04] shadow-2xs';
+              headerBg = 'bg-emerald-500/[0.08] dark:bg-emerald-500/[0.15] text-emerald-700 dark:text-emerald-300 border-b border-emerald-200/70 dark:border-emerald-900/50';
               titleColor = 'text-emerald-600 dark:text-emerald-400 font-extrabold';
-              avatarCls = 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800';
+              bodyBg = 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/60 dark:border-emerald-900/40';
+              avatarCls = 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800';
               badgeIcon = <IconCheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
             } else if (isTrap) {
-              cardAccentBorder = 'border-l-4 border-l-purple-500 border border-purple-200/80 dark:border-purple-900/40 bg-white dark:bg-slate-900 shadow-2xs';
-              headerBg = 'bg-purple-500/[0.06] dark:bg-purple-500/[0.08] text-purple-700 dark:text-purple-300 border-b border-purple-200/60 dark:border-purple-900/40';
+              cardAccentBorder = 'border-l-4 border-l-purple-500 border border-purple-200/80 dark:border-purple-900/40 bg-purple-500/[0.02] dark:bg-purple-500/[0.04] shadow-2xs';
+              headerBg = 'bg-purple-500/[0.08] dark:bg-purple-500/[0.12] text-purple-700 dark:text-purple-300 border-b border-purple-200/60 dark:border-purple-900/40';
               titleColor = 'text-purple-600 dark:text-purple-400 font-bold';
+              bodyBg = 'bg-purple-50/30 dark:bg-purple-950/20 border-purple-200/50 dark:border-purple-900/30';
               avatarCls = 'bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800';
               badgeIcon = <IconZap className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />;
             } else if (isPoll) {
-              cardAccentBorder = 'border-l-4 border-l-amber-500 border border-amber-200/80 dark:border-amber-900/40 bg-white dark:bg-slate-900 shadow-2xs';
-              headerBg = 'bg-amber-500/[0.06] dark:bg-amber-500/[0.08] text-amber-700 dark:text-amber-300 border-b border-amber-200/60 dark:border-amber-900/40';
+              cardAccentBorder = 'border-l-4 border-l-amber-500 border border-amber-200/80 dark:border-amber-900/40 bg-amber-500/[0.02] dark:bg-amber-500/[0.04] shadow-2xs';
+              headerBg = 'bg-amber-500/[0.08] dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border-b border-amber-200/60 dark:border-amber-900/40';
               titleColor = 'text-amber-600 dark:text-amber-400 font-bold';
+              bodyBg = 'bg-amber-50/30 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-900/30';
               avatarCls = 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800';
               badgeIcon = <IconRefresh className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
             }
@@ -455,7 +460,7 @@ export default function SystemAlertChat() {
                   <div className={`px-3 py-1.5 ${headerBg} flex items-center justify-between`}>
                     <div className="flex items-center space-x-1.5">
                       <span className="text-[10.5px] font-bold text-slate-800 dark:text-slate-200 capitalize tracking-tight">
-                        alert monitoring realtime
+                        alert monitoring sistem
                       </span>
                     </div>
 
@@ -489,9 +494,9 @@ export default function SystemAlertChat() {
                       dangerouslySetInnerHTML={{ __html: msg.title }}
                     />
 
-                    {/* Body Text with Clean HTML Elements */}
+                    {/* Body Text with Clean Monospace Text (No Blue Background on SN/Redaman) */}
                     <div 
-                      className="text-[10px] sm:text-[10.5px] leading-snug text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap bg-slate-50/70 dark:bg-slate-950/50 p-2.5 rounded-lg border border-slate-200/70 dark:border-slate-800/70 [&_b]:font-bold [&_b]:text-slate-900 dark:[&_b]:text-white [&_code]:px-1.5 [&_code]:py-0.2 [&_code]:rounded [&_code]:bg-slate-200/70 dark:[&_code]:bg-slate-800 [&_code]:text-sky-700 dark:[&_code]:text-sky-300 [&_code]:border [&_code]:border-slate-300/80 dark:[&_code]:border-slate-700/60 [&_code]:font-mono [&_code]:text-[10px] [&_i]:italic [&_i]:text-slate-600 dark:[&_i]:text-slate-400"
+                      className={`text-[10px] sm:text-[10.5px] leading-snug text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap ${bodyBg} p-2.5 rounded-lg border [&_b]:font-bold [&_b]:text-slate-900 dark:[&_b]:text-white [&_code]:font-mono [&_code]:font-medium [&_code]:text-inherit [&_code]:bg-transparent [&_code]:border-0 [&_code]:p-0 [&_i]:italic [&_i]:text-slate-600 dark:[&_i]:text-slate-400`}
                       dangerouslySetInnerHTML={{ __html: msg.body }}
                     />
 
