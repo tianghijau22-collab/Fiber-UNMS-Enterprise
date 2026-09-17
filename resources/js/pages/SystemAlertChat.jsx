@@ -245,38 +245,17 @@ export default function SystemAlertChat() {
     try {
       const isDark = document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
       
-      // Create off-screen container with ideal Telegram/mobile proportions (600px width)
-      const wrapper = document.createElement('div');
-      if (isDark) {
-        wrapper.classList.add('dark');
-      }
-      wrapper.style.position = 'fixed';
-      wrapper.style.top = '-99999px';
-      wrapper.style.left = '-99999px';
-      wrapper.style.zIndex = '-99999';
-      wrapper.style.width = '600px';
-      wrapper.style.padding = '0';
-      wrapper.style.margin = '0';
-      wrapper.style.background = isDark ? '#0b0f19' : '#ffffff';
-
-      const clone = cardElement.cloneNode(true);
-      clone.querySelectorAll('.no-screenshot').forEach(el => el.remove());
-      clone.style.width = '100%';
-      clone.style.maxWidth = '100%';
-      clone.style.margin = '0';
-      clone.style.boxShadow = 'none';
-
-      wrapper.appendChild(clone);
-      document.body.appendChild(wrapper);
-
-      // Capture high-DPI crisp snapshot
-      const dataUrl = await toPng(wrapper, {
-        pixelRatio: 2.5,
+      const dataUrl = await toPng(cardElement, {
+        pixelRatio: 2,
         cacheBust: true,
-        backgroundColor: isDark ? '#0b0f19' : '#ffffff',
+        backgroundColor: isDark ? '#0f172a' : '#ffffff',
+        filter: (node) => {
+          if (node?.classList && node.classList.contains('no-screenshot')) {
+            return false;
+          }
+          return true;
+        }
       });
-
-      document.body.removeChild(wrapper);
 
       const link = document.createElement('a');
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -507,31 +486,31 @@ export default function SystemAlertChat() {
             let badgeIcon = <IconBot className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />;
 
             if (isRecovery) {
-              cardAccentBorder = 'border-l-4 border-l-emerald-500 border border-emerald-300/80 dark:border-emerald-900/60 bg-emerald-500/[0.02] dark:bg-emerald-500/[0.04] shadow-2xs';
-              headerBg = 'bg-emerald-500/[0.08] dark:bg-emerald-500/[0.15] text-emerald-700 dark:text-emerald-300 border-b border-emerald-200/70 dark:border-emerald-900/50';
+              cardAccentBorder = 'border-l-4 border-l-emerald-500 border border-emerald-300/80 dark:border-emerald-800 bg-white dark:bg-slate-900 shadow-2xs';
+              headerBg = 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-b border-emerald-200 dark:border-emerald-900/60';
               titleColor = 'text-emerald-600 dark:text-emerald-400 font-extrabold';
-              bodyBg = 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/60 dark:border-emerald-900/40';
+              bodyBg = 'bg-emerald-50/70 dark:bg-slate-950 border-emerald-200/80 dark:border-emerald-950';
               avatarCls = 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800';
               badgeIcon = <IconCheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
             } else if (isOutage) {
-              cardAccentBorder = 'border-l-4 border-l-rose-500 border border-rose-300/80 dark:border-rose-900/60 bg-rose-500/[0.02] dark:bg-rose-500/[0.04] shadow-2xs';
-              headerBg = 'bg-rose-500/[0.08] dark:bg-rose-500/[0.15] text-rose-700 dark:text-rose-300 border-b border-rose-200/70 dark:border-rose-900/50';
+              cardAccentBorder = 'border-l-4 border-l-rose-500 border border-rose-300/80 dark:border-rose-800 bg-white dark:bg-slate-900 shadow-2xs';
+              headerBg = 'bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border-b border-rose-200 dark:border-rose-900/60';
               titleColor = 'text-rose-600 dark:text-rose-400 font-extrabold';
-              bodyBg = 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/60 dark:border-rose-900/40';
+              bodyBg = 'bg-rose-50/70 dark:bg-slate-950 border-rose-200/80 dark:border-rose-950';
               avatarCls = 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-800';
               badgeIcon = <IconShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
             } else if (isTrap) {
-              cardAccentBorder = 'border-l-4 border-l-purple-500 border border-purple-200/80 dark:border-purple-900/40 bg-purple-500/[0.02] dark:bg-purple-500/[0.04] shadow-2xs';
-              headerBg = 'bg-purple-500/[0.08] dark:bg-purple-500/[0.12] text-purple-700 dark:text-purple-300 border-b border-purple-200/60 dark:border-purple-900/40';
+              cardAccentBorder = 'border-l-4 border-l-purple-500 border border-purple-200/80 dark:border-purple-800 bg-white dark:bg-slate-900 shadow-2xs';
+              headerBg = 'bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border-b border-purple-200 dark:border-purple-900/60';
               titleColor = 'text-purple-600 dark:text-purple-400 font-bold';
-              bodyBg = 'bg-purple-50/30 dark:bg-purple-950/20 border-purple-200/50 dark:border-purple-900/30';
+              bodyBg = 'bg-purple-50/70 dark:bg-slate-950 border-purple-200/80 dark:border-purple-950';
               avatarCls = 'bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800';
               badgeIcon = <IconZap className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />;
             } else if (isPoll) {
-              cardAccentBorder = 'border-l-4 border-l-amber-500 border border-amber-200/80 dark:border-amber-900/40 bg-amber-500/[0.02] dark:bg-amber-500/[0.04] shadow-2xs';
-              headerBg = 'bg-amber-500/[0.08] dark:bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 border-b border-amber-200/60 dark:border-amber-900/40';
+              cardAccentBorder = 'border-l-4 border-l-amber-500 border border-amber-200/80 dark:border-amber-800 bg-white dark:bg-slate-900 shadow-2xs';
+              headerBg = 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border-b border-amber-200 dark:border-amber-900/60';
               titleColor = 'text-amber-600 dark:text-amber-400 font-bold';
-              bodyBg = 'bg-amber-50/30 dark:bg-amber-950/20 border-amber-200/50 dark:border-amber-900/30';
+              bodyBg = 'bg-amber-50/70 dark:bg-slate-950 border-amber-200/80 dark:border-amber-950';
               avatarCls = 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800';
               badgeIcon = <IconRefresh className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
             }
