@@ -279,59 +279,8 @@ export default function SystemAlertChat() {
     return groups;
   }, [messages]);
 
-  const statCards = [
-    {
-      label: 'Total Alert',
-      value: stats.total_all,
-      sub: 'Semua riwayat alarm',
-      badge: 'NOC Log',
-      badgeCls: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-    },
-    {
-      label: 'Hari Ini',
-      value: stats.total_today,
-      sub: 'Aktivitas 24 jam',
-      badge: 'Live',
-      badgeCls: 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-    },
-    {
-      label: 'Gangguan Massal',
-      value: stats.outages_today,
-      sub: stats.outages_today > 0 ? 'Perlu penanganan teknisi' : 'Tidak ada gangguan baru',
-      badge: '🚨 Outage',
-      badgeCls: stats.outages_today > 0 
-        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 animate-pulse'
-        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
-    },
-    {
-      label: 'Pemulihan (UP)',
-      value: stats.recovery_today,
-      sub: 'Port / ODP pulih normal',
-      badge: '✅ Restored',
-      badgeCls: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-    }
-  ];
-
   return (
-    <div className="flex flex-col h-[calc(100vh-5.5rem)] w-full space-y-4">
-      
-      {/* ── KPI STAT CARDS (ENTERPRISE 4-GRID) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-        {statCards.map((c, i) => (
-          <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs p-4 transition-colors duration-300">
-            <div className="flex justify-between items-start mb-1">
-              <span className={`text-2xl font-black leading-none ${c.label.includes('Gangguan') && c.value > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
-                {c.value.toLocaleString()}
-              </span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.badgeCls}`}>
-                {c.badge}
-              </span>
-            </div>
-            <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">{c.label}</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-medium">{c.sub}</p>
-          </div>
-        ))}
-      </div>
+    <div className="flex flex-col h-[calc(100vh-5.5rem)] w-full space-y-3">
 
       {/* ── FILTER, SEARCH & ACTION TOOLBAR ── */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3 transition-colors duration-300">
