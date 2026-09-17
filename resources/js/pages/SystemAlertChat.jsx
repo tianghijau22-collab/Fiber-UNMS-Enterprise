@@ -313,7 +313,7 @@ export default function SystemAlertChat() {
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] max-w-7xl mx-auto space-y-4">
+    <div className="flex flex-col h-[calc(100vh-5.5rem)] w-full space-y-4">
       
       {/* ── TOP HEADER: ENTERPRISE NOC PROFILE & ACTIONS ── */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
@@ -522,7 +522,7 @@ export default function SystemAlertChat() {
             }
 
             return (
-              <div key={`msg-${msg.id}`} className="flex items-start space-x-3 max-w-3xl group">
+              <div key={`msg-${msg.id}`} className="flex items-start space-x-3 w-full group">
                 
                 {/* Bot Small Avatar */}
                 <div className="flex-shrink-0 mt-1">
