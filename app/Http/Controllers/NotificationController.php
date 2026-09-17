@@ -483,8 +483,8 @@ class NotificationController extends Controller
             $telegramText .= "────────────────────────────\n\n";
             $telegramText .= $cardBody;
 
-            $isOutage = str_contains($n->title, 'GANGGUAN MASSAL') || str_contains($n->title, 'ALARM') || str_contains($n->title, 'LOS');
-            $isRecovery = str_contains($n->title, 'PEMULIHAN') || str_contains($n->title, 'PULIH');
+            $isRecovery = str_contains($n->title, 'PEMULIHAN') || str_contains($n->title, 'PULIH') || str_contains($n->title, 'RECOVERY') || str_contains($n->title, 'NORMAL') || str_contains($n->title, 'RESTORED');
+            $isOutage = !$isRecovery && (str_contains($n->title, 'GANGGUAN') || str_contains($n->title, 'ALARM') || str_contains($n->title, 'LOS') || str_contains($n->title, 'DOWN') || str_contains($n->title, 'PUTUS') || str_contains($n->title, 'DYING GASP') || str_contains($n->title, 'CRITICAL'));
 
             return [
                 'id'                 => $n->id,
@@ -504,7 +504,7 @@ class NotificationController extends Controller
                 'datetime_human'     => $createdCarbon->format('d/m/Y H:i:s'),
                 'is_outage'          => $isOutage,
                 'is_recovery'        => $isRecovery,
-                'level'              => $isOutage ? 'critical' : ($isRecovery ? 'recovery' : 'info'),
+                'level'              => $isRecovery ? 'recovery' : ($isOutage ? 'critical' : 'info'),
                 'telegram_text'      => $telegramText,
             ];
         });
@@ -514,12 +514,19 @@ class NotificationController extends Controller
         $totalToday = AppNotification::where('created_at', '>=', $todayStart)->count();
         $outagesToday = AppNotification::where('created_at', '>=', $todayStart)
             ->where(function ($q) {
-                $q->where('title', 'like', '%GANGGUAN MASSAL%')
-                  ->orWhere('title', 'like', '%ALARM%');
-            })->count();
+                $q->where('title', 'like', '%GANGGUAN%')
+                  ->orWhere('title', 'like', '%ALARM%')
+                  ->orWhere('title', 'like', '%LOS%')
+                  ->orWhere('title', 'like', '%DOWN%');
+            })
+            ->where('title', 'not like', '%PEMULIHAN%')
+            ->where('title', 'not like', '%PULIH%')
+            ->count();
         $recoveryToday = AppNotification::where('created_at', '>=', $todayStart)
             ->where(function ($q) {
-                $q->where('title', 'like', '%PEMULIHAN%');
+                $q->where('title', 'like', '%PEMULIHAN%')
+                  ->orWhere('title', 'like', '%PULIH%')
+                  ->orWhere('title', 'like', '%RECOVERY%');
             })->count();
 
         $lastNotif = AppNotification::latest('created_at')->first();

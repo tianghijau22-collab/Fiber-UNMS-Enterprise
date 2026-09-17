@@ -465,8 +465,8 @@ export default function SystemAlertChat() {
             }
 
             const msg = item.data;
-            const isOutage = msg.is_outage || /GANGGUAN|ALARM|LOS|DOWN|PUTUS|DYING GASP|CRITICAL/i.test(msg.title);
-            const isRecovery = msg.is_recovery || /PEMULIHAN|PULIH|RECOVERY|UP|NORMAL/i.test(msg.title);
+            const isRecovery = msg.is_recovery || /PEMULIHAN|PULIH|RECOVERY|RESTORED|RESOLVED|NORMAL/i.test(msg.title);
+            const isOutage = !isRecovery && (msg.is_outage || /GANGGUAN|ALARM|LOS|DOWN|PUTUS|DYING GASP|CRITICAL/i.test(msg.title));
             const isTrap = msg.source === 'SNMP_TRAP';
             const isPoll = msg.source === 'POLL_TELEMETRY';
 
@@ -478,20 +478,20 @@ export default function SystemAlertChat() {
             let avatarCls = 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700';
             let badgeIcon = <IconBot className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />;
 
-            if (isOutage) {
-              cardAccentBorder = 'border-l-4 border-l-rose-500 border border-rose-300/80 dark:border-rose-900/60 bg-rose-500/[0.02] dark:bg-rose-500/[0.04] shadow-2xs';
-              headerBg = 'bg-rose-500/[0.08] dark:bg-rose-500/[0.15] text-rose-700 dark:text-rose-300 border-b border-rose-200/70 dark:border-rose-900/50';
-              titleColor = 'text-rose-600 dark:text-rose-400 font-extrabold';
-              bodyBg = 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/60 dark:border-rose-900/40';
-              avatarCls = 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-800';
-              badgeIcon = <IconShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
-            } else if (isRecovery) {
+            if (isRecovery) {
               cardAccentBorder = 'border-l-4 border-l-emerald-500 border border-emerald-300/80 dark:border-emerald-900/60 bg-emerald-500/[0.02] dark:bg-emerald-500/[0.04] shadow-2xs';
               headerBg = 'bg-emerald-500/[0.08] dark:bg-emerald-500/[0.15] text-emerald-700 dark:text-emerald-300 border-b border-emerald-200/70 dark:border-emerald-900/50';
               titleColor = 'text-emerald-600 dark:text-emerald-400 font-extrabold';
               bodyBg = 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/60 dark:border-emerald-900/40';
               avatarCls = 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800';
               badgeIcon = <IconCheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
+            } else if (isOutage) {
+              cardAccentBorder = 'border-l-4 border-l-rose-500 border border-rose-300/80 dark:border-rose-900/60 bg-rose-500/[0.02] dark:bg-rose-500/[0.04] shadow-2xs';
+              headerBg = 'bg-rose-500/[0.08] dark:bg-rose-500/[0.15] text-rose-700 dark:text-rose-300 border-b border-rose-200/70 dark:border-rose-900/50';
+              titleColor = 'text-rose-600 dark:text-rose-400 font-extrabold';
+              bodyBg = 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/60 dark:border-rose-900/40';
+              avatarCls = 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-800';
+              badgeIcon = <IconShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
             } else if (isTrap) {
               cardAccentBorder = 'border-l-4 border-l-purple-500 border border-purple-200/80 dark:border-purple-900/40 bg-purple-500/[0.02] dark:bg-purple-500/[0.04] shadow-2xs';
               headerBg = 'bg-purple-500/[0.08] dark:bg-purple-500/[0.12] text-purple-700 dark:text-purple-300 border-b border-purple-200/60 dark:border-purple-900/40';
