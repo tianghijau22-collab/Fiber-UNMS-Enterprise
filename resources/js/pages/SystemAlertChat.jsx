@@ -392,7 +392,7 @@ export default function SystemAlertChat() {
       {/* ── CHAT BOT STREAM CONTAINER (TELEGRAM STYLE) ── */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 bg-slate-50/70 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 md:p-6 overflow-y-auto space-y-4 relative scroll-smooth shadow-inner transition-colors duration-300"
+        className="flex-1 bg-slate-50/70 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 md:p-4 overflow-y-auto space-y-3 relative scroll-smooth shadow-inner transition-colors duration-300"
       >
         {loading ? (
           <div className="flex flex-col items-center justify-center h-full space-y-3 py-20 text-slate-400">
@@ -443,11 +443,11 @@ export default function SystemAlertChat() {
             }
 
             return (
-              <div key={`msg-${msg.id}`} className="flex items-start space-x-3 w-full group">
+              <div key={`msg-${msg.id}`} className="flex items-start space-x-2.5 w-full group">
                 
                 {/* Bot Small Avatar */}
-                <div className="flex-shrink-0 mt-1">
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-2xs ${
+                <div className="flex-shrink-0 mt-0.5">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-2xs ${
                     isOutage 
                       ? 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-800' 
                       : isRecovery 
@@ -459,46 +459,46 @@ export default function SystemAlertChat() {
                 </div>
 
                 {/* Telegram Chat Bubble */}
-                <div className={`flex-1 bg-white dark:bg-slate-900 border ${bubbleBorder} rounded-2xl rounded-tl-sm shadow-2xs overflow-hidden transition-all duration-200 hover:border-slate-300 dark:hover:border-slate-700`}>
+                <div className={`flex-1 bg-white dark:bg-slate-900 border ${bubbleBorder} rounded-xl rounded-tl-sm shadow-2xs overflow-hidden transition-all duration-200 hover:border-slate-300 dark:hover:border-slate-700`}>
                   
                   {/* Bubble Header */}
-                  <div className={`px-3.5 py-2 ${headerBg} flex items-center justify-between`}>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[11px] font-bold text-sky-700 dark:text-sky-400 capitalize">
+                  <div className={`px-3 py-1.5 ${headerBg} flex items-center justify-between`}>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-[10px] font-bold text-sky-700 dark:text-sky-400 capitalize">
                         alert monitoring realtime
                       </span>
-                      <span className="text-[9px] px-1.5 py-0.2 rounded-md font-bold bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 tracking-wider">
+                      <span className="text-[8px] px-1.5 py-0.2 rounded font-bold bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 tracking-wider">
                         REALTIME
                       </span>
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      <span className="text-[10px] font-mono font-medium text-slate-500 dark:text-slate-400">
+                      <span className="text-[9.5px] font-mono font-medium text-slate-500 dark:text-slate-400">
                         {msg.time_seconds || msg.time_human}
                       </span>
                       {/* Copy Formatted Text Button */}
                       <button
                         onClick={() => handleCopyText(msg.telegram_text, msg.id)}
                         title="Salin Teks Pesan"
-                        className="opacity-70 group-hover:opacity-100 hover:opacity-100 p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+                        className="opacity-70 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
                       >
                         {copiedId === msg.id ? (
-                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                            <IconCheck className="w-3.5 h-3.5" /> Tersalin!
+                          <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <IconCheck className="w-3 h-3" /> Tersalin!
                           </span>
                         ) : (
-                          <IconCopy className="w-3.5 h-3.5" />
+                          <IconCopy className="w-3 h-3" />
                         )}
                       </button>
                     </div>
                   </div>
 
                   {/* Bubble Content - Formatted Telegram Output */}
-                  <div className="p-3.5 space-y-2.5">
+                  <div className="p-2.5 space-y-2">
                     
                     {/* Title */}
                     <div 
-                      className={`text-xs sm:text-sm font-extrabold tracking-tight flex items-center gap-1.5 ${titleColor}`}
+                      className={`text-[11px] sm:text-xs font-extrabold tracking-tight flex items-center gap-1.5 ${titleColor}`}
                       dangerouslySetInnerHTML={{ __html: msg.title }}
                     />
 
@@ -507,7 +507,7 @@ export default function SystemAlertChat() {
 
                     {/* Body Text with Clean HTML Elements */}
                     <div 
-                      className="text-[11px] sm:text-xs leading-relaxed text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap bg-slate-50/80 dark:bg-slate-950/60 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800/80 [&_b]:font-bold [&_b]:text-slate-900 dark:[&_b]:text-white [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-slate-200/80 dark:[&_code]:bg-slate-800 [&_code]:text-sky-600 dark:[&_code]:text-sky-300 [&_code]:border [&_code]:border-slate-300 dark:[&_code]:border-slate-700/60 [&_code]:font-mono [&_code]:text-[11px] [&_i]:italic [&_i]:text-slate-600 dark:[&_i]:text-slate-400"
+                      className="text-[10px] sm:text-[10.5px] leading-snug text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap bg-slate-50/80 dark:bg-slate-950/60 p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800/80 [&_b]:font-bold [&_b]:text-slate-900 dark:[&_b]:text-white [&_code]:px-1 [&_code]:py-0.2 [&_code]:rounded [&_code]:bg-slate-200/80 dark:[&_code]:bg-slate-800 [&_code]:text-sky-600 dark:[&_code]:text-sky-300 [&_code]:border [&_code]:border-slate-300 dark:[&_code]:border-slate-700/60 [&_code]:font-mono [&_code]:text-[10px] [&_i]:italic [&_i]:text-slate-600 dark:[&_i]:text-slate-400"
                       dangerouslySetInnerHTML={{ __html: msg.body }}
                     />
 
@@ -515,7 +515,7 @@ export default function SystemAlertChat() {
                     <div className="border-t border-slate-100 dark:border-slate-800" />
 
                     {/* Footer Info */}
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 pt-0.5">
+                    <div className="flex items-center justify-between text-[9px] text-slate-400 dark:text-slate-500 pt-0.2">
                       <div className="flex items-center space-x-1.5">
                         <span className="font-semibold text-slate-400 dark:text-slate-500">Waktu:</span>
                         <span className="font-mono font-medium text-slate-700 dark:text-slate-300">{msg.datetime_human}</span>
