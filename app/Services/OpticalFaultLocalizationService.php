@@ -152,7 +152,6 @@ class OpticalFaultLocalizationService
                         $clientListText = implode("\n", $clientLines);
 
                         $cleanMassMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
-                                        "<b>• ODC Induk:</b> {$odcName}\n" .
                                         "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
                                         "<b>• Klien Terdampak:</b> 🔴 <b>{$downCount} dari {$totalOnus} Pelanggan ({$pctVal}% LOS)</b>\n\n" .
                                         "<b>Daftar Klien Terdampak:</b>\n" .
@@ -209,7 +208,6 @@ class OpticalFaultLocalizationService
                         $recoveryDetailText = implode("\n", $clientRecoveryLines);
 
                         $cleanRecoveryMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
-                                            "<b>• ODC Induk:</b> {$odcName}\n" .
                                             "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
                                             "<b>• Status:</b> 🟢 <b>LAYANAN ODP PULIH NORMAL ({$recoveredCount}/{$totalOnus} Klien Online)</b>\n\n" .
                                             "<b>Daftar Pelanggan Pulih:</b>\n" .

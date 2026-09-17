@@ -404,6 +404,19 @@ class NotificationController extends Controller
                       ->orWhere('title', 'like', '%PULIH%')
                       ->orWhere('title', 'like', '%RECOVERY%');
                 });
+            } elseif ($type === 'TRAP') {
+                $query->where(function ($q) {
+                    $q->where('icon', 'SNMP_TRAP')
+                      ->orWhere('body', 'like', '%SNMP Trap%')
+                      ->orWhere('body', 'like', '%#TRAP%');
+                });
+            } elseif ($type === 'POLL') {
+                $query->where(function ($q) {
+                    $q->where('icon', 'POLL_TELEMETRY')
+                      ->orWhere('body', 'like', '%Jalur Prioritas Cepat%')
+                      ->orWhere('body', 'like', '%FLAPPING%')
+                      ->orWhere('body', 'like', '%#POLL%');
+                });
             } else {
                 $query->where('type', $type);
             }
@@ -423,13 +436,52 @@ class NotificationController extends Controller
             $createdCarbon = Carbon::parse($n->created_at);
             $timeStr = $createdCarbon->format('d/m/Y, H.i.s');
             
-            // Format pesan persis Telegram
+            // Resolusi identitas sumber: SNMP Trap vs Polling Telemetri
+            $source = $n->icon;
+            if (!$source || $source === 'NOC' || $source === 'SYSTEM') {
+                if (str_contains($n->body, 'SNMP Trap') || str_contains($n->title, 'SNMP Trap') || str_contains($n->body, '#TRAP')) {
+                    $source = 'SNMP_TRAP';
+                } elseif (str_contains($n->body, 'Jalur Prioritas Cepat') || str_contains($n->title, 'FLAPPING') || str_contains($n->body, '#POLL') || str_contains($n->body, 'redaman jatuh ke -40.00 dBm')) {
+                    $source = 'POLL_TELEMETRY';
+                } else {
+                    $source = 'SYSTEM';
+                }
+            }
+
+            $sourceLabel = match($source) {
+                'SNMP_TRAP'      => '⚡ SNMP Trap Engine (Realtime Event)',
+                'POLL_TELEMETRY' => '🔄 Polling Telemetri Daemon',
+                default          => '🖥️ Sistem Otomatis UNMS',
+            };
+
+            $sourceCode = match($source) {
+                'SNMP_TRAP'      => '#TRAP',
+                'POLL_TELEMETRY' => '#POLL',
+                default          => '#UNMS',
+            };
+
+            $sourceShortBadge = match($source) {
+                'SNMP_TRAP'      => 'SNMP TRAP',
+                'POLL_TELEMETRY' => 'POLLING TELEMETRI',
+                default          => 'SISTEM UNMS',
+            };
+
+            // Bersihkan format lama (hapus Diagnosa NOC, Tindakan, ODC Induk, dan footer lama)
+            $cleanBody = $n->body;
+            $cleanBody = preg_replace('/\n*────────────────────────────\n.*$/s', '', $cleanBody);
+            $cleanBody = preg_replace('/\n*<b>Diagnosa NOC:<\/b>.*?(?=\n\n|\z|\n<b>)/s', '', $cleanBody);
+            $cleanBody = preg_replace('/\n*<b>Tindakan:<\/b>.*?(?=\n\n|\z|\n<b>)/s', '', $cleanBody);
+            $cleanBody = preg_replace('/<b>• ODC Induk:<\/b>.*?\n/', '', $cleanBody);
+            $cleanBody = preg_replace('/\n*<code>\[#(?:POLL|TRAP|UNMS)\]<\/code>$/s', '', $cleanBody);
+            $cleanBody = trim($cleanBody);
+
+            // Cukup tampilkan kode [#POLL] atau [#TRAP] di bagian paling bawah
+            $cardBody = $cleanBody . "\n\n<code>[{$sourceCode}]</code>";
+
+            // Format pesan utuh persis Telegram untuk fitur copy clipboard
             $telegramText = "<b>" . htmlspecialchars($n->title, ENT_QUOTES, 'UTF-8') . "</b>\n";
             $telegramText .= "────────────────────────────\n\n";
-            $telegramText .= $n->body . "\n\n";
-            $telegramText .= "────────────────────────────\n";
-            $telegramText .= "<b>Waktu:</b> {$timeStr}\n";
-            $telegramText .= "<b>Sistem:</b> Fiber-UNMS Enterprise";
+            $telegramText .= $cardBody;
 
             $isOutage = str_contains($n->title, 'GANGGUAN MASSAL') || str_contains($n->title, 'ALARM') || str_contains($n->title, 'LOS');
             $isRecovery = str_contains($n->title, 'PEMULIHAN') || str_contains($n->title, 'PULIH');
@@ -437,8 +489,12 @@ class NotificationController extends Controller
             return [
                 'id'                 => $n->id,
                 'type'               => $n->type,
+                'source'             => $source,
+                'source_code'        => $sourceCode,
+                'source_label'       => $sourceLabel,
+                'source_short_badge' => $sourceShortBadge,
                 'title'              => $n->title,
-                'body'               => $n->body,
+                'body'               => $cardBody,
                 'url'                => $n->url,
                 'is_read'            => (bool)$n->is_read,
                 'created_at'         => $n->created_at->toIso8601String(),
@@ -472,12 +528,12 @@ class NotificationController extends Controller
             'status'   => 'success',
             'messages' => $formatted,
             'stats'    => [
-                'total_all'      => AppNotification::count(),
-                'total_today'    => $totalToday,
-                'outages_today'  => $outagesToday,
-                'recovery_today' => $recoveryToday,
-                'last_alert_at'  => $lastNotif?->created_at?->toIso8601String(),
-                'last_alert_ago' => $lastNotif ? Carbon::parse($lastNotif->created_at)->diffForHumans() : 'Belum ada',
+                'total_all'        => AppNotification::count(),
+                'total_today'      => $totalToday,
+                'outages_today'    => $outagesToday,
+                'recovery_today'   => $recoveryToday,
+                'last_alert_at'    => $lastNotif?->created_at?->toIso8601String(),
+                'last_alert_ago'   => $lastNotif ? Carbon::parse($lastNotif->created_at)->diffForHumans() : 'Belum ada',
             ],
             'bot_info' => [
                 'name'     => 'Fiber-UNMS NOC Alert Bot',

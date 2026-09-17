@@ -36,8 +36,28 @@ class AppNotification extends Model
     /**
      * Kirim notifikasi siaran (Broadcast) ke SELURUH USER di sistem
      */
-    public static function notifyAll(string $title, string $body, string $type = 'NOC', ?string $url = null, ?string $icon = null, bool $sendTelegram = true): self
-    {
+    public static function notifyAll(
+        string $title,
+        string $body,
+        string $type = 'NOC',
+        ?string $url = null,
+        ?string $icon = null,
+        bool $sendTelegram = true,
+        ?string $source = null
+    ): self {
+        if (!$source) {
+            $cmd = implode(' ', $_SERVER['argv'] ?? []);
+            if (str_contains($cmd, 'olt:listen-events') || str_contains($cmd, 'ListenOltEvents') || str_contains($body, 'via SNMP Trap')) {
+                $source = 'SNMP_TRAP';
+            } elseif (str_contains($cmd, 'olt:poll-telemetry') || str_contains($cmd, 'PollOltTelemetry')) {
+                $source = 'POLL_TELEMETRY';
+            } else {
+                $source = 'SYSTEM';
+            }
+        }
+
+        $icon = $icon ?: $source;
+
         $notif = self::create([
             'user_id' => null, // null = broadcast ke seluruh user
             'type'    => $type,
@@ -50,7 +70,7 @@ class AppNotification extends Model
 
         // Otomatis sinkronisasi kirim ke Telegram Bot jika diaktifkan
         if ($sendTelegram) {
-            \App\Services\TelegramService::send($title, $body, $type, $url);
+            \App\Services\TelegramService::send($title, $body, $type, $url, $source);
         }
 
         return $notif;
@@ -59,8 +79,20 @@ class AppNotification extends Model
     /**
      * Kirim notifikasi khusus ke 1 user tertentu
      */
-    public static function notifyUser(int $userId, string $title, string $body, string $type = 'NOC', ?string $url = null, ?string $icon = null): self
-    {
+    public static function notifyUser(
+        int $userId,
+        string $title,
+        string $body,
+        string $type = 'NOC',
+        ?string $url = null,
+        ?string $icon = null,
+        ?string $source = null
+    ): self {
+        if (!$source) {
+            $source = 'SYSTEM';
+        }
+        $icon = $icon ?: $source;
+
         $notif = self::create([
             'user_id' => $userId,
             'type'    => $type,
@@ -72,7 +104,7 @@ class AppNotification extends Model
         ]);
 
         // Otomatis sinkronisasi kirim ke Telegram Bot jika diaktifkan
-        \App\Services\TelegramService::send($title, $body, $type, $url);
+        \App\Services\TelegramService::send($title, $body, $type, $url, $source);
 
         return $notif;
     }

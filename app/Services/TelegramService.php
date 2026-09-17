@@ -81,9 +81,21 @@ class TelegramService
     /**
      * Kirim notifikasi pesan ke seluruh Grup Telegram (Non-Blocking / Asynchronous)
      */
-    public static function send(string $title, string $body, string $type = 'NOC', ?string $url = null): bool
+    public static function send(string $title, string $body, string $type = 'NOC', ?string $url = null, ?string $source = null): bool
     {
         try {
+            // Auto-deteksi sumber jika tidak diisi secara eksplisit
+            if (!$source) {
+                $cmd = implode(' ', $_SERVER['argv'] ?? []);
+                if (str_contains($cmd, 'olt:listen-events') || str_contains($cmd, 'ListenOltEvents') || str_contains($body, 'via SNMP Trap')) {
+                    $source = 'SNMP_TRAP';
+                } elseif (str_contains($cmd, 'olt:poll-telemetry') || str_contains($cmd, 'PollOltTelemetry')) {
+                    $source = 'POLL_TELEMETRY';
+                } else {
+                    $source = 'SYSTEM';
+                }
+            }
+
             // 1. Selalu catat notifikasi ke Database Sistem (system_notifications)
             // agar data alert tersimpan secara permanen untuk halaman NOTIFIKASI ALERT SISTEM
             try {
@@ -99,7 +111,7 @@ class TelegramService
                         'title'      => $title,
                         'body'       => $body,
                         'url'        => $url,
-                        'icon'       => $type,
+                        'icon'       => $source, // Rekam asal muasal sinyal (#TRAP / #POLL)
                         'is_read'    => false,
                         'created_at' => now(),
                         'updated_at' => now(),
@@ -129,10 +141,10 @@ class TelegramService
 
             // Eksekusi non-blocking di background setelah HTTP response dikirim ke browser (0ms delay)
             if (app()->runningInConsole()) {
-                static::executeSendDispatch($title, $body, $type, $url, $botToken, $targetChatIds);
+                static::executeSendDispatch($title, $body, $type, $url, $botToken, $targetChatIds, $source);
             } else {
-                app()->terminating(function () use ($title, $body, $type, $url, $botToken, $targetChatIds) {
-                    static::executeSendDispatch($title, $body, $type, $url, $botToken, $targetChatIds);
+                app()->terminating(function () use ($title, $body, $type, $url, $botToken, $targetChatIds, $source) {
+                    static::executeSendDispatch($title, $body, $type, $url, $botToken, $targetChatIds, $source);
                 });
             }
 
@@ -152,19 +164,38 @@ class TelegramService
         string $type,
         ?string $url,
         string $botToken,
-        array $targetChatIds
+        array $targetChatIds,
+        ?string $source = null
     ): void {
         try {
             $timeStr = now()->format('d/m/Y, H.i.s');
             $appUrl = env('APP_URL', 'http://127.0.0.1:8000');
             $targetUrl = $url ? (str_starts_with($url, 'http') ? $url : rtrim($appUrl, '/') . '/' . ltrim($url, '/')) : null;
 
+            $sourceLabel = match($source) {
+                'SNMP_TRAP'      => '⚡ SNMP Trap Engine (Realtime Event)',
+                'POLL_TELEMETRY' => '🔄 Polling Telemetri Daemon',
+                default          => '🖥️ Sistem Otomatis UNMS',
+            };
+
+            $sourceCode = match($source) {
+                'SNMP_TRAP'      => '#TRAP',
+                'POLL_TELEMETRY' => '#POLL',
+                default          => '#UNMS',
+            };
+
+            $cleanBody = $body;
+            $cleanBody = preg_replace('/\n*────────────────────────────\n.*$/s', '', $cleanBody);
+            $cleanBody = preg_replace('/\n*<b>Diagnosa NOC:<\/b>.*?(?=\n\n|\z|\n<b>)/s', '', $cleanBody);
+            $cleanBody = preg_replace('/\n*<b>Tindakan:<\/b>.*?(?=\n\n|\z|\n<b>)/s', '', $cleanBody);
+            $cleanBody = preg_replace('/<b>• ODC Induk:<\/b>.*?\n/', '', $cleanBody);
+            $cleanBody = preg_replace('/\n*<code>\[#(?:POLL|TRAP|UNMS)\]<\/code>$/s', '', $cleanBody);
+            $cleanBody = trim($cleanBody);
+
             $message = "<b>" . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . "</b>\n";
             $message .= "────────────────────────────\n\n";
-            $message .= $body . "\n\n";
-            $message .= "────────────────────────────\n";
-            $message .= "<b>Waktu:</b> {$timeStr}\n";
-            $message .= "<b>Sistem:</b> Fiber-UNMS Enterprise";
+            $message .= $cleanBody . "\n\n";
+            $message .= "<code>[{$sourceCode}]</code>";
 
             $payload = [
                 'text'                     => $message,

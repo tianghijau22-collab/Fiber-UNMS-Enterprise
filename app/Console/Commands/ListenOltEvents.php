@@ -75,12 +75,30 @@ class ListenOltEvents extends Command
         ], 86400 * 30);
 
         $lastHeartbeat = 0;
+        $lastDbPing    = 0;
 
         while (true) {
             $nowTs = time();
             if ($nowTs - $lastHeartbeat >= 5) {
                 $lastHeartbeat = $nowTs;
                 Cache::put('snmp_trap_listener_heartbeat', $nowTs, 30);
+            }
+
+            // DB Health Check & Auto-Reconnect setiap 30 detik agar daemon tahan berbulan-bulan tanpa crash
+            if ($nowTs - $lastDbPing >= 30) {
+                $lastDbPing = $nowTs;
+                try {
+                    DB::connection()->getPdo();
+                } catch (\Throwable $dbEx) {
+                    $this->warn("⚠️  [DB AUTO-RECONNECT] Koneksi database terputus. Melakukan reconnect otomatis...");
+                    try {
+                        DB::purge();
+                        DB::reconnect();
+                        $this->info("✅ [DB AUTO-RECONNECT] Berhasil tersambung kembali ke database.");
+                    } catch (\Throwable $reErr) {
+                        $this->error("❌ Gagal reconnect DB: " . $reErr->getMessage());
+                    }
+                }
             }
 
             $read = array_filter([$syslogSocket, $trapSocket]);
@@ -104,7 +122,18 @@ class ListenOltEvents extends Command
                 $bytes = @socket_recvfrom($sock, $buf, 4096, 0, $fromIp, $fromPort);
 
                 if ($bytes > 0 && !empty($buf)) {
-                    $this->processIncomingPacket($buf, $fromIp, $sock === $trapSocket ? 'TRAP' : 'SYSLOG');
+                    // Proteksi Total: Tangkap segala Exception/Error agar service Listener TIDAK PERNAH crash loop
+                    try {
+                        $this->processIncomingPacket($buf, $fromIp, $sock === $trapSocket ? 'TRAP' : 'SYSLOG');
+                    } catch (\Throwable $packetEx) {
+                        $this->error("⚠️  [LISTENER SAFETY CATCH] Error memproses paket dari {$fromIp}: " . $packetEx->getMessage() . " (" . basename($packetEx->getFile()) . ":" . $packetEx->getLine() . ")");
+                        Log::error("ListenOltEvents packet error: " . $packetEx->getMessage(), [
+                            'from_ip' => $fromIp,
+                            'file'    => $packetEx->getFile(),
+                            'line'    => $packetEx->getLine(),
+                            'trace'   => $packetEx->getTraceAsString(),
+                        ]);
+                    }
                 }
             }
         }
@@ -783,10 +812,10 @@ class ListenOltEvents extends Command
                         "<b>• Interface / Port:</b> <code>{$standardPort}</code>\n" .
                         "<b>• Penyebab:</b> {$causeTitle}\n" .
                         "<b>• Total Terdampak:</b> {$totalTerdampakText}\n\n" .
-                        "<b>Daftar Pelanggan Terdampak:</b>\n{$sampleListText}\n\n" .
-                        "<b>Diagnosa NOC:</b> {$causeDesc}\n" .
-                        "<b>Tindakan:</b> ⚠️ <i>Segera verifikasi jalur backbone/feeder interface {$standardPort}!</i>",
-                        'NOC'
+                        "<b>Daftar Pelanggan Terdampak:</b>\n{$sampleListText}",
+                        'NOC',
+                        null,
+                        'SNMP_TRAP'
                     );
 
                     $this->error("   🚨🚨 [MASS OUTAGE DETECTED] Interface {$standardPort} mengalami gangguan massal ({$countInWindow}/{$totalOnPort} clients down)!");
@@ -940,7 +969,9 @@ class ListenOltEvents extends Command
                             "<b>• Klien Pulih:</b> {$totalKlienText}\n\n" .
                             "<b>Daftar Pelanggan Pulih & Nilai Redaman:</b>\n{$recListText}\n\n" .
                             "<b>Keterangan:</b> Sinyal optik pada interface <code>{$standardPort}</code> telah stabil dan normal kembali.",
-                            'NOC'
+                            'NOC',
+                            null,
+                            'SNMP_TRAP'
                         );
 
                         $this->info("   🟢🟢 [MASS RECOVERY] Interface {$standardPort} telah pulih normal ({$displayRecCount} clients up)!");
@@ -1124,9 +1155,11 @@ class ListenOltEvents extends Command
                     'customers.customer_number',
                     'customers.name as customer_name',
                 ])
-                ->get();
+                ->get()
+                ->toArray();
         });
 
+        $onus = collect($onus);
         $totalOnus = $onus->count();
         if ($totalOnus < 2) {
             return;
@@ -1191,7 +1224,6 @@ class ListenOltEvents extends Command
                 $clientListText = implode("\n", $clientLines);
 
                 $cleanMassMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
-                                "<b>• ODC Induk:</b> {$odcName}\n" .
                                 "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
                                 "<b>• Klien Terdampak:</b> 🔴 <b>{$downCount} dari {$totalOnus} Pelanggan ({$pctVal}% LOS)</b>\n\n" .
                                 "<b>Daftar Klien Terdampak:</b>\n" .
@@ -1202,7 +1234,10 @@ class ListenOltEvents extends Command
                     "🚨 ALARM GANGGUAN MASSAL: {$cleanOdpTitle}",
                     $cleanMassMsg,
                     'NOC',
-                    '/network'
+                    '/network',
+                    'SNMP_TRAP',
+                    true,
+                    'SNMP_TRAP'
                 );
 
                 $this->error("   🚨🚨 [ODP MASS OUTAGE DETECTED VIA TRAP] {$cleanOdpTitle} ({$downCount}/{$totalOnus} down)!");
@@ -1249,7 +1284,6 @@ class ListenOltEvents extends Command
                     $recoveryDetailText = implode("\n", $clientRecoveryLines);
 
                     $cleanRecoveryMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
-                                        "<b>• ODC Induk:</b> {$odcName}\n" .
                                         "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
                                         "<b>• Status:</b> 🟢 <b>LAYANAN ODP PULIH NORMAL ({$onlineCount}/{$totalOnus} Klien Online)</b>\n\n" .
                                         "<b>Daftar Pelanggan Pulih:</b>\n" .
@@ -1260,7 +1294,10 @@ class ListenOltEvents extends Command
                         "🟢 PEMULIHAN GANGGUAN MASSAL: {$cleanOdpTitle}",
                         $cleanRecoveryMsg,
                         'NOC',
-                        '/network'
+                        '/network',
+                        'SNMP_TRAP',
+                        true,
+                        'SNMP_TRAP'
                     );
 
                     $this->info("   🟢🟢 [ODP MASS RECOVERY DETECTED VIA TRAP] {$cleanOdpTitle} telah pulih normal!");
