@@ -57,7 +57,7 @@ class SnmpTrapDecoder
             return null;
         }
 
-        // Cek apakah ini event level port/interface fisik (SFP Dicabut / Link Down)
+        // Cek apakah ini event level port/interface fisik (SFP Dicabut / Link Down / Link Up)
         $isPortEvent = (!$onuId && $portRef && !$serialNumber);
 
         // 4. Deteksi Klasifikasi Alarm (LOS, Dying Gasp, Recovery, Port Down, dsb)
@@ -65,14 +65,21 @@ class SnmpTrapDecoder
         $eventLabel = '';
         $isLoss = false;
 
-        if ($isPortEvent) {
-            if (preg_match('/(pull[- ]?out|unplugged|linkDown|link_down|lossOfSignal|down|offline|fail)/i', $cleanString) 
-                || in_array($eventLevel, ['critical', 'major'])) {
+        // Cek apakah payload mengandung sinyal Link Down / Link Up standar SNMP atau ZTE
+        $hasLinkDownSignal = str_contains($rawPayload, "\x2b\x06\x01\x06\x03\x01\x01\x05\x03") 
+            || str_contains($cleanString, '1.3.6.1.6.3.1.1.5.3')
+            || (bool)preg_match('/(pull[- ]?out|unplugged|linkDown|link_down|port_down|lossOfSignal)/i', $cleanString);
+
+        $hasLinkUpSignal = str_contains($rawPayload, "\x2b\x06\x01\x06\x03\x01\x01\x05\x04") 
+            || str_contains($cleanString, '1.3.6.1.6.3.1.1.5.4')
+            || (bool)preg_match('/(plug[- ]?in|inserted|linkUp|link_up|port_up)/i', $cleanString);
+
+        if ($isPortEvent || (!$onuId && ($hasLinkDownSignal || $hasLinkUpSignal))) {
+            if ($hasLinkDownSignal || in_array($eventLevel, ['critical', 'major'])) {
                 $eventType = 'PORT_DOWN';
                 $eventLabel = 'SFP Dicabut / Port Link Down';
                 $isLoss = true;
-            } elseif (preg_match('/(plug[- ]?in|inserted|linkUp|link_up|up|online|cleared|normal)/i', $cleanString) 
-                || $eventLevel === 'cleared') {
+            } elseif ($hasLinkUpSignal || $eventLevel === 'cleared') {
                 $eventType = 'PORT_UP';
                 $eventLabel = 'SFP Terpasang / Port Link Up';
                 $isLoss = false;

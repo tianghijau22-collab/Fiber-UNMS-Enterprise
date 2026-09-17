@@ -166,9 +166,8 @@ class ListenOltEvents extends Command
             $serialNumber    = $decoded['serial_number'] ?? null;
             $eventType       = $decoded['event_type'] ?? null;
             $eventLabel      = $decoded['event_label'] ?? '';
-            $eventLevel      = $decoded['event_level'] ?? 'info';
-            $isAlarmLoss     = (bool)($decoded['is_loss'] ?? false);
-            $isAlarmRecovery = ($eventType === 'RECOVERY');
+            $isAlarmLoss     = (bool)($decoded['is_loss'] ?? false) || in_array($eventType, ['PORT_DOWN', 'LOS', 'DYING_GASP']);
+            $isAlarmRecovery = ($eventType === 'RECOVERY') || ($eventType === 'PORT_UP');
             $portRef         = $decoded['port_ref'] ?? null;
             $onuId           = $decoded['onu_id'] ?? null;
         }
@@ -248,6 +247,21 @@ class ListenOltEvents extends Command
                         $olt = $dev;
                         if (!$portRef && !empty($so['port'])) $portRef = $so['port'];
                         if (!$onuId && !empty($so['onu_id'])) $onuId = $so['onu_id'];
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        // Resolusi OLT via portRef jika belum match (penting untuk trap port down/up yang tidak memiliki serial)
+        if (!$olt && $portRef) {
+            $devicesWithSnap = OltDevice::whereNotNull('last_telemetry_snapshot')->get();
+            foreach ($devicesWithSnap as $dev) {
+                $ponPorts = $dev->last_telemetry_snapshot['pon_ports'] ?? [];
+                foreach ($ponPorts as $pp) {
+                    $ppId = strtolower(trim((string)($pp['port_id'] ?? '')));
+                    if ($ppId === strtolower(trim($portRef)) || str_ends_with($ppId, strtolower(trim($portRef)))) {
+                        $olt = $dev;
                         break 2;
                     }
                 }
@@ -373,7 +387,7 @@ class ListenOltEvents extends Command
             Cache::put($windowKey, $window, 300);
 
             // Trigger alert interface mass outage
-            $this->handleInterfaceMassOutageGuard(
+            $this->handleInterfaceMassCorrelator(
                 $olt,
                 $standardPort,
                 $serials[0] ?? 'PORT_DOWN',
@@ -398,14 +412,14 @@ class ListenOltEvents extends Command
             $onusOnPort = $this->getAllOnusOnInterface($olt, $standardPort);
             $serials = collect($onusOnPort)->pluck('sn')->filter()->toArray();
 
-            // Trigger recovery di guard
-            $this->handleInterfaceMassOutageGuard(
+            // Trigger recovery di correlator
+            $this->handleInterfaceMassCorrelator(
                 $olt,
                 $standardPort,
                 $serials[0] ?? 'PORT_UP',
                 'Kabel Feeder / SFP Port',
                 null,
-                'RECOVERY',
+                'PORT_UP',
                 false,
                 -20.00,
                 null
@@ -710,8 +724,16 @@ class ListenOltEvents extends Command
         $oltName = $olt->name;
         $nowTs = time();
 
-        $activeMassKey = "interface_in_mass_outage_{$oltId}_{$standardPort}";
-        $isCurrentlyInMassOutage = (bool)Cache::get($activeMassKey, false);
+        $cleanP = str_replace(['gpon-olt_', 'epon-olt_', 'gpon_', 'epon_'], '', strtolower(trim($standardPort)));
+        $fullP  = 'gpon-olt_' . $cleanP;
+
+        $activeMassKey      = "interface_in_mass_outage_{$oltId}_{$standardPort}";
+        $activeMassKeyClean = "interface_in_mass_outage_{$oltId}_{$cleanP}";
+        $activeMassKeyFull  = "interface_in_mass_outage_{$oltId}_{$fullP}";
+
+        $isCurrentlyInMassOutage = (bool)Cache::get($activeMassKey, false)
+            || (bool)Cache::get($activeMassKeyClean, false)
+            || (bool)Cache::get($activeMassKeyFull, false);
 
         if ($isLoss) {
             // Sliding window 60 detik untuk event loss pada interface ini
@@ -761,11 +783,22 @@ class ListenOltEvents extends Command
 
             if ($isMassOutage) {
                 $alertCooldownKey = "interface_mass_alert_sent_{$oltId}_{$standardPort}";
-                $alreadyAlerted = Cache::has($alertCooldownKey);
+                $alreadyAlerted = Cache::has($alertCooldownKey)
+                    || Cache::has("interface_mass_alert_sent_{$oltId}_{$cleanP}")
+                    || Cache::has("interface_mass_alert_sent_{$oltId}_{$fullP}");
 
                 if (!$alreadyAlerted) {
                     Cache::put($alertCooldownKey, true, now()->addMinutes(15));
+                    Cache::put("interface_mass_alert_sent_{$oltId}_{$cleanP}", true, now()->addMinutes(15));
+                    Cache::put("interface_mass_alert_sent_{$oltId}_{$fullP}", true, now()->addMinutes(15));
+
                     Cache::put($activeMassKey, true, now()->addHours(2));
+                    Cache::put($activeMassKeyClean, true, now()->addHours(2));
+                    Cache::put($activeMassKeyFull, true, now()->addHours(2));
+
+                    Cache::forget("interface_mass_recovery_alert_{$oltId}_{$standardPort}");
+                    Cache::forget("interface_mass_recovery_alert_{$oltId}_{$cleanP}");
+                    Cache::forget("interface_mass_recovery_alert_{$oltId}_{$fullP}");
 
                     // Analisa dominan penyebab: LOS (Kabel Putus) vs Dying Gasp (Mati Listrik)
                     $dyingCount = collect($window)->where('type', 'DYING_GASP')->count();
@@ -863,7 +896,7 @@ class ListenOltEvents extends Command
 
             return $isCurrentlyInMassOutage;
         } else {
-            // JIKA EVENT ADALAH RECOVERY:
+            // JIKA EVENT ADALAH RECOVERY atau PORT_UP:
             $windowKey = "interface_loss_window_{$oltId}_{$standardPort}";
             $window = Cache::get($windowKey, []);
             if (!empty($window)) {
@@ -871,13 +904,13 @@ class ListenOltEvents extends Command
                 Cache::put($windowKey, $window, 120);
             }
 
-            // Jika interface ini sebelumnya memang tercatat sedang dalam status Mass Outage
+            // Jika interface ini tercatat sedang dalam status Mass Outage
             if ($isCurrentlyInMassOutage) {
                 $recKey = "interface_recovery_window_{$oltId}_{$standardPort}";
                 $recWindow = Cache::get($recKey, []);
-                $recWindow = array_values(array_filter($recWindow, fn($item) => ($nowTs - ($item['time'] ?? 0)) <= 120));
+                $recWindow = array_values(array_filter($recWindow, fn($item) => ($nowTs - ($item['time'] ?? 0)) <= 180));
 
-                if (!collect($recWindow)->contains('sn', $targetSn)) {
+                if (!empty($targetSn) && $targetSn !== '—' && $targetSn !== 'PORT_UP' && !collect($recWindow)->contains('sn', $targetSn)) {
                     $recWindow[] = [
                         'sn'      => $targetSn,
                         'name'    => $targetName,
@@ -895,53 +928,113 @@ class ListenOltEvents extends Command
                 $allRecoveredOnPort = $this->getAllOnusOnInterface($olt, $standardPort);
                 $totalRecOnPort = count($allRecoveredOnPort);
 
-                // Kriteria Pemulihan Interface Massal:
-                // Minimal 50% dari total pelanggan pada port telah pulih online (atau minimal 8 modem)
-                $recThreshold = $totalRecOnPort >= 10 ? max(6, (int)ceil($totalRecOnPort * 0.50)) : max(3, (int)ceil($totalRecOnPort * 0.60));
+                // 🎯 KRITERIA PEMULIHAN INTERFACE MASSAL SUB-DETIK VIA SNMP TRAP:
+                // 1. Jika event adalah PORT_UP (SFP dicolok/link kembali up) -> LANGSUNG TRIGGER!
+                // 2. Jika interface memiliki <= 4 pelanggan: 1 modem pulih sudah cukup memicu
+                // 3. Jika interface memiliki >= 5 pelanggan: minimal 2 modem pulih dalam window 180s
+                $isPortUp = ($eventType === 'PORT_UP');
+                $hasEnoughTraps = ($totalRecOnPort <= 4) ? ($recoveredCount >= 1) : ($recoveredCount >= 2);
 
-                if ($recoveredCount >= $recThreshold) {
-                    $recAlertCooldownKey = "interface_mass_recovery_alert_{$oltId}_{$standardPort}";
-                    if (!Cache::has($recAlertCooldownKey)) {
+                if ($isPortUp || $hasEnoughTraps) {
+                    $recAlertCooldownKey   = "interface_mass_recovery_alert_{$oltId}_{$standardPort}";
+                    $recAlertCooldownClean = "interface_mass_recovery_alert_{$oltId}_{$cleanP}";
+                    $recAlertCooldownFull  = "interface_mass_recovery_alert_{$oltId}_{$fullP}";
+
+                    $alreadyRecovered = Cache::has($recAlertCooldownKey)
+                        || Cache::has($recAlertCooldownClean)
+                        || Cache::has($recAlertCooldownFull);
+
+                    if (!$alreadyRecovered) {
+                        // Kunci cooldown 15 menit agar Poller atau trap sekunder tidak mengirim alert duplikat
                         Cache::put($recAlertCooldownKey, true, now()->addMinutes(15));
+                        Cache::put($recAlertCooldownClean, true, now()->addMinutes(15));
+                        Cache::put($recAlertCooldownFull, true, now()->addMinutes(15));
+
                         Cache::forget($activeMassKey);
+                        Cache::forget($activeMassKeyClean);
+                        Cache::forget($activeMassKeyFull);
                         Cache::forget("interface_mass_alert_sent_{$oltId}_{$standardPort}");
+                        Cache::forget("interface_mass_alert_sent_{$oltId}_{$cleanP}");
+                        Cache::forget("interface_mass_alert_sent_{$oltId}_{$fullP}");
                         Cache::forget($windowKey);
+                        Cache::forget($recKey);
                         Cache::forget('dashboard_metrics_payload');
 
-                        $displayRecList = $totalRecOnPort > 0 ? $allRecoveredOnPort : $recWindow;
-                        $displayRecCount = count($displayRecList);
+                        // Ambil info nama pelanggan dari database untuk port ini
+                        $serials = array_filter(array_map(fn($o) => strtoupper(trim((string)($o['sn'] ?? ''))), $allRecoveredOnPort));
+                        $dbClients = collect();
+                        try {
+                            $dbClients = DB::table('ont_registrations')
+                                ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
+                                ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
+                                ->leftJoin('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
+                                ->leftJoin('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
+                                ->where(function ($q) use ($serials, $cleanP, $fullP) {
+                                    if (!empty($serials)) {
+                                        $q->whereIn('ont_registrations.onu_serial', $serials)
+                                          ->orWhereIn('ont_registrations.onu_mac', $serials);
+                                    }
+                                    $q->orWhere('network_nodes.olt_port_ref', $fullP)
+                                      ->orWhere('network_nodes.olt_port_ref', $cleanP);
+                                })
+                                ->select([
+                                    'customers.name as customer_name',
+                                    'customers.id as customer_id',
+                                    'customers.customer_number',
+                                    'ont_registrations.onu_serial',
+                                    'ont_registrations.rx_power',
+                                    'ont_registrations.status',
+                                    'network_nodes.name as odp_name',
+                                ])
+                                ->get()
+                                ->keyBy(fn($item) => strtoupper(trim((string)$item->onu_serial)));
+                        } catch (\Throwable $dbEx) {}
 
                         $recList = [];
                         $actualOnlineCount = 0;
+                        $displayRecList = $totalRecOnPort > 0 ? $allRecoveredOnPort : $recWindow;
+                        $displayRecCount = count($displayRecList);
+
                         foreach (array_slice($displayRecList, 0, 30) as $idx => $rw) {
-                            $cName  = $rw['name'] ?? ($rw['customer_name'] ?? 'Pelanggan');
-                            $cSn    = $rw['sn'] ?? ($rw['serial_number'] ?? '—');
-                            $cId    = !empty($rw['cust_id']) ? $rw['cust_id'] : (!empty($rw['customer_number']) ? $rw['customer_number'] : (!empty($rw['customer_id']) ? "ID-{$rw['customer_id']}" : ""));
+                            $cSn = strtoupper(trim((string)($rw['sn'] ?? '—')));
+                            $matched = $dbClients->get($cSn);
+
+                            $cName  = $matched->customer_name ?? ($rw['name'] ?? 'Pelanggan');
+                            $cId    = !empty($matched->customer_number) ? $matched->customer_number : (!empty($matched->customer_id) ? "ID-{$matched->customer_id}" : (!empty($rw['cust_id']) ? $rw['cust_id'] : ""));
                             $cIdStr = $cId ? "[{$cId}] " : "";
-                            $odpStr = !empty($rw['node']) ? " (ODP: {$rw['node']})" : (!empty($rw['odp']) ? " (ODP: {$rw['odp']})" : "");
+                            $odpStr = !empty($matched->odp_name) ? " (ODP: {$matched->odp_name})" : (!empty($rw['odp']) ? " (ODP: {$rw['odp']})" : "");
 
-                            $status = strtolower(trim((string)($rw['status'] ?? '')));
-                            $rxVal  = $rw['rx_power'] ?? ($rw['rx'] ?? null);
-
-                            // Ekstrak nilai redaman
-                            $rxNum = null;
-                            if (is_numeric($rxVal)) {
-                                $rxNum = (float)$rxVal;
-                            } elseif (is_string($rxVal) && preg_match('/(-?\d+(?:\.\d+)?)/', $rxVal, $m)) {
-                                $rxNum = (float)$m[1];
+                            // Cek apakah modem ini ada di $recWindow atau baru saja pulih
+                            $recItem = collect($recWindow)->firstWhere('sn', $cSn);
+                            $instantRx = null;
+                            if ($recItem && isset($recItem['rx']) && (float)$recItem['rx'] > -35.0) {
+                                $instantRx = (float)$recItem['rx'];
+                            } elseif ($cSn === strtoupper(trim($targetSn)) && $recoveredRxPower !== null && (float)$recoveredRxPower > -35.0) {
+                                $instantRx = (float)$recoveredRxPower;
+                            } elseif (!empty($rw['onu_id'])) {
+                                // Coba baca optical power instan direct SNMP (~30ms)
+                                $instantRx = $this->queryInstantRxPower($olt, $standardPort, (int)$rw['onu_id']);
                             }
 
-                            // Klien dianggap Up/Pulih HANYA jika sinyal terukur sehat (> -35.0 dBm dan < -5.0 dBm) dan status bukan offline/los
-                            $isUp = ($rxNum !== null && $rxNum > -35.0 && $rxNum < -5.0)
-                                && !str_contains($status, 'los')
-                                && !str_contains($status, 'off')
-                                && !str_contains($status, 'inact')
-                                && !str_contains($status, 'gasp');
+                            // Jika tidak terdeteksi via instan, cek nilai di DB jika status active
+                            if ($instantRx === null && $matched && strtolower((string)$matched->status) === 'active' && is_numeric($matched->rx_power) && (float)$matched->rx_power > -35.0) {
+                                $instantRx = (float)$matched->rx_power;
+                            }
+
+                            $isUp = ($instantRx !== null && $instantRx > -35.0 && $instantRx < -5.0);
 
                             if ($isUp) {
                                 $actualOnlineCount++;
                                 $badge = "🟢";
-                                $rxStr = number_format($rxNum, 2, '.', '') . " dBm";
+                                $rxStr = number_format($instantRx, 2, '.', '') . " dBm";
+                                // Update DB
+                                if ($cSn && $cSn !== '—') {
+                                    DB::table('ont_registrations')->where('onu_serial', $cSn)->orWhere('onu_mac', $cSn)->update([
+                                        'status'     => 'active',
+                                        'rx_power'   => $instantRx,
+                                        'updated_at' => now(),
+                                    ]);
+                                }
                             } else {
                                 $badge = "🔴";
                                 $rxStr = "-40.00 dBm (LOS)";
@@ -949,32 +1042,36 @@ class ListenOltEvents extends Command
 
                             $recList[] = ($idx + 1) . ". {$badge} {$cIdStr}<b>{$cName}</b>{$odpStr}\n   └ SN: <code>{$cSn}</code> • <code>{$rxStr}</code>";
                         }
-                        if ($displayRecCount > 30) {
-                            $recList[] = "<i>... dan " . ($displayRecCount - 30) . " pelanggan lainnya pada interface {$standardPort}</i>";
-                        }
-                        $recListText = implode("\n", $recList);
 
-                        if ($actualOnlineCount === $displayRecCount) {
+                        if ($displayRecCount > 30) {
+                            $recList[] = "<i>... dan " . ($displayRecCount - 30) . " pelanggan lainnya pada interface {$fullP}</i>";
+                        }
+                        $recListText = !empty($recList) ? implode("\n", $recList) : "—";
+
+                        // Hitung teks klien pulih
+                        if ($actualOnlineCount === $displayRecCount && $displayRecCount > 0) {
                             $totalKlienText = "<b>{$actualOnlineCount} dari {$displayRecCount} Pelanggan (100% Pulih Normal)</b>";
-                        } else {
+                        } elseif ($actualOnlineCount > 0) {
                             $losCount = max(0, $displayRecCount - $actualOnlineCount);
                             $totalKlienText = "<b>{$actualOnlineCount} dari {$displayRecCount} Pelanggan Pulih Online</b> (🔴 {$losCount} Klien Masih LOS)";
+                        } else {
+                            $totalKlienText = "🟢 <b>JALUR INTERFACE TELAH AKTIF KEMBALI</b>";
                         }
 
                         TelegramService::send(
                             "🟢🟢 PEMULIHAN GANGGUAN MASSAL INTERFACE 🟢🟢",
                             "<b>• OLT:</b> {$oltName}\n" .
-                            "<b>• Interface / Port:</b> <code>{$standardPort}</code>\n" .
+                            "<b>• Interface / Port:</b> <code>{$fullP}</code>\n" .
                             "<b>• Status:</b> 🟢 <b>JALUR ON</b>\n" .
                             "<b>• Klien Pulih:</b> {$totalKlienText}\n\n" .
                             "<b>Daftar Pelanggan Pulih & Nilai Redaman:</b>\n{$recListText}\n\n" .
-                            "<b>Keterangan:</b> Sinyal optik pada interface <code>{$standardPort}</code> telah stabil dan normal kembali.",
+                            "<b>Keterangan:</b> Sinyal optik pada interface <code>{$fullP}</code> telah stabil dan normal kembali.",
                             'NOC',
                             null,
                             'SNMP_TRAP'
                         );
 
-                        $this->info("   🟢🟢 [MASS RECOVERY] Interface {$standardPort} telah pulih normal ({$displayRecCount} clients up)!");
+                        $this->info("   🟢🟢 [MASS RECOVERY VIA TRAP] Interface {$fullP} telah pulih normal ({$actualOnlineCount}/{$displayRecCount} clients up)!");
                     }
                 }
             }
