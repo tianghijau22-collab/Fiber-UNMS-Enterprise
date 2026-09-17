@@ -474,6 +474,8 @@ class NotificationController extends Controller
             $cleanBody = preg_replace('/<b>• ODC Induk:<\/b>.*?\n/', '', $cleanBody);
             $cleanBody = preg_replace('/\n*<code>\[#(?:POLL|TRAP|UNMS)\]<\/code>$/s', '', $cleanBody);
             $cleanBody = trim($cleanBody);
+            $cleanBody = str_replace('JALUR TRANSMISI UTAMA PULIH NORMAL', 'JALUR ON', $cleanBody);
+            $cleanBody = str_replace('Kabel Feeder Putus / SFP Port Down', 'Kabel Putus / Masalah lainnya', $cleanBody);
 
             // Cukup tampilkan kode [#POLL] atau [#TRAP] di bagian paling bawah
             $cardBody = $cleanBody . "\n\n<code>[{$sourceCode}]</code>";

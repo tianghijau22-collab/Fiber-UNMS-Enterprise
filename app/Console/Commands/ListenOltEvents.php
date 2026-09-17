@@ -965,7 +965,7 @@ class ListenOltEvents extends Command
                             "🟢🟢 PEMULIHAN GANGGUAN MASSAL INTERFACE 🟢🟢",
                             "<b>• OLT:</b> {$oltName}\n" .
                             "<b>• Interface / Port:</b> <code>{$standardPort}</code>\n" .
-                            "<b>• Status:</b> 🟢 <b>JALUR TRANSMISI UTAMA PULIH NORMAL</b>\n" .
+                            "<b>• Status:</b> 🟢 <b>JALUR ON</b>\n" .
                             "<b>• Klien Pulih:</b> {$totalKlienText}\n\n" .
                             "<b>Daftar Pelanggan Pulih & Nilai Redaman:</b>\n{$recListText}\n\n" .
                             "<b>Keterangan:</b> Sinyal optik pada interface <code>{$standardPort}</code> telah stabil dan normal kembali.",

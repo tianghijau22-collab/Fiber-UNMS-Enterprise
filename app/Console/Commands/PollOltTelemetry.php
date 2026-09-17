@@ -832,7 +832,7 @@ class PollOltTelemetry extends Command
                     "🚨🚨 ALARM GANGGUAN MASSAL INTERFACE 🚨🚨",
                     "<b>• OLT:</b> {$oltName}\n" .
                     "<b>• Interface / Port:</b> <code>{$fullP}</code>\n" .
-                    "<b>• Penyebab:</b> Kabel Feeder Putus / SFP Port Down\n" .
+                    "<b>• Penyebab:</b> Kabel Putus / Masalah lainnya\n" .
                     "<b>• Total Terdampak:</b> {$totalTerdampakText}\n\n" .
                     "<b>Daftar Pelanggan Terdampak:</b>\n{$sampleListText}",
                     'NOC',
@@ -956,7 +956,7 @@ class PollOltTelemetry extends Command
                     "🟢🟢 PEMULIHAN GANGGUAN MASSAL INTERFACE 🟢🟢",
                     "<b>• OLT:</b> {$oltName}\n" .
                     "<b>• Interface / Port:</b> <code>{$fullP}</code>\n" .
-                    "<b>• Status:</b> 🟢 <b>JALUR TRANSMISI UTAMA PULIH NORMAL</b>\n" .
+                    "<b>• Status:</b> 🟢 <b>JALUR ON</b>\n" .
                     "<b>• Klien Pulih:</b> {$totalKlienText}\n\n" .
                     "<b>Daftar Pelanggan Pulih & Nilai Redaman:</b>\n{$recListText}\n\n" .
                     "<b>Keterangan:</b> Sinyal optik pada interface <code>{$fullP}</code> telah stabil dan normal kembali.",
