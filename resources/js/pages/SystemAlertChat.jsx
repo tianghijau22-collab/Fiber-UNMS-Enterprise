@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import html2canvas from 'html2canvas';
 
 // ─── Inline SVG Icons ──────────────────────────────────────────────────────────
 const IconBot = ({ className = "w-4 h-4" }) => (
@@ -56,6 +57,13 @@ const IconCopy = ({ className = "w-3 h-3" }) => (
   </svg>
 );
 
+const IconCamera = ({ className = "w-3 h-3" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+    <circle cx="12" cy="13" r="3" strokeWidth="2" />
+  </svg>
+);
+
 const IconShieldAlert = ({ className = "w-3.5 h-3.5" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -93,6 +101,12 @@ const IconClock = ({ className = "w-3 h-3" }) => (
   </svg>
 );
 
+const IconEyeOff = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+  </svg>
+);
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function SystemAlertChat() {
   const [messages, setMessages] = useState([]);
@@ -112,8 +126,12 @@ export default function SystemAlertChat() {
   const [soundEnabled, setSoundEnabled] = useState(() => {
     return localStorage.getItem('unms_alert_sound') !== 'false';
   });
+  const [hideTime, setHideTime] = useState(() => {
+    return localStorage.getItem('unms_alert_hide_time') === 'true';
+  });
   const [autoScroll, setAutoScroll] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
+  const [capturingId, setCapturingId] = useState(null);
   const [isClearing, setIsClearing] = useState(false);
 
   const chatContainerRef = useRef(null);
@@ -207,11 +225,44 @@ export default function SystemAlertChat() {
     localStorage.setItem('unms_alert_sound', next ? 'true' : 'false');
   };
 
+  const handleToggleHideTime = () => {
+    const next = !hideTime;
+    setHideTime(next);
+    localStorage.setItem('unms_alert_hide_time', next ? 'true' : 'false');
+  };
+
   const handleCopyText = (text, id) => {
     const plainText = text ? text.replace(/<[^>]+>/g, '') : '';
     navigator.clipboard.writeText(plainText);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleScreenshotCard = async (msgId) => {
+    const cardElement = document.getElementById(`alert-card-${msgId}`);
+    if (!cardElement) return;
+    setCapturingId(msgId);
+    try {
+      const canvas = await html2canvas(cardElement, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: null,
+        logging: false,
+      });
+      const image = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      link.download = `alert-${msgId}-${timestamp}.png`;
+      link.href = image;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Gagal mengambil screenshot:', err);
+      alert('Gagal mengambil screenshot card alert.');
+    } finally {
+      setCapturingId(null);
+    }
   };
 
   const handleClearHistory = async () => {
@@ -325,6 +376,20 @@ export default function SystemAlertChat() {
               </button>
             )}
           </div>
+
+          {/* Hide/Show Time Toggle Button */}
+          <button
+            onClick={handleToggleHideTime}
+            title={hideTime ? 'Tampilkan Waktu Notifikasi' : 'Sembunyikan Waktu Notifikasi'}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              hideTime 
+                ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30 dark:border-indigo-500/30' 
+                : 'bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border-slate-200/60 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            {hideTime ? <IconEyeOff className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> : <IconClock className="w-3.5 h-3.5" />}
+            <span className="text-[11px]">{hideTime ? 'Waktu Tersembunyi' : 'Sembunyikan Waktu'}</span>
+          </button>
 
           {/* Sound Toggle Button */}
           <button
@@ -454,7 +519,10 @@ export default function SystemAlertChat() {
                 </div>
 
                 {/* NOC Alert Card */}
-                <div className={`flex-1 rounded-xl overflow-hidden shadow-2xs transition-all duration-150 hover:shadow-sm ${cardAccentBorder}`}>
+                <div 
+                  id={`alert-card-${msg.id}`} 
+                  className={`flex-1 rounded-xl overflow-hidden shadow-2xs transition-all duration-150 hover:shadow-sm ${cardAccentBorder}`}
+                >
                   
                   {/* Card Header */}
                   <div className={`px-3 py-1.5 ${headerBg} flex items-center justify-between`}>
@@ -464,10 +532,28 @@ export default function SystemAlertChat() {
                       </span>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[9.5px] font-mono font-medium text-slate-500 dark:text-slate-400">
-                        {msg.time_seconds || msg.time_human}
-                      </span>
+                    <div className="flex items-center space-x-1.5">
+                      {/* Timestamp (hidden if hideTime is active) */}
+                      {!hideTime && (
+                        <span className="text-[9.5px] font-mono font-medium text-slate-500 dark:text-slate-400 mr-1">
+                          {msg.time_seconds || msg.time_human}
+                        </span>
+                      )}
+
+                      {/* Screenshot Card Button */}
+                      <button
+                        onClick={() => handleScreenshotCard(msg.id)}
+                        disabled={capturingId === msg.id}
+                        title="Ambil Screenshot Card Alert"
+                        className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+                      >
+                        {capturingId === msg.id ? (
+                          <IconRefresh className="w-3 h-3 animate-spin text-sky-500" />
+                        ) : (
+                          <IconCamera className="w-3 h-3" />
+                        )}
+                      </button>
+
                       {/* Copy Formatted Text Button */}
                       <button
                         onClick={() => handleCopyText(msg.telegram_text, msg.id)}
@@ -475,8 +561,8 @@ export default function SystemAlertChat() {
                         className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
                       >
                         {copiedId === msg.id ? (
-                          <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                            <IconCheck className="w-3 h-3" /> Tersalin!
+                          <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                            <IconCheck className="w-3 h-3" />
                           </span>
                         ) : (
                           <IconCopy className="w-3 h-3" />
@@ -500,14 +586,16 @@ export default function SystemAlertChat() {
                       dangerouslySetInnerHTML={{ __html: msg.body }}
                     />
 
-                    {/* Footer Info */}
-                    <div className="flex items-center justify-between text-[9px] text-slate-400 dark:text-slate-500 pt-0.5">
-                      <div className="flex items-center space-x-1">
-                        <IconClock className="w-2.5 h-2.5 text-slate-400" />
-                        <span className="font-semibold text-slate-400 dark:text-slate-500">Waktu:</span>
-                        <span className="font-mono font-medium text-slate-600 dark:text-slate-400">{msg.datetime_human}</span>
+                    {/* Footer Info (Hidden if hideTime is active) */}
+                    {!hideTime && (
+                      <div className="flex items-center justify-between text-[9px] text-slate-400 dark:text-slate-500 pt-0.5">
+                        <div className="flex items-center space-x-1">
+                          <IconClock className="w-2.5 h-2.5 text-slate-400" />
+                          <span className="font-semibold text-slate-400 dark:text-slate-500">Waktu:</span>
+                          <span className="font-mono font-medium text-slate-600 dark:text-slate-400">{msg.datetime_human}</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                   </div>
                 </div>
@@ -516,14 +604,15 @@ export default function SystemAlertChat() {
           })
         )}
 
-        {/* Floating Scroll to Bottom Button */}
+        {/* Floating Scroll to Bottom Button - Simplified & Modern */}
         {!autoScroll && (
           <button
             onClick={scrollToBottom}
-            className="fixed bottom-16 right-12 z-30 bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-xl shadow-lg transition border border-sky-400/30 flex items-center space-x-1.5 cursor-pointer"
+            title="Scroll ke Pesan Terbaru"
+            className="fixed bottom-14 right-8 z-30 bg-slate-900/90 hover:bg-slate-900 dark:bg-white/90 dark:hover:bg-white text-white dark:text-slate-900 backdrop-blur-xs px-2.5 py-1 rounded-full shadow-md hover:shadow-lg transition-all duration-150 border border-slate-700/40 dark:border-slate-300/40 flex items-center space-x-1 cursor-pointer"
           >
-            <IconArrowDown className="w-3.5 h-3.5 animate-bounce" />
-            <span className="text-[11px] font-bold pr-0.5">Pesan Terbaru</span>
+            <IconArrowDown className="w-3 h-3 text-sky-400 dark:text-sky-600" />
+            <span className="text-[10px] font-bold">Terbaru</span>
           </button>
         )}
       </div>
