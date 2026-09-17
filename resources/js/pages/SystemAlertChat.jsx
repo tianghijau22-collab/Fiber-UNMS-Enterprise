@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 
 // ─── Inline SVG Icons ──────────────────────────────────────────────────────────
 const IconBot = ({ className = "w-4 h-4" }) => (
@@ -243,23 +243,26 @@ export default function SystemAlertChat() {
     if (!cardElement) return;
     setCapturingId(msgId);
     try {
-      const canvas = await html2canvas(cardElement, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: null,
-        logging: false,
+      const dataUrl = await toPng(cardElement, {
+        pixelRatio: 2,
+        cacheBust: true,
+        filter: (node) => {
+          if (node?.classList && node.classList.contains('no-screenshot')) {
+            return false;
+          }
+          return true;
+        }
       });
-      const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       link.download = `alert-${msgId}-${timestamp}.png`;
-      link.href = image;
+      link.href = dataUrl;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (err) {
       console.error('Gagal mengambil screenshot:', err);
-      alert('Gagal mengambil screenshot card alert.');
+      alert('Gagal mengambil screenshot card alert: ' + (err?.message || 'Pastikan browser mendukung canvas'));
     } finally {
       setCapturingId(null);
     }
@@ -540,34 +543,36 @@ export default function SystemAlertChat() {
                         </span>
                       )}
 
-                      {/* Screenshot Card Button */}
-                      <button
-                        onClick={() => handleScreenshotCard(msg.id)}
-                        disabled={capturingId === msg.id}
-                        title="Ambil Screenshot Card Alert"
-                        className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
-                      >
-                        {capturingId === msg.id ? (
-                          <IconRefresh className="w-3 h-3 animate-spin text-sky-500" />
-                        ) : (
-                          <IconCamera className="w-3 h-3" />
-                        )}
-                      </button>
+                      <div className="flex items-center space-x-1 no-screenshot">
+                        {/* Screenshot Card Button */}
+                        <button
+                          onClick={() => handleScreenshotCard(msg.id)}
+                          disabled={capturingId === msg.id}
+                          title="Ambil Screenshot Card Alert"
+                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+                        >
+                          {capturingId === msg.id ? (
+                            <IconRefresh className="w-3 h-3 animate-spin text-sky-500" />
+                          ) : (
+                            <IconCamera className="w-3 h-3" />
+                          )}
+                        </button>
 
-                      {/* Copy Formatted Text Button */}
-                      <button
-                        onClick={() => handleCopyText(msg.telegram_text, msg.id)}
-                        title="Salin Teks Pesan"
-                        className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
-                      >
-                        {copiedId === msg.id ? (
-                          <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                            <IconCheck className="w-3 h-3" />
-                          </span>
-                        ) : (
-                          <IconCopy className="w-3 h-3" />
-                        )}
-                      </button>
+                        {/* Copy Formatted Text Button */}
+                        <button
+                          onClick={() => handleCopyText(msg.telegram_text, msg.id)}
+                          title="Salin Teks Pesan"
+                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+                        >
+                          {copiedId === msg.id ? (
+                            <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                              <IconCheck className="w-3 h-3" />
+                            </span>
+                          ) : (
+                            <IconCopy className="w-3 h-3" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
