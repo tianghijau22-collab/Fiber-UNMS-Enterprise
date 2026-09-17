@@ -315,74 +315,6 @@ export default function SystemAlertChat() {
   return (
     <div className="flex flex-col h-[calc(100vh-5.5rem)] w-full space-y-4">
       
-      {/* ── TOP HEADER: ENTERPRISE NOC PROFILE & ACTIONS ── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
-        
-        {/* Profile Info */}
-        <div className="flex items-center space-x-3.5">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-600 via-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-500/20 ring-2 ring-sky-400/30">
-              <IconTelegram className="w-6 h-6" />
-            </div>
-            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full animate-pulse" title="Bot Online & Aktif 24/7" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
-                {botInfo.name}
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
-                OFFICIAL NOC
-              </span>
-            </div>
-            <div className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              <span className="font-mono font-semibold text-sky-600 dark:text-sky-400">{botInfo.username}</span>
-              <span>•</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
-                Sinkron Real-Time (Telegram & Web)
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={handleToggleSound}
-            title={soundEnabled ? 'Matikan Notifikasi Suara' : 'Aktifkan Notifikasi Suara'}
-            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
-              soundEnabled 
-                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 shadow-2xs' 
-                : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-            }`}
-          >
-            {soundEnabled ? <IconVolume2 className="w-4 h-4 text-amber-600 dark:text-amber-400" /> : <IconVolumeX className="w-4 h-4" />}
-            <span>{soundEnabled ? 'Suara Aktif' : 'Suara Mati'}</span>
-          </button>
-
-          <button
-            onClick={() => fetchAlerts()}
-            disabled={refreshing}
-            title="Perbarui Feed Notifikasi"
-            className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
-          >
-            <IconRefresh className={`w-4 h-4 ${refreshing ? 'animate-spin text-sky-500' : ''}`} />
-            <span>Refresh</span>
-          </button>
-
-          <button
-            onClick={handleClearHistory}
-            disabled={isClearing}
-            title="Bersihkan Semua Pesan"
-            className="px-3.5 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-          >
-            <IconTrash className="w-4 h-4" />
-            <span>Bersihkan</span>
-          </button>
-        </div>
-      </div>
-
       {/* ── KPI STAT CARDS (ENTERPRISE 4-GRID) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         {statCards.map((c, i) => (
@@ -401,10 +333,11 @@ export default function SystemAlertChat() {
         ))}
       </div>
 
-      {/* ── FILTER & SEARCH BAR ── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3 transition-colors duration-300">
+      {/* ── FILTER, SEARCH & ACTION TOOLBAR ── */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3 transition-colors duration-300">
+        
         {/* Filter Pills */}
-        <div className="flex items-center space-x-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+        <div className="flex items-center space-x-2 overflow-x-auto w-full lg:w-auto pb-1 lg:pb-0 scrollbar-none">
           <button
             onClick={() => setFilterType('ALL')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer ${
@@ -447,24 +380,63 @@ export default function SystemAlertChat() {
           </button>
         </div>
 
-        {/* Search Input */}
-        <div className="relative w-full sm:w-72">
-          <IconSearch className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Cari OLT, port, ODP, tiket..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-8 py-2 text-xs font-semibold text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs font-bold cursor-pointer"
-            >
-              ✕
-            </button>
-          )}
+        {/* Right Controls: Search Input + Action Buttons */}
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full lg:w-auto">
+          {/* Search Input */}
+          <div className="relative flex-1 sm:w-64">
+            <IconSearch className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Cari OLT, port, ODP, tiket..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-8 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Sound Toggle Button */}
+          <button
+            onClick={handleToggleSound}
+            title={soundEnabled ? 'Matikan Notifikasi Suara' : 'Aktifkan Notifikasi Suara'}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+              soundEnabled 
+                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 shadow-2xs' 
+                : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+          >
+            {soundEnabled ? <IconVolume2 className="w-4 h-4 text-amber-600 dark:text-amber-400" /> : <IconVolumeX className="w-4 h-4" />}
+            <span>{soundEnabled ? 'Suara Aktif' : 'Suara Mati'}</span>
+          </button>
+
+          {/* Refresh Button */}
+          <button
+            onClick={() => fetchAlerts()}
+            disabled={refreshing}
+            title="Perbarui Feed Notifikasi"
+            className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+          >
+            <IconRefresh className={`w-4 h-4 ${refreshing ? 'animate-spin text-sky-500' : ''}`} />
+            <span>Refresh</span>
+          </button>
+
+          {/* Clear History Button */}
+          <button
+            onClick={handleClearHistory}
+            disabled={isClearing}
+            title="Bersihkan Semua Pesan"
+            className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+          >
+            <IconTrash className="w-4 h-4" />
+            <span>Bersihkan</span>
+          </button>
         </div>
       </div>
 
