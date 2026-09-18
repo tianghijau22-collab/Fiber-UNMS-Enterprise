@@ -233,20 +233,58 @@ class ListenOltEvents extends Command
             return;
         }
 
-        // 3. Resolusi Perangkat OLT Pengirim
-        $olt = OltDevice::where('ip_address', $fromIp)->first();
+        // 3. Cari Data Pelanggan & Lokasi ODP di Database Terlebih Dahulu (Jika Ada Serial Number)
+        $reg = null;
+        if ($serialNumber) {
+            $reg = DB::table('ont_registrations')
+                ->leftJoin('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
+                ->leftJoin('customers', 'customers.id', '=', 'customer_services.customer_id')
+                ->leftJoin('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
+                ->leftJoin('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
+                ->where(function ($q) use ($serialNumber) {
+                    $q->where('ont_registrations.onu_serial', $serialNumber)
+                      ->orWhere('ont_registrations.onu_mac', $serialNumber);
+                })
+                ->select([
+                    'ont_registrations.*',
+                    'customers.customer_number as customer_number',
+                    'customers.id as customer_id',
+                    'customers.name as customer_name',
+                    'customers.phone as customer_phone',
+                    'customer_services.id as service_id',
+                    'network_nodes.id as node_id',
+                    'network_nodes.name as node_name',
+                    'network_nodes.code as node_code',
+                    'network_nodes.olt_port_ref as olt_port_ref',
+                    'network_nodes.olt_device_id as olt_device_id',
+                    'network_ports.port_number as odp_port_number',
+                ])
+                ->first();
+        }
 
-        // Jika trap lewat NAT / MikroTik Gateway (10.254.0.2 / 10.116.10.107) atau IP tidak langsung match
-        if (!$olt && $serialNumber) {
+        // 4. Resolusi Perangkat OLT Pengirim
+        $olt = null;
+        if ($reg && !empty($reg->olt_device_id)) {
+            $olt = OltDevice::find($reg->olt_device_id);
+        }
+
+        if (!$olt && $fromIp) {
+            $olt = OltDevice::where('ip_address', $fromIp)->first();
+        }
+
+        // Jika trap lewat NAT / MikroTik Gateway atau IP tidak langsung match
+        $targetOnt = null;
+        if ($serialNumber) {
             $devicesWithSnap = OltDevice::whereNotNull('last_telemetry_snapshot')->get();
             foreach ($devicesWithSnap as $dev) {
                 $snap = $dev->last_telemetry_snapshot ?? [];
                 $allOnus = array_merge($snap['onu_list'] ?? [], $snap['unconfigured_onus'] ?? []);
                 foreach ($allOnus as $so) {
                     if (strcasecmp($so['serial_number'] ?? '', $serialNumber) === 0 || strcasecmp($so['onu_mac'] ?? '', $serialNumber) === 0) {
-                        $olt = $dev;
-                        if (!$portRef && !empty($so['port'])) $portRef = $so['port'];
-                        if (!$onuId && !empty($so['onu_id'])) $onuId = $so['onu_id'];
+                        if (!$olt) {
+                            $olt = $dev;
+                        }
+                        $targetOnt = $so;
                         break 2;
                     }
                 }
@@ -260,7 +298,7 @@ class ListenOltEvents extends Command
                 $ponPorts = $dev->last_telemetry_snapshot['pon_ports'] ?? [];
                 foreach ($ponPorts as $pp) {
                     $ppId = strtolower(trim((string)($pp['port_id'] ?? '')));
-                    if ($ppId === strtolower(trim($portRef)) || str_ends_with($ppId, strtolower(trim($portRef)))) {
+                    if ($ppId === strtolower(trim($portRef))) {
                         $olt = $dev;
                         break 2;
                     }
@@ -275,56 +313,53 @@ class ListenOltEvents extends Command
         $oltName = $olt ? $olt->name : "OLT ({$fromIp})";
         $oltId   = $olt ? $olt->id : null;
 
-        // 4. Standarisasi Format Port OLT (misal gpon-olt_1/2/4)
-        $standardPort = $portRef;
-        if ($portRef && !str_starts_with($portRef, 'gpon-olt_') && !str_starts_with($portRef, 'epon_')) {
-            if (preg_match('/^[0-9]+\/[0-9]+\/[0-9]+$/', $portRef)) {
-                $standardPort = 'gpon-olt_' . $portRef;
-            } elseif (is_numeric($portRef)) {
+        // 5. Standarisasi Format Port OLT Secara Presisi (Slot & Subrack Aware)
+        $standardPort = null;
+
+        // Prioritas 1: Port dari referensi database ODP pelanggan resmi
+        if ($reg && !empty($reg->olt_port_ref)) {
+            $standardPort = str_starts_with($reg->olt_port_ref, 'gpon-olt_') 
+                ? $reg->olt_port_ref 
+                : 'gpon-olt_' . $reg->olt_port_ref;
+        }
+
+        // Prioritas 2: Port dari snapshot telemetri OLT berdasarkan Serial Number
+        if (!$standardPort && $targetOnt && !empty($targetOnt['port'])) {
+            $standardPort = $targetOnt['port'];
+            if (!$onuId && !empty($targetOnt['onu_id'])) {
+                $onuId = $targetOnt['onu_id'];
+            }
+        }
+
+        // Prioritas 3: Port yang didecode langsung dari OID / VLQ ifIndex (misal gpon-olt_1/7/1)
+        if (!$standardPort && $portRef && (str_starts_with($portRef, 'gpon-olt_') || str_starts_with($portRef, 'epon_') || preg_match('/^[0-9]+\/[0-9]+\/[0-9]+$/', $portRef))) {
+            $standardPort = str_starts_with($portRef, 'gpon-olt_') ? $portRef : 'gpon-olt_' . $portRef;
+        }
+
+        // Prioritas 4: Jika hanya ada nomor port angka (misal "1" atau "4") tanpa info slot
+        if (!$standardPort && $portRef) {
+            if (is_numeric($portRef)) {
+                // Periksa apakah OLT hanya memiliki 1 slot aktif (seperti C320 di slot 1)
                 if ($olt && !empty($olt->last_telemetry_snapshot['pon_ports'])) {
+                    $matchingPorts = [];
                     foreach ($olt->last_telemetry_snapshot['pon_ports'] as $pp) {
                         if (str_ends_with($pp['port_id'] ?? '', "/{$portRef}")) {
-                            $standardPort = $pp['port_id'];
-                            break;
+                            $matchingPorts[] = $pp['port_id'];
                         }
                     }
+                    // Hanya gunakan jika tidak ambigu (hanya ada 1 port berakhiran angka tersebut)
+                    if (count($matchingPorts) === 1) {
+                        $standardPort = $matchingPorts[0];
+                    }
                 }
-                if (!$standardPort || is_numeric($standardPort)) {
-                    $standardPort = 'gpon-olt_' . $portRef;
-                }
-            } else {
+            }
+            if (!$standardPort) {
                 $standardPort = 'gpon-olt_' . $portRef;
             }
         }
 
-        // 5. Cari Data Pelanggan & Lokasi ODP di Database
-        $reg = null;
-        if ($serialNumber) {
-            $reg = DB::table('ont_registrations')
-                ->leftJoin('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
-                ->leftJoin('customers', 'customers.id', '=', 'customer_services.customer_id')
-                ->leftJoin('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
-                ->leftJoin('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
-                ->where('ont_registrations.onu_serial', $serialNumber)
-                ->orWhere('ont_registrations.onu_mac', $serialNumber)
-                ->select([
-                    'ont_registrations.*',
-                    'customers.customer_number as customer_number',
-                    'customers.id as customer_id',
-                    'customers.name as customer_name',
-                    'customers.phone as customer_phone',
-                    'customer_services.id as service_id',
-                    'network_nodes.id as node_id',
-                    'network_nodes.name as node_name',
-                    'network_nodes.code as node_code',
-                    'network_ports.port_number as odp_port_number',
-                ])
-                ->first();
-        }
-
-        // Fallback pencarian melalui snapshot OLT jika di database belum ada serial
-        $targetOnt = null;
-        if ($oltId) {
+        // Fallback targetOnt jika belum didapatkan
+        if (!$targetOnt && $oltId) {
             $snapshot = $olt?->last_telemetry_snapshot ?? [];
             $allOnus = array_merge($snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
             foreach ($allOnus as $so) {

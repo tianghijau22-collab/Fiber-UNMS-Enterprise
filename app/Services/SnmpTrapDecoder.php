@@ -35,21 +35,54 @@ class SnmpTrapDecoder
         $onuId = null;
         $rawOnuDesc = null;
 
-        if (preg_match('/(?:ONU-|ONU\s+|onu_)([0-9\/\:\_\-]+)/i', $cleanString, $onuMatch)) {
-            $rawOnuDesc = trim($onuMatch[1]);
-            if (strpos($rawOnuDesc, ':') !== false) {
-                [$p, $o] = explode(':', $rawOnuDesc, 2);
-                $portRef = trim($p);
-                $onuId = (int)$o;
-            } else {
-                $portRef = trim($rawOnuDesc);
+        // 3a. Deteksi ZTE ASN.1 BER binary VLQ ifIndex (\x81\x88\x84)
+        // ZTE C300/C320 encodes Rack 1 Shelf 1 ifIndex as: \x81\x88\x84 followed by byte with slot and byte with port
+        $vlqPos = strpos($rawPayload, "\x81\x88\x84");
+        if ($vlqPos !== false && $vlqPos + 5 < strlen($rawPayload)) {
+            $extractedSlot = (ord($rawPayload[$vlqPos + 3]) & 0x7F) >> 1;
+            $extractedPort = ord($rawPayload[$vlqPos + 4]);
+            $extractedOnu  = ord($rawPayload[$vlqPos + 5]) & 0x7F;
+            if ($extractedSlot > 0 && $extractedPort > 0) {
+                $portRef = "gpon-olt_1/{$extractedSlot}/{$extractedPort}";
+                if ($extractedOnu > 0) {
+                    $onuId = $extractedOnu;
+                }
             }
-        } elseif (preg_match('/(?:gpon-olt_|epon-olt_|gpon_|epon_)([0-9]+\/[0-9]+\/[0-9]+)/i', $cleanString, $pMatch)) {
+        }
+
+        // 3b. Deteksi ZTE Textual OID (misal: 3902.1082.500.10.2.3.3.1.3.<ifIndex>.<onuId>)
+        if (!$portRef && preg_match('/3902\.1082\.\d+\.\d+\.\d+\.\d+\.\d+\.\d+\.(\d{8,10})\.(\d+)/', $cleanString, $oidMatch)) {
+            $ifIndex = (int)$oidMatch[1];
+            $extractedSlot = ($ifIndex >> 8) & 0xFF;
+            $extractedPort = $ifIndex & 0xFF;
+            if ($extractedSlot > 0 && $extractedPort > 0) {
+                $portRef = "gpon-olt_1/{$extractedSlot}/{$extractedPort}";
+                $onuId = (int)$oidMatch[2];
+            }
+        }
+
+        // 3c. Deteksi dari string deskripsi / nama interface di payload
+        if (preg_match('/(?:gpon-olt_|epon-olt_|gpon_|epon_)([0-9]+\/[0-9]+\/[0-9]+)/i', $cleanString, $pMatch)) {
             $portRef = 'gpon-olt_' . trim($pMatch[1]);
         } elseif (preg_match('/(?:port|interface)\s+([0-9]+\/[0-9]+\/[0-9]+)/i', $cleanString, $pMatch)) {
             $portRef = 'gpon-olt_' . trim($pMatch[1]);
         } elseif (preg_match('/(?:slot|subrack)\s*[0-9]+\s*(?:slot|port)\s*([0-9]+\/[0-9]+\/[0-9]+)/i', $cleanString, $pMatch)) {
             $portRef = 'gpon-olt_' . trim($pMatch[1]);
+        } elseif (preg_match('/(?:ONU-|ONU\s+|onu_)([0-9\/\:\_\-]+)/i', $cleanString, $onuMatch)) {
+            $rawOnuDesc = trim($onuMatch[1]);
+            if (strpos($rawOnuDesc, ':') !== false) {
+                [$p, $o] = explode(':', $rawOnuDesc, 2);
+                if (!$portRef) {
+                    $portRef = trim($p);
+                }
+                if (!$onuId) {
+                    $onuId = (int)$o;
+                }
+            } else {
+                if (!$portRef) {
+                    $portRef = trim($rawOnuDesc);
+                }
+            }
         }
 
         // Filter: Hanya loloskan jika ada Serial Number, deskripsi ONU, atau Port Ref
