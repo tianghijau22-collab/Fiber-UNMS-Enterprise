@@ -734,9 +734,57 @@ class ListenOltEvents extends Command
         }
         Cache::put("ont_live_state_{$targetSn}", $newState, 86400);
 
-        // 13. Kebijakan Anti-Spam Telegram NOC: Redam Notifikasi Individual
-        // Telegram NOC difokuskan 100% eksklusif untuk 4 Pilar Gangguan Massal (ODP & Interface PON)
-        $this->line("   ℹ️ [INDIVIDUAL ALERT SUPPRESSED] Alert individual untuk {$targetName} ({$targetSn}) diredam. Telegram eksklusif untuk insiden massal.");
+        // 13. Kebijakan Anti-Spam Telegram NOC (Opsi B):
+        // Jika interface sedang dalam kondisi Gangguan Massal, redam notifikasi individual
+        if ($suppressIndividualAlert) {
+            $this->line("   ℹ️ [MASS OUTAGE ACTIVE] Alert individual {$targetName} ({$targetSn}) diredam karena interface sedang dalam gangguan massal.");
+            return;
+        }
+
+        // Susun format judul & badan notifikasi alert perorangan (SNMP Trap Sub-Detik)
+        if ($isAlarmLoss) {
+            if ($eventType === 'DYING_GASP') {
+                $indivTitle = "⚡ SNMP TRAP: Modem {$targetName} Mati Listrik (Dying Gasp)";
+                $statusLine = "⚡ <b>Mati Listrik (Dying Gasp)</b>";
+            } else {
+                $indivTitle = "⚡ SNMP TRAP: Modem {$targetName} Putus / LOS";
+                $statusLine = "🔴 <b>Putus / LOS (-40.00 dBm)</b>";
+            }
+        } elseif ($isAlarmRecovery) {
+            $rxInfo = ($recoveredRxPower !== null && (float)$recoveredRxPower > -35.0) ? " ({$recoveredRxPower} dBm)" : "";
+            $indivTitle = "🟢 SNMP TRAP: Modem {$targetName} Pulih Online";
+            $statusLine = "🟢 <b>Online Kembali{$rxInfo}</b>";
+        } else {
+            $indivTitle = "⚡ SNMP TRAP: {$eventLabel} - {$targetName}";
+            $statusLine = "ℹ️ <b>{$eventLabel}</b>";
+        }
+
+        $portInfo = $standardPort ? "<code>{$standardPort}</code>" . ($onuId ? ":<code>{$onuId}</code>" : "") : '—';
+        $odpInfo  = $nodeName ? " (ODP: {$nodeName})" : '';
+
+        $indivBody = "<b>• OLT:</b> {$oltName}\n" .
+                     "<b>• Interface / Port:</b> {$portInfo}\n" .
+                     "<b>• Pelanggan:</b> <b>{$targetName}</b>{$odpInfo}\n" .
+                     "<b>• SN Modem:</b> <code>{$targetSn}</code>\n" .
+                     "<b>• Status:</b> {$statusLine}\n" .
+                     "<b>• Event OLT:</b> <code>{$eventLabel}</code>";
+
+        // Rekam ke AppNotification dengan sendTelegram = false (Opsi B: Telegram hening, Web UI aktif perorangan)
+        try {
+            AppNotification::notifyAll(
+                $indivTitle,
+                $indivBody,
+                'TRAP_INDIVIDUAL',
+                '/customers',
+                'SNMP_TRAP',
+                false, // STRICTLY FALSE: Telegram HANYA untuk Gangguan Massal!
+                'SNMP_TRAP'
+            );
+            $this->line("   ⚡ [TRAP INDIVIDUAL RECORDED] Alert perorangan {$targetName} ({$targetSn}) dicatat ke Web UI (Telegram: OFF).");
+        } catch (\Throwable $e) {
+            $this->warn("   ⚠️ Gagal mencatat notifikasi perorangan: " . $e->getMessage());
+        }
+
         return;
     }
 
@@ -873,16 +921,18 @@ class ListenOltEvents extends Command
                     $pctDown = $totalOnPort > 0 ? round(($countInWindow / $totalOnPort) * 100) : 100;
                     $totalTerdampakText = "🔴 <b>{$countInWindow} dari {$totalOnPort} Pelanggan ({$pctDown}% Terdampak)</b>";
 
-                    // Kirim Notifikasi Alarm Gangguan Massal ke Telegram
-                    TelegramService::send(
-                        "🚨🚨 ALARM GANGGUAN MASSAL INTERFACE 🚨🚨",
+                    // Kirim Notifikasi Alarm Gangguan Massal ke Telegram & Web UI
+                    AppNotification::notifyAll(
+                        "🚨 ALARM GANGGUAN MASSAL: Interface {$standardPort}",
                         "<b>• OLT:</b> {$oltName}\n" .
                         "<b>• Interface / Port:</b> <code>{$standardPort}</code>\n" .
                         "<b>• Penyebab:</b> {$causeTitle}\n" .
                         "<b>• Total Terdampak:</b> {$totalTerdampakText}\n\n" .
                         "<b>Daftar Pelanggan Terdampak:</b>\n{$sampleListText}",
-                        'NOC',
-                        null,
+                        'MASS_OUTAGE',
+                        '/network',
+                        'MASS_OUTAGE',
+                        true, // sendTelegram = true (Eksklusif untuk Insiden Massal!)
                         'SNMP_TRAP'
                     );
 
@@ -1093,16 +1143,18 @@ class ListenOltEvents extends Command
                             $totalKlienText = "🟢 <b>JALUR INTERFACE TELAH AKTIF KEMBALI</b>";
                         }
 
-                        TelegramService::send(
-                            "🟢🟢 PEMULIHAN GANGGUAN MASSAL INTERFACE 🟢🟢",
+                        AppNotification::notifyAll(
+                            "🟢 PEMULIHAN GANGGUAN MASSAL: Interface {$fullP}",
                             "<b>• OLT:</b> {$oltName}\n" .
                             "<b>• Interface / Port:</b> <code>{$fullP}</code>\n" .
                             "<b>• Status:</b> 🟢 <b>JALUR ON</b>\n" .
                             "<b>• Klien Pulih:</b> {$totalKlienText}\n\n" .
                             "<b>Daftar Pelanggan Pulih & Nilai Redaman:</b>\n{$recListText}\n\n" .
                             "<b>Keterangan:</b> Sinyal optik pada interface <code>{$fullP}</code> telah stabil dan normal kembali.",
-                            'NOC',
-                            null,
+                            'MASS_RECOVERY',
+                            '/network',
+                            'MASS_RECOVERY',
+                            true, // sendTelegram = true
                             'SNMP_TRAP'
                         );
 
@@ -1365,9 +1417,9 @@ class ListenOltEvents extends Command
                 AppNotification::notifyAll(
                     "🚨 ALARM GANGGUAN MASSAL: {$cleanOdpTitle}",
                     $cleanMassMsg,
-                    'NOC',
+                    'MASS_OUTAGE',
                     '/network',
-                    'SNMP_TRAP',
+                    'MASS_OUTAGE',
                     true,
                     'SNMP_TRAP'
                 );
@@ -1425,9 +1477,9 @@ class ListenOltEvents extends Command
                     AppNotification::notifyAll(
                         "🟢 PEMULIHAN GANGGUAN MASSAL: {$cleanOdpTitle}",
                         $cleanRecoveryMsg,
-                        'NOC',
+                        'MASS_RECOVERY',
                         '/network',
-                        'SNMP_TRAP',
+                        'MASS_RECOVERY',
                         true,
                         'SNMP_TRAP'
                     );

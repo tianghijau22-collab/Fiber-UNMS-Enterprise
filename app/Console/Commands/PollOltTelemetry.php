@@ -828,15 +828,17 @@ class PollOltTelemetry extends Command
                 $pctDown = $found > 0 ? round((($found - $onlineCount) / $found) * 100) : 100;
                 $totalTerdampakText = "🔴 <b>" . ($found - $onlineCount) . " dari {$found} Pelanggan ({$pctDown}% Terdampak)</b>";
 
-                TelegramService::send(
-                    "🚨🚨 ALARM GANGGUAN MASSAL INTERFACE 🚨🚨",
+                \App\Models\AppNotification::notifyAll(
+                    "🚨 ALARM GANGGUAN MASSAL: Interface {$fullP}",
                     "<b>• OLT:</b> {$oltName}\n" .
                     "<b>• Interface / Port:</b> <code>{$fullP}</code>\n" .
                     "<b>• Penyebab:</b> Kabel Putus / Masalah lainnya\n" .
                     "<b>• Total Terdampak:</b> {$totalTerdampakText}\n\n" .
                     "<b>Daftar Pelanggan Terdampak:</b>\n{$sampleListText}",
-                    'NOC',
-                    null,
+                    'MASS_OUTAGE',
+                    '/network',
+                    'MASS_OUTAGE',
+                    true,
                     'POLL_TELEMETRY'
                 );
 
@@ -952,16 +954,18 @@ class PollOltTelemetry extends Command
                     $totalKlienText = "<b>{$onlineCount} dari {$found} Pelanggan Pulih Online</b> (🔴 {$losCount} Klien Masih LOS)";
                 }
 
-                TelegramService::send(
-                    "🟢🟢 PEMULIHAN GANGGUAN MASSAL INTERFACE 🟢🟢",
+                \App\Models\AppNotification::notifyAll(
+                    "🟢 PEMULIHAN GANGGUAN MASSAL: Interface {$fullP}",
                     "<b>• OLT:</b> {$oltName}\n" .
                     "<b>• Interface / Port:</b> <code>{$fullP}</code>\n" .
                     "<b>• Status:</b> 🟢 <b>JALUR ON</b>\n" .
                     "<b>• Klien Pulih:</b> {$totalKlienText}\n\n" .
                     "<b>Daftar Pelanggan Pulih & Nilai Redaman:</b>\n{$recListText}\n\n" .
                     "<b>Keterangan:</b> Sinyal optik pada interface <code>{$fullP}</code> telah stabil dan normal kembali.",
-                    'NOC',
-                    null,
+                    'MASS_RECOVERY',
+                    '/network',
+                    'MASS_RECOVERY',
+                    true,
                     'POLL_TELEMETRY'
                 );
             }

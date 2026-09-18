@@ -327,12 +327,11 @@ export default function SystemAlertChat() {
   }, [messages]);
 
   const filterButtons = [
-    { id: 'ALL', label: `Semua (${stats.total_all})`, icon: null, activeCls: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' },
-    { id: 'TRAP', label: 'SNMP Trap', icon: <IconZap className="w-3 h-3 text-purple-500" />, activeCls: 'bg-purple-600 text-white shadow-sm' },
-    { id: 'POLL', label: 'Polling Telemetri', icon: <IconRefresh className="w-3 h-3 text-amber-500" />, activeCls: 'bg-amber-600 text-white shadow-sm' },
-    { id: 'OUTAGE', label: 'Gangguan Massal', icon: <IconShieldAlert className="w-3 h-3 text-rose-500" />, activeCls: 'bg-rose-600 text-white shadow-sm' },
-    { id: 'RECOVERY', label: 'Pemulihan (UP)', icon: <IconCheckCircle className="w-3 h-3 text-emerald-500" />, activeCls: 'bg-emerald-600 text-white shadow-sm' },
-    { id: 'SYSTEM', label: 'Sistem & Tiket', icon: <IconActivity className="w-3 h-3 text-indigo-500" />, activeCls: 'bg-indigo-600 text-white shadow-sm' },
+    { id: 'ALL', label: `Semua (${stats.total_all || 0})`, icon: null, activeCls: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' },
+    { id: 'MASS_OUTAGE', label: `🚨 Gangguan Massal (${stats.mass_outages_today || 0})`, icon: <IconShieldAlert className="w-3 h-3 text-rose-500" />, activeCls: 'bg-rose-600 text-white shadow-sm' },
+    { id: 'TRAP_INDIVIDUAL', label: `⚡ Alert Perorangan (${stats.trap_individual_today || 0})`, icon: <IconZap className="w-3 h-3 text-purple-500" />, activeCls: 'bg-purple-600 text-white shadow-sm' },
+    { id: 'POLL', label: `🔄 Polling Telemetri (${stats.polling_today || 0})`, icon: <IconRefresh className="w-3 h-3 text-amber-500" />, activeCls: 'bg-amber-600 text-white shadow-sm' },
+    { id: 'RECOVERY', label: `🟢 Pemulihan (${stats.recovery_today || 0})`, icon: <IconCheckCircle className="w-3 h-3 text-emerald-500" />, activeCls: 'bg-emerald-600 text-white shadow-sm' },
   ];
 
   return (
@@ -473,9 +472,10 @@ export default function SystemAlertChat() {
 
             const msg = item.data;
             const isRecovery = msg.is_recovery || /PEMULIHAN|PULIH|RECOVERY|RESTORED|RESOLVED|NORMAL/i.test(msg.title);
-            const isOutage = !isRecovery && (msg.is_outage || /GANGGUAN|ALARM|LOS|DOWN|PUTUS|DYING GASP|CRITICAL/i.test(msg.title));
-            const isTrap = msg.source === 'SNMP_TRAP';
-            const isPoll = msg.source === 'POLL_TELEMETRY';
+            const isMassOutage = !isRecovery && (msg.type === 'MASS_OUTAGE' || /GANGGUAN MASSAL/i.test(msg.title));
+            const isTrapIndividual = !isRecovery && !isMassOutage && (msg.type === 'TRAP_INDIVIDUAL' || msg.source === 'SNMP_TRAP');
+            const isPoll = !isRecovery && !isMassOutage && !isTrapIndividual && (msg.source === 'POLL_TELEMETRY');
+            const isOutage = !isRecovery && (isMassOutage || msg.is_outage || /GANGGUAN|ALARM|LOS|DOWN|PUTUS|DYING GASP|CRITICAL/i.test(msg.title));
 
             // Distinctive Enterprise Card Styling with Left Border Accent
             let cardAccentBorder = 'border-l-4 border-l-slate-400 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900';
@@ -492,14 +492,14 @@ export default function SystemAlertChat() {
               bodyBg = 'bg-emerald-50/70 dark:bg-slate-950 border-emerald-200/80 dark:border-emerald-950';
               avatarCls = 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800';
               badgeIcon = <IconCheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
-            } else if (isOutage) {
-              cardAccentBorder = 'border-l-4 border-l-rose-500 border border-rose-300/80 dark:border-rose-800 bg-white dark:bg-slate-900 shadow-2xs';
-              headerBg = 'bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border-b border-rose-200 dark:border-rose-900/60';
-              titleColor = 'text-rose-600 dark:text-rose-400 font-extrabold';
+            } else if (isMassOutage) {
+              cardAccentBorder = 'border-l-4 border-l-rose-600 border border-rose-300/80 dark:border-rose-800 bg-white dark:bg-slate-900 shadow-sm';
+              headerBg = 'bg-rose-100/80 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border-b border-rose-200 dark:border-rose-900/60';
+              titleColor = 'text-rose-600 dark:text-rose-400 font-black tracking-tight';
               bodyBg = 'bg-rose-50/70 dark:bg-slate-950 border-rose-200/80 dark:border-rose-950';
-              avatarCls = 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-800';
+              avatarCls = 'bg-rose-200 dark:bg-rose-900 text-rose-700 dark:text-rose-300 border-rose-400 dark:border-rose-700 animate-pulse';
               badgeIcon = <IconShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
-            } else if (isTrap) {
+            } else if (isTrapIndividual) {
               cardAccentBorder = 'border-l-4 border-l-purple-500 border border-purple-200/80 dark:border-purple-800 bg-white dark:bg-slate-900 shadow-2xs';
               headerBg = 'bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border-b border-purple-200 dark:border-purple-900/60';
               titleColor = 'text-purple-600 dark:text-purple-400 font-bold';
@@ -533,9 +533,9 @@ export default function SystemAlertChat() {
                   
                   {/* Card Header */}
                   <div className={`px-4 py-2.5 ${headerBg} flex items-center justify-between`}>
-                    <div className="flex items-center space-x-1.5">
-                      <span className="text-[13px] sm:text-[13.5px] font-bold text-slate-800 dark:text-slate-200 capitalize tracking-tight">
-                        alert monitoring sistem
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[11.5px] sm:text-[12px] font-extrabold tracking-wider uppercase flex items-center gap-1.5">
+                        {msg.source_short_badge || 'ALERT MONITORING SISTEM'}
                       </span>
                     </div>
 

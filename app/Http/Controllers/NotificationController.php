@@ -391,24 +391,21 @@ class NotificationController extends Controller
             ->orderBy('created_at', 'desc');
 
         if ($type !== 'ALL') {
-            if ($type === 'OUTAGE') {
+            if ($type === 'MASS_OUTAGE' || $type === 'OUTAGE') {
                 $query->where(function ($q) {
-                    $q->where('title', 'like', '%GANGGUAN MASSAL%')
-                      ->orWhere('title', 'like', '%ALARM%')
-                      ->orWhere('title', 'like', '%LOS%')
-                      ->orWhere('title', 'like', '%DOWN%');
-                });
-            } elseif ($type === 'RECOVERY') {
+                    $q->where('type', 'MASS_OUTAGE')
+                      ->orWhere('title', 'like', '%GANGGUAN MASSAL%');
+                })->where('title', 'not like', '%PEMULIHAN%');
+            } elseif ($type === 'TRAP_INDIVIDUAL' || $type === 'TRAP') {
                 $query->where(function ($q) {
-                    $q->where('title', 'like', '%PEMULIHAN%')
-                      ->orWhere('title', 'like', '%PULIH%')
-                      ->orWhere('title', 'like', '%RECOVERY%');
-                });
-            } elseif ($type === 'TRAP') {
-                $query->where(function ($q) {
-                    $q->where('icon', 'SNMP_TRAP')
-                      ->orWhere('body', 'like', '%SNMP Trap%')
-                      ->orWhere('body', 'like', '%#TRAP%');
+                    $q->where('type', 'TRAP_INDIVIDUAL')
+                      ->orWhere(function ($sub) {
+                          $sub->where('icon', 'SNMP_TRAP')
+                              ->where('title', 'not like', '%GANGGUAN MASSAL%')
+                              ->where('title', 'not like', '%PEMULIHAN%')
+                              ->where('type', '!=', 'MASS_OUTAGE')
+                              ->where('type', '!=', 'MASS_RECOVERY');
+                      });
                 });
             } elseif ($type === 'POLL') {
                 $query->where(function ($q) {
@@ -416,6 +413,14 @@ class NotificationController extends Controller
                       ->orWhere('body', 'like', '%Jalur Prioritas Cepat%')
                       ->orWhere('body', 'like', '%FLAPPING%')
                       ->orWhere('body', 'like', '%#POLL%');
+                })->where('title', 'not like', '%GANGGUAN MASSAL%')
+                  ->where('title', 'not like', '%PEMULIHAN%');
+            } elseif ($type === 'RECOVERY') {
+                $query->where(function ($q) {
+                    $q->where('title', 'like', '%PEMULIHAN%')
+                      ->orWhere('title', 'like', '%PULIH%')
+                      ->orWhere('title', 'like', '%RECOVERY%')
+                      ->orWhere('type', 'MASS_RECOVERY');
                 });
             } else {
                 $query->where('type', $type);
@@ -436,10 +441,14 @@ class NotificationController extends Controller
             $createdCarbon = Carbon::parse($n->created_at);
             $timeStr = $createdCarbon->format('d/m/Y, H.i.s');
             
+            // Resolusi status pemulihan & gangguan massal
+            $isRecovery = str_contains($n->title, 'PEMULIHAN') || str_contains($n->title, 'PULIH') || str_contains($n->title, 'RECOVERY') || str_contains($n->title, 'NORMAL') || str_contains($n->title, 'RESTORED') || $n->type === 'MASS_RECOVERY';
+            $isMassOutage = !$isRecovery && (str_contains($n->title, 'GANGGUAN MASSAL') || $n->type === 'MASS_OUTAGE');
+
             // Resolusi identitas sumber: SNMP Trap vs Polling Telemetri
             $source = $n->icon;
-            if (!$source || $source === 'NOC' || $source === 'SYSTEM') {
-                if (str_contains($n->body, 'SNMP Trap') || str_contains($n->title, 'SNMP Trap') || str_contains($n->body, '#TRAP')) {
+            if (!$source || in_array($source, ['NOC', 'SYSTEM', 'MASS_OUTAGE', 'MASS_RECOVERY'])) {
+                if ($n->type === 'TRAP_INDIVIDUAL' || str_contains($n->body, 'SNMP Trap') || str_contains($n->title, 'SNMP Trap') || str_contains($n->body, '#TRAP')) {
                     $source = 'SNMP_TRAP';
                 } elseif (str_contains($n->body, 'Jalur Prioritas Cepat') || str_contains($n->title, 'FLAPPING') || str_contains($n->body, '#POLL') || str_contains($n->body, 'redaman jatuh ke -40.00 dBm')) {
                     $source = 'POLL_TELEMETRY';
@@ -448,22 +457,30 @@ class NotificationController extends Controller
                 }
             }
 
-            $sourceLabel = match($source) {
-                'SNMP_TRAP'      => '⚡ SNMP Trap Engine (Realtime Event)',
-                'POLL_TELEMETRY' => '🔄 Polling Telemetri Daemon',
-                default          => '🖥️ Sistem Otomatis UNMS',
+            $isTrapIndividual = !$isRecovery && !$isMassOutage && ($n->type === 'TRAP_INDIVIDUAL' || $source === 'SNMP_TRAP');
+
+            $sourceLabel = match(true) {
+                $isMassOutage     => '🚨 Gangguan Massal (ODP / Feeder)',
+                $isRecovery       => '🟢 Pemulihan Sistem & Layanan',
+                $isTrapIndividual => '⚡ SNMP Trap Engine (Alert Perorangan)',
+                $source === 'POLL_TELEMETRY' => '🔄 Polling Telemetri Daemon',
+                default           => '🖥️ Sistem Otomatis UNMS',
             };
 
-            $sourceCode = match($source) {
-                'SNMP_TRAP'      => '#TRAP',
-                'POLL_TELEMETRY' => '#POLL',
-                default          => '#UNMS',
+            $sourceCode = match(true) {
+                $isMassOutage     => '#MASS_OUTAGE',
+                $isRecovery       => '#RECOVERY',
+                $isTrapIndividual => '#TRAP',
+                $source === 'POLL_TELEMETRY' => '#POLL',
+                default           => '#UNMS',
             };
 
-            $sourceShortBadge = match($source) {
-                'SNMP_TRAP'      => 'SNMP TRAP',
-                'POLL_TELEMETRY' => 'POLLING TELEMETRI',
-                default          => 'SISTEM UNMS',
+            $sourceShortBadge = match(true) {
+                $isMassOutage     => '🚨 GANGGUAN MASSAL',
+                $isRecovery       => '🟢 PEMULIHAN',
+                $isTrapIndividual => '⚡ ALERT PERORANGAN',
+                $source === 'POLL_TELEMETRY' => '🔄 POLLING TELEMETRI',
+                default           => 'SISTEM UNMS',
             };
 
             // Bersihkan format lama (hapus Diagnosa NOC, Tindakan, ODC Induk, dan footer lama)
@@ -472,7 +489,7 @@ class NotificationController extends Controller
             $cleanBody = preg_replace('/\n*<b>Diagnosa NOC:<\/b>.*?(?=\n\n|\z|\n<b>)/s', '', $cleanBody);
             $cleanBody = preg_replace('/\n*<b>Tindakan:<\/b>.*?(?=\n\n|\z|\n<b>)/s', '', $cleanBody);
             $cleanBody = preg_replace('/<b>• ODC Induk:<\/b>.*?\n/', '', $cleanBody);
-            $cleanBody = preg_replace('/\n*<code>\[#(?:POLL|TRAP|UNMS)\]<\/code>$/s', '', $cleanBody);
+            $cleanBody = preg_replace('/\n*<code>\[#(?:POLL|TRAP|UNMS|MASS_OUTAGE|RECOVERY)\]<\/code>$/s', '', $cleanBody);
             $cleanBody = trim($cleanBody);
             $cleanBody = str_replace('JALUR TRANSMISI UTAMA PULIH NORMAL', 'JALUR ON', $cleanBody);
             $cleanBody = str_replace('Kabel Feeder Putus / SFP Port Down', 'Kabel Putus / Masalah lainnya', $cleanBody);
@@ -485,8 +502,7 @@ class NotificationController extends Controller
             $telegramText .= "────────────────────────────\n\n";
             $telegramText .= $cardBody;
 
-            $isRecovery = str_contains($n->title, 'PEMULIHAN') || str_contains($n->title, 'PULIH') || str_contains($n->title, 'RECOVERY') || str_contains($n->title, 'NORMAL') || str_contains($n->title, 'RESTORED');
-            $isOutage = !$isRecovery && (str_contains($n->title, 'GANGGUAN') || str_contains($n->title, 'ALARM') || str_contains($n->title, 'LOS') || str_contains($n->title, 'DOWN') || str_contains($n->title, 'PUTUS') || str_contains($n->title, 'DYING GASP') || str_contains($n->title, 'CRITICAL'));
+            $isOutage = !$isRecovery && ($isMassOutage || str_contains($n->title, 'GANGGUAN') || str_contains($n->title, 'ALARM') || str_contains($n->title, 'LOS') || str_contains($n->title, 'DOWN') || str_contains($n->title, 'PUTUS') || str_contains($n->title, 'DYING GASP') || str_contains($n->title, 'CRITICAL'));
 
             return [
                 'id'                 => $n->id,
@@ -513,23 +529,48 @@ class NotificationController extends Controller
 
         // Metrik Statistik
         $todayStart = now()->startOfDay();
+        $totalAll = AppNotification::count();
         $totalToday = AppNotification::where('created_at', '>=', $todayStart)->count();
-        $outagesToday = AppNotification::where('created_at', '>=', $todayStart)
+
+        $massOutagesToday = AppNotification::where('created_at', '>=', $todayStart)
             ->where(function ($q) {
-                $q->where('title', 'like', '%GANGGUAN%')
-                  ->orWhere('title', 'like', '%ALARM%')
-                  ->orWhere('title', 'like', '%LOS%')
-                  ->orWhere('title', 'like', '%DOWN%');
+                $q->where('type', 'MASS_OUTAGE')
+                  ->orWhere('title', 'like', '%GANGGUAN MASSAL%');
             })
             ->where('title', 'not like', '%PEMULIHAN%')
-            ->where('title', 'not like', '%PULIH%')
             ->count();
+
+        $trapIndividualToday = AppNotification::where('created_at', '>=', $todayStart)
+            ->where(function ($q) {
+                $q->where('type', 'TRAP_INDIVIDUAL')
+                  ->orWhere(function ($sub) {
+                      $sub->where('icon', 'SNMP_TRAP')
+                          ->where('title', 'not like', '%GANGGUAN MASSAL%')
+                          ->where('title', 'not like', '%PEMULIHAN%')
+                          ->where('type', '!=', 'MASS_OUTAGE')
+                          ->where('type', '!=', 'MASS_RECOVERY');
+                  });
+            })
+            ->count();
+
+        $pollingToday = AppNotification::where('created_at', '>=', $todayStart)
+            ->where(function ($q) {
+                $q->where('icon', 'POLL_TELEMETRY')
+                  ->orWhere('body', 'like', '%Jalur Prioritas Cepat%')
+                  ->orWhere('body', 'like', '%FLAPPING%');
+            })
+            ->where('title', 'not like', '%GANGGUAN MASSAL%')
+            ->where('title', 'not like', '%PEMULIHAN%')
+            ->count();
+
         $recoveryToday = AppNotification::where('created_at', '>=', $todayStart)
             ->where(function ($q) {
                 $q->where('title', 'like', '%PEMULIHAN%')
                   ->orWhere('title', 'like', '%PULIH%')
-                  ->orWhere('title', 'like', '%RECOVERY%');
-            })->count();
+                  ->orWhere('title', 'like', '%RECOVERY%')
+                  ->orWhere('type', 'MASS_RECOVERY');
+            })
+            ->count();
 
         $lastNotif = AppNotification::latest('created_at')->first();
 
@@ -537,12 +578,14 @@ class NotificationController extends Controller
             'status'   => 'success',
             'messages' => $formatted,
             'stats'    => [
-                'total_all'        => AppNotification::count(),
-                'total_today'      => $totalToday,
-                'outages_today'    => $outagesToday,
-                'recovery_today'   => $recoveryToday,
-                'last_alert_at'    => $lastNotif?->created_at?->toIso8601String(),
-                'last_alert_ago'   => $lastNotif ? Carbon::parse($lastNotif->created_at)->diffForHumans() : 'Belum ada',
+                'total_all'             => $totalAll,
+                'total_today'           => $totalToday,
+                'mass_outages_today'    => $massOutagesToday,
+                'trap_individual_today' => $trapIndividualToday,
+                'polling_today'         => $pollingToday,
+                'recovery_today'        => $recoveryToday,
+                'last_alert_at'         => $lastNotif?->created_at?->toIso8601String(),
+                'last_alert_ago'        => $lastNotif ? Carbon::parse($lastNotif->created_at)->diffForHumans() : 'Belum ada',
             ],
             'bot_info' => [
                 'name'     => 'Fiber-UNMS NOC Alert Bot',
