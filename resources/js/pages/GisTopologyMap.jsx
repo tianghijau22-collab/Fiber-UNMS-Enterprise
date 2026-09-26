@@ -1156,7 +1156,7 @@ function LeafletMap({
     if (highlightGroup) highlightGroup.clearLayers();
 
     const zoom = map.getZoom();
-    const zoomTier = zoom >= 15 ? 'badge' : (zoom >= 13 ? 'circle-only' : 'dot');
+    const zoomTier = zoom >= 17 ? 'badge' : (zoom >= 15 ? 'circle-only' : 'dot');
     const tierChanged = currentZoomTierRef.current !== zoomTier;
     currentZoomTierRef.current = zoomTier;
 
@@ -1219,8 +1219,9 @@ function LeafletMap({
 
       const opticalDbmText = formatCompactOptical(node, effStatus) || '—';
 
-      const isBadgeMode = zoomTier === 'badge' || isSelected || isFault || node.node_type === 'POP' || node.node_type === 'ODC';
-      const isCircleMode = zoomTier !== 'dot' || isSelected || isFault || node.node_type === 'POP' || node.node_type === 'ODC';
+      const isPopOrOdc = node.node_type === 'POP' || node.node_type === 'ODC';
+      const isBadgeMode = isSelected || isFault || (isPopOrOdc ? zoom >= 15 : zoom >= 17);
+      const isCircleMode = isSelected || isFault || (isPopOrOdc ? zoom >= 13 : zoom >= 15);
 
       let existing = currentMarkers.get(id);
 
@@ -1328,13 +1329,13 @@ function LeafletMap({
     // Initial render
     renderNodes();
 
-    // Fit bounds on first render
+    // Fit bounds on first render with smart maximum zoom
     if (isFirstRenderRef.current && safeNodes.length > 0) {
       const validNodes = safeNodes.filter(n => n?.latitude && n?.longitude && parseFloat(n.latitude) !== 0);
       if (validNodes.length > 0) {
         const bounds = validNodes.map(n => [parseFloat(n.latitude), parseFloat(n.longitude)]);
         try {
-          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+          map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
         } catch { }
         isFirstRenderRef.current = false;
       }
@@ -1395,37 +1396,37 @@ function LeafletMap({
         }
 
         .gis-circle-node {
-          width: 28px;
-          height: 28px;
+          width: 26px;
+          height: 26px;
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
           border: 2px solid #10b981;
           background: #ffffff;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
           position: relative;
           transition: all 0.14s ease;
           flex-shrink: 0;
         }
         .dark .gis-circle-node {
           background: #000000;
-          box-shadow: 0 2px 8px rgba(255, 255, 255, 0.15);
+          box-shadow: 0 1px 4px rgba(255, 255, 255, 0.2);
         }
 
         .gis-circle-marker.is-pop .gis-circle-node {
-          width: 36px;
-          height: 36px;
+          width: 34px;
+          height: 34px;
           border-width: 2.5px;
         }
         .gis-circle-marker.is-odc .gis-circle-node {
-          width: 32px;
-          height: 32px;
+          width: 30px;
+          height: 30px;
           border-width: 2px;
         }
 
         .gis-circle-icon {
-          font-size: 8.5px;
+          font-size: 8px;
           font-weight: 900;
           letter-spacing: -0.02em;
           color: #000000;
@@ -1435,21 +1436,21 @@ function LeafletMap({
           color: #ffffff;
         }
         .gis-circle-marker.is-pop .gis-circle-icon {
-          font-size: 11px;
+          font-size: 10.5px;
           color: #4f46e5;
         }
         .dark .gis-circle-marker.is-pop .gis-circle-icon {
           color: #818cf8;
         }
         .gis-circle-marker.is-odc .gis-circle-icon {
-          font-size: 9.5px;
+          font-size: 9px;
           color: #2563eb;
         }
         .dark .gis-circle-marker.is-odc .gis-circle-icon {
           color: #60a5fa;
         }
         .gis-circle-marker.is-odp .gis-circle-icon {
-          font-size: 8.5px;
+          font-size: 8px;
           color: #059669;
         }
         .dark .gis-circle-marker.is-odp .gis-circle-icon {
@@ -1473,27 +1474,26 @@ function LeafletMap({
           justify-content: center;
           gap: 1.5px;
           margin-top: 3px;
-          padding: 2.5px 7px;
-          border-radius: 6px;
-          background: rgba(255, 255, 255, 0.98);
-          backdrop-filter: blur(4px);
-          border: 1px solid rgba(0, 0, 0, 0.5);
-          box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2);
+          padding: 2px 6px;
+          border-radius: 5px;
+          background: #ffffff;
+          border: 1px solid rgba(0, 0, 0, 0.6);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
           white-space: nowrap;
-          max-width: 130px;
+          max-width: 125px;
           text-align: center;
         }
         .dark .gis-circle-stack {
-          background: rgba(0, 0, 0, 0.95);
-          border-color: rgba(255, 255, 255, 0.4);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+          background: #000000;
+          border-color: rgba(255, 255, 255, 0.5);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
         }
 
         .gis-circle-name {
-          font-size: 10.5px;
+          font-size: 10px;
           font-weight: 800;
           color: #000000;
-          max-width: 115px;
+          max-width: 110px;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -1505,10 +1505,10 @@ function LeafletMap({
 
         .gis-circle-dbm {
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-          font-size: 9px;
+          font-size: 8.5px;
           font-weight: 800;
-          padding: 1px 4.5px;
-          border-radius: 4px;
+          padding: 1px 4px;
+          border-radius: 3px;
           line-height: 1.2;
           border: 1px solid transparent;
           white-space: nowrap;
