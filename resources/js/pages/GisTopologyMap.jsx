@@ -1584,13 +1584,6 @@ function LeafletMap({
 ══════════════════════════════════════════════════════════════════ */
 function GisStatCards({ nodes = [] }) {
   const safeNodes = Array.isArray(nodes) ? nodes : (nodes && typeof nodes === 'object' ? Object.values(nodes) : []);
-  const pops = safeNodes.filter(n => n?.node_type === 'POP');
-  const odcs = safeNodes.filter(n => n?.node_type === 'ODC');
-  const odps = safeNodes.filter(n => n?.node_type === 'ODP');
-
-  const activeOdps = odps.filter(n => n?.used_ports > 0 && n?.optical_power_dbm != null);
-  const odpOptValues = activeOdps.map(n => parseFloat(n.optical_power_dbm));
-  const avgOdpDbm = odpOptValues.length > 0 ? (odpOptValues.reduce((a, b) => a + b, 0) / odpOptValues.length).toFixed(2) : '—';
 
   // Count optical loss faults (total loss or damaged)
   const lossNodes = safeNodes.filter(n => {
@@ -1600,38 +1593,37 @@ function GisStatCards({ nodes = [] }) {
   });
 
   const inactiveNodes = safeNodes.filter(n => n?.status === 'inactive');
-
-  const cards = [
-    { label: 'POP Central', value: pops.length, sub: `${pops.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Core Headend', badgeCls: 'bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20' },
-    { label: 'ODC Cabinet', value: odcs.length, sub: `${odcs.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Distribution', badgeCls: 'bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20' },
-    { label: 'ODP Point', value: odps.length, sub: `${odps.filter(n => n.status === 'active').length} Total Point ODP`, badge: 'Access Terminal', badgeCls: 'bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20' },
-    { 
-      label: 'Gangguan Loss Total', 
-      value: lossNodes.length, 
-      sub: inactiveNodes.length > 0 ? `${lossNodes.length} Total Loss • ${inactiveNodes.length} Tidak Aktif` : (lossNodes.length > 0 ? 'Perlu Investigasi Lapangan' : 'Seluruh Jalur Sehat'), 
-      badge: lossNodes.length > 0 ? 'Gangguan' : (inactiveNodes.length > 0 ? `${inactiveNodes.length} Nonaktif` : 'Aman Normal'), 
-      badgeCls: lossNodes.length > 0 
-        ? 'text-rose-600 dark:text-rose-400 font-bold border border-rose-500/40' 
-        : 'text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/40' 
-    },
-  ];
+  const isLoss = lossNodes.length > 0;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 stagger-enter">
-      {cards.map((c, i) => (
-        <div key={i} className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-2xs p-4 transition-colors duration-300">
-          <div className="flex justify-between items-start mb-1">
-            <span className={`text-2xl font-black leading-none ${c.label.includes('Gangguan') && c.value > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-black dark:text-white'}`}>
-              {c.value}
-            </span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${c.badgeCls}`}>
-              {c.badge}
-            </span>
+    <div className="w-full">
+      <div className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-2xs p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors duration-300">
+        <div className="flex items-center gap-3">
+          <div className={`w-3 h-3 rounded-full shrink-0 ${isLoss ? 'bg-rose-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`} />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className={`text-2xl font-black leading-none ${isLoss ? 'text-rose-600 dark:text-rose-400' : 'text-black dark:text-white'}`}>
+                {lossNodes.length}
+              </span>
+              <p className="text-sm font-bold text-black dark:text-white">Gangguan Loss Total</p>
+            </div>
+            <p className="text-xs text-black/70 dark:text-white/70 mt-0.5 font-medium">
+              {inactiveNodes.length > 0
+                ? `${lossNodes.length} Total Loss • ${inactiveNodes.length} Tidak Aktif (Nonaktif)`
+                : (isLoss ? 'Perlu Investigasi Lapangan Pada Titik ODP / Jalur Terkait' : 'Seluruh Jalur Distribusi FO & Titik ODP Beroperasi Normal')}
+            </p>
           </div>
-          <p className="text-xs font-bold text-black dark:text-white mt-1">{c.label}</p>
-          <p className="text-[10px] text-black/70 dark:text-white/70 mt-0.5 font-medium">{c.sub}</p>
         </div>
-      ))}
+        <div className="flex items-center gap-2 self-start sm:self-center">
+          <span className={`text-xs font-bold px-3 py-1.5 rounded-md ${
+            isLoss 
+              ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/40' 
+              : 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/40'
+          }`}>
+            {isLoss ? 'Perhatian: Ada Gangguan' : 'Sistem Aman Normal'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2163,8 +2155,8 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   return (
     <div className="space-y-5 text-black dark:text-white">
       {/* Header Banner */}
-      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-5 rounded-lg shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
-        <div>
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-colors duration-300">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <h3 className="text-xl font-bold text-black dark:text-white tracking-tight font-sans">
@@ -2173,102 +2165,108 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Import KML / KMZ Button */}
-          <button
-            onClick={() => setKmlImportModal(true)}
-            className="px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm"
-            title="Import Data Jaringan dari Google Earth (.kml / .kmz)"
-          >
-            <span>Import KML / KMZ</span>
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full lg:w-auto">
+          {/* Action Buttons Grid (2 columns on mobile, flex on desktop) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:items-center gap-2 w-full sm:w-auto">
+            {/* Import KML / KMZ Button */}
+            <button
+              onClick={() => setKmlImportModal(true)}
+              className="w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm text-center"
+              title="Import Data Jaringan dari Google Earth (.kml / .kmz)"
+            >
+              <span>Import KML</span>
+            </button>
 
-          {/* Mode Satelit / Mode Vektor Button */}
-          <button
-            onClick={() => setIsSatellite(!isSatellite)}
-            className="px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10"
-            title="Ganti Tampilan Peta (Satelit / Vektor)"
-          >
-            <span>{isSatellite ? 'Mode Vektor' : 'Mode Satelit'}</span>
-          </button>
+            {/* Mode Satelit / Mode Vektor Button */}
+            <button
+              onClick={() => setIsSatellite(!isSatellite)}
+              className="w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 text-center"
+              title="Ganti Tampilan Peta (Satelit / Vektor)"
+            >
+              <span>{isSatellite ? 'Mode Vektor' : 'Mode Satelit'}</span>
+            </button>
 
-          {/* Pusatkan Peta Button */}
-          <button
-            onClick={() => {
-              if (externalRecenterRef.current) {
-                externalRecenterRef.current();
-              }
-            }}
-            className="px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10"
-            title="Pusatkan Kamera Peta ke Seluruh Node"
-          >
-            <span>Pusatkan Peta</span>
-          </button>
+            {/* Pusatkan Peta Button */}
+            <button
+              onClick={() => {
+                if (externalRecenterRef.current) {
+                  externalRecenterRef.current();
+                }
+              }}
+              className="w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 text-center"
+              title="Pusatkan Kamera Peta ke Seluruh Node"
+            >
+              <span>Pusatkan Peta</span>
+            </button>
 
-          {/* Target Location / Check Coordinates Button */}
-          <button
-            onClick={() => setTargetCoordModal(true)}
-            className={`px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
-              targetPin
-                ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-sm'
-                : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
-            }`}
-            title="Cek lokasi rumah pelanggan dari koordinat GPS"
-          >
-            <span>{targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat Rumah'}</span>
-          </button>
-
-          {/* Dedicated Fullscreen Page Button */}
-          <button
-            onClick={() => navigate('/gis-map/fullscreen')}
-            className="px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 shadow-2xs"
-            title="Buka Peta GIS di Halaman Khusus Layar Penuh (100% Layar Bersih)"
-          >
-            <span>Buka Layar Penuh</span>
-          </button>
-
-          {/* Ruler Button */}
-          <button
-            onClick={() => {
-              const next = !rulerActive;
-              setRulerActive(next);
-              if (!next) setRulerPoints([]);
-            }}
-            className={`px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
-              rulerActive
-                ? 'bg-amber-500 text-black border-amber-400 shadow-sm'
-                : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
-            }`}
-          >
-            <span>{rulerActive ? 'Tutup Penggaris' : 'Ukur Jarak FO'}</span>
-          </button>
-
-          <button
-            onClick={() => setActiveView('map')}
-            className={`px-4 py-2 rounded-md text-xs font-bold border transition-colors cursor-pointer ${activeView === 'map'
-              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-              : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
+            {/* Target Location / Check Coordinates Button */}
+            <button
+              onClick={() => setTargetCoordModal(true)}
+              className={`w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer text-center ${
+                targetPin
+                  ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-sm'
+                  : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
               }`}
-          >
-            Peta GIS Interaktif
-          </button>
-          <button
-            onClick={() => setActiveView('list')}
-            className={`px-4 py-2 rounded-md text-xs font-bold border transition-colors cursor-pointer ${activeView === 'list'
-              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-              : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
+              title="Cek lokasi rumah pelanggan dari koordinat GPS"
+            >
+              <span>{targetPin ? 'Patokan Aktif' : 'Cek Koordinat'}</span>
+            </button>
+
+            {/* Dedicated Fullscreen Page Button */}
+            <button
+              onClick={() => navigate('/gis-map/fullscreen')}
+              className="w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 shadow-2xs text-center"
+              title="Buka Peta GIS di Halaman Khusus Layar Penuh (100% Layar Bersih)"
+            >
+              <span>Layar Penuh</span>
+            </button>
+
+            {/* Ruler Button */}
+            <button
+              onClick={() => {
+                const next = !rulerActive;
+                setRulerActive(next);
+                if (!next) setRulerPoints([]);
+              }}
+              className={`w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer text-center ${
+                rulerActive
+                  ? 'bg-amber-500 text-black border-amber-400 shadow-sm'
+                  : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
               }`}
-          >
-            Tabel Telemetry Redaman
-          </button>
+            >
+              <span>{rulerActive ? 'Tutup Ukur' : 'Ukur Jarak FO'}</span>
+            </button>
+          </div>
+
+          {/* View Tab Switchers (2 columns on mobile) */}
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 pt-1 sm:pt-0 sm:border-l sm:border-black/20 sm:dark:border-white/20 sm:pl-2.5 w-full sm:w-auto">
+            <button
+              onClick={() => setActiveView('map')}
+              className={`w-full sm:w-auto px-3.5 py-2 rounded-md text-xs font-bold border transition-colors cursor-pointer text-center ${activeView === 'map'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
+                }`}
+            >
+              Peta GIS
+            </button>
+            <button
+              onClick={() => setActiveView('list')}
+              className={`w-full sm:w-auto px-3.5 py-2 rounded-md text-xs font-bold border transition-colors cursor-pointer text-center ${activeView === 'list'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
+                }`}
+            >
+              Tabel Redaman
+            </button>
+          </div>
         </div>
       </div>
 
       <GisStatCards nodes={safeAllNodes} />
 
       {/* Main Controls Filter Bar with Smart Search & Fault Filter */}
-      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 rounded-lg shadow-2xs transition-colors duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3 relative">
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 rounded-lg shadow-2xs transition-colors duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
           {/* Smart Search Input with Floating Dropdown Suggestions */}
           <div className="relative w-full sm:w-72">
             <input
@@ -2317,52 +2315,57 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             )}
           </div>
 
-          <select
-            value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value)}
-            className="px-3 py-2 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-          >
-            <option value="">Semua Tipe Node</option>
-            <option value="POP">POP Central</option>
-            <option value="ODC">ODC Cabinet</option>
-            <option value="ODP">ODP Point</option>
-          </select>
+          {/* Filter Dropdowns in clean 2 columns on mobile */}
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              className="w-full sm:w-auto px-3 py-2 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            >
+              <option value="">Semua Tipe Node</option>
+              <option value="POP">POP Central</option>
+              <option value="ODC">ODC Cabinet</option>
+              <option value="ODP">ODP Point</option>
+            </select>
 
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-          >
-            <option value="">Semua Status Node</option>
-            <option value="active">Aktif Normal</option>
-            <option value="active_loss">Aktif (Gangguan Loss)</option>
-            <option value="no_clients">Belum Ada Pelanggan</option>
-            <option value="damaged">Rusak / Loss Putus</option>
-            <option value="inactive">Tidak Aktif (Nonaktif)</option>
-            <option value="maintenance">Maintenance</option>
-          </select>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="w-full sm:w-auto px-3 py-2 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            >
+              <option value="">Semua Status Node</option>
+              <option value="active">Aktif Normal</option>
+              <option value="active_loss">Aktif (Gangguan Loss)</option>
+              <option value="no_clients">Belum Ada Pelanggan</option>
+              <option value="damaged">Rusak / Loss Putus</option>
+              <option value="inactive">Tidak Aktif (Nonaktif)</option>
+              <option value="maintenance">Maintenance</option>
+            </select>
+          </div>
+        </div>
 
+        {/* Filter Quick Action & Telemetry Status in clean 2 columns on mobile */}
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full lg:w-auto">
           {/* Quick Filter: Hanya Gangguan Loss */}
           <button
             type="button"
             onClick={() => setFaultOnlyFilter(!faultOnlyFilter)}
-            className={`px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
+            className={`w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer text-center ${
               faultOnlyFilter
                 ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
                 : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20'
             }`}
           >
-            <span>Hanya Gangguan Loss</span>
+            <span>Hanya Gangguan</span>
           </button>
-        </div>
 
-        <div className="flex items-center space-x-3">
+          {/* Telemetry Live Polling Button */}
           <button
             onClick={() => setLivePolling(!livePolling)}
-            className="px-3 py-2 rounded-md text-xs font-bold border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 text-black dark:text-white transition-colors flex items-center gap-1.5 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10"
+            className="w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 text-black dark:text-white transition-colors flex items-center justify-center gap-1.5 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 text-center"
           >
             <span className={`w-2 h-2 rounded-full ${livePolling ? 'bg-emerald-500 animate-pulse' : 'bg-black/40 dark:bg-white/40'}`} />
-            <span>{livePolling ? 'Telemetry Live' : 'Telemetry Paused'}</span>
+            <span>{livePolling ? 'Telemetry Live' : 'Paused'}</span>
           </button>
         </div>
       </div>
