@@ -744,6 +744,7 @@ function LeafletMap({
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const leafletRef = useRef(null);
+  const canvasRendererRef = useRef(null);
   const tileLayerRef = useRef(null);
   const cablesLayerGroupRef = useRef(null);
   const nodesLayerGroupRef = useRef(null);
@@ -753,7 +754,6 @@ function LeafletMap({
   const isFirstRenderRef = useRef(true);
   const rulerActiveRef = useRef(rulerActive);
   const markersMapRef = useRef(new Map());
-  const currentZoomTierRef = useRef(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [isSatellite, setIsSatellite] = useState(true);
 
@@ -774,7 +774,7 @@ function LeafletMap({
     };
   }, [isFullscreen]);
 
-  // 1. Initialize Map Instance with SVG Renderer (ONLY ONCE ON MOUNT)
+  // 1. Initialize Map Instance with Canvas Hardware Acceleration
   useEffect(() => {
     if (mapInstanceRef.current) return;
 
@@ -794,11 +794,19 @@ function LeafletMap({
 
         const map = Lf.map(mapRef.current, {
           center: defaultCenter,
-          zoom: 15,
+          zoom: 14,
           zoomControl: false,
           scrollWheelZoom: true,
           preferCanvas: true,
+          bounceAtZoomLimits: false,
+          inertia: true,
+          inertiaDeceleration: 3000,
+          fadeAnimation: true,
+          markerZoomAnimation: true,
         });
+
+        // Initialize dedicated Canvas Renderer with generous padding for 60 FPS mobile panning
+        canvasRendererRef.current = Lf.canvas({ padding: 0.75, tolerance: 10 });
 
         // Zoom control at bottom right
         Lf.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -841,6 +849,7 @@ function LeafletMap({
         pathHighlightLayerGroupRef.current = null;
         rulerLayerGroupRef.current = null;
         targetPinLayerGroupRef.current = null;
+        canvasRendererRef.current = null;
         markersMapRef.current.clear();
       }
     };
@@ -1038,6 +1047,7 @@ function LeafletMap({
         
         // Single clean solid polyline - hardware accelerated by Canvas
         const poly = Lf.polyline(coords, {
+          renderer: canvasRendererRef.current || undefined,
           color: cableColor,
           weight: 3.5,
           opacity: 0.85,
@@ -1138,14 +1148,6 @@ function LeafletMap({
     `;
   };
 
-  const buildDotHtml = (node, effStatus, isSelected) => {
-    return `
-      <div class="gis-micro-dot ${isSelected ? 'is-selected' : ''}" style="background:${effStatus.pinBg};">
-        ${effStatus.hasRadar ? '<span class="gis-micro-ping"></span>' : ''}
-      </div>
-    `;
-  };
-
   const renderNodes = useCallback(() => {
     if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current || !nodesLayerGroupRef.current) return;
     const Lf = leafletRef.current;
@@ -1156,10 +1158,6 @@ function LeafletMap({
     if (highlightGroup) highlightGroup.clearLayers();
 
     const zoom = map.getZoom();
-    const zoomTier = zoom >= 17 ? 'badge' : (zoom >= 15 ? 'circle-only' : 'dot');
-    const tierChanged = currentZoomTierRef.current !== zoomTier;
-    currentZoomTierRef.current = zoomTier;
-
     const nodeMap = new Map();
     safeNodes.forEach(n => {
       if (n?.latitude && n?.longitude && parseFloat(n.latitude) !== 0) {
@@ -1186,6 +1184,7 @@ function LeafletMap({
           ];
 
           Lf.polyline(lineCoords, {
+            renderer: canvasRendererRef.current || undefined,
             color: '#0284c7',
             weight: 4,
             opacity: 0.9,
@@ -1196,7 +1195,7 @@ function LeafletMap({
       });
     }
 
-    // 2. High-performance Persistent Marker Diffing (Zero DOM Thrashing on Pan)
+    // 2. High-performance Hybrid Marker System: Hardware Canvas GPU for Overview + Rich DOM for Details
     const currentMarkers = markersMapRef.current;
     const nextNodeIds = new Set();
 
@@ -1220,58 +1219,55 @@ function LeafletMap({
       const opticalDbmText = formatCompactOptical(node, effStatus) || '—';
 
       const isPopOrOdc = node.node_type === 'POP' || node.node_type === 'ODC';
-      const isBadgeMode = isSelected || isFault || (isPopOrOdc ? zoom >= 15 : zoom >= 17);
-      const isCircleMode = isSelected || isFault || (isPopOrOdc ? zoom >= 13 : zoom >= 15);
+      
+      // Use DOM element only if explicitly selected, critical total loss, POP/ODC, or zoomed in very close (>=17)
+      const useDomMarker = isSelected || isFault || (isPopOrOdc ? zoom >= 14 : zoom >= 17);
+      const isBadgeMode = isSelected || isFault || (isPopOrOdc ? zoom >= 16 : zoom >= 17);
+      const markerType = useDomMarker ? (isBadgeMode ? 'dom-badge' : 'dom-circle') : 'canvas-dot';
 
       let existing = currentMarkers.get(id);
 
       if (existing) {
-        // Visual update only if properties or zoom tier changed
-        const needsIconUpdate = tierChanged || 
-          existing.isSelected !== isSelected || 
+        if (
+          existing.markerType !== markerType || 
           existing.statusKey !== effStatus.key || 
-          existing.opticalDbm !== effectiveBestPower ||
-          existing.isBadgeMode !== isBadgeMode ||
-          existing.isCircleMode !== isCircleMode;
+          existing.opticalDbm !== effectiveBestPower || 
+          existing.isSelected !== isSelected
+        ) {
+          nodesGroup.removeLayer(existing.marker);
+          existing = null;
+        } else {
+          const curLatLng = existing.marker.getLatLng();
+          if (Math.abs(curLatLng.lat - lat) > 0.000001 || Math.abs(curLatLng.lng - lng) > 0.000001) {
+            existing.marker.setLatLng([lat, lng]);
+          }
+        }
+      }
 
-        if (needsIconUpdate) {
-          const iconHtml = isCircleMode
-            ? buildCircleHtml(node, effStatus, optMeta, isSelected, isBadgeMode)
-            : buildDotHtml(node, effStatus, isSelected);
-
-          const newIcon = Lf.divIcon({
+      if (!existing) {
+        let marker;
+        if (useDomMarker) {
+          const iconHtml = buildCircleHtml(node, effStatus, optMeta, isSelected, isBadgeMode);
+          const icon = Lf.divIcon({
             className: 'gis-marker-container',
             html: iconHtml,
             iconSize: [0, 0],
             iconAnchor: [0, 0],
           });
-
-          existing.marker.setIcon(newIcon);
-          existing.isSelected = isSelected;
-          existing.statusKey = effStatus.key;
-          existing.opticalDbm = effectiveBestPower;
-          existing.isBadgeMode = isBadgeMode;
-          existing.isCircleMode = isCircleMode;
+          marker = Lf.marker([lat, lng], { icon }).addTo(nodesGroup);
+        } else {
+          // Hardware-accelerated Canvas circleMarker (0 DOM elements for 60-120 FPS mobile panning)
+          const dotRadius = isPopOrOdc ? (zoom >= 13 ? 8 : 6) : (zoom >= 15 ? 6 : (zoom >= 13 ? 4.5 : 3.5));
+          marker = Lf.circleMarker([lat, lng], {
+            renderer: canvasRendererRef.current || undefined,
+            radius: dotRadius,
+            fillColor: effStatus.pinBg,
+            color: '#ffffff',
+            weight: zoom >= 15 ? 1.8 : 1.2,
+            opacity: 0.95,
+            fillOpacity: 0.9,
+          }).addTo(nodesGroup);
         }
-
-        const curLatLng = existing.marker.getLatLng();
-        if (Math.abs(curLatLng.lat - lat) > 0.000001 || Math.abs(curLatLng.lng - lng) > 0.000001) {
-          existing.marker.setLatLng([lat, lng]);
-        }
-      } else {
-        // Create new marker once and cache
-        const iconHtml = isCircleMode
-          ? buildCircleHtml(node, effStatus, optMeta, isSelected, isBadgeMode)
-          : buildDotHtml(node, effStatus, isSelected);
-
-        const icon = Lf.divIcon({
-          className: 'gis-marker-container',
-          html: iconHtml,
-          iconSize: [0, 0],
-          iconAnchor: [0, 0],
-        });
-
-        const marker = Lf.marker([lat, lng], { icon }).addTo(nodesGroup);
 
         const tooltipSub = effStatus.hasNoClients 
           ? '<br><span style="color:#64748b;font-weight:bold;">Belum Ada Pelanggan</span>'
@@ -1281,7 +1277,7 @@ function LeafletMap({
 
         marker.bindTooltip(`<b>${node.name}</b> (${node.code})<br>Tipe: ${node.node_type} • Status: ${effStatus.label}${tooltipSub}`, {
           direction: 'top',
-          offset: [0, -18],
+          offset: [0, useDomMarker ? -18 : -8],
           opacity: 0.95,
         });
 
@@ -1297,11 +1293,10 @@ function LeafletMap({
 
         currentMarkers.set(id, {
           marker,
+          markerType,
           isSelected,
           statusKey: effStatus.key,
           opticalDbm: effectiveBestPower,
-          isBadgeMode,
-          isCircleMode,
         });
       }
     });
@@ -1315,7 +1310,7 @@ function LeafletMap({
     }
   }, [mapLoaded, safeNodes, selectedNode, tracedPath, onSelectNode, setRulerPoints]);
 
-  // 6c. Attach Smooth Viewport & Zoom Listeners (NO moveend listener = 60 FPS silky smooth panning)
+  // 6c. Attach Smooth Viewport & Zoom Listeners
   useEffect(() => {
     if (!mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
