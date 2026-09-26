@@ -1575,18 +1575,6 @@ function LeafletMap({
         className={`w-full overflow-hidden relative z-0 transition-all ${isFullscreen ? 'h-full rounded-none' : 'rounded-lg border border-black/70 dark:border-white/70 shadow-inner'}`}
         style={{ height: isFullscreen ? '100%' : '640px', minHeight: isFullscreen ? '100%' : '640px' }}
       />
-
-      {/* Floating Street View Trigger (only when a node is selected) */}
-      {selectedNode && selectedNode.latitude && selectedNode.longitude && (
-        <div className="absolute top-4 right-4 z-[999]">
-          <button
-            onClick={() => onOpenStreetView(selectedNode.latitude, selectedNode.longitude, selectedNode.name)}
-            className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-xs font-bold rounded-md shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
-          >
-            <span>Street View 360°</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
