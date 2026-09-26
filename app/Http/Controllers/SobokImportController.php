@@ -107,7 +107,7 @@ class SobokImportController extends Controller
                 $sn = sprintf('HWTC-%08X', rand(10000000, 99999999));
             }
 
-            $created = DB::transaction(function () use ($validated, $customerNumber, $sn, $duplicateSnNote) {
+            $created = DB::transaction(function () use ($request, $validated, $customerNumber, $sn, $duplicateSnNote) {
                 // 1. Create Customer
                 $customer = Customer::create([
                     'customer_number' => $customerNumber,
@@ -160,10 +160,11 @@ class SobokImportController extends Controller
                 }
 
                 // 5. Deteksi otomatis port fisik OLT, redaman riil, dan sinkronkan ODP
+                $hintInterface = $validated['interface'] ?? ($request ? $request->input('interface') : null);
                 $detected = CustomerController::resolveOnuPhysicalPortAndSync(
                     $sn,
                     $odpId,
-                    $request->input('interface')
+                    $hintInterface
                 );
 
                 $rxPowerVal = $detected['rx_power'] ?? ($validated['rx_power'] ?? -19.50);
@@ -279,4 +280,57 @@ class SobokImportController extends Controller
             'errors'   => $errors,
         ]);
     }
+
+    /**
+     * Sinkronisasi Status Layanan Pelanggan (OPEN vs BLOKIR) dari Sobok secara langsung
+     */
+    public function syncServiceStatus(Request $request)
+    {
+        $username = $request->input('username', 'jasen');
+        $password = $request->input('password', 'jasen2401');
+
+        try {
+            $result = $this->scraperService->syncServiceStatuses($username, $password);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => "Berhasil menyinkronkan status layanan dari Sobok via {$result['domain_used']}: {$result['open_count']} Open, {$result['blocked_count']} Terblokir.",
+                'data'    => $result,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Sobok Status Sync Error: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal menyinkronkan status layanan Sobok: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Ambil metadata status sinkronisasi Sobok terakhir
+     */
+    public function getSyncMeta()
+    {
+        $meta = \Illuminate\Support\Facades\Cache::get('sobok_service_status_meta');
+        if (!$meta) {
+            $lastSync = CustomerService::whereNotNull('sobok_sync_at')->max('sobok_sync_at');
+            $open = CustomerService::where('sobok_service_status', 'OPEN')->count();
+            $blocked = CustomerService::where('sobok_service_status', 'BLOKIR')->count();
+
+            $meta = [
+                'status'          => 'ready',
+                'domain_used'     => 'sobok.cinoxmedianet.id',
+                'open_count'      => $open,
+                'blocked_count'   => $blocked,
+                'synced_at'       => $lastSync,
+                'synced_at_human' => $lastSync ? \Carbon\Carbon::parse($lastSync)->diffForHumans() : 'Belum pernah',
+            ];
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $meta,
+        ]);
+    }
 }
+

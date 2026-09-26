@@ -154,17 +154,33 @@ class KmlImportService
 
         DB::beginTransaction();
         try {
+            // Urutkan: POP dan ODC diproses terlebih dahulu agar ODP dapat otomatis terhubung ke parent ODC yang sama
+            $sortedNodes = $parsed['nodes'] ?? [];
+            usort($sortedNodes, function($a, $b) {
+                $typeWeight = ['POP' => 1, 'ODC' => 2, 'ODP' => 3];
+                $wa = $typeWeight[$a['node_type'] ?? 'ODP'] ?? 4;
+                $wb = $typeWeight[$b['node_type'] ?? 'ODP'] ?? 4;
+                return $wa <=> $wb;
+            });
+
             // ── 1. IMPORT ODP SAJA ──────────────────────────────────────────
             if ($target === 'odp') {
-                foreach ($parsed['nodes'] as $nodeData) {
+                foreach ($sortedNodes as $nodeData) {
                     // Paksa semua point menjadi ODP
                     $nodeData['node_type'] = 'ODP';
-                    $this->upsertNode($nodeData, $targetOltId, $defaultParentId, $stats);
+                    $resolvedParentId = $defaultParentId;
+                    if (!$resolvedParentId && !empty($nodeData['power_from_raw'])) {
+                        $pQuery = NetworkNode::where('node_type', 'ODC')->where('name', $nodeData['power_from_raw']);
+                        if ($targetOltId) $pQuery->where('olt_device_id', $targetOltId);
+                        $pNode = $pQuery->first();
+                        if ($pNode) $resolvedParentId = $pNode->id;
+                    }
+                    $this->upsertNode($nodeData, $targetOltId, $resolvedParentId, $stats);
                 }
             }
             // ── 2. IMPORT ODC SAJA ──────────────────────────────────────────
             elseif ($target === 'odc') {
-                foreach ($parsed['nodes'] as $nodeData) {
+                foreach ($sortedNodes as $nodeData) {
                     // Paksa semua point menjadi ODC
                     $nodeData['node_type'] = 'ODC';
                     $this->upsertNode($nodeData, $targetOltId, null, $stats);
@@ -172,14 +188,21 @@ class KmlImportService
             }
             // ── 3. IMPORT KABEL SAJA ────────────────────────────────────────
             elseif ($target === 'cable') {
-                $this->importCablesList($parsed['cables'], $stats);
+                $this->importCablesList($parsed['cables'] ?? [], $stats, $targetOltId);
             }
             // ── 4. IMPORT SEMUA DATA (ODP, ODC, POP, KABEL) ─────────────────
             else {
-                foreach ($parsed['nodes'] as $nodeData) {
-                    $this->upsertNode($nodeData, $targetOltId, null, $stats);
+                foreach ($sortedNodes as $nodeData) {
+                    $resolvedParentId = $defaultParentId;
+                    if (!$resolvedParentId && !empty($nodeData['power_from_raw'])) {
+                        $pQuery = NetworkNode::where('node_type', 'ODC')->where('name', $nodeData['power_from_raw']);
+                        if ($targetOltId) $pQuery->where('olt_device_id', $targetOltId);
+                        $pNode = $pQuery->first();
+                        if ($pNode) $resolvedParentId = $pNode->id;
+                    }
+                    $this->upsertNode($nodeData, $targetOltId, $resolvedParentId, $stats);
                 }
-                $this->importCablesList($parsed['cables'], $stats);
+                $this->importCablesList($parsed['cables'] ?? [], $stats, $targetOltId);
             }
 
             DB::commit();
@@ -212,12 +235,19 @@ class KmlImportService
     /**
      * Helper to import LineString cables and auto-generate core records
      */
-    protected function importCablesList(array $cables, array &$stats): void
+    protected function importCablesList(array $cables, array &$stats, ?int $oltId = null): void
     {
         foreach ($cables as $cableData) {
             $slug = Str::slug($cableData['name'] ?: 'cable');
             $hash = substr(md5(json_encode($cableData['coordinates'])), 0, 6);
-            $code = 'CBL-' . substr($slug, 0, 26) . '-' . $hash;
+            $baseCode = 'CBL-' . substr($slug, 0, 26) . '-' . $hash;
+            $code = $baseCode;
+            if ($oltId) {
+                $codeExistsOther = NetworkCable::where('code', $baseCode)->exists();
+                if ($codeExistsOther) {
+                    $code = 'CBL-OLT' . $oltId . '-' . substr($slug, 0, 20) . '-' . $hash;
+                }
+            }
 
             $cable = NetworkCable::where('code', $code)->first();
             $wasTrashed = false;
@@ -313,7 +343,7 @@ class KmlImportService
     }
 
     /**
-     * Upsert a NetworkNode record
+     * Upsert a NetworkNode record with OLT scoping
      */
     protected function upsertNode(array $data, ?int $oltId, ?int $parentId, array &$stats): NetworkNode
     {
@@ -327,29 +357,56 @@ class KmlImportService
             $cleanName = preg_replace('/^ODP\s*[I|l](\d+)/i', 'ODP 1$1', $cleanName);
         }
         $cleanName = preg_replace('/^(ODP|ODC|POP)[-_]?(\d+)/i', '$1 $2', $cleanName);
-        $code = Str::slug($data['node_type'] . '-' . $cleanName);
-        if (strlen($code) > 38) {
-            $code = substr($code, 0, 32) . '-' . substr(md5($cleanName), 0, 5);
+        $baseCode = Str::slug($data['node_type'] . '-' . $cleanName);
+        if (strlen($baseCode) > 38) {
+            $baseCode = substr($baseCode, 0, 32) . '-' . substr(md5($cleanName), 0, 5);
         }
 
         // 1. Search active first, then search trashed (in case previously deleted)
-        $node = NetworkNode::where('name', $cleanName)->first();
-        if (!$node) {
-            $node = NetworkNode::where('code', $code)->first();
-        }
-
+        // If scoped to an OLT, isolate search to that specific OLT
         $wasTrashed = false;
-        if (!$node) {
-            $node = NetworkNode::onlyTrashed()->where('name', $cleanName)->first();
+        if ($oltId) {
+            // Check if code is already used by a node from another OLT
+            $codeCollision = NetworkNode::where('code', $baseCode)->where('olt_device_id', '!=', $oltId)->exists();
+            $code = $codeCollision ? ($baseCode . '-olt' . $oltId) : $baseCode;
+
+            $node = NetworkNode::where('olt_device_id', $oltId)->where('name', $cleanName)->first();
             if (!$node) {
-                $node = NetworkNode::onlyTrashed()->where('code', $code)->first();
+                $node = NetworkNode::where('olt_device_id', $oltId)->where('code', $code)->first();
             }
+
             if (!$node) {
-                $node = NetworkNode::onlyTrashed()->where('code', 'LIKE', $code . '_deleted_%')->first();
+                $node = NetworkNode::onlyTrashed()->where('olt_device_id', $oltId)->where('name', $cleanName)->first();
+                if (!$node) {
+                    $node = NetworkNode::onlyTrashed()->where('olt_device_id', $oltId)->where('code', $code)->first();
+                }
+                if (!$node) {
+                    $node = NetworkNode::onlyTrashed()->where('olt_device_id', $oltId)->where('code', 'LIKE', $code . '_deleted_%')->first();
+                }
+                if ($node) {
+                    $node->restore();
+                    $wasTrashed = true;
+                }
             }
-            if ($node) {
-                $node->restore();
-                $wasTrashed = true;
+        } else {
+            $code = $baseCode;
+            $node = NetworkNode::where('name', $cleanName)->first();
+            if (!$node) {
+                $node = NetworkNode::where('code', $code)->first();
+            }
+
+            if (!$node) {
+                $node = NetworkNode::onlyTrashed()->where('name', $cleanName)->first();
+                if (!$node) {
+                    $node = NetworkNode::onlyTrashed()->where('code', $code)->first();
+                }
+                if (!$node) {
+                    $node = NetworkNode::onlyTrashed()->where('code', 'LIKE', $code . '_deleted_%')->first();
+                }
+                if ($node) {
+                    $node->restore();
+                    $wasTrashed = true;
+                }
             }
         }
 

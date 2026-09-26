@@ -8,6 +8,10 @@ import { dmsToDecimal, decimalToDms, parseCoordsInput } from '../utils/coordinat
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
 import { naturalNodeCompare } from '../utils/naturalSort';
+import { toPng } from 'html-to-image';
+import KmlImportModal from '../components/KmlImportModal';
+import OdcFilterPopover from '../components/OdcFilterPopover';
+import OdpFilterPopover from '../components/OdpFilterPopover';
 
 /* ══════════════════════════════════════════════════════════════════
    AUTO CODE GENERATOR HELPERS
@@ -157,10 +161,10 @@ const DEST_TYPES = [
 const DEST_TYPE_META = DEST_TYPES.reduce((acc, cur) => ({ ...acc, [cur.value]: cur }), {});
 
 const STATUS_META = {
-  active: { label: 'Aktif', dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  inactive: { label: 'Tidak Aktif', dot: 'bg-slate-400', pill: 'bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700' },
-  maintenance: { label: 'Maintenance', dot: 'bg-amber-500', pill: 'bg-amber-50 text-amber-700 border-amber-200' },
-  damaged: { label: 'Rusak', dot: 'bg-red-500', pill: 'bg-red-50 text-red-700 border-red-200' },
+  active: { label: 'Aktif', dot: 'bg-emerald-500', pill: 'text-emerald-600 dark:text-emerald-400 font-bold' },
+  inactive: { label: 'Tidak Aktif', dot: 'bg-slate-400', pill: 'text-black/50 dark:text-white/50 font-bold' },
+  maintenance: { label: 'Maintenance', dot: 'bg-amber-500', pill: 'text-amber-600 dark:text-amber-400 font-bold' },
+  damaged: { label: 'Rusak', dot: 'bg-rose-600 dark:text-rose-400 font-bold' },
 };
 
 const pct = (used, total) => total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
@@ -178,28 +182,6 @@ const displayInterface = (ref) => {
   }).filter(Boolean).join(', ');
 };
 
-function StatCard({ label, value, sub, badgeText }) {
-  return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-xs">
-      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-        <span className="text-[11px] font-bold uppercase tracking-wider">{label}</span>
-        {badgeText && (
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60">
-            {badgeText}
-          </span>
-        )}
-      </div>
-      <div className="my-2.5 flex items-baseline justify-between">
-        <span className="text-2xl sm:text-3xl font-extrabold text-slate-950 dark:text-white font-sans">{value}</span>
-      </div>
-      {sub && (
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate pt-2.5 border-t border-slate-100 dark:border-slate-800">
-          {sub}
-        </p>
-      )}
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════════════════════════════
    MODAL EDIT CORE
@@ -236,26 +218,26 @@ function EditCoreModal({ core, cableName, onSave, onClose, loading, allNodes = [
 
   const handleSubmit = e => { e.preventDefault(); onSave(form); };
 
-  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium';
-  const lc = 'block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1.5';
+  const fc = 'w-full px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs sm:text-sm text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white transition-all font-medium';
+  const lc = 'block text-xs font-bold text-black dark:text-white uppercase tracking-wide mb-1.5';
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
-      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
-        <div className="bg-slate-50 dark:bg-slate-800/90 text-slate-950 dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-200 dark:border-slate-800">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-lg bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-black/20 dark:border-white/20">
           <div className="flex items-center gap-3">
             <div
-              className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs border ${colorMeta.bg} ${colorMeta.border} ${colorMeta.text}`}
+              className={`w-8 h-8 rounded-md flex items-center justify-center font-bold text-xs border ${colorMeta.bg} ${colorMeta.border} ${colorMeta.text}`}
               style={{ backgroundColor: colorMeta.hex, borderColor: colorMeta.borderHex }}
             >
               {core.core_number}
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-950 dark:text-white">Core #{core.core_number} — {getIndonesianColor(core.color)}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Tube {core.tube_number} ({getIndonesianColor(core.tube_color)}) · {cableName}</p>
+              <h3 className="text-base font-bold text-black dark:text-white">Core #{core.core_number} — {getIndonesianColor(core.color)}</h3>
+              <p className="text-xs text-black/70 dark:text-white/70">Tube {core.tube_number} ({getIndonesianColor(core.tube_color)}) · {cableName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold transition-colors cursor-pointer">✕</button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold transition-colors cursor-pointer">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
@@ -304,7 +286,7 @@ function EditCoreModal({ core, cableName, onSave, onClose, loading, allNodes = [
             </div>
             <div>
               <label className={lc}>Warna Standard</label>
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-900 dark:text-white">
+              <div className="flex items-center gap-2 px-3 py-2 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white">
                 <span
                   className={`w-3.5 h-3.5 rounded-full border ${colorMeta.bg} ${colorMeta.border}`}
                   style={{ backgroundColor: colorMeta.hex, borderColor: colorMeta.borderHex }}
@@ -325,11 +307,11 @@ function EditCoreModal({ core, cableName, onSave, onClose, loading, allNodes = [
             />
           </div>
 
-          <div className="flex gap-3 pt-3 border-t border-slate-200 dark:border-slate-800 flex-shrink-0">
-            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+          <div className="flex gap-3 pt-3 border-t border-black/20 dark:border-white/20 flex-shrink-0">
+            <button type="button" onClick={onClose} className="flex-1 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-bold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
               Batal
             </button>
-            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 transition-all">
+            <button type="submit" disabled={loading} className="flex-1 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 transition-all">
               {loading && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
               Simpan
             </button>
@@ -594,11 +576,11 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
   return (
     <div className="relative space-y-1" ref={dropdownRef}>
       <div className="flex items-center justify-between">
-        <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wide">
+        <label className="block text-xs font-bold text-black dark:text-white uppercase tracking-wide">
           INTERFACE PORT OLT
         </label>
         {selectedOlt && (
-          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/70 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/70 px-2 py-0.5 rounded border border-indigo-300 dark:border-indigo-800">
             {selectedOlt.name} ({selectedOlt.vendor || 'OLT'})
           </span>
         )}
@@ -607,51 +589,51 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
       {/* Input Trigger Box */}
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="min-h-[44px] p-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 rounded-xl cursor-pointer flex items-center justify-between gap-2 flex-wrap hover:border-indigo-500 dark:hover:border-indigo-400 transition-all shadow-2xs"
+        className="min-h-[40px] p-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md cursor-pointer flex items-center justify-between gap-2 flex-wrap hover:border-black dark:hover:border-white transition-all shadow-xs"
       >
         <div className="flex items-center gap-1.5 flex-wrap min-h-[26px]">
           {selectedPorts.length > 0 ? (
             selectedPorts.map(port => (
               <span
                 key={port}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800"
               >
                 <span>{port}</span>
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); removePort(port); }}
-                  className="w-4 h-4 rounded-full hover:bg-indigo-200 dark:hover:bg-indigo-800 flex items-center justify-center text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-rose-500 font-extrabold transition-colors"
+                  className="w-3.5 h-3.5 rounded-full hover:bg-indigo-200 dark:hover:bg-indigo-800 flex items-center justify-center text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-rose-500 font-extrabold transition-colors"
                 >
                   ✕
                 </button>
               </span>
             ))
           ) : (
-            <span className="text-xs text-slate-400 dark:text-slate-500 px-1 font-medium">
+            <span className="text-xs text-black/40 dark:text-white/40 px-1 font-medium">
               — Klik untuk memilih Interface Port OLT —
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 text-xs text-slate-400 dark:text-slate-500 font-bold px-1">
+        <div className="flex items-center gap-1.5 shrink-0 text-xs text-black/50 dark:text-white/50 font-bold px-1">
           {selectedPorts.length > 0 && (
-            <span className="text-[10px] bg-indigo-600 text-white font-extrabold px-2 py-0.5 rounded-full shadow-2xs">
+            <span className="text-[10px] bg-indigo-600 text-white font-extrabold px-1.5 py-0.5 rounded">
               {selectedPorts.length} Port
             </span>
           )}
-          <span className="text-[10px] text-slate-400">{isOpen ? '▲' : '▼'}</span>
+          <span className="text-[10px]">{isOpen ? '▲' : '▼'}</span>
         </div>
       </div>
 
       {/* Dropdown Floating Panel */}
       {isOpen && (
-        <div className="absolute z-50 left-0 right-0 sm:left-auto sm:right-0 sm:min-w-[420px] max-w-[500px] mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-4 space-y-3.5 animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute z-50 left-0 right-0 sm:left-auto sm:right-0 sm:min-w-[420px] max-w-[500px] mt-1 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xl p-4 space-y-3 animate-in fade-in zoom-in-95 duration-100 text-black dark:text-white">
           {/* Header Panel */}
-          <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between pb-2.5 border-b border-black/15 dark:border-white/15">
             <div>
-              <h5 className="font-bold text-xs text-slate-900 dark:text-slate-100">
+              <h5 className="font-bold text-xs text-black dark:text-white">
                 Pilih Interface ({isCompactOlt ? `${compactPorts.length} Port PON` : `Modular ${slots.length} Slot Card`})
               </h5>
-              <p className="text-[10px] text-slate-400">
+              <p className="text-[10px] text-black/60 dark:text-white/60">
                 {selectedOlt ? `${selectedOlt.name} • ${selectedOlt.model || selectedOlt.vendor}` : 'Pilih interface yang mengarah ke ODC/ODP'}
               </p>
             </div>
@@ -660,7 +642,7 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
                 <button
                   type="button"
                   onClick={selectAllCompact}
-                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                 >
                   Pilih Semua
                 </button>
@@ -668,16 +650,16 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
                 <button
                   type="button"
                   onClick={selectAllSlot}
-                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                 >
                   Pilih All Slot {activeSlot}
                 </button>
               )}
-              <span className="text-slate-300 dark:text-slate-700">|</span>
+              <span className="text-black/20 dark:text-white/20">|</span>
               <button
                 type="button"
                 onClick={clearAll}
-                className="text-[11px] font-bold text-rose-500 hover:underline"
+                className="text-[11px] font-bold text-rose-500 hover:underline cursor-pointer"
               >
                 Reset
               </button>
@@ -688,17 +670,14 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
           <div>
             <input
               type="text"
-              placeholder="🔍 Cari interface (contoh: 1, epon, 1/1/4)..."
+              placeholder="Cari interface (contoh: 1, epon, 1/1/4)..."
               value={portSearch}
               onChange={e => setPortSearch(e.target.value)}
-              className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+              className="w-full px-3 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white font-mono"
             />
           </div>
 
           {isCompactOlt ? (
-            /* ══════════════════════════════════════════════════════════════
-               LAYOUT A: COMPACT OLT (HSGQ 4-Port, VSOL, HIOSO)
-            ══════════════════════════════════════════════════════════════ */
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
                 {filteredCompactPorts.map(p => {
@@ -708,20 +687,20 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
                       key={p.id}
                       type="button"
                       onClick={() => togglePort(p.id)}
-                      className={`p-3 rounded-xl border text-left transition-all flex items-center justify-between gap-2 ${
+                      className={`p-2.5 rounded-md border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
                         isSelected
-                          ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                          : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-400 dark:hover:border-indigo-500'
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : 'bg-white dark:bg-black border-black/20 dark:border-white/20 text-black dark:text-white hover:border-black dark:hover:border-white'
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-500'}`} />
                         <span className="font-mono text-xs font-bold tracking-tight">{p.label}</span>
                       </div>
-                      <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${
+                      <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
                         isSelected
                           ? 'bg-white/20 text-white'
-                          : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                          : 'text-emerald-600 dark:text-emerald-400 font-bold'
                       }`}>
                         {isSelected ? '✓ Aktif' : p.status}
                       </span>
@@ -731,16 +710,13 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
               </div>
             </div>
           ) : (
-            /* ══════════════════════════════════════════════════════════════
-               LAYOUT B: MODULAR CHASSIS OLT (ZTE C300/C320, HUAWEI)
-            ══════════════════════════════════════════════════════════════ */
             <div className="space-y-3">
               {/* Slot / Card Tab Switcher */}
               <div className="space-y-1.5">
-                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                <span className="text-[11px] font-bold text-black/70 dark:text-white/70 uppercase tracking-wider block">
                   Pilih Slot Card ({slots.length} Slot Chassis):
                 </span>
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 bg-black/5 dark:bg-white/5 p-1.5 rounded-md border border-black/20 dark:border-white/20">
                   {slots.map(s => {
                     const countInSlot = selectedPorts.filter(p => p.startsWith(`1/${s.id}/`)).length;
                     const isActive = activeSlot === s.id;
@@ -749,19 +725,19 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
                         key={s.id}
                         type="button"
                         onClick={() => setActiveSlot(s.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                        className={`px-3 py-1 rounded-md text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
                           isActive
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                            ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
+                            : 'text-black dark:text-white hover:bg-black/10 dark:hover:bg-white/10'
                         }`}
                       >
                         <span>Slot {s.id}</span>
                         {s.portCount ? (
-                          <span className="text-[9px] text-slate-400">({s.portCount}P)</span>
+                          <span className="text-[9px] opacity-60">({s.portCount}P)</span>
                         ) : null}
                         {countInSlot > 0 && (
                           <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
-                            isActive ? 'bg-white text-indigo-700' : 'bg-indigo-600 text-white'
+                            isActive ? 'bg-white text-black dark:bg-black dark:text-white' : 'bg-blue-600 text-white'
                           }`}>
                             {countInSlot}
                           </span>
@@ -775,22 +751,22 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
               {/* Port Grid in Active Slot */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-700 dark:text-slate-200 text-[11px]">
+                  <span className="font-bold text-black dark:text-white text-[11px]">
                     {filteredModularPorts.length} Port PON Slot {activeSlot} (Card 1/{activeSlot}/*):
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={selectAllSlot}
-                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                     >
                       Pilih Semua
                     </button>
-                    <span className="text-slate-300">|</span>
+                    <span className="text-black/20 dark:text-white/20">|</span>
                     <button
                       type="button"
                       onClick={clearSlot}
-                      className="text-[10px] font-bold text-rose-500 hover:underline"
+                      className="text-[10px] font-bold text-rose-500 hover:underline cursor-pointer"
                     >
                       Hapus
                     </button>
@@ -805,15 +781,15 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
                         key={p.id}
                         type="button"
                         onClick={() => togglePort(p.id)}
-                        className={`p-2.5 rounded-xl border text-xs font-mono font-bold transition-all flex items-center justify-between ${
+                        className={`p-2 rounded-md border text-xs font-mono font-bold transition-all flex items-center justify-between cursor-pointer ${
                           isSelected
-                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
-                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-black border-black/20 dark:border-white/20 text-black dark:text-white hover:border-black dark:hover:border-white'
                         }`}
                       >
                         <span>{p.shortLabel}</span>
                         <span className={`text-[9px] px-1 py-0.5 rounded ${
-                          isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300'
+                          isSelected ? 'bg-white/20 text-white' : 'bg-black/5 dark:bg-white/10 text-black/70 dark:text-white/70'
                         }`}>
                           {p.id}
                         </span>
@@ -826,12 +802,12 @@ function MultiOltPortSelector({ value, onChange, selectedOlt }) {
           )}
 
           {/* Footer Info */}
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="pt-2 border-t border-black/15 dark:border-white/15 flex items-center justify-between text-[11px] text-black/60 dark:text-white/60">
             <span>Terpilih: <strong className="text-indigo-600 dark:text-indigo-400">{selectedPorts.length} Interface</strong></span>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="px-3 py-1 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors"
+              className="px-3 py-1 rounded-md bg-blue-600 text-white font-bold hover:bg-blue-700 transition-colors cursor-pointer"
             >
               Selesai
             </button>
@@ -890,13 +866,13 @@ function MultiColorSelector({ value, onChange, label, placeholder, helpText }) {
 
   return (
     <div className="relative space-y-1" ref={dropdownRef}>
-      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+      <label className="block text-xs font-semibold text-black dark:text-white uppercase tracking-wide">
         {label}
       </label>
 
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="min-h-[42px] p-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer flex items-center justify-between gap-2 flex-wrap hover:border-indigo-500 transition-all"
+        className="min-h-[40px] p-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md cursor-pointer flex items-center justify-between gap-2 flex-wrap hover:border-black dark:hover:border-white transition-all shadow-xs"
       >
         <div className="flex items-center gap-1.5 flex-wrap min-h-[26px]">
           {selectedItems.length > 0 && selectedItems.map(item => {
@@ -904,7 +880,7 @@ function MultiColorSelector({ value, onChange, label, placeholder, helpText }) {
             return (
               <span
                 key={item}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20"
               >
                 <span
                   className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/10"
@@ -922,14 +898,14 @@ function MultiColorSelector({ value, onChange, label, placeholder, helpText }) {
             );
           })}
         </div>
-        <span className="text-xs text-slate-400 dark:text-slate-500 font-bold px-1">
+        <span className="text-xs text-black/50 dark:text-white/50 font-bold px-1">
           {isOpen ? '▲' : '▼'}
         </span>
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-3 space-y-3 animate-in fade-in zoom-in-95 duration-100">
-          <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between items-center">
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-xl p-3 space-y-3 animate-in fade-in zoom-in-95 duration-100 text-black dark:text-white">
+          <div className="text-[11px] font-bold text-black/70 dark:text-white/70 uppercase tracking-wider flex justify-between items-center">
             <span>Pilihan Warna Core (12 Telecom Standard)</span>
             <span className="text-[10px] font-normal text-indigo-600 dark:text-indigo-400">Multi-Pilih</span>
           </div>
@@ -942,10 +918,10 @@ function MultiColorSelector({ value, onChange, label, placeholder, helpText }) {
                   key={c.name}
                   type="button"
                   onClick={() => toggleColor(c.name)}
-                  className={`px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+                  className={`px-2 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border cursor-pointer ${
                     isSelected
-                      ? 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-900 dark:text-indigo-200 border-indigo-400 font-bold shadow-xs'
-                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                      ? 'bg-blue-600 border-blue-600 text-white font-bold'
+                      : 'bg-white dark:bg-black text-black dark:text-white border-black/20 dark:border-white/20 hover:border-black dark:hover:border-white'
                   }`}
                 >
                   <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/10" style={{ backgroundColor: c.hex }} />
@@ -955,19 +931,19 @@ function MultiColorSelector({ value, onChange, label, placeholder, helpText }) {
             })}
           </div>
 
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="pt-2 border-t border-black/15 dark:border-white/15">
             <input
               type="text"
               value={customInput}
               onChange={e => setCustomInput(e.target.value)}
               onKeyDown={handleAddCustom}
               placeholder="Masukan detail / daya kustom (cth: +2.5 dBm) tekan Enter..."
-              className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full px-3 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white"
             />
           </div>
         </div>
       )}
-      {helpText && <p className="text-[10px] text-slate-400 dark:text-slate-500">{helpText}</p>}
+      {helpText && <p className="text-[10px] text-black/60 dark:text-white/60">{helpText}</p>}
     </div>
   );
 }
@@ -1020,13 +996,13 @@ function MultiTubeSelector({ value, onChange, label, placeholder, helpText }) {
 
   return (
     <div className="relative space-y-1" ref={dropdownRef}>
-      <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+      <label className="block text-xs font-semibold text-black dark:text-white uppercase tracking-wide">
         {label}
       </label>
 
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="min-h-[42px] p-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer flex items-center justify-between gap-2 flex-wrap hover:border-indigo-500 transition-all"
+        className="min-h-[40px] p-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md cursor-pointer flex items-center justify-between gap-2 flex-wrap hover:border-black dark:hover:border-white transition-all shadow-xs"
       >
         <div className="flex items-center gap-1.5 flex-wrap min-h-[26px]">
           {selectedItems.length > 0 && selectedItems.map(item => {
@@ -1034,7 +1010,7 @@ function MultiTubeSelector({ value, onChange, label, placeholder, helpText }) {
             return (
               <span
                 key={item}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20"
               >
                 <span
                   className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/10"
@@ -1052,14 +1028,14 @@ function MultiTubeSelector({ value, onChange, label, placeholder, helpText }) {
             );
           })}
         </div>
-        <span className="text-xs text-slate-400 dark:text-slate-500 font-bold px-1">
+        <span className="text-xs text-black/50 dark:text-white/50 font-bold px-1">
           {isOpen ? '▲' : '▼'}
         </span>
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-3 space-y-3 animate-in fade-in zoom-in-95 duration-100">
-          <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between items-center">
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-xl p-3 space-y-3 animate-in fade-in zoom-in-95 duration-100 text-black dark:text-white">
+          <div className="text-[11px] font-bold text-black/70 dark:text-white/70 uppercase tracking-wider flex justify-between items-center">
             <span>Daftar Tube Fiber (Warna &amp; Detail)</span>
             <span className="text-[10px] font-normal text-indigo-600 dark:text-indigo-400">Multi-Pilih</span>
           </div>
@@ -1072,10 +1048,10 @@ function MultiTubeSelector({ value, onChange, label, placeholder, helpText }) {
                   key={t.label}
                   type="button"
                   onClick={() => toggleTube(t.label)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
+                  className={`px-2.5 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all border cursor-pointer ${
                     isSelected
-                      ? 'bg-blue-50 dark:bg-blue-950/80 text-blue-900 dark:text-blue-200 border-blue-400 font-bold shadow-xs'
-                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-blue-300'
+                      ? 'bg-blue-600 border-blue-600 text-white font-bold'
+                      : 'bg-white dark:bg-black text-black dark:text-white border-black/20 dark:border-white/20 hover:border-black dark:hover:border-white'
                   }`}
                 >
                   <span className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/10" style={{ backgroundColor: t.hex }} />
@@ -1085,19 +1061,19 @@ function MultiTubeSelector({ value, onChange, label, placeholder, helpText }) {
             })}
           </div>
 
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="pt-2 border-t border-black/15 dark:border-white/15">
             <input
               type="text"
               value={customInput}
               onChange={e => setCustomInput(e.target.value)}
               onKeyDown={handleAddCustom}
               placeholder="Masukan tube kustom (cth: Tube Special A) tekan Enter..."
-              className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full px-3 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white"
             />
           </div>
         </div>
       )}
-      {helpText && <p className="text-[10px] text-slate-400 dark:text-slate-500">{helpText}</p>}
+      {helpText && <p className="text-[10px] text-black/60 dark:text-white/60">{helpText}</p>}
     </div>
   );
 }
@@ -1308,27 +1284,27 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
     onSave(payload);
   };
 
-  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium';
-  const lc = 'block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1.5';
+  const fc = 'w-full px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs sm:text-sm text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white transition-all font-medium';
+  const lc = 'block text-xs font-bold text-black dark:text-white uppercase tracking-wide mb-1.5';
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-2xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white">
         
         {/* Pinned Header */}
-        <div className="bg-slate-50 dark:bg-slate-800/90 text-slate-950 dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-200 dark:border-slate-800">
+        <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-black/20 dark:border-white/20">
           <div>
-            <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">
-              {isEdit ? '✏️ Edit Node' : isMsCreation ? '➕ Tambah ODP/MS (Mini Splitter)' : '➕ Tambah Node'} ({isMsCreation ? 'ODP/MS' : form.node_type})
+            <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">
+              {isEdit ? 'Edit Node' : isMsCreation ? 'Tambah ODP/MS (Mini Splitter)' : 'Tambah Node'} ({isMsCreation ? 'ODP/MS' : form.node_type})
             </h3>
             {isMsCreation && (
               <p className="text-[11px] text-violet-600 dark:text-violet-400 font-semibold mt-0.5">
-                🔵 Pola Mini: Terhubung langsung ke POP (POP → ODP/MS → ODP → CLIENT)
+                Pola Mini: Terhubung langsung ke POP (POP → ODP/MS → ODP → CLIENT)
               </p>
             )}
-            {parentNode && <p className="text-[11px] text-slate-500 dark:text-slate-400">di bawah: {parentNode.name}</p>}
+            {parentNode && <p className="text-[11px] text-black/70 dark:text-white/70">di bawah: {parentNode.name}</p>}
           </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
+          <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
         </div>
 
         {/* Form Wrapper */}
@@ -1394,12 +1370,12 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
           </div>
 
           {/* ── Mode & Input Koordinat Lokasi (Google Earth DMS / Google Maps Desimal) ── */}
-          <div className="space-y-2 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700">
+          <div className="space-y-2 bg-black/5 dark:bg-white/5 p-3 rounded-lg border border-black/20 dark:border-white/20">
             <div className="flex items-center justify-between gap-2">
               <label className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide flex items-center gap-1.5">
-                <span>📍 Koordinat Lokasi Node</span>
+                <span>Koordinat Lokasi Node</span>
               </label>
-              <div className="flex gap-1 bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="flex gap-1 bg-white dark:bg-black p-0.5 rounded-md border border-black/20 dark:border-white/20">
                 <button
                   type="button"
                   onClick={() => set('coord_mode', 'dms')}
@@ -1408,7 +1384,7 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                 >
-                  🌍 Google Earth (DMS)
+                  Google Earth (DMS)
                 </button>
                 <button
                   type="button"
@@ -1418,7 +1394,7 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                 >
-                  🗺️ Google Maps (Desimal)
+                  Google Maps (Desimal)
                 </button>
               </div>
             </div>
@@ -1511,13 +1487,13 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
               {form.node_type === 'ODP' && (
                 <div className="mb-2 flex flex-wrap gap-1.5 text-[10px]">
                   <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-950/60 border border-purple-300 dark:border-purple-800 rounded-lg text-purple-800 dark:text-purple-300 font-bold">
-                    🏢 POP → Pilih jika node ini adalah ODP/MS (Pola: POP → MS)
+                    POP → Pilih jika node ini adalah ODP/MS (Pola: POP → MS)
                   </span>
                   <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-lg text-blue-700 dark:text-blue-300 font-semibold">
-                    📦 ODC → Pola Standar (POP → ODC → ODP)
+                    ODC → Pola Standar (POP → ODC → ODP)
                   </span>
                   <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 font-semibold">
-                    🔵 ODP/MS → Cabang ke MS lain (POP → MS → ODP)
+                    ODP/MS → Cabang ke MS lain (POP → MS → ODP)
                   </span>
                 </div>
               )}
@@ -1602,7 +1578,7 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
               KONFIGURASI KHUSUS ODP
           ═══════════════════════════════════════ */}
           {form.node_type === 'ODP' && (
-            <div className="bg-emerald-50/50 dark:bg-slate-800/80 border border-emerald-200/80 dark:border-slate-700 rounded-2xl p-4 space-y-3">
+            <div className="bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-lg p-3.5 space-y-3">
               <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
                 ️ Konfigurasi Teknis ODP
               </h4>
@@ -1624,7 +1600,7 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
               </div>
 
               {/* Baris 2: Splitter ODP */}
-              <div className="bg-white dark:bg-slate-900/90 border border-emerald-200 dark:border-emerald-900/60 rounded-xl p-3 space-y-2">
+              <div className="bg-white dark:bg-black border border-black/20 dark:border-white/20 rounded-md p-3 space-y-2">
                 <label className="text-xs font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
                   Splitter ODP
                 </label>
@@ -1836,18 +1812,18 @@ function AddNodeModal({ type, editNode, parentNode, allNodes, splitterTypes, olt
         </div>
 
         {/* Pinned Modal Footer */}
-        <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5 flex-shrink-0">
+        <div className="px-5 py-3.5 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex items-center justify-end gap-2.5 flex-shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-bold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
           >
             Batal
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            className="px-5 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading && <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
             <span>Simpan Node</span>
@@ -1916,18 +1892,18 @@ function AddCableModal({ popNode, onSave, onClose, loading, error, cables = [], 
     onSave({ ...form, code: autoCode });
   };
 
-  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium';
-  const lc = 'block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1.5';
+  const fc = 'w-full px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs sm:text-sm text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white transition-all font-medium';
+  const lc = 'block text-xs font-bold text-black dark:text-white uppercase tracking-wide mb-1.5';
 
   return (
-    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
-      <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
-        <div className="bg-slate-50 dark:bg-slate-800/90 text-slate-950 dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-200 dark:border-slate-800">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white">
+        <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-black/20 dark:border-white/20">
           <div>
-            <h3 className="text-base font-bold text-slate-950 dark:text-white"> Tambah Kabel Fiber Optik Baru</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Konfigurasi Node Asal, Node Tujuan, &amp; Core Matrix TIA-598-A</p>
+            <h3 className="text-base font-bold text-black dark:text-white"> Tambah Kabel Fiber Optik Baru</h3>
+            <p className="text-xs text-black/70 dark:text-white/70">Konfigurasi Node Asal, Node Tujuan, &amp; Core Matrix TIA-598-A</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
@@ -2053,18 +2029,18 @@ function EditCableModal({ cable, onSave, onClose, loading, error, allNodes = [] 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const handleSubmit = e => { e.preventDefault(); onSave(form); };
 
-  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium';
-  const lc = 'block text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1.5';
+  const fc = 'w-full px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs sm:text-sm text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white transition-all font-medium';
+  const lc = 'block text-xs font-bold text-black dark:text-white uppercase tracking-wide mb-1.5';
 
   return (
-    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
-      <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
-        <div className="bg-slate-50 dark:bg-slate-800/90 text-slate-950 dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-200 dark:border-slate-800">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white">
+        <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-black/20 dark:border-white/20">
           <div>
-            <h3 className="text-base font-bold text-slate-950 dark:text-white">️ Edit Kabel — {cable.name}</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{cable.code} · {cable.core_count_total} Core</p>
+            <h3 className="text-base font-bold text-black dark:text-white">️ Edit Kabel — {cable.name}</h3>
+            <p className="text-xs text-black/70 dark:text-white/70 font-mono">{cable.code} · {cable.core_count_total} Core</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
@@ -2130,10 +2106,10 @@ function EditCableModal({ cable, onSave, onClose, loading, error, allNodes = [] 
           <div>
             <label className={lc}>Status Kabel</label>
             <select value={form.status} onChange={e => set('status', e.target.value)} className={fc}>
-              <option value="active">🟢 Aktif</option>
-              <option value="inactive">⚪ Non-Aktif</option>
-              <option value="maintenance">🟡 Maintenance / Pemeliharaan</option>
-              <option value="damaged">🔴 Rusak / Putus</option>
+              <option value="active">Aktif</option>
+              <option value="inactive">Non-Aktif</option>
+              <option value="maintenance">Maintenance / Pemeliharaan</option>
+              <option value="damaged">Rusak / Putus</option>
             </select>
           </div>
 
@@ -2197,9 +2173,9 @@ function TubeCoreAccordion({ coresByTube, onEditCore }) {
                 <div>
                   <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
                     Tube {tubeNum} — <span className="font-semibold">{tubeColorName}</span>
-                    <span className="text-slate-500 dark:text-slate-400 font-normal ml-1">({cores.length} Core)</span>
+                    <span className="text-black/70 dark:text-white/70 font-normal ml-1">({cores.length} Core)</span>
                   </h4>
-                  <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-[10px] sm:text-xs text-black/70 dark:text-white/70">
                     Core #{cores[0]?.core_number} s/d #{cores[cores.length - 1]?.core_number}
                     <span className={`ml-2 font-semibold ${tubeUsed > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
                       · {tubeUsed}/{cores.length} Terpakai ({usedPct}%)
@@ -2274,14 +2250,14 @@ function TubeCoreAccordion({ coresByTube, onEditCore }) {
                         )}
 
                         {core.notes && (
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 line-clamp-2 leading-relaxed bg-slate-100/70 dark:bg-slate-800/80 px-2 py-1 rounded-md border border-slate-200/50 dark:border-slate-700/50">
+                          <p className="text-[11px] text-black/70 dark:text-white/70 mt-1.5 line-clamp-2 leading-relaxed bg-slate-100/70 dark:bg-slate-800/80 px-2 py-1 rounded-md border border-slate-200/50 dark:border-slate-700/50">
                             <span className="font-semibold text-slate-600 dark:text-slate-300">Catatan:</span> {core.notes}
                           </p>
                         )}
                       </div>
 
                       <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10px]">
-                        <span className="font-mono text-slate-500 dark:text-slate-400 truncate max-w-[130px]">{core.odf_cassette_label || 'TUBE - CORE: —'}</span>
+                        <span className="font-mono text-black/70 dark:text-white/70 truncate max-w-[130px]">{core.odf_cassette_label || 'TUBE - CORE: —'}</span>
                         <span className="text-indigo-600 font-semibold">Edit &rarr;</span>
                       </div>
                     </button>
@@ -2301,7 +2277,7 @@ function TubeCoreAccordion({ coresByTube, onEditCore }) {
 ══════════════════════════════════════════════════════════════════ */
 function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, onAddCable, onEditCable, onDeleteCable, onRefreshCables, onAddNode, onEditNode, onDeleteNode, allNodes = [] }) {
   const { hasRole } = useAuth();
-  const canCrud = hasRole('Super Administrator', 'Operator Jaringan', 'NOC Operator');
+  const canCrud = hasRole('Super Administrator', 'Operator Jaringan');
   const [selectedCableId, setSelectedCableId] = useState(null);
   const [editingCore, setEditingCore] = useState(null);
   const [savingCore, setSavingCore] = useState(false);
@@ -2350,16 +2326,16 @@ function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, 
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* POP Selector Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="bg-white dark:bg-black p-4 sm:p-5 rounded-lg border border-black/70 dark:border-white/70 shadow-xs text-black dark:text-white">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div>
-            <h3 className="text-xs sm:text-sm font-bold text-slate-950 dark:text-white"> Pilih POP ({pops.length} POP)</h3>
-            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">Pilih POP untuk melihat daftar kabel &amp; core matrix</p>
+            <h3 className="text-xs sm:text-sm font-bold text-black dark:text-white"> Pilih POP ({pops.length} POP)</h3>
+            <p className="text-[11px] sm:text-xs text-black/70 dark:text-white/70 mt-0.5">Pilih POP untuk melihat daftar kabel &amp; core matrix</p>
           </div>
           {canCrud && (
             <button
               onClick={() => onAddNode('POP')}
-              className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-md shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>+</span> Tambah POP
             </button>
@@ -2390,12 +2366,12 @@ function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, 
               <button
                 onClick={() => onEditNode(selectedPop)}
                 title="Edit POP ini"
-                className="flex-shrink-0 px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 hover:border-indigo-300 text-slate-700 dark:text-slate-300 transition-all"
+                className="flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white transition-all cursor-pointer"
               >Edit</button>
               <button
                 onClick={() => onDeleteNode(selectedPop)}
                 title="Hapus POP ini"
-                className="flex-shrink-0 px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/40 hover:border-red-300 text-red-600 dark:text-red-400 transition-all"
+                className="flex-shrink-0 px-3 py-1.5 text-xs font-bold rounded-md border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-400 transition-all cursor-pointer"
               >Hapus</button>
             </>
           )}
@@ -2416,7 +2392,7 @@ function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, 
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 p-8 sm:p-12 text-center">
           <div className="text-3xl sm:text-4xl mb-3"></div>
           <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">Belum Ada Kabel Backbone di POP Ini</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1 mb-5">
+          <p className="text-xs text-black/70 dark:text-white/70 max-w-md mx-auto mt-1 mb-5">
             Mulai daftarkan kabel backbone 48 Core / 24 Core / 12 Core untuk mengelola rak ODF &amp; peruntukan core.
           </p>
           {canCrud && (
@@ -2428,11 +2404,11 @@ function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, 
       ) : (
         <div className="space-y-4">
           {/* ── Cable Dropdown Selector ── */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 p-4 sm:p-5 shadow-xs">
+          <div className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 p-4 sm:p-5 shadow-xs text-black dark:text-white">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
               <div>
                 <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100"> Daftar Kabel Fiber POP ({cables.length} Kabel)</h3>
-                <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">Pilih kabel untuk membuka susunan Tube &amp; Core TIA-598-A</p>
+                <p className="text-[11px] sm:text-xs text-black/70 dark:text-white/70 mt-0.5">Pilih kabel untuk membuka susunan Tube &amp; Core TIA-598-A</p>
               </div>
               {canCrud && (
                 <button onClick={onAddCable} className="w-full sm:w-auto px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1">
@@ -2479,39 +2455,39 @@ function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, 
 
           {/* Active Cable Overview Card */}
           {activeCable && (
-            <div className="bg-slate-900 dark:bg-slate-950 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-slate-800">
+            <div className="bg-white dark:bg-black text-black dark:text-white rounded-lg p-4 sm:p-5 shadow-xs border border-black/70 dark:border-white/70">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2.5 py-0.5 rounded-lg bg-slate-800 text-slate-300 text-[11px] font-semibold border border-slate-700">
+                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
                       {activeCable.core_count_total} Core ({Object.keys(coresByTube).length} Tube)
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-lg bg-slate-800 text-slate-300 text-[11px] font-semibold border border-slate-700">
-                      ️ Jalur {activeCable.installation_type} ({activeCable.length_meters}m)
+                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
+                      Jalur {activeCable.installation_type} ({activeCable.length_meters}m)
                     </span>
                   </div>
-                  <h2 className="text-base sm:text-lg font-bold mt-2">{activeCable.name}</h2>
+                  <h2 className="text-base sm:text-lg font-bold mt-2 text-black dark:text-white">{activeCable.name}</h2>
                   {activeCable.route_description && (
-                    <p className="text-xs text-slate-400 mt-0.5"> Rute: {activeCable.route_description}</p>
+                    <p className="text-xs text-black/70 dark:text-white/70 mt-0.5"> Rute: {activeCable.route_description}</p>
                   )}
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 bg-slate-800/90 p-2.5 sm:p-3 rounded-xl border border-slate-700 text-center">
+                <div className="grid grid-cols-4 gap-2 bg-black/5 dark:bg-white/5 p-2.5 sm:p-3 rounded-md border border-black/20 dark:border-white/20 text-center">
                   <div>
-                    <p className="text-[10px] sm:text-xs text-slate-400">Total</p>
-                    <p className="text-sm sm:text-base font-bold text-white">{activeCable.core_count_total}</p>
+                    <p className="text-[10px] sm:text-xs text-black/60 dark:text-white/60">Total</p>
+                    <p className="text-sm sm:text-base font-bold text-black dark:text-white">{activeCable.core_count_total}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] sm:text-xs text-emerald-400">Used</p>
-                    <p className="text-sm sm:text-base font-bold text-emerald-400">{(activeCable.cores ?? []).filter(c => c.status === 'used').length}</p>
+                    <p className="text-[10px] sm:text-xs text-emerald-600 dark:text-emerald-400">Used</p>
+                    <p className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400">{(activeCable.cores ?? []).filter(c => c.status === 'used').length}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] sm:text-xs text-slate-300">Dark Fiber</p>
-                    <p className="text-sm sm:text-base font-bold text-slate-300">{(activeCable.cores ?? []).filter(c => c.status === 'available').length}</p>
+                    <p className="text-[10px] sm:text-xs text-black/60 dark:text-white/60">Dark Fiber</p>
+                    <p className="text-sm sm:text-base font-bold text-black dark:text-white">{(activeCable.cores ?? []).filter(c => c.status === 'available').length}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] sm:text-xs text-amber-400">Reserved</p>
-                    <p className="text-sm sm:text-base font-bold text-amber-400">{(activeCable.cores ?? []).filter(c => c.status === 'reserved' || c.status === 'damaged').length}</p>
+                    <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">Reserved</p>
+                    <p className="text-sm sm:text-base font-bold text-amber-600 dark:text-amber-400">{(activeCable.cores ?? []).filter(c => c.status === 'reserved' || c.status === 'damaged').length}</p>
                   </div>
                 </div>
               </div>
@@ -2521,7 +2497,7 @@ function PopTabContent({ pops, selectedPop, onSelectPop, cables, loadingCables, 
           {/* ── Tube & Core Accordion ── */}
           {activeCable && Object.keys(coresByTube).length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 px-1">
+              <p className="text-xs font-semibold text-black/70 dark:text-white/70 mb-2 px-1">
                 Klik salah satu Tube di bawah untuk melihat isi Core-nya
               </p>
               <TubeCoreAccordion coresByTube={coresByTube} onEditCore={setEditingCore} />
@@ -2572,7 +2548,7 @@ function EditOdcPortModal({ port, odcName, onSave, onClose, loading }) {
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Status Port *</label>
+            <label className="block text-xs font-semibold text-black/70 dark:text-white/70 uppercase tracking-wide mb-1">Status Port *</label>
             <select
               value={form.status}
               onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
@@ -2585,7 +2561,7 @@ function EditOdcPortModal({ port, odcName, onSave, onClose, loading }) {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Label Peruntukan / Tujuan Port</label>
+            <label className="block text-xs font-semibold text-black/70 dark:text-white/70 uppercase tracking-wide mb-1">Label Peruntukan / Tujuan Port</label>
             <input
               value={form.destination_label}
               onChange={e => setForm(f => ({ ...f, destination_label: e.target.value }))}
@@ -2594,7 +2570,7 @@ function EditOdcPortModal({ port, odcName, onSave, onClose, loading }) {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Nama Pelanggan / Service (Cache)</label>
+            <label className="block text-xs font-semibold text-black/70 dark:text-white/70 uppercase tracking-wide mb-1">Nama Pelanggan / Service (Cache)</label>
             <input
               value={form.customer_name_cache}
               onChange={e => setForm(f => ({ ...f, customer_name_cache: e.target.value }))}
@@ -2603,7 +2579,7 @@ function EditOdcPortModal({ port, odcName, onSave, onClose, loading }) {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Catatan Port</label>
+            <label className="block text-xs font-semibold text-black/70 dark:text-white/70 uppercase tracking-wide mb-1">Catatan Port</label>
             <textarea
               rows={2}
               value={form.notes}
@@ -2630,9 +2606,9 @@ function EditOdcPortModal({ port, odcName, onSave, onClose, loading }) {
    - Core Power & Multi Interface
    - Dynamic Splitter Grouping & Interactive Port Editing
 ══════════════════════════════════════════════════════════════════ */
-function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDeleteAllNodes, refreshKey, onRefreshGlobal, scopedOltId }) {
+function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDeleteAllNodes, refreshKey, onRefreshGlobal, scopedOltId, onOpenKmlModal }) {
   const { hasRole } = useAuth();
-  const canCrud = hasRole('Super Administrator', 'Operator Jaringan', 'NOC Operator');
+  const canCrud = hasRole('Super Administrator', 'Operator Jaringan');
   const [oltDevices, setOltDevices] = useState([]);
   const [popNodes, setPopNodes] = useState([]);
   const [odcList, setOdcList] = useState([]);
@@ -2673,9 +2649,9 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
     setLoading(true);
     const params = new URLSearchParams();
     const targetOlt = filterOlt || scopedOltId;
-    if (targetOlt) params.append('olt_id', targetOlt);
-    if (filterPop) params.append('pop_id', filterPop);
-    if (searchQuery) params.append('search', searchQuery);
+    if (targetOlt && targetOlt !== 'all') params.append('olt_id', targetOlt);
+    if (filterPop && filterPop !== 'all') params.append('pop_id', filterPop);
+    if (searchQuery.trim()) params.append('search', searchQuery.trim());
     try {
       const r = await fetch(`/api/network-nodes/odc-list?${params}`);
       const d = await r.json();
@@ -2829,9 +2805,32 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
     setCurrentPage(1);
   }, [searchQuery, filterOlt, filterPop]);
 
+  const filteredOdcs = useMemo(() => {
+    return odcList.filter(odc => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchSearch = !q ||
+        odc.name?.toLowerCase().includes(q) ||
+        odc.code?.toLowerCase().includes(q) ||
+        odc.address?.toLowerCase().includes(q) ||
+        odc.notes?.toLowerCase().includes(q) ||
+        odc.olt_port_ref?.toLowerCase().includes(q) ||
+        odc.parent_node?.name?.toLowerCase().includes(q) ||
+        odc.parent?.name?.toLowerCase().includes(q) ||
+        odc.olt_device?.name?.toLowerCase().includes(q);
+
+      const odcOltId = odc.olt_device_id || odc.olt_device?.id || odc.parent_node?.olt_device?.id || odc.parent?.olt_device?.id;
+      const matchOlt = !filterOlt || filterOlt === 'all' || String(odcOltId) === String(filterOlt);
+
+      const odcPopId = odc.parent_node_id || odc.parent_node?.id || odc.parent?.id;
+      const matchPop = !filterPop || filterPop === 'all' || String(odcPopId) === String(filterPop);
+
+      return matchSearch && matchOlt && matchPop;
+    });
+  }, [odcList, searchQuery, filterOlt, filterPop]);
+
   const sortedOdcs = useMemo(() => {
-    return [...odcList].sort(naturalNodeCompare);
-  }, [odcList]);
+    return [...filteredOdcs].sort(naturalNodeCompare);
+  }, [filteredOdcs]);
 
   const totalPages = Math.ceil(sortedOdcs.length / perPage) || 1;
   const paginatedOdcs = sortedOdcs.slice((currentPage - 1) * perPage, currentPage * perPage);
@@ -2839,34 +2838,46 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
   return (
     <div className="space-y-4">
       {/* ─── Header ─── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white dark:bg-black p-4 sm:p-5 rounded-lg border border-black/70 dark:border-white/70 shadow-xs">
         <div>
-          <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">
-            Daftar ODC & ODP/MS
+          <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">
+            Daftar ODC &amp; ODP/MS
           </h3>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-[11px] text-black/70 dark:text-white/70 mt-0.5">
             <span className="font-semibold text-blue-600 dark:text-blue-400">ODC</span> = Pola standar (POP → ODC → ODP) &nbsp;·&nbsp;
             <span className="font-semibold text-violet-600 dark:text-violet-400">ODP/MS</span> = Pola mini (POP → MS → ODP)
           </p>
         </div>
         {canCrud && (
           <div className="flex gap-2 flex-wrap items-center">
+            {onOpenKmlModal && (
+              <button
+                type="button"
+                onClick={() => onOpenKmlModal('odc')}
+                className="px-3.5 py-2 bg-white hover:bg-black/5 dark:bg-black dark:hover:bg-white/10 text-black dark:text-white text-xs font-bold rounded-md transition-all flex items-center gap-1.5 border border-black/70 dark:border-white/70 cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                <span>Import KML ODC</span>
+              </button>
+            )}
             <button
               onClick={() => onAddNode('ODC')}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-md shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span>+</span> Tambah ODC
             </button>
             <button
               onClick={() => onAddMsNode()}
-              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl shadow-md shadow-violet-600/20 transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-md shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span>+</span> Tambah ODP/MS
             </button>
             {odcList.length > 0 && onDeleteAllNodes && (
               <button
                 onClick={() => onDeleteAllNodes('ODC')}
-                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-2xs"
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
                 title="Hapus seluruh data ODC dan ODP/MS"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2879,66 +2890,106 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
         )}
       </div>
 
-      {/* ─── Filter & Search Bar ─── */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 min-w-[180px]">
-          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1"> Cari ODC</label>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Cari kode, nama, lokasi..."
-            className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-          />
+      {/* ─── Filter & Search Bar (Section 7 Standard) ─── */}
+      <div className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs p-3.5 sm:p-4 space-y-2.5">
+        <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
+          <div className="relative flex-1">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-black/40 dark:text-white/40">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') fetchOdcs(); }}
+              placeholder="Cari kode, nama, lokasi ODC / MS..."
+              className="w-full pl-9 pr-3 py-2 text-xs rounded-md border border-black/40 dark:border-white/40 bg-white dark:bg-black text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 focus:outline-none focus:border-black dark:focus:border-white"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <OdcFilterPopover
+              filterOlt={filterOlt}
+              setFilterOlt={setFilterOlt}
+              filterPop={filterPop}
+              setFilterPop={setFilterPop}
+              olts={oltDevices}
+              pops={popNodes}
+              onApply={() => fetchOdcs()}
+              onApplyFilters={({ oltValue, popValue }) => {
+                setFilterOlt(oltValue);
+                setFilterPop(popValue);
+              }}
+              onReset={() => {
+                setFilterOlt('');
+                setFilterPop('');
+              }}
+              onResetFilters={() => {
+                setFilterOlt('');
+                setFilterPop('');
+              }}
+            />
+            <button
+              type="button"
+              onClick={fetchOdcs}
+              className="px-3.5 py-2 bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 text-white dark:text-black text-xs font-bold rounded-md transition-all cursor-pointer"
+            >
+              Cari
+            </button>
+          </div>
         </div>
-        <div className="flex-1 min-w-[160px]">
-          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1"> Filter OLT</label>
-          <SearchableSelect
-            value={filterOlt}
-            onChange={val => { setFilterOlt(val); setFilterPop(''); }}
-            placeholder="— Semua OLT —"
-            searchPlaceholder="Cari OLT..."
-            options={oltDevices.map(o => ({
-              value: o.id,
-              label: o.name
-            }))}
-          />
-        </div>
-        <div className="flex-1 min-w-[160px]">
-          <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1"> Filter POP</label>
-          <SearchableSelect
-            value={filterPop}
-            onChange={val => setFilterPop(val)}
-            placeholder="— Semua POP —"
-            searchPlaceholder="Cari POP..."
-            options={popNodes.map(p => ({
-              value: p.id,
-              label: p.name
-            }))}
-          />
-        </div>
-        <div className="flex items-end">
-          <button
-            onClick={fetchOdcs}
-            className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
-          >
-            Cari &amp; Filter
-          </button>
-        </div>
+
+        {/* Filter Chips */}
+        {(filterOlt || filterPop) && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-black/10 dark:border-white/10">
+            <span className="text-[11px] font-semibold text-black/60 dark:text-white/60">Filter Aktif:</span>
+            {filterOlt && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
+                <span>OLT: {oltDevices.find(o => String(o.id) === String(filterOlt))?.name || filterOlt}</span>
+                <button
+                  type="button"
+                  onClick={() => setFilterOlt('')}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            {filterPop && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
+                <span>POP: {popNodes.find(p => String(p.id) === String(filterPop))?.name || filterPop}</span>
+                <button
+                  type="button"
+                  onClick={() => setFilterPop('')}
+                  className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => { setFilterOlt(''); setFilterPop(''); }}
+              className="text-[11px] text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white underline ml-1 cursor-pointer"
+            >
+              Reset Filter
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ─── ODC Cards & Pagination ─── */}
       {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-10 text-center text-slate-400 text-xs animate-pulse border border-slate-200 dark:border-slate-700">
+        <div className="bg-white dark:bg-black rounded-lg p-10 text-center text-black/40 dark:text-white/40 text-xs animate-pulse border border-black/70 dark:border-white/70">
           Memuat data ODC...
         </div>
       ) : odcList.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 sm:p-12 text-center border border-dashed border-slate-300 dark:border-slate-600">
-          <p className="text-4xl mb-2"></p>
-          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Belum Ada ODC Ditemukan</p>
-          <p className="text-xs text-slate-400 mt-1">Coba ubah filter OLT / POP / kata pencarian atau tambah ODC baru</p>
+        <div className="bg-white dark:bg-black rounded-lg p-8 sm:p-12 text-center border border-dashed border-black/30 dark:border-white/30">
+          <p className="text-sm font-bold text-black dark:text-white">Belum Ada ODC Ditemukan</p>
+          <p className="text-xs text-black/60 dark:text-white/60 mt-1">Coba ubah filter OLT / POP / kata pencarian atau tambah ODC baru</p>
           {canCrud && (
-            <button onClick={() => onAddNode('ODC')} className="mt-3 px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl">
+            <button onClick={() => onAddNode('ODC')} className="mt-3 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-md cursor-pointer">
               + Tambah ODC Pertama
             </button>
           )}
@@ -2946,10 +2997,10 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
       ) : (
         <>
           {/* Desktop Table View */}
-          <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+          <div className="hidden md:block bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[11px]">
+              <table className="w-full text-left text-xs text-black dark:text-white">
+                <thead className="bg-black/5 dark:bg-white/5 text-black dark:text-white font-semibold border-b border-black/20 dark:border-white/20 uppercase tracking-wider text-[11px]">
                   <tr>
                     <th className="py-3.5 px-4">#</th>
                     <th className="py-3.5 px-4">KODE / NAMA ODC / MS</th>
@@ -2961,57 +3012,57 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                     <th className="py-3.5 px-4 text-center">AKSI</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                <tbody className="divide-y divide-black/20 dark:divide-white/20">
                   {paginatedOdcs.map((odc, idx) => {
                     const globalIdx = (currentPage - 1) * perPage + idx + 1;
                     const p = pct(odc.used_ports, odc.total_ports);
                     const isMsNode = odc.is_ms_node === true;
                     const topoType = odc.odc_topology_type ?? 'tunggal';
                     const topoBadge = isMsNode
-                      ? { label: 'ODP/MS', bg: 'bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-950/60 dark:text-violet-300 dark:border-violet-800' }
+                      ? { label: 'ODP/MS', bg: 'text-violet-600 dark:text-violet-400 border border-violet-500/30' }
                       : topoType === 'induk'
-                        ? { label: 'ODC Induk', bg: 'bg-blue-100 text-blue-800 border-blue-200' }
+                        ? { label: 'ODC Induk', bg: 'text-blue-600 dark:text-blue-400 border border-blue-500/30' }
                         : topoType === 'anak'
-                          ? { label: 'ODC Anak', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' }
-                          : { label: 'Tunggal', bg: 'bg-blue-100 text-blue-800 border-blue-200' };
+                          ? { label: 'ODC Anak', bg: 'text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' }
+                          : { label: 'Tunggal', bg: 'text-blue-600 dark:text-blue-400 border border-blue-500/30' };
 
                     return (
-                      <tr key={odc.id} className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors ${isMsNode ? 'bg-violet-50/30 dark:bg-violet-950/10' : ''}`}>
-                        <td className="py-3 px-4 font-mono font-bold text-slate-500">{globalIdx}</td>
+                      <tr key={odc.id} className={`hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${isMsNode ? 'bg-violet-500/5' : ''}`}>
+                        <td className="py-3 px-4 font-mono font-bold text-black/50 dark:text-white/50">{globalIdx}</td>
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{odc.name}</span>
+                            <span className="font-bold text-black dark:text-white text-sm leading-tight">{odc.name}</span>
                             {isMsNode && (
-                              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-violet-100 text-violet-700 border border-violet-300 dark:bg-violet-950/70 dark:text-violet-300 dark:border-violet-700 shrink-0">
+                              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded text-violet-600 dark:text-violet-400 border border-violet-500/40 shrink-0">
                                 MS
                               </span>
                             )}
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${topoBadge.bg} inline-block mb-1`}>
+                          <span className={`px-2 py-0.5 text-[11px] font-bold rounded ${topoBadge.bg} inline-block mb-1`}>
                             {topoBadge.label}
                           </span>
-                          <span className="font-semibold text-slate-800 dark:text-slate-100 block">{odc.olt_device?.name || 'OLT Utama Solok'}</span>
-                          <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400 font-semibold">{displayInterface(odc.olt_port_ref)}</span>
+                          <span className="font-semibold text-black dark:text-white block">{odc.olt_device?.name || 'OLT Utama Solok'}</span>
+                          <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{displayInterface(odc.olt_port_ref)}</span>
                         </td>
                         <td className="py-3 px-4">
                           {odc.core_power ? (
-                            <span className="font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900/60 px-2 py-0.5 rounded text-[11px] block w-max mb-1">
+                            <span className="font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded text-[11px] block w-max mb-1">
                               {odc.core_power}
                             </span>
-                          ) : <span className="text-slate-400 block">—</span>}
-                          <span className="text-[11px] font-medium text-blue-800 dark:text-blue-300 block truncate max-w-[140px]">
+                          ) : <span className="text-black/40 dark:text-white/40 block">—</span>}
+                          <span className="text-[11px] font-medium text-black/80 dark:text-white/80 block truncate max-w-[140px]">
                             {odc.tube_info || '—'}
                           </span>
                         </td>
                         <td className="py-3 px-4">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 block">{odc.used_ports}/{odc.total_ports} Port ({p}%)</span>
-                          <div className="w-24 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mt-1">
+                          <span className="font-bold text-black dark:text-white block">{odc.used_ports}/{odc.total_ports} Port ({p}%)</span>
+                          <div className="w-24 h-1.5 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden mt-1">
                             <div className={`h-full ${pctColor(p)} rounded-full`} style={{ width: `${p}%` }} />
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300 max-w-[160px] truncate">
+                        <td className="py-3 px-4 text-black/70 dark:text-white/70 max-w-[160px] truncate">
                           {odc.address || '—'}
                         </td>
                         <td className="py-3 px-4">
@@ -3024,14 +3075,14 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                             <button
                               onClick={() => openOdcDetail(odc)}
                               title="Kelola Grid Port ODC"
-                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors"
+                              className="px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                             >
                               Port
                             </button>
                             <button
                               onClick={() => openOdcFullModal(odc)}
                               title="Lihat Seluruh Spesifikasi Data ODC"
-                              className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold hover:bg-blue-100 transition-colors"
+                              className="px-2.5 py-1 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/40 dark:border-white/40 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                             >
                               Detail
                             </button>
@@ -3039,13 +3090,13 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                               <>
                                 <button
                                   onClick={() => onEditNode(odc)}
-                                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-200 transition-colors"
+                                  className="px-2.5 py-1 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/40 dark:border-white/40 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                                 >
                                   Edit
                                 </button>
                                 <button
                                   onClick={() => onDeleteNode(odc)}
-                                  className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-semibold hover:bg-rose-100 transition-colors"
+                                  className="px-2.5 py-1 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer"
                                 >
                                   Hapus
                                 </button>
@@ -3067,54 +3118,54 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
               const globalIdx = (currentPage - 1) * perPage + idx + 1;
               const p = pct(odc.used_ports, odc.total_ports);
               return (
-                <div key={odc.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-                  <div className="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
-                    <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-slate-50/70 dark:bg-slate-800/40">
-                      <span className="text-slate-400 font-semibold">#</span>
-                      <span className="col-span-2 font-mono font-bold text-slate-700 dark:text-slate-200">{globalIdx}</span>
+                <div key={odc.id} className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs overflow-hidden">
+                  <div className="divide-y divide-black/20 dark:divide-white/20 text-xs">
+                    <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-black/5 dark:bg-white/5">
+                      <span className="text-black/50 dark:text-white/50 font-semibold">#</span>
+                      <span className="col-span-2 font-mono font-bold text-black dark:text-white">{globalIdx}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">Name</span>
-                      <span className="col-span-2 font-bold text-slate-800 dark:text-slate-100 uppercase">{odc.name}</span>
+                      <span className="text-black/50 dark:text-white/50 font-semibold">Name</span>
+                      <span className="col-span-2 font-bold text-black dark:text-white uppercase">{odc.name}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">OLT &amp; Interface</span>
-                      <span className="col-span-2 text-slate-700 dark:text-slate-300">
+                      <span className="text-black/50 dark:text-white/50 font-semibold">OLT &amp; Interface</span>
+                      <span className="col-span-2 text-black dark:text-white">
                         <span className="font-bold block">{odc.olt_device?.name || 'OLT Utama Solok'}</span>
-                        <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400 font-semibold">{displayInterface(odc.olt_port_ref)}</span>
+                        <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{displayInterface(odc.olt_port_ref)}</span>
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">Tube &amp; Core Power</span>
-                      <span className="col-span-2 text-slate-700 dark:text-slate-300">
+                      <span className="text-black/50 dark:text-white/50 font-semibold">Tube &amp; Core Power</span>
+                      <span className="col-span-2 text-black dark:text-white">
                         <span className="font-semibold block">{odc.tube_info || '—'}</span>
                         {odc.core_power && <span className="font-mono font-bold text-amber-700 dark:text-amber-300 text-[10px] block">{odc.core_power}</span>}
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">Capacity</span>
-                      <span className="col-span-2 font-bold text-slate-800 dark:text-slate-100">
+                      <span className="text-black/50 dark:text-white/50 font-semibold">Capacity</span>
+                      <span className="col-span-2 font-bold text-black dark:text-white">
                         {odc.used_ports}/{odc.total_ports} Port ({p}%)
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">Status</span>
+                      <span className="text-black/50 dark:text-white/50 font-semibold">Status</span>
                       <span className="col-span-2">
-                        <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold ${STATUS_META[odc.status]?.pill}`}>
+                        <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold border ${STATUS_META[odc.status]?.pill}`}>
                           {STATUS_META[odc.status]?.label}
                         </span>
                       </span>
                     </div>
-                    <div className="px-4 py-3 bg-slate-50/50 dark:bg-slate-800/20 flex items-center justify-end gap-2">
+                    <div className="px-4 py-3 bg-black/5 dark:bg-white/5 flex items-center justify-end gap-2">
                       <button
                         onClick={() => openOdcDetail(odc)}
-                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-xs"
+                        className="px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-xs cursor-pointer"
                       >
                         Port
                       </button>
                       <button
                         onClick={() => openOdcFullModal(odc)}
-                        className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold hover:bg-blue-100"
+                        className="px-2.5 py-1 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/40 dark:border-white/40 text-[11px] font-bold hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
                       >
                         Detail
                       </button>
@@ -3122,13 +3173,13 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                         <>
                           <button
                             onClick={() => onEditNode(odc)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold"
+                            className="px-2.5 py-1 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/40 dark:border-white/40 text-[11px] font-semibold cursor-pointer"
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => onDeleteNode(odc)}
-                            className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-[11px] font-semibold"
+                            className="px-2.5 py-1 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-[11px] font-semibold cursor-pointer"
                           >
                             Hapus
                           </button>
@@ -3143,21 +3194,21 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
 
           {/* ODC Pagination Controls */}
           {totalPages > 1 && (
-            <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between text-xs">
+            <div className="p-3.5 bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs flex items-center justify-between text-xs">
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40"
+                className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-30 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10"
               >
                 ← Prev
               </button>
-              <span className="font-bold text-slate-700 dark:text-slate-300">
-                Halaman {currentPage} dari {totalPages} (Total {odcList.length} ODC)
+              <span className="font-bold text-black dark:text-white">
+                Halaman {currentPage} dari {totalPages} (Total {filteredOdcs.length} ODC)
               </span>
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40"
+                className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-30 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10"
               >
                 Next →
               </button>
@@ -3168,64 +3219,65 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
 
       {/* ─── ODC Detail Panel Modal ─── */}
       {selectedOdc && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4" onClick={closeDetail}>
-          <div className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-3xl border border-slate-200 dark:border-slate-700 max-h-[92vh] flex flex-col overflow-hidden"
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-sm p-3 sm:p-6 flex items-start sm:items-center justify-center pt-14 sm:pt-20 pb-8 sm:pb-12" onClick={closeDetail}>
+          <div
+            className="relative bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl w-full max-w-3xl border border-black/70 dark:border-white/70 my-auto flex flex-col overflow-hidden max-h-[82vh] sm:max-h-[86vh]"
             onClick={e => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="bg-slate-900 border-b border-slate-800 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
-              <div>
+            <div className="bg-white dark:bg-black border-b border-black/30 dark:border-white/30 text-black dark:text-white px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between flex-shrink-0">
+              <div className="min-w-0 pr-2">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold">Detail ODC — {selectedOdc.name}</h3>
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-white/20 text-white uppercase">
+                  <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">Detail ODC — {selectedOdc.name}</h3>
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded text-black dark:text-white border border-black/30 dark:border-white/30 uppercase">
                     {selectedOdc.odc_topology_type === 'induk' ? 'ODC INDUK' : selectedOdc.odc_topology_type === 'anak' ? 'ODC ANAK' : 'TUNGGAL'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-300 font-mono mt-0.5">
+                <p className="text-xs text-black/70 dark:text-white/70 font-mono mt-0.5">
                   {selectedOdc.code}
                   {selectedOdc.olt_device && ` · OLT: ${selectedOdc.olt_device.name}`}
                   {selectedOdc.olt_port_ref && ` [ ${displayInterface(selectedOdc.olt_port_ref)} ]`}
                   {selectedOdc.parent_node && ` · POP: ${selectedOdc.parent_node.name}`}
                 </p>
               </div>
-              <button onClick={closeDetail} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white/10 text-slate-300 font-bold">✕</button>
+              <button onClick={closeDetail} className="w-8 h-8 flex items-center justify-center rounded-md border border-black/30 dark:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white font-bold cursor-pointer">✕</button>
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
               {/* Context Summary Banner */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/30 dark:border-white/30 rounded-lg p-3">
                 <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Interface OLT</span>
-                  <span className="font-mono font-bold text-indigo-700">{displayInterface(selectedOdc.olt_port_ref)}</span>
+                  <span className="text-black/50 dark:text-white/50 block text-[10px] uppercase font-bold">Interface OLT</span>
+                  <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{displayInterface(selectedOdc.olt_port_ref)}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Core Power</span>
-                  <span className="font-mono font-bold text-amber-700">{selectedOdc.core_power || '—'}</span>
+                  <span className="text-black/50 dark:text-white/50 block text-[10px] uppercase font-bold">Core Power</span>
+                  <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{selectedOdc.core_power || '—'}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Splitter Config</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-100">
+                  <span className="text-black/50 dark:text-white/50 block text-[10px] uppercase font-bold">Splitter Config</span>
+                  <span className="font-semibold text-black dark:text-white">
                     {selectedOdc.splitter_count > 0 ? `${selectedOdc.splitter_count} × ${selectedOdc.splitter_config?.[0] || '1:4'}` : (selectedOdc.splitter_config?.join(', ') || selectedOdc.splitter_type?.ratio || '—')}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Kapasitas Port</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-100">{selectedOdc.used_ports}/{selectedOdc.total_ports} Port</span>
+                  <span className="text-black/50 dark:text-white/50 block text-[10px] uppercase font-bold">Kapasitas Port</span>
+                  <span className="font-bold text-black dark:text-white">{selectedOdc.used_ports}/{selectedOdc.total_ports} Port</span>
                 </div>
               </div>
 
               {/* Tube Info Banner if present */}
               {selectedOdc.tube_info && (
-                <div className="bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl px-3.5 py-2.5 text-xs text-blue-900 dark:text-blue-200">
-                  <span className="font-bold"> Informasi Tube Fiber:</span> {selectedOdc.tube_info}
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg px-3.5 py-2.5 text-xs text-blue-600 dark:text-blue-400">
+                  <span className="font-bold">Informasi Tube Fiber:</span> {selectedOdc.tube_info}
                 </div>
               )}
 
               {detailLoading ? (
-                <div className="py-10 text-center text-slate-400 text-xs animate-pulse">Memuat detail ODC...</div>
+                <div className="py-10 text-center text-black/40 dark:text-white/40 text-xs animate-pulse">Memuat detail ODC...</div>
               ) : odcDetail ? (
-                <div className="space-y-5">
+                <div className="space-y-4">
                   {/* Port Grid Grouped By Splitter Categories */}
                   {odcDetail.ports?.length > 0 && (() => {
                     const { powerGroups, distGroups, generalGroups } = groupPortsBySplitter(
@@ -3235,33 +3287,33 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                     );
 
                     return (
-                      <div className="space-y-5">
+                      <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                          <h4 className="text-xs font-bold text-black dark:text-white uppercase tracking-wider">
                             Grid Port ODC ({odcDetail.ports.length} Port Total)
                           </h4>
-                          <span className="text-[11px] text-slate-400 dark:text-slate-500"> Klik port untuk mengedit peruntukan</span>
+                          <span className="text-[11px] text-black/50 dark:text-white/50">Klik port untuk mengedit peruntukan</span>
                         </div>
 
-                        {/*  Kelompok Splitter Power ODC */}
+                        {/* Kelompok Splitter Power ODC */}
                         {powerGroups.length > 0 && (
-                          <div className="space-y-3 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/40 rounded-2xl p-4">
-                            <div className="flex items-center justify-between border-b border-amber-200/80 dark:border-amber-900/40 pb-2">
-                              <h4 className="text-xs font-bold text-amber-900 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <div className="space-y-3 bg-amber-500/5 border border-amber-500/30 rounded-lg p-3.5 sm:p-4">
+                            <div className="flex items-center justify-between border-b border-amber-500/20 pb-2">
+                              <h4 className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
                                 Kelompok Splitter Power ODC ({powerGroups.length} Modul · {powerGroups.reduce((a, g) => a + g.ports.length, 0)} Port)
                               </h4>
-                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">Feeder / Upstream</span>
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded text-amber-700 dark:text-amber-300 border border-amber-500/30">Feeder / Upstream</span>
                             </div>
 
                             <div className="space-y-3">
                               {powerGroups.map((group, gIdx) => (
-                                <div key={gIdx} className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 space-y-2">
-                                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                                <div key={gIdx} className="bg-white dark:bg-black border border-amber-500/30 rounded-md p-3 space-y-2">
+                                  <div className="flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-1.5">
+                                    <span className="text-xs font-bold text-black dark:text-white flex items-center gap-1.5">
                                       <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                                       {group.title}
                                     </span>
-                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded text-amber-700 dark:text-amber-300 border border-amber-500/30">
                                       Rasio {group.ratio} ({group.ports.length} Port)
                                     </span>
                                   </div>
@@ -3273,17 +3325,17 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                                         <div
                                           key={port.id}
                                           onClick={() => setEditingPort(port)}
-                                          className={`p-2.5 rounded-xl border flex flex-col items-center text-center gap-1 cursor-pointer transition-all hover:scale-105 hover:shadow-sm ${used ? 'bg-amber-100/70 dark:bg-amber-950/70 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 hover:border-amber-500' : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-amber-400'
+                                          className={`p-2.5 rounded-md border flex flex-col items-center text-center gap-1 cursor-pointer transition-all hover:scale-105 ${used ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300 hover:border-amber-500' : 'bg-black/5 dark:bg-white/5 border-black/20 dark:border-white/20 text-black dark:text-white hover:border-amber-400'
                                             }`}
                                         >
-                                          <span className="text-base leading-none">{used ? '' : '○'}</span>
-                                          <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">Port {port.port_number}</span>
+                                          <span className="text-base leading-none">{used ? '●' : '○'}</span>
+                                          <span className="text-[11px] font-bold text-black dark:text-white">P{port.port_number}</span>
                                           {used ? (
-                                            <p className="text-[10px] font-semibold text-amber-900 dark:text-amber-300 line-clamp-2 leading-tight">
+                                            <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 line-clamp-2 leading-tight">
                                               {port.destination_label || port.customer_name_cache || 'Terpakai'}
                                             </p>
                                           ) : (
-                                            <span className="text-[10px] text-slate-400 dark:text-slate-500">Kosong</span>
+                                            <span className="text-[10px] text-black/40 dark:text-white/40">Kosong</span>
                                           )}
                                         </div>
                                       );
@@ -3295,25 +3347,25 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                           </div>
                         )}
 
-                        {/*  Kelompok Splitter Distribusi ODC */}
+                        {/* Kelompok Splitter Distribusi ODC */}
                         {distGroups.length > 0 && (
-                          <div className="space-y-3 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/40 rounded-2xl p-4">
-                            <div className="flex items-center justify-between border-b border-blue-200/80 dark:border-blue-900/40 pb-2">
-                              <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <div className="space-y-3 bg-blue-500/5 border border-blue-500/30 rounded-lg p-3.5 sm:p-4">
+                            <div className="flex items-center justify-between border-b border-blue-500/20 pb-2">
+                              <h4 className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
                                 Kelompok Splitter Distribusi ODC ({distGroups.length} Modul · {distGroups.reduce((a, g) => a + g.ports.length, 0)} Port)
                               </h4>
-                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border border-blue-300 dark:border-blue-800">Downstream ODP</span>
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded text-blue-700 dark:text-blue-300 border border-blue-500/30">Downstream ODP</span>
                             </div>
 
                             <div className="space-y-3">
                               {distGroups.map((group, gIdx) => (
-                                <div key={gIdx} className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-800 rounded-xl p-3 space-y-2">
-                                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                                <div key={gIdx} className="bg-white dark:bg-black border border-blue-500/30 rounded-md p-3 space-y-2">
+                                  <div className="flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-1.5">
+                                    <span className="text-xs font-bold text-black dark:text-white flex items-center gap-1.5">
                                       <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                                       {group.title}
                                     </span>
-                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded text-blue-700 dark:text-blue-300 border border-blue-500/30">
                                       Rasio {group.ratio} ({group.ports.length} Port)
                                     </span>
                                   </div>
@@ -3325,17 +3377,17 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                                         <div
                                           key={port.id}
                                           onClick={() => setEditingPort(port)}
-                                          className={`p-2.5 rounded-xl border flex flex-col items-center text-center gap-1 cursor-pointer transition-all hover:scale-105 hover:shadow-sm ${used ? 'bg-blue-50 dark:bg-blue-950/80 border-blue-300 dark:border-blue-700 hover:border-blue-500' : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                                          className={`p-2.5 rounded-md border flex flex-col items-center text-center gap-1 cursor-pointer transition-all hover:scale-105 ${used ? 'bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-blue-300 hover:border-blue-500' : 'bg-black/5 dark:bg-white/5 border-black/20 dark:border-white/20 text-black dark:text-white hover:border-blue-400'
                                             }`}
                                         >
-                                          <span className="text-base leading-none">{used ? '' : '○'}</span>
-                                          <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">Port {port.port_number}</span>
+                                          <span className="text-base leading-none">{used ? '●' : '○'}</span>
+                                          <span className="text-[11px] font-bold text-black dark:text-white">P{port.port_number}</span>
                                           {used ? (
                                             <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 line-clamp-2 leading-tight">
                                               {port.destination_label || port.customer_name_cache || 'Terpakai'}
                                             </p>
                                           ) : (
-                                            <span className="text-[10px] text-slate-400 dark:text-slate-500">Kosong</span>
+                                            <span className="text-[10px] text-black/40 dark:text-white/40">Kosong</span>
                                           )}
                                         </div>
                                       );
@@ -3349,15 +3401,15 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
 
                         {/* General / Unclassified Groups */}
                         {generalGroups.length > 0 && (
-                          <div className="space-y-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+                          <div className="space-y-3 bg-black/5 dark:bg-white/5 border border-black/30 dark:border-white/30 rounded-lg p-3.5 sm:p-4">
                             {generalGroups.map((group, gIdx) => (
-                              <div key={gIdx} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2">
-                                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5">
-                                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                                    <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                              <div key={gIdx} className="bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md p-3 space-y-2">
+                                <div className="flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-1.5">
+                                  <span className="text-xs font-bold text-black dark:text-white flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-black/60 dark:bg-white/60"></span>
                                     {group.title}
                                   </span>
-                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded text-black/70 dark:text-white/70 border border-black/30 dark:border-white/30">
                                     {group.ratio !== '—' ? `Rasio ${group.ratio} (` : ''}{group.ports.length} Port{group.ratio !== '—' ? ')' : ''}
                                   </span>
                                 </div>
@@ -3369,17 +3421,17 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                                       <div
                                         key={port.id}
                                         onClick={() => setEditingPort(port)}
-                                        className={`p-2.5 rounded-xl border flex flex-col items-center text-center gap-1 cursor-pointer transition-all hover:scale-105 hover:shadow-sm ${used ? 'bg-blue-50 dark:bg-blue-950/80 border-blue-300 dark:border-blue-700 hover:border-blue-500' : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                                        className={`p-2.5 rounded-md border flex flex-col items-center text-center gap-1 cursor-pointer transition-all hover:scale-105 ${used ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-700 dark:text-indigo-300 hover:border-indigo-500' : 'bg-black/5 dark:bg-white/5 border-black/20 dark:border-white/20 text-black dark:text-white hover:border-black/50 dark:hover:border-white/50'
                                           }`}
                                       >
-                                        <span className="text-base leading-none">{used ? '' : '○'}</span>
-                                        <span className="text-[11px] font-bold text-slate-800 dark:text-slate-100">Port {port.port_number}</span>
+                                        <span className="text-base leading-none">{used ? '●' : '○'}</span>
+                                        <span className="text-[11px] font-bold text-black dark:text-white">P{port.port_number}</span>
                                         {used ? (
-                                          <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 line-clamp-2 leading-tight">
+                                          <p className="text-[10px] font-semibold text-indigo-700 dark:text-indigo-300 line-clamp-2 leading-tight">
                                             {port.destination_label || port.customer_name_cache || 'Terpakai'}
                                           </p>
                                         ) : (
-                                          <span className="text-[10px] text-slate-400 dark:text-slate-500">Kosong</span>
+                                          <span className="text-[10px] text-black/40 dark:text-white/40">Kosong</span>
                                         )}
                                       </div>
                                     );
@@ -3396,26 +3448,26 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                   {/* ODP Children */}
                   {odcDetail.odps?.length > 0 && (
                     <div>
-                      <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-3">
+                      <h4 className="text-xs font-bold text-black dark:text-white uppercase tracking-wider mb-2.5">
                         ODP Terhubung ({odcDetail.odps.length} ODP)
                       </h4>
                       <div className="space-y-2">
                         {odcDetail.odps.map(odp => {
                           const pp = pct(odp.used_ports, odp.total_ports);
                           return (
-                            <div key={odp.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 gap-4">
+                            <div key={odp.id} className="flex items-center justify-between bg-black/5 dark:bg-white/5 border border-black/30 dark:border-white/30 rounded-lg px-4 py-3 gap-4">
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{odp.name}</p>
-                                <p className="text-[11px] font-mono text-emerald-700">{odp.code}</p>
-                                {odp.address && <p className="text-[10px] text-slate-400 truncate mt-0.5">{odp.address}</p>}
+                                <p className="text-xs font-bold text-black dark:text-white truncate">{odp.name}</p>
+                                <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">{odp.code}</p>
+                                {odp.address && <p className="text-[10px] text-black/50 dark:text-white/50 truncate mt-0.5">{odp.address}</p>}
                               </div>
                               <div className="text-right shrink-0">
-                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">{odp.used_ports}/{odp.total_ports} Port</p>
-                                <div className="w-20 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mt-1">
+                                <p className="text-[11px] font-bold text-black dark:text-white">{odp.used_ports}/{odp.total_ports} Port</p>
+                                <div className="w-20 h-1.5 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden mt-1">
                                   <div className={`h-full ${pctColor(pp)} rounded-full`} style={{ width: `${pp}%` }} />
                                 </div>
                               </div>
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${STATUS_META[odp.status]?.pill}`}>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border shrink-0 ${STATUS_META[odp.status]?.pill}`}>
                                 {STATUS_META[odp.status]?.label}
                               </span>
                             </div>
@@ -3426,29 +3478,29 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                   )}
                 </div>
               ) : (
-                <div className="py-10 text-center text-red-400 text-xs">Gagal memuat detail ODC.</div>
+                <div className="py-10 text-center text-red-500 text-xs">Gagal memuat detail ODC.</div>
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
+            <div className="px-5 py-4 border-t border-black/30 dark:border-white/30 bg-white dark:bg-black flex items-center justify-between flex-shrink-0">
               {canCrud ? (
                 <div className="flex gap-2">
                   <button
                     onClick={() => { onEditNode(selectedOdc); closeDetail(); }}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-all"
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-md transition-all cursor-pointer"
                   >
-                    ️ Edit ODC
+                    Edit ODC
                   </button>
                   <button
                     onClick={() => { onDeleteNode(selectedOdc); closeDetail(); }}
-                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold rounded-xl border border-red-200 transition-all"
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-semibold rounded-md border border-rose-200 dark:border-rose-800 transition-all cursor-pointer"
                   >
-                    ️ Hapus
+                    Hapus
                   </button>
                 </div>
               ) : <div />}
-              <button onClick={closeDetail} className="text-xs text-slate-400 hover:text-slate-600">Tutup</button>
+              <button onClick={closeDetail} className="px-4 py-2 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white text-xs font-semibold rounded-md border border-black/30 dark:border-white/30 cursor-pointer">Tutup</button>
             </div>
           </div>
         </div>
@@ -3466,39 +3518,40 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
       )}
 
       {/* ─── Modal Full Spesifikasi Data Lengkap ODC ─── */}
-      {viewFullOdcModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4" onClick={closeFullOdcModal}>
-          <div className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-700 max-h-[90vh] flex flex-col overflow-hidden"
+      {viewFullOdcModal && createPortal(
+        <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen" onClick={closeFullOdcModal}>
+          <div
+            className="relative w-full max-w-2xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
             onClick={e => e.stopPropagation()}
           >
             {!viewFullOdcModal ? null : (<>
-            <div className="bg-slate-900 border-b border-slate-800 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
+            <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-black/20 dark:border-white/20">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold">Spesifikasi &amp; Data Lengkap ODC</h3>
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-indigo-500 text-white uppercase">
+                  <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">Spesifikasi &amp; Data Lengkap ODC</h3>
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 uppercase">
                     {viewFullOdcModal.odc_topology_type === 'induk' ? 'ODC INDUK' : viewFullOdcModal.odc_topology_type === 'anak' ? 'ODC ANAK' : 'TUNGGAL'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-300 font-mono mt-0.5">{viewFullOdcModal.name}</p>
+                <p className="text-[11px] text-black/70 dark:text-white/70 font-mono mt-0.5">{viewFullOdcModal.name}</p>
               </div>
-              <button onClick={closeFullOdcModal} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white/10 text-slate-300 font-bold">✕</button>
+              <button onClick={closeFullOdcModal} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
-                <h4 className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-[11px]">1. Identitas Node &amp; Topologi</h4>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 text-xs">
+              <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-3">
+                <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px]">1. Identitas Node &amp; Topologi</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Nama Node</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-100">{viewFullOdcModal.name}</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Nama Node</span>
+                    <span className="font-bold text-black dark:text-white">{viewFullOdcModal.name}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Jenis Topologi</span>
-                    <span className="font-semibold text-slate-700 dark:text-slate-300 uppercase">{viewFullOdcModal.odc_topology_type || 'tunggal'}</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Jenis Topologi</span>
+                    <span className="font-semibold text-black dark:text-white uppercase">{viewFullOdcModal.odc_topology_type || 'tunggal'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Status Operasional</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Status Operasional</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${STATUS_META[viewFullOdcModal.status]?.pill}`}>
                       {STATUS_META[viewFullOdcModal.status]?.label}
                     </span>
@@ -3506,91 +3559,98 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
                 </div>
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
-                <h4 className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-[11px]">2. Koneksi OLT &amp; Parent Headend</h4>
+              <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-3">
+                <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px]">2. Koneksi OLT &amp; Parent Headend</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Perangkat OLT</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-100">{viewFullOdcModal.olt_device?.name || 'OLT Utama Solok'}</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Perangkat OLT</span>
+                    <span className="font-bold text-black dark:text-white">{viewFullOdcModal.olt_device?.name || 'OLT Utama Solok'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Interface OLT PON</span>
-                    <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{displayInterface(viewFullOdcModal.olt_port_ref)}</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Interface OLT PON</span>
+                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{displayInterface(viewFullOdcModal.olt_port_ref)}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">POP / ODC Induk</span>
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">{viewFullOdcModal.parent_node?.name || '—'}</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">POP / ODC Induk</span>
+                    <span className="font-semibold text-black dark:text-white">{viewFullOdcModal.parent_node?.name || '—'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">ODP Anak Terhubung</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">ODP Anak Terhubung</span>
                     <span className="font-bold text-emerald-600 dark:text-emerald-400">{viewFullOdcModal.odp_count} ODP</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
-                <h4 className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-[11px]">3. Spesifikasi Teknis Optik &amp; Splitter</h4>
+              <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-3">
+                <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px]">3. Spesifikasi Teknis Optik &amp; Splitter</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Core Power Feeder</span>
-                    <span className="font-mono font-bold text-amber-700 dark:text-amber-300">{viewFullOdcModal.core_power || '—'}</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Core Power Feeder</span>
+                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{viewFullOdcModal.core_power || '—'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Informasi Tube Fiber</span>
-                    <span className="font-medium text-blue-800 dark:text-blue-300">{viewFullOdcModal.tube_info || '—'}</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Informasi Tube Fiber</span>
+                    <span className="font-medium text-black dark:text-white">{viewFullOdcModal.tube_info || '—'}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Modul Splitter ODC</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-100">
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Modul Splitter ODC</span>
+                    <span className="font-semibold text-black dark:text-white">
                       {viewFullOdcModal.splitter_count > 0 ? `${viewFullOdcModal.splitter_count} × ${viewFullOdcModal.splitter_config?.[0]}` : (viewFullOdcModal.splitter_config?.join(', ') || viewFullOdcModal.splitter_type?.ratio || '—')}
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Kapasitas &amp; Port Terisi</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-100">
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Kapasitas &amp; Port Terisi</span>
+                    <span className="font-bold text-black dark:text-white">
                       {viewFullOdcModal.used_ports}/{viewFullOdcModal.total_ports} Port ({pct(viewFullOdcModal.used_ports, viewFullOdcModal.total_ports)}%)
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
-                <h4 className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-[11px]">4. Lokasi &amp; Koordinat Pemetaan</h4>
+              <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-3">
+                <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px]">4. Lokasi &amp; Koordinat Pemetaan</h4>
                 <div className="space-y-2">
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Alamat / Lokasi ODC</span>
-                    <span className="font-medium text-slate-800 dark:text-slate-100">{viewFullOdcModal.address || '—'}</span>
+                    <span className="text-black/50 dark:text-white/50 block text-[10px]">Alamat / Lokasi ODC</span>
+                    <span className="font-medium text-black dark:text-white">{viewFullOdcModal.address || '—'}</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                  <div className="grid grid-cols-2 gap-3 pt-1 border-t border-black/20 dark:border-white/20">
                     <div>
-                      <span className="text-slate-400 block text-[10px]">Koordinat Desimal</span>
-                      <span className="font-mono text-slate-700 dark:text-slate-300">{viewFullOdcModal.latitude && viewFullOdcModal.longitude ? `${viewFullOdcModal.latitude}, ${viewFullOdcModal.longitude}` : '—'}</span>
+                      <span className="text-black/50 dark:text-white/50 block text-[10px]">Koordinat Desimal</span>
+                      <span className="font-mono text-black dark:text-white">{viewFullOdcModal.latitude && viewFullOdcModal.longitude ? `${viewFullOdcModal.latitude}, ${viewFullOdcModal.longitude}` : '—'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block text-[10px]">Koordinat DMS</span>
-                      <span className="font-mono text-slate-700 dark:text-slate-300">{viewFullOdcModal.latitude && viewFullOdcModal.longitude ? decimalToDms(viewFullOdcModal.latitude, viewFullOdcModal.longitude).formattedDms : '—'}</span>
+                      <span className="text-black/50 dark:text-white/50 block text-[10px]">Koordinat DMS</span>
+                      <span className="font-mono text-black dark:text-white">{viewFullOdcModal.latitude && viewFullOdcModal.longitude ? decimalToDms(viewFullOdcModal.latitude, viewFullOdcModal.longitude).formattedDms : '—'}</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
+            {/* Pinned Footer */}
+            <div className="px-5 py-3.5 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex items-center justify-between flex-shrink-0">
               {canCrud ? (
                 <div className="flex gap-2">
                   <button
                     onClick={() => { onEditNode(viewFullOdcModal); closeFullOdcModal(); }}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-all"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-md shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
                   >
                     Edit ODC
                   </button>
                 </div>
               ) : <div />}
-              <button onClick={closeFullOdcModal} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl">Tutup</button>
+              <button
+                onClick={closeFullOdcModal}
+                className="px-4 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-bold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
             </div>
             </>)}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -3599,14 +3659,16 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
 /* ══════════════════════════════════════════════════════════════════
    TAB 3: ODP (OPTICAL DISTRIBUTION POINT)
 ══════════════════════════════════════════════════════════════════ */
-function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllNodes, refreshKey, onRefreshGlobal }) {
+function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllNodes, refreshKey, onRefreshGlobal, onOpenKmlModal }) {
   const { hasRole } = useAuth();
-  const canCrud = hasRole('Super Administrator', 'Operator Jaringan', 'NOC Operator');
+  const canCrud = hasRole('Super Administrator', 'Operator Jaringan');
 
   const [selectedOdp, setSelectedOdp] = useState(null);
   const [odpDetailData, setOdpDetailData] = useState(null);
   const [portsData, setPortsData] = useState([]);
   const [loadingPorts, setLoadingPorts] = useState(false);
+  const [refreshingLiveOptical, setRefreshingLiveOptical] = useState(false);
+  const [liveProbeFeedback, setLiveProbeFeedback] = useState(null);
   const [editingOdpPort, setEditingOdpPort] = useState(null);
   const [savingOdpPort, setSavingOdpPort] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -3630,10 +3692,240 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
 
   const closeFullOdpModal = () => { setViewFullOdpModal(null); setFullOdpData(null); };
 
-  const fetchOdpPorts = useCallback(async (odpId) => {
-    setLoadingPorts(true);
+  // ─── Fitur Screenshot Detail Port ODP ─────────────────────────────────────
+  const [capturingScreenshot, setCapturingScreenshot] = useState(false);
+  const [screenshotSuccess, setScreenshotSuccess] = useState(false);
+  const odpModalContentRef = useRef(null);
+
+  const handleScreenshotOdp = async () => {
+    const node = odpModalContentRef.current;
+    if (!node || capturingScreenshot) return;
+    setCapturingScreenshot(true);
+
+    let wrapper = null;
     try {
-      const r = await fetch(`/api/network-nodes/${odpId}/port-detail`);
+      const isDarkMode = document.documentElement.classList.contains('dark');
+      const canvasBgColor = isDarkMode ? '#000000' : '#ffffff';
+
+      // 1. Buat deep clone dari modal untuk rendering off-screen tanpa terpengaruh viewport/scroll
+      const clone = node.cloneNode(true);
+
+      // 2. Hapus semua tombol interaktif / no-screenshot dari clone
+      clone.querySelectorAll('.no-screenshot').forEach(el => el.remove());
+
+      // 3. Siapkan container wrapper off-screen
+      wrapper = document.createElement('div');
+      wrapper.id = 'odp-screenshot-capture-wrapper';
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-9999px';
+      wrapper.style.top = '0';
+      wrapper.style.width = '880px';
+      wrapper.style.maxWidth = '880px';
+      wrapper.style.zIndex = '-9999';
+      wrapper.style.backgroundColor = canvasBgColor;
+      wrapper.style.margin = '0';
+      wrapper.style.padding = '0';
+      wrapper.style.boxSizing = 'border-box';
+
+      // 4. Atur style clone agar bebas dari batasan height/margin/overflow
+      clone.style.position = 'relative';
+      clone.style.top = '0';
+      clone.style.left = '0';
+      clone.style.margin = '0';
+      clone.style.marginTop = '0';
+      clone.style.marginBottom = '0';
+      clone.style.marginLeft = '0';
+      clone.style.marginRight = '0';
+      clone.style.maxHeight = 'none';
+      clone.style.height = 'auto';
+      clone.style.width = '880px';
+      clone.style.maxWidth = '880px';
+      clone.style.overflow = 'visible';
+      clone.style.transform = 'none';
+      clone.style.boxShadow = 'none';
+      clone.style.backgroundColor = canvasBgColor;
+
+      // 5. Buka scroll container internal di dalam clone
+      const scrollContainers = clone.querySelectorAll('.overflow-y-auto');
+      scrollContainers.forEach(sc => {
+        sc.style.overflow = 'visible';
+        sc.style.maxHeight = 'none';
+        sc.style.height = 'auto';
+        sc.style.flex = 'none';
+      });
+
+      // 6. Buat grid port di clone menjadi 4 kolom proporsional (2 baris x 4 kolom untuk 8 port)
+      const portGrid = clone.querySelector('.grid');
+      if (portGrid) {
+        portGrid.style.display = 'grid';
+        portGrid.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))';
+        portGrid.style.gap = '12px';
+      }
+
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      // Berikan waktu sejenak untuk kalkulasi layout DOM
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const fullWidth = clone.offsetWidth || 880;
+      const fullHeight = clone.offsetHeight || clone.scrollHeight;
+
+      const captureOptions = {
+        cacheBust: true,
+        pixelRatio: 2,
+        width: fullWidth,
+        height: fullHeight,
+        backgroundColor: canvasBgColor,
+        style: {
+          margin: '0',
+          marginTop: '0',
+          marginBottom: '0',
+          marginLeft: '0',
+          marginRight: '0',
+          transform: 'none',
+          backgroundColor: canvasBgColor,
+        },
+      };
+
+      let imgData;
+      try {
+        imgData = await toPng(clone, captureOptions);
+      } catch (err1) {
+        console.warn('First toPng attempt failed, retrying with skipFonts:', err1);
+        imgData = await toPng(clone, {
+          ...captureOptions,
+          skipFonts: true,
+          pixelRatio: 1.5,
+        });
+      }
+
+      const cleanName = (selectedOdp?.name || 'ODP').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const now = new Date();
+      const dateStr = now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0');
+      const timeStr = String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0');
+      const filename = `Monitoring_${cleanName}_${dateStr}_${timeStr}.png`;
+
+      const link = document.createElement('a');
+      link.href = imgData;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setScreenshotSuccess(true);
+      setTimeout(() => setScreenshotSuccess(false), 3500);
+    } catch (err) {
+      console.error('Screenshot error:', err);
+      alert('Gagal mengambil screenshot: ' + (err?.message || 'Error'));
+    } finally {
+      if (wrapper && document.body.contains(wrapper)) {
+        document.body.removeChild(wrapper);
+      }
+      setCapturingScreenshot(false);
+    }
+  };
+
+  // ─── Fitur Maintenance ODP & Broadcast Alert ─────────────────────────────
+  const [maintenanceModalNode, setMaintenanceModalNode] = useState(null);
+  const [maintenanceInfo, setMaintenanceInfo] = useState(null);
+  const [loadingMaintenanceInfo, setLoadingMaintenanceInfo] = useState(false);
+  const [submittingMaintenance, setSubmittingMaintenance] = useState(false);
+  const [maintenanceDuration, setMaintenanceDuration] = useState('1 Jam');
+  const [maintenanceNotes, setMaintenanceNotes] = useState('');
+  const [sendTelegramNotif, setSendTelegramNotif] = useState(true);
+  const [maintenanceSuccessToast, setMaintenanceSuccessToast] = useState(null);
+
+  const openMaintenanceModal = async (odp) => {
+    setMaintenanceModalNode(odp);
+    setMaintenanceInfo(null);
+    setLoadingMaintenanceInfo(true);
+    setMaintenanceDuration('1 Jam');
+    setMaintenanceNotes(
+      odp.status === 'maintenance'
+        ? 'Pemeliharaan telah selesai dilakukan. Seluruh port dan layanan pelanggan kembali beroperasi normal.'
+        : 'Pemeliharaan rutin dan perbaikan kabel splitter ODP'
+    );
+    try {
+      const res = await fetch(`/api/network-nodes/${odp.id}/maintenance`);
+      const data = await res.json();
+      if (res.ok && data.status === 'success') {
+        setMaintenanceInfo(data);
+      } else {
+        setMaintenanceInfo(null);
+      }
+    } catch {
+      setMaintenanceInfo(null);
+    } finally {
+      setLoadingMaintenanceInfo(false);
+    }
+  };
+
+  const closeMaintenanceModal = () => {
+    setMaintenanceModalNode(null);
+    setMaintenanceInfo(null);
+  };
+
+  const handleToggleMaintenance = async (action) => {
+    if (!maintenanceModalNode) return;
+    setSubmittingMaintenance(true);
+    try {
+      const res = await fetch(`/api/network-nodes/${maintenanceModalNode.id}/maintenance`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        },
+        body: JSON.stringify({
+          action,
+          notes: maintenanceNotes,
+          estimated_duration: maintenanceDuration,
+          send_notification: sendTelegramNotif,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.status !== 'success') {
+        throw new Error(data.message || 'Gagal memproses perubahan status maintenance.');
+      }
+
+      setMaintenanceSuccessToast({
+        action,
+        nodeName: maintenanceModalNode.name,
+        message: data.message,
+        impactedCount: data.impacted_count ?? 0,
+      });
+
+      if (typeof onRefreshGlobal === 'function') {
+        onRefreshGlobal();
+      }
+
+      closeMaintenanceModal();
+
+      setTimeout(() => {
+        setMaintenanceSuccessToast(null);
+      }, 7000);
+    } catch (err) {
+      alert(err.message || 'Terjadi kesalahan sistem saat memproses status maintenance.');
+    } finally {
+      setSubmittingMaintenance(false);
+    }
+  };
+
+  const fetchOdpPorts = useCallback(async (odpId, isLiveRefresh = false) => {
+    if (isLiveRefresh) {
+      setRefreshingLiveOptical(true);
+    } else {
+      setLoadingPorts(true);
+    }
+    try {
+      const url = isLiveRefresh
+        ? `/api/network-nodes/${odpId}/port-detail?live=1`
+        : `/api/network-nodes/${odpId}/port-detail`;
+      const r = await fetch(url);
       if (!r.ok) throw new Error('API error');
       const d = await r.json();
       setOdpDetailData(d);
@@ -3642,11 +3934,27 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
       if (d.node?.used_ports != null) {
         setSelectedOdp(prev => prev ? { ...prev, used_ports: d.node.used_ports } : null);
       }
+
+      if (isLiveRefresh && d.live_probe) {
+        if (d.live_probe.success) {
+          setLiveProbeFeedback({
+            type: 'success',
+            text: `Realtime OLT (${d.live_probe.duration_ms || 45}ms)`,
+          });
+        } else {
+          setLiveProbeFeedback({
+            type: 'info',
+            text: d.live_probe.reason || 'OLT tidak merespons',
+          });
+        }
+        setTimeout(() => setLiveProbeFeedback(null), 4500);
+      }
     } catch {
       setOdpDetailData(null);
       setPortsData([]);
     } finally {
       setLoadingPorts(false);
+      setRefreshingLiveOptical(false);
     }
   }, []);
 
@@ -3655,6 +3963,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
     setOdpDetailData(null);
     setPortsData([]);
     setEditingOdpPort(null);
+    setLiveProbeFeedback(null);
     fetchOdpPorts(odp.id);
   };
 
@@ -3663,10 +3972,13 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
     setOdpDetailData(null);
     setPortsData([]);
     setEditingOdpPort(null);
+    setLiveProbeFeedback(null);
   };
 
   const handleRefreshPorts = () => {
-    if (selectedOdp) fetchOdpPorts(selectedOdp.id);
+    if (selectedOdp && !refreshingLiveOptical && !loadingPorts) {
+      fetchOdpPorts(selectedOdp.id, true);
+    }
   };
 
   const startEditPort = (port) => {
@@ -3698,115 +4010,282 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
     finally { setSavingOdpPort(false); }
   };
 
+  const [filterOlt, setFilterOlt] = useState('');
+  const [filterOdc, setFilterOdc] = useState('');
+
+  const availableOlts = useMemo(() => {
+    const map = new Map();
+    odps.forEach(o => {
+      const dev = o.olt_device || o.parent_node?.olt_device || o.parent?.olt_device;
+      if (dev?.id && !map.has(dev.id)) {
+        map.set(dev.id, { id: dev.id, name: dev.name });
+      }
+    });
+    return Array.from(map.values());
+  }, [odps]);
+
+  const availableOdcs = useMemo(() => {
+    const map = new Map();
+    odps.forEach(o => {
+      const p = o.parent_node || o.parent;
+      if (p?.id && !map.has(p.id)) {
+        map.set(p.id, { id: p.id, name: p.name });
+      }
+    });
+    return Array.from(map.values());
+  }, [odps]);
+
   const filteredOdps = useMemo(() => {
     return odps
       .filter(odp => {
-        const q = searchQuery.toLowerCase();
-        const matchSearch = !q || odp.name?.toLowerCase().includes(q) || odp.code?.toLowerCase().includes(q) || odp.address?.toLowerCase().includes(q);
-        const matchStatus = !filterStatus || odp.status === filterStatus;
-        return matchSearch && matchStatus;
+        const q = searchQuery.toLowerCase().trim();
+        const matchSearch = !q ||
+          odp.name?.toLowerCase().includes(q) ||
+          odp.code?.toLowerCase().includes(q) ||
+          odp.address?.toLowerCase().includes(q) ||
+          odp.notes?.toLowerCase().includes(q) ||
+          odp.olt_port_ref?.toLowerCase().includes(q) ||
+          odp.parent_node?.name?.toLowerCase().includes(q) ||
+          odp.parent?.name?.toLowerCase().includes(q) ||
+          odp.olt_device?.name?.toLowerCase().includes(q);
+
+        const matchStatus = !filterStatus || filterStatus === 'all' || odp.status === filterStatus;
+
+        const odpOltId = odp.olt_device_id || odp.olt_device?.id || odp.parent_node?.olt_device_id || odp.parent_node?.olt_device?.id || odp.parent?.olt_device_id || odp.parent?.olt_device?.id;
+        const matchOlt = !filterOlt || filterOlt === 'all' || String(odpOltId) === String(filterOlt);
+
+        const odpParentId = odp.parent_node_id || odp.parent_id || odp.parent_node?.id || odp.parent?.id;
+        const matchOdc = !filterOdc || filterOdc === 'all' || String(odpParentId) === String(filterOdc);
+
+        return matchSearch && matchStatus && matchOlt && matchOdc;
       })
       .sort(naturalNodeCompare);
-  }, [odps, searchQuery, filterStatus]);
+  }, [odps, searchQuery, filterStatus, filterOlt, filterOdc]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const perPage = 6;
+  const totalPages = Math.ceil(filteredOdps.length / perPage) || 1;
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterStatus]);
-
-  const totalPages = Math.ceil(filteredOdps.length / perPage) || 1;
+  }, [searchQuery, filterStatus, filterOlt, filterOdc]);
   const paginatedOdps = filteredOdps.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   const getRxColor = (rx) => {
     if (rx === null || rx === undefined) return 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700/60 border-slate-200 dark:border-slate-600';
     if (rx >= -25.0) return 'text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 font-bold';
-    if (rx >= -28.0) return 'text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-emerald-700 font-bold';
+    if (rx >= -28.0) return 'text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 font-bold';
     return 'text-red-800 dark:text-red-300 bg-red-100 dark:bg-red-900/40 border-red-300 dark:border-red-700 font-bold animate-pulse';
   };
 
   return (
     <div className="space-y-4">
-      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm sm:text-base font-bold text-slate-950 dark:text-white">Daftar ODP (Optical Distribution Point)</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {filteredOdps.length} dari {odps.length} ODP · Titik terminal distribusi optik ke pelanggan
-            </p>
-          </div>
-          {canCrud && (
-            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-              <button
-                onClick={() => onAddNode('ODP')}
-                className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5"
-              >
-                <span>+</span> Tambah ODP Baru
-              </button>
-              {odps.length > 0 && onDeleteAllNodes && (
-                <button
-                  onClick={() => onDeleteAllNodes('ODP')}
-                  className="w-full sm:w-auto px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-2xs"
-                  title="Hapus seluruh data ODP"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      {/* Toast / Alert Sukses Maintenance */}
+      {maintenanceSuccessToast && (
+        <div className={`p-4 rounded-lg border flex items-start justify-between gap-3 animate-fade-in bg-white dark:bg-black ${
+          maintenanceSuccessToast.action === 'start'
+            ? 'border-amber-400 dark:border-amber-600 text-black dark:text-white'
+            : 'border-emerald-400 dark:border-emerald-600 text-black dark:text-white'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 shrink-0">
+              {maintenanceSuccessToast.action === 'start' ? (
+                <div className="w-8 h-8 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-400 dark:border-amber-600">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
-                  <span>Hapus Semua ODP</span>
-                </button>
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-400 dark:border-emerald-600">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
               )}
             </div>
-          )}
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2.5">
-          <input
-            type="text"
-            placeholder=" Cari nama, kode, atau alamat ODP..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="flex-1 px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-          />
-          <select
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            <div>
+              <h4 className="font-bold text-sm text-black dark:text-white">
+                {maintenanceSuccessToast.action === 'start'
+                  ? `Pemeliharaan (Maintenance) ODP ${maintenanceSuccessToast.nodeName} Berhasil Diaktifkan!`
+                  : `Pemeliharaan ODP ${maintenanceSuccessToast.nodeName} Selesai & Kembali Normal!`}
+              </h4>
+              <p className="text-xs mt-0.5 text-black/70 dark:text-white/70 leading-relaxed">
+                {maintenanceSuccessToast.message}
+              </p>
+              <div className="mt-1 text-[11px] font-semibold text-black/60 dark:text-white/60">
+                Pesan alert siaran sistem dan Telegram NOC telah dikirimkan ({maintenanceSuccessToast.impactedCount} pelanggan terdampak).
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setMaintenanceSuccessToast(null)}
+            className="text-black/40 hover:text-black dark:text-white/40 dark:hover:text-white text-sm font-bold p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition-colors"
+            title="Tutup Notifikasi"
           >
-            <option value="">Semua Status</option>
-            <option value="active"> Aktif</option>
-            <option value="inactive"> Tidak Aktif</option>
-            <option value="maintenance"> Maintenance</option>
-            <option value="damaged"> Rusak</option>
-          </select>
+            ✕
+          </button>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-black p-3.5 sm:p-4 rounded-lg border border-black/70 dark:border-white/70 shadow-xs space-y-3">
+        {canCrud && (
+          <div className="flex items-center justify-start sm:justify-end gap-2 flex-wrap">
+            {onOpenKmlModal && (
+              <button
+                type="button"
+                onClick={() => onOpenKmlModal('odp')}
+                className="flex-1 sm:flex-initial px-3.5 py-2 bg-white hover:bg-black/5 dark:bg-black dark:hover:bg-white/10 text-black dark:text-white text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 border border-black/70 dark:border-white/70 cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                <span>Import KML ODP</span>
+              </button>
+            )}
+            <button
+              onClick={() => onAddNode('ODP')}
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-md shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>+</span> Tambah ODP Baru
+            </button>
+            {odps.length > 0 && onDeleteAllNodes && (
+              <button
+                onClick={() => onDeleteAllNodes('ODP')}
+                className="w-full sm:w-auto px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Hapus seluruh data ODP"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>Hapus Semua ODP</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ─── Search & Filter Bar (Section 7 Standard) ─── */}
+        <div className="space-y-2.5">
+          <div className="flex gap-2 items-center">
+            <div className="relative flex-1 min-w-0">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-black/40 dark:text-white/40">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                placeholder="Cari nama, kode, atau alamat ODP..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-md border border-black/40 dark:border-white/40 bg-white dark:bg-black text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 focus:outline-none focus:border-black dark:focus:border-white"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <OdpFilterPopover
+                filterStatus={filterStatus}
+                setFilterStatus={setFilterStatus}
+                filterOlt={filterOlt}
+                setFilterOlt={setFilterOlt}
+                filterOdc={filterOdc}
+                setFilterOdc={setFilterOdc}
+                olts={availableOlts}
+                odcs={availableOdcs}
+                onApplyFilters={({ statusValue, oltValue, odcValue }) => {
+                  setFilterStatus(statusValue);
+                  setFilterOlt(oltValue);
+                  setFilterOdc(odcValue);
+                }}
+                onReset={() => {
+                  setFilterStatus('');
+                  setFilterOlt('');
+                  setFilterOdc('');
+                }}
+                onResetFilters={() => {
+                  setFilterStatus('');
+                  setFilterOlt('');
+                  setFilterOdc('');
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Filter Chips */}
+          {(filterStatus || filterOlt || filterOdc) && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-black/10 dark:border-white/10">
+              <span className="text-[11px] font-semibold text-black/60 dark:text-white/60">Filter Aktif:</span>
+              {filterStatus && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
+                  <span>Status: {STATUS_META[filterStatus]?.label || filterStatus}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('')}
+                    className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              {filterOlt && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
+                  <span>OLT: {availableOlts.find(o => String(o.id) === String(filterOlt))?.name || filterOlt}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFilterOlt('')}
+                    className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              {filterOdc && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
+                  <span>ODC: {availableOdcs.find(od => String(od.id) === String(filterOdc))?.name || filterOdc}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFilterOdc('')}
+                    className="hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => { setFilterStatus(''); setFilterOlt(''); setFilterOdc(''); }}
+                className="text-[11px] text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white underline ml-1 cursor-pointer"
+              >
+                Reset Filter
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {odps.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 sm:p-12 text-center border border-dashed border-slate-300 dark:border-slate-600">
-          <p className="text-4xl mb-2"></p>
-          <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Belum Ada ODP Terdaftar</p>
-          <p className="text-xs text-slate-400 mt-1 mb-4">Tambahkan ODP baru untuk memulai manajemen distribusi optik</p>
+        <div className="bg-white dark:bg-black rounded-lg p-8 sm:p-12 text-center border border-dashed border-black/30 dark:border-white/30">
+          <p className="text-sm font-bold text-black dark:text-white">Belum Ada ODP Terdaftar</p>
+          <p className="text-xs text-black/60 dark:text-white/60 mt-1 mb-4">Tambahkan ODP baru untuk memulai manajemen distribusi optik</p>
           {canCrud && (
-            <button onClick={() => onAddNode('ODP')} className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl">
+            <button onClick={() => onAddNode('ODP')} className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-md cursor-pointer">
               + Tambah ODP Pertama
             </button>
           )}
         </div>
       ) : filteredOdps.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 text-center border border-dashed border-slate-200 dark:border-slate-700">
-          <p className="text-3xl mb-2"></p>
-          <p className="text-sm font-bold text-slate-500 dark:text-slate-400">Tidak ada ODP yang cocok dengan filter</p>
-          <button onClick={() => { setSearchQuery(''); setFilterStatus(''); }} className="mt-3 text-xs text-indigo-600 hover:underline">
+        <div className="bg-white dark:bg-black rounded-lg p-8 text-center border border-dashed border-black/30 dark:border-white/30">
+          <p className="text-sm font-bold text-black dark:text-white">Tidak ada ODP yang cocok dengan filter</p>
+          <button onClick={() => { setSearchQuery(''); setFilterStatus(''); setFilterOlt(''); setFilterOdc(''); }} className="mt-3 text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
             Reset filter
           </button>
         </div>
       ) : (
         <>
           {/* Desktop Table View */}
-          <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+          <div className="hidden md:block bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider text-[11px]">
+              <table className="w-full text-left text-xs text-black dark:text-white">
+                <thead className="bg-black/5 dark:bg-white/5 text-black dark:text-white font-semibold border-b border-black/20 dark:border-white/20 uppercase tracking-wider text-[11px]">
                   <tr>
                     <th className="py-3.5 px-4">#</th>
                     <th className="py-3.5 px-4">KODE / NAMA ODP</th>
@@ -3819,43 +4298,43 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                     <th className="py-3.5 px-4 text-center">AKSI</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                <tbody className="divide-y divide-black/20 dark:divide-white/20">
                   {paginatedOdps.map((odp, idx) => {
                     const globalIdx = (currentPage - 1) * perPage + idx + 1;
                     const p = pct(odp.used_ports, odp.total_ports);
                     return (
-                      <tr key={odp.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-slate-500">{globalIdx}</td>
+                      <tr key={odp.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-black/50 dark:text-white/50">{globalIdx}</td>
                         <td className="py-3 px-4">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight block uppercase">{odp.name}</span>
+                          <span className="font-bold text-black dark:text-white text-sm leading-tight block uppercase">{odp.name}</span>
                         </td>
-                        <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300">
+                        <td className="py-3 px-4 font-medium text-black dark:text-white">
                           {odp.parent_node?.name || '—'}
                         </td>
                         <td className="py-3 px-4">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 block">
+                          <span className="font-bold text-black dark:text-white block">
                             {odp.olt_device?.name || odp.parent_node?.olt_device?.name || 'Auto-Detect OLT'}
                           </span>
-                          <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400 font-semibold">
+                          <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold">
                             {displayInterface(odp.olt_port_ref)}
                           </span>
                         </td>
                         <td className="py-3 px-4">
-                          <span className="font-semibold text-slate-800 dark:text-slate-100 block">{odp.tube_info || '—'}</span>
-                          <span className="text-[11px] text-slate-500 block">Core {odp.core_color || '—'}</span>
+                          <span className="font-semibold text-black dark:text-white block">{odp.tube_info || '—'}</span>
+                          <span className="text-[11px] text-black/50 dark:text-white/50 block">Core {odp.core_color || '—'}</span>
                         </td>
                         <td className="py-3 px-4">
-                          <span className="font-semibold text-slate-700 dark:text-slate-300 block">
+                          <span className="font-semibold text-black dark:text-white block">
                             Rasio {odp.splitter_config || odp.splitter_type?.ratio || '1:8'}
                           </span>
-                          <span className="font-bold text-slate-800 dark:text-slate-100 block">
+                          <span className="font-bold text-black dark:text-white block">
                             {odp.used_ports}/{odp.total_ports} Port ({p}%)
                           </span>
-                          <div className="w-24 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden mt-1">
+                          <div className="w-24 h-1.5 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden mt-1">
                             <div className={`h-full ${pctColor(p)} rounded-full`} style={{ width: `${p}%` }} />
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300 max-w-[180px] truncate uppercase">
+                        <td className="py-3 px-4 text-black/70 dark:text-white/70 max-w-[180px] truncate uppercase">
                           {odp.address || '—'}
                         </td>
                         <td className="py-3 px-4">
@@ -3868,28 +4347,43 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                             <button
                               onClick={() => openOdpDetail(odp)}
                               title="Kelola Port & Sinyal ODP"
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
+                              className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                             >
                               Port
                             </button>
                             <button
                               onClick={() => openOdpFullModal(odp)}
                               title="Lihat Seluruh Spesifikasi Data ODP"
-                              className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-bold hover:bg-blue-100 transition-colors"
+                              className="px-2.5 py-1 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/40 dark:border-white/40 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                             >
                               Detail
+                            </button>
+                            <button
+                              onClick={() => openMaintenanceModal(odp)}
+                              title={odp.status === 'maintenance' ? 'ODP Sedang Maintenance (Klik untuk Selesaikan)' : 'Mulai Maintenance ODP & Kirim Alert Pelanggan'}
+                              className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1 shadow-xs cursor-pointer ${
+                                odp.status === 'maintenance'
+                                  ? 'bg-amber-500 hover:bg-amber-600 text-white animate-pulse border border-amber-600'
+                                  : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/20'
+                              }`}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                              <span>{odp.status === 'maintenance' ? 'Maint. Aktif' : 'Maintenance'}</span>
                             </button>
                             {canCrud && (
                               <>
                                 <button
                                   onClick={() => onEditNode(odp)}
-                                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold hover:bg-slate-200 transition-colors"
+                                  className="px-2.5 py-1 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/40 dark:border-white/40 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                                 >
                                   Edit
                                 </button>
                                 <button
                                   onClick={() => onDeleteNode(odp)}
-                                  className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-semibold hover:bg-rose-100 transition-colors"
+                                  className="px-2.5 py-1 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-semibold hover:bg-rose-100 transition-colors cursor-pointer"
                                 >
                                   Hapus
                                 </button>
@@ -3911,72 +4405,86 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
               const globalIdx = (currentPage - 1) * perPage + idx + 1;
               const p = pct(odp.used_ports, odp.total_ports);
               return (
-                <div key={odp.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-                  <div className="divide-y divide-slate-200 dark:divide-slate-800 text-xs">
-                    <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-slate-50/70 dark:bg-slate-800/40">
-                      <span className="text-slate-400 font-semibold">#</span>
-                      <span className="col-span-2 font-mono font-bold text-slate-700 dark:text-slate-200">{globalIdx}</span>
+                <div key={odp.id} className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs overflow-hidden">
+                  <div className="divide-y divide-black/20 dark:divide-white/20 text-xs">
+                    <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-black/5 dark:bg-white/5">
+                      <span className="text-black/50 dark:text-white/50 font-semibold">#</span>
+                      <span className="col-span-2 font-mono font-bold text-black dark:text-white">{globalIdx}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">Name</span>
-                      <span className="col-span-2 font-bold text-slate-800 dark:text-slate-100 uppercase">{odp.name}</span>
+                      <span className="text-black/50 dark:text-white/50 font-semibold">Name</span>
+                      <span className="col-span-2 font-bold text-black dark:text-white uppercase">{odp.name}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">Address</span>
-                      <span className="col-span-2 text-slate-700 dark:text-slate-300 leading-snug uppercase">{odp.address || '—'}</span>
+                      <span className="text-black/50 dark:text-white/50 font-semibold">Address</span>
+                      <span className="col-span-2 text-black dark:text-white leading-snug uppercase">{odp.address || '—'}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">OLT &amp; Interface</span>
-                      <span className="col-span-2 text-slate-700 dark:text-slate-300">
+                      <span className="text-black/50 dark:text-white/50 font-semibold">OLT &amp; Interface</span>
+                      <span className="col-span-2 text-black dark:text-white">
                         <span className="font-bold block">{odp.olt_device?.name || odp.parent_node?.olt_device?.name || 'Auto-Detect OLT'}</span>
-                        <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400 font-semibold">{displayInterface(odp.olt_port_ref)}</span>
+                        <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{displayInterface(odp.olt_port_ref)}</span>
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">Tube &amp; Core</span>
-                      <span className="col-span-2 text-slate-700 dark:text-slate-300">
+                      <span className="text-black/50 dark:text-white/50 font-semibold">Tube &amp; Core</span>
+                      <span className="col-span-2 text-black dark:text-white">
                         <span className="font-semibold block">{odp.tube_info || '—'}</span>
-                        <span className="text-[10px] text-slate-400 block">Core {odp.core_color || '—'}</span>
+                        <span className="text-[10px] text-black/50 dark:text-white/50 block">Core {odp.core_color || '—'}</span>
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">Port Terisi</span>
-                      <span className="col-span-2 font-bold text-slate-800 dark:text-slate-100">
+                      <span className="text-black/50 dark:text-white/50 font-semibold">Port Terisi</span>
+                      <span className="col-span-2 font-bold text-black dark:text-white">
                         {odp.used_ports}/{odp.total_ports} Port ({p}%)
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
-                      <span className="text-slate-400 font-semibold">Status</span>
+                      <span className="text-black/50 dark:text-white/50 font-semibold">Status</span>
                       <span className="col-span-2">
-                        <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold ${STATUS_META[odp.status]?.pill}`}>
+                        <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold border ${STATUS_META[odp.status]?.pill}`}>
                           {STATUS_META[odp.status]?.label}
                         </span>
                       </span>
                     </div>
-                    <div className="px-4 py-3 bg-slate-50/50 dark:bg-slate-800/20 flex items-center justify-end gap-2">
+                    <div className="px-4 py-3 bg-black/5 dark:bg-white/5 flex items-center justify-end gap-2">
                       <button
                         onClick={() => openOdpDetail(odp)}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs"
+                        className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs cursor-pointer"
                       >
                         Port
                       </button>
                       <button
                         onClick={() => openOdpFullModal(odp)}
-                        className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold hover:bg-blue-100"
+                        className="px-2.5 py-1 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/40 dark:border-white/40 text-[11px] font-bold hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
                       >
                         Detail
+                      </button>
+                      <button
+                        onClick={() => openMaintenanceModal(odp)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold shadow-xs transition-colors flex items-center gap-1 cursor-pointer ${
+                          odp.status === 'maintenance'
+                            ? 'bg-amber-500 hover:bg-amber-600 text-white animate-pulse border border-amber-600'
+                            : 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/20'
+                        }`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span>{odp.status === 'maintenance' ? 'Maint. Aktif' : 'Maintenance'}</span>
                       </button>
                       {canCrud && (
                         <>
                           <button
                             onClick={() => onEditNode(odp)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold"
+                            className="px-2.5 py-1 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/40 dark:border-white/40 text-[11px] font-semibold cursor-pointer"
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => onDeleteNode(odp)}
-                            className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-[11px] font-semibold"
+                            className="px-2.5 py-1 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-[11px] font-semibold cursor-pointer"
                           >
                             Hapus
                           </button>
@@ -3991,21 +4499,21 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
 
           {/* ODP Pagination Controls */}
           {totalPages > 1 && (
-            <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-between text-xs">
+            <div className="p-3.5 bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs flex items-center justify-between text-xs">
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40"
+                className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-30 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10"
               >
                 ← Prev
               </button>
-              <span className="font-bold text-slate-700 dark:text-slate-300">
+              <span className="font-bold text-black dark:text-white">
                 Halaman {currentPage} dari {totalPages} (Total {filteredOdps.length} ODP)
               </span>
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40"
+                className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-30 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10"
               >
                 Next →
               </button>
@@ -4014,196 +4522,222 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
         </>
       )}
 
-      {/* Modal Detail Port & Monitoring Sinyal ODP */}
-      {selectedOdp && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-700 max-h-[92vh] flex flex-col overflow-hidden">
+      {/* Modal Detail Port & Monitoring Redaman ODP */}
+      {selectedOdp && createPortal(
+        <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen" onClick={closeOdpDetail}>
+          <div
+            ref={odpModalContentRef}
+            className="relative w-full max-w-4xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
+            onClick={e => e.stopPropagation()}
+          >
 
-            <div className="bg-slate-900 dark:bg-slate-950 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
-              <div className="min-w-0">
-                <h3 className="text-base font-bold flex items-center gap-2 truncate">
-                  <span></span> Detail Port & Monitoring Sinyal — {selectedOdp.name}
-                </h3>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  {selectedOdp.code} · 1:{selectedOdp.total_ports} Port ·
-                  {selectedOdp.olt_port_ref
-                    ? <span className="text-blue-400 ml-1">{displayInterface(selectedOdp.olt_port_ref)}</span>
-                    : <span className="text-slate-500 ml-1">Interface Auto-Detect</span>
-                  }
+            {/* Pinned Modal Header */}
+            <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-black/20 dark:border-white/20">
+              <div className="min-w-0 pr-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm sm:text-base font-bold text-black dark:text-white tracking-tight break-words">
+                    Detail Port &amp; Monitoring Redaman — {selectedOdp.name}
+                  </h3>
+                  {liveProbeFeedback && (
+                    <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-mono font-bold animate-in fade-in duration-150 ${
+                      liveProbeFeedback.type === 'success'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                    }`}>
+                      {liveProbeFeedback.type === 'success' && (
+                        <svg className="w-3 h-3 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                      {liveProbeFeedback.text}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] sm:text-xs text-black/70 dark:text-white/70 font-mono mt-0.5">
+                  1:{selectedOdp.total_ports} Port ·{' '}
+                  {selectedOdp.olt_port_ref ? (
+                    <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{displayInterface(selectedOdp.olt_port_ref)}</span>
+                  ) : (
+                    <span className="text-black/50 dark:text-white/50">Interface Auto-Detect</span>
+                  )}
                 </p>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                {/* Tombol Live Refresh OLT */}
                 <button
                   onClick={handleRefreshPorts}
-                  disabled={loadingPorts}
-                  className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 disabled:opacity-50"
-                  title="Refresh Data"
+                  disabled={loadingPorts || refreshingLiveOptical}
+                  className={`no-screenshot w-8 h-8 flex items-center justify-center rounded-md bg-white dark:bg-black text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 border ${
+                    refreshingLiveOptical
+                      ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 ring-1 ring-indigo-500/30'
+                      : 'border-black/30 dark:border-white/30'
+                  } disabled:opacity-50 transition-colors cursor-pointer`}
+                  title={refreshingLiveOptical ? 'Mengambil redaman realtime dari OLT...' : 'Refresh Real-time Redaman dari OLT'}
                 >
-                  <svg className={`w-4 h-4 ${loadingPorts ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className={`w-4 h-4 ${loadingPorts || refreshingLiveOptical ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                 </button>
                 <button
                   onClick={closeOdpDetail}
-                  className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 font-bold"
+                  className="no-screenshot w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors"
+                  title="Tutup Modal"
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                {/* 1. OLT & Interface */}
-                <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl p-3.5 flex flex-col justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider"> OLT Terhubung</span>
-                    <p className="text-xs font-bold text-blue-950 dark:text-blue-100 truncate mt-0.5">
-                      {odpDetailData?.node?.olt_device?.name || odpDetailData?.node?.parent_node?.olt_device?.name || selectedOdp.olt_device?.name || selectedOdp.parent_node?.olt_device?.name || 'Auto-Detect OLT'}
-                    </p>
-                  </div>
-                  <div className="mt-2 pt-1.5 border-t border-blue-200/60 dark:border-blue-800/60">
-                    <span className="text-[10px] text-blue-500 block">Interface OLT Otomatis:</span>
-                    <span className="text-xs font-mono font-bold text-blue-700 dark:text-blue-300 truncate block">
-                      {odpDetailData?.display_olt_ref || displayInterface(selectedOdp.olt_port_ref)}
-                    </span>
-                  </div>
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4 bg-white dark:bg-black text-xs">
+              {/* OLT & Interface PON Terhubung */}
+              <div className="bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-lg p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold text-black/60 dark:text-white/60 uppercase tracking-wider block">OLT Terhubung</span>
+                  <p className="text-xs sm:text-sm font-bold text-black dark:text-white break-words mt-0.5">
+                    {odpDetailData?.node?.olt_device?.name || odpDetailData?.node?.parent_node?.olt_device?.name || selectedOdp.olt_device?.name || selectedOdp.parent_node?.olt_device?.name || 'Auto-Detect OLT'}
+                  </p>
                 </div>
-
-                {/* 2. Splitter & Kapasitas Port */}
-                <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-3.5 flex flex-col justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider"> Splitter &amp; Kapasitas</span>
-                    <p className="text-xs font-bold text-indigo-950 dark:text-indigo-100 truncate mt-0.5">
-                      {odpDetailData?.node?.splitter_count ?? selectedOdp.splitter_count ?? 1} Unit ({odpDetailData?.node?.splitter_config || selectedOdp.splitter_config || selectedOdp.splitter_type?.ratio || '1:8'})
-                    </p>
-                  </div>
-                  <div className="mt-2 pt-1.5 border-t border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-between">
-                    <span className="text-[10px] text-indigo-500">Port Total:</span>
-                    <span className="text-xs font-bold text-indigo-800 dark:text-indigo-200 font-mono">
-                      1:{selectedOdp.total_ports} Port
-                    </span>
-                  </div>
-                </div>
-
-                {/* 3. Fiber Tube & Core */}
-                <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-3.5 flex flex-col justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider"> Fiber Tube &amp; Core</span>
-                    <p className="text-xs font-bold text-indigo-950 dark:text-indigo-100 truncate mt-0.5">
-                      {odpDetailData?.node?.tube_info || selectedOdp.tube_info || 'Tube 1'}
-                    </p>
-                  </div>
-                  <div className="mt-2 pt-1.5 border-t border-indigo-200/60 dark:border-indigo-800/60 flex items-center justify-between">
-                    <span className="text-[10px] text-indigo-500">Warna Core:</span>
-                    <span className="text-xs font-bold text-indigo-800 dark:text-indigo-200 font-mono">
-                      Core {odpDetailData?.node?.core_color || selectedOdp.core_color || '—'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* 4. Sinyal & Status Pelanggan */}
-                <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-3.5 flex flex-col justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider"> Redaman &amp; Terisi</span>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-sm font-extrabold text-emerald-900 dark:text-emerald-200 font-mono">
-                        {odpDetailData?.attenuation?.avg_rx_power != null
-                          ? `${parseFloat(odpDetailData.attenuation.avg_rx_power).toFixed(2)} dBm`
-                          : '—'}
-                      </span>
-                      {odpDetailData?.attenuation?.signal_status === 'good' && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-300"> Normal</span>}
-                      {odpDetailData?.attenuation?.signal_status === 'warning' && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 font-bold border border-amber-300"> Tinggi</span>}
-                      {odpDetailData?.attenuation?.signal_status === 'critical' && <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 font-bold border border-red-300"> Kritis</span>}
-                    </div>
-                  </div>
-                  <div className="mt-2 pt-1.5 border-t border-emerald-200/60 dark:border-emerald-800/60 flex items-center justify-between">
-                    <span className="text-[10px] text-emerald-600">Pelanggan:</span>
-                    <span className="text-xs font-bold text-emerald-800 dark:text-emerald-200 font-mono">
-                      {odpDetailData?.attenuation?.connected_count ?? selectedOdp.used_ports} / {selectedOdp.total_ports} Port
-                    </span>
-                  </div>
+                <div className="pt-2 sm:pt-0 sm:pl-4 border-t sm:border-t-0 sm:border-l border-black/20 dark:border-white/20">
+                  <span className="text-[10px] text-black/60 dark:text-white/60 block font-medium">Interface OLT Otomatis:</span>
+                  <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 break-all block mt-0.5">
+                    {odpDetailData?.display_olt_ref || displayInterface(selectedOdp.olt_port_ref)}
+                  </span>
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                  <h4 className="text-xs font-bold text-black dark:text-white uppercase tracking-wider">
                     Detail Per-Port ({portsData.length} Port)
                   </h4>
-                  {loadingPorts && (
-                    <span className="text-[10px] text-indigo-500 animate-pulse"> Memuat...</span>
+                  {(loadingPorts || refreshingLiveOptical) && (
+                    <span className="text-[10px] text-indigo-500 animate-pulse font-mono">
+                      {refreshingLiveOptical ? 'Mengambil data dari OLT...' : 'Memuat...'}
+                    </span>
                   )}
                 </div>
 
-                {loadingPorts ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {loadingPorts && portsData.length === 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                     {Array.from({ length: selectedOdp.total_ports || 8 }).map((_, i) => (
-                      <div key={i} className="h-28 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                      <div key={i} className="h-32 rounded-lg bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 animate-pulse" />
                     ))}
                   </div>
                 ) : portsData.length === 0 ? (
-                  <div className="py-10 text-center text-slate-400">
-                    <p className="text-2xl mb-1"></p>
+                  <div className="py-10 text-center text-black/50 dark:text-white/50">
                     <p className="text-xs">Data port tidak ditemukan. Coba refresh.</p>
                     <button onClick={handleRefreshPorts} className="mt-2 text-xs text-indigo-500 hover:underline"> Coba Lagi</button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5">
                     {portsData.map(port => {
                       const isUsed = !!(port.customer_id || port.customer_service_id || port.status === 'used');
                       const rx = port.rx_power != null ? parseFloat(port.rx_power) : null;
-                      const rxColor = getRxColor(rx);
                       const rxText = rx !== null ? `${rx.toFixed(2)} dBm` : '—';
+                      let rxTextColor = 'text-black/50 dark:text-white/50 font-medium';
+                      if (rx !== null) {
+                        if (rx >= -25.0) rxTextColor = 'text-emerald-600 dark:text-emerald-400 font-bold';
+                        else if (rx >= -28.0) rxTextColor = 'text-amber-600 dark:text-amber-400 font-bold';
+                        else rxTextColor = 'text-rose-600 dark:text-rose-400 font-bold animate-pulse';
+                      }
+                      const custId = port.customer_number && port.customer_number !== '—'
+                        ? port.customer_number
+                        : (port.service_number && port.service_number !== '—' ? port.service_number : (port.customer_id ? `ID: ${port.customer_id}` : null));
+                      const customerName = port.customer_name || port.customer_name_cache || 'Pelanggan';
 
                       return (
                         <div
                           key={port.id}
-                          className={`relative rounded-2xl border flex flex-col justify-between transition-all ${isUsed
-                            ? 'bg-white dark:bg-slate-800/80 border-emerald-300 dark:border-emerald-700 shadow-xs hover:shadow-md'
-                            : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700'
-                            }`}
+                          className="bg-white dark:bg-black border border-black/60 dark:border-white/60 rounded-lg flex flex-col justify-between transition-all shadow-xs hover:border-black dark:hover:border-white"
                         >
-                          <div className="p-3.5 flex-1 flex flex-col justify-between">
+                          <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
                             <div>
-                              <div className="flex items-center justify-between gap-1 mb-2">
-                                <span className={`px-2 py-0.5 rounded-lg text-xs font-bold font-mono ${isUsed ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'}`}>
-                                  Port {port.port_number}
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                  {port.port_type || 'SC/APC'}
-                                </span>
+                              {/* Port Header */}
+                              <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-black/20 dark:border-white/20">
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs font-bold font-mono ${isUsed ? 'text-emerald-600 dark:text-emerald-400' : 'text-black/50 dark:text-white/50'}`}>
+                                    P{port.port_number}
+                                  </span>
+                                  {isUsed && (
+                                    <span className="inline-flex items-center text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span>
+                                      Terisi
+                                    </span>
+                                  )}
+                                </div>
+                                {isUsed ? (
+                                  (port.sobok_service_status || port.service_status || 'OPEN').toUpperCase() === 'BLOKIR' ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 font-sans tracking-wide">
+                                      <svg className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                      </svg>
+                                      BLOKIR
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 font-sans tracking-wide">
+                                      <svg className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      OPEN
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="text-[10px] text-black/50 dark:text-white/50 font-mono">
+                                    {port.port_type || 'SC/APC'}
+                                  </span>
+                                )}
                               </div>
 
                               {isUsed ? (
-                                <div className="space-y-1.5">
-                                  {/* 1. Nama Client */}
-                                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-1 flex items-center gap-1.5">
-                                    <span className="text-indigo-500"></span> {port.customer_name || port.customer_name_cache || 'Pelanggan'}
-                                  </p>
+                                <div className="space-y-2">
+                                  {/* 1. ID Pelanggan & Nama Pelanggan */}
+                                  <div className="min-w-0">
+                                    {custId && (
+                                      <div className="mb-1 flex items-center">
+                                        <span className="inline-flex items-center whitespace-nowrap font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400 leading-none shrink-0">
+                                          {custId}
+                                        </span>
+                                      </div>
+                                    )}
+                                    <h5 className="text-xs sm:text-sm font-bold text-black dark:text-white break-words leading-snug">
+                                      {customerName}
+                                    </h5>
+                                  </div>
 
-                                  {/* 2. SN ONT */}
-                                  <p className="text-[10px] font-mono text-slate-600 dark:text-slate-300 flex items-center gap-1 truncate">
-                                    <span className="text-slate-400">SN:</span> <span className="font-semibold text-slate-700 dark:text-slate-200">{port.onu_serial || '—'}</span>
-                                  </p>
+                                  {/* 2. Detail Teknis (SN ONT & Interface) */}
+                                  <div className="space-y-1 pt-1 text-[11px] font-mono text-black dark:text-white">
+                                    <div className="flex items-baseline gap-1 break-all">
+                                      <span className="text-black/60 dark:text-white/60 shrink-0 text-[10px]">SN:</span>
+                                      <span className="font-semibold text-black dark:text-white">
+                                        {port.onu_serial || '—'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-baseline gap-1 break-all">
+                                      <span className="text-black/60 dark:text-white/60 shrink-0 text-[10px]">IF:</span>
+                                      <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                                        {port.olt_port_name
+                                          ? (port.olt_port_name.startsWith('gpon') ? port.olt_port_name : `gpon_olt_${port.olt_port_name}`)
+                                          : (odpDetailData?.display_olt_ref && odpDetailData.display_olt_ref !== '—' ? odpDetailData.display_olt_ref : 'gpon_olt_1/1/1')}
+                                      </span>
+                                    </div>
+                                  </div>
 
-                                  {/* 3. Interface OLT Otomatis */}
-                                  <p className="text-[10px] font-mono text-slate-600 dark:text-slate-300 flex items-center gap-1 truncate">
-                                    <span className="text-slate-400">Interface:</span> <span className="font-semibold text-indigo-600 dark:text-indigo-400">{port.olt_port_name ? (port.olt_port_name.startsWith('gpon') ? port.olt_port_name : `gpon_olt_${port.olt_port_name}`) : (odpDetailData?.display_olt_ref && odpDetailData.display_olt_ref !== '—' ? odpDetailData.display_olt_ref : 'gpon_olt_1/1/1')}</span>
-                                  </p>
-
-                                  {/* 4. Redaman Otomatis */}
-                                  <div className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                    <span className="text-[10px] text-slate-400">Redaman:</span>
-                                    <span className={`px-2 py-0.5 rounded-md text-[10px] border font-mono ${rxColor}`}>
+                                  {/* 3. Redaman Optik */}
+                                  <div className="pt-2 border-t border-black/20 dark:border-white/20 flex items-center justify-between">
+                                    <span className="text-[10px] text-black/70 dark:text-white/70 font-medium">Redaman Rx:</span>
+                                    <span className={`text-[11px] font-mono ${rxTextColor}`}>
                                       {rxText}
                                     </span>
                                   </div>
                                 </div>
                               ) : (
-                                <div className="py-3 text-center">
-                                  <span className="text-2xl opacity-30">○</span>
-                                  <p className="text-xs font-medium text-slate-400 mt-1">Port Tersedia</p>
+                                <div className="py-5 text-center flex flex-col items-center justify-center">
+                                  <div className="w-8 h-8 rounded-full border border-dashed border-black/40 dark:border-white/40 flex items-center justify-center text-black/50 dark:text-white/50 mb-1.5">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                  </div>
+                                  <p className="text-[11px] font-medium text-black/50 dark:text-white/50">Port Tersedia</p>
                                 </div>
                               )}
                             </div>
@@ -4216,23 +4750,57 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                Redaman ODP ini synced real-time dari koneksi OLT &amp; ONT pelanggan.
-              </span>
-              <button onClick={closeOdpDetail} className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl">
-                Tutup
-              </button>
+            {/* Pinned Modal Footer */}
+            <div className="px-5 py-3.5 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex items-center justify-between flex-shrink-0">
+              <div className="text-[11px] text-black/70 dark:text-white/70 font-mono truncate mr-2">
+                {selectedOdp.name?.startsWith('ODP') ? selectedOdp.name : `ODP ${selectedOdp.name}`} · {selectedOdp.total_ports || 8} Port
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleScreenshotOdp}
+                  disabled={capturingScreenshot}
+                  className="no-screenshot px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-md flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  {capturingScreenshot ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : screenshotSuccess ? (
+                    <>
+                      <svg className="w-4 h-4 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-emerald-200">Tersimpan</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <circle cx="12" cy="13" r="3" strokeWidth={2} />
+                      </svg>
+                      <span>Screenshot</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={closeOdpDetail}
+                  className="no-screenshot px-4 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-bold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─── Modal Full Spesifikasi Data Lengkap ODP ─── */}
-      {viewFullOdpModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4" onClick={closeFullOdpModal}>
-          <div className="bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-700 max-h-[90vh] flex flex-col overflow-hidden"
+      {viewFullOdpModal && createPortal(
+        <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen" onClick={closeFullOdpModal}>
+          <div
+            className="relative w-full max-w-2xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
             onClick={e => e.stopPropagation()}
           >
             {(() => {
@@ -4245,40 +4813,40 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
 
               return (
                 <>
-                  <div className="bg-slate-900 border-b border-slate-800 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
+                  <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-black/20 dark:border-white/20">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-bold">Spesifikasi &amp; Data Lengkap ODP</h3>
-                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-emerald-600 text-white uppercase">
+                        <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">Spesifikasi &amp; Data Lengkap ODP</h3>
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-600 text-white uppercase">
                           TERMINAL ODP
                         </span>
                       </div>
-                      <p className="text-xs text-slate-300 font-mono mt-0.5">{node.name}</p>
+                      <p className="text-[11px] text-black/70 dark:text-white/70 font-mono mt-0.5">{node.name}</p>
                     </div>
-                    <button onClick={closeFullOdpModal} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white/10 text-slate-300 font-bold">✕</button>
+                    <button onClick={closeFullOdpModal} className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors">✕</button>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 text-xs">
                     {loadingFullOdp ? (
-                      <div className="py-12 text-center text-slate-400 font-medium space-y-2">
+                      <div className="py-12 text-center text-black/50 dark:text-white/50 font-medium space-y-2">
                         <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
                         <p>Memuat spesifikasi lengkap ODP...</p>
                       </div>
                     ) : (
                       <>
-                        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
-                          <h4 className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-[11px]">1. Identitas Node &amp; Status</h4>
+                        <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-3">
+                          <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px]">1. Identitas Node &amp; Status</h4>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Nama ODP</span>
-                              <span className="font-bold text-slate-800 dark:text-slate-100 uppercase">{node.name}</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Nama ODP</span>
+                              <span className="font-bold text-black dark:text-white uppercase">{node.name}</span>
                             </div>
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Tipe Node</span>
-                              <span className="font-semibold text-slate-700 dark:text-slate-300">ODP (Optical Distribution Point)</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Tipe Node</span>
+                              <span className="font-semibold text-black dark:text-white">ODP (Optical Distribution Point)</span>
                             </div>
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Status Operasional</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Status Operasional</span>
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${STATUS_META[node.status]?.pill}`}>
                                 {STATUS_META[node.status]?.label}
                               </span>
@@ -4286,23 +4854,23 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                           </div>
                         </div>
 
-                        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
-                          <h4 className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-[11px]">2. Upstream ODC &amp; Perangkat OLT</h4>
+                        <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-3">
+                          <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px]">2. Upstream ODC &amp; Perangkat OLT</h4>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <span className="text-slate-400 block text-[10px]">ODC Induk (Upstream)</span>
-                              <span className="font-bold text-slate-800 dark:text-slate-100">{node.parent_node?.name || '—'}</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">ODC Induk (Upstream)</span>
+                              <span className="font-bold text-black dark:text-white">{node.parent_node?.name || '—'}</span>
                             </div>
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Perangkat OLT</span>
-                              <span className="font-bold text-slate-800 dark:text-slate-100">{node.olt_device?.name || node.parent_node?.olt_device?.name || 'Auto-Detect OLT'}</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Perangkat OLT</span>
+                              <span className="font-bold text-black dark:text-white">{node.olt_device?.name || node.parent_node?.olt_device?.name || 'Auto-Detect OLT'}</span>
                             </div>
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Interface OLT PON</span>
-                              <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{displayOltRef}</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Interface OLT PON</span>
+                              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{displayOltRef}</span>
                             </div>
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Status Sinyal Rx Power</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Status Sinyal Rx Power</span>
                               <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border inline-block ${getRxColor(attenuation?.avg_rx_power ?? node.rx_power)}`}>
                                 {attenuation?.avg_rx_power ? `${parseFloat(attenuation.avg_rx_power).toFixed(2)} dBm (Rata-rata)` : (node.rx_power != null ? `${parseFloat(node.rx_power).toFixed(2)} dBm` : 'Normal (-21.50 dBm)')}
                               </span>
@@ -4310,23 +4878,23 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                           </div>
                         </div>
 
-                        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
-                          <h4 className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-[11px]">3. Spesifikasi Teknis Optik &amp; Splitter</h4>
+                        <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-3">
+                          <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px]">3. Spesifikasi Teknis Optik &amp; Splitter</h4>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Rasio Splitter ODP</span>
-                              <span className="font-bold text-slate-800 dark:text-slate-100">Rasio {node.splitter_config || node.splitter_type?.ratio || '1:8'}</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Rasio Splitter ODP</span>
+                              <span className="font-bold text-black dark:text-white">Rasio {node.splitter_config || node.splitter_type?.ratio || '1:8'}</span>
                             </div>
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Informasi Tube &amp; Warna Core</span>
-                              <span className="font-semibold text-slate-800 dark:text-slate-100">{node.tube_info || '—'} (Core {node.core_color || '—'})</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Informasi Tube &amp; Warna Core</span>
+                              <span className="font-semibold text-black dark:text-white">{node.tube_info || '—'} (Core {node.core_color || '—'})</span>
                             </div>
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Kapasitas Total Port</span>
-                              <span className="font-mono font-bold text-slate-800 dark:text-slate-100">{node.total_ports} Port</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Kapasitas Total Port</span>
+                              <span className="font-mono font-bold text-black dark:text-white">{node.total_ports} Port</span>
                             </div>
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Port Terisi (Digunakan)</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Port Terisi (Digunakan)</span>
                               <span className="font-bold text-emerald-600 dark:text-emerald-400">
                                 {node.used_ports}/{node.total_ports} Port ({pct(node.used_ports, node.total_ports)}%)
                               </span>
@@ -4334,9 +4902,9 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                           </div>
                         </div>
 
-                        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
+                        <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-3">
                           <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-[11px]">4. Lokasi &amp; Pemetaan Koordinat</h4>
+                            <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px]">4. Lokasi &amp; Pemetaan Koordinat</h4>
                             {hasCoords && (
                               <a
                                 href={`https://www.google.com/maps/search/?api=1&query=${node.latitude},${node.longitude}`}
@@ -4350,28 +4918,28 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                           </div>
                           <div className="space-y-2">
                             <div>
-                              <span className="text-slate-400 block text-[10px]">Alamat Lengkap / Area</span>
-                              <span className="font-medium text-slate-800 dark:text-slate-100 uppercase">{node.address || '—'}</span>
+                              <span className="text-black/50 dark:text-white/50 block text-[10px]">Alamat Lengkap / Area</span>
+                              <span className="font-medium text-black dark:text-white uppercase">{node.address || '—'}</span>
                             </div>
-                            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200 dark:border-slate-700/60">
+                            <div className="grid grid-cols-2 gap-3 pt-1 border-t border-black/20 dark:border-white/20">
                               <div>
-                                <span className="text-slate-400 block text-[10px]">Koordinat Desimal</span>
-                                <span className="font-mono text-slate-700 dark:text-slate-300">{hasCoords ? `${node.latitude}, ${node.longitude}` : '—'}</span>
+                                <span className="text-black/50 dark:text-white/50 block text-[10px]">Koordinat Desimal</span>
+                                <span className="font-mono text-black dark:text-white">{hasCoords ? `${node.latitude}, ${node.longitude}` : '—'}</span>
                               </div>
                               <div>
-                                <span className="text-slate-400 block text-[10px]">Koordinat DMS</span>
-                                <span className="font-mono text-slate-700 dark:text-slate-300">{hasCoords ? decimalToDms(node.latitude, node.longitude).formattedDms : '—'}</span>
+                                <span className="text-black/50 dark:text-white/50 block text-[10px]">Koordinat DMS</span>
+                                <span className="font-mono text-black dark:text-white">{hasCoords ? decimalToDms(node.latitude, node.longitude).formattedDms : '—'}</span>
                               </div>
                             </div>
                           </div>
                         </div>
 
                         {ports.length > 0 && (
-                          <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
-                            <h4 className="font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-[11px]">5. Daftar Port Pelanggan ({ports.length} Port)</h4>
-                            <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                          <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-3">
+                            <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px]">5. Daftar Port Pelanggan ({ports.length} Port)</h4>
+                            <div className="max-h-48 overflow-y-auto rounded-md border border-black/20 dark:border-white/20">
                               <table className="w-full text-left text-[11px]">
-                                <thead className="bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold sticky top-0">
+                                <thead className="bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 font-semibold sticky top-0">
                                   <tr>
                                     <th className="py-2 px-3">Port</th>
                                     <th className="py-2 px-3">Pelanggan / Label</th>
@@ -4379,15 +4947,15 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                                     <th className="py-2 px-3">Rx Sinyal</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-900">
+                                <tbody className="divide-y divide-black/20 dark:divide-white/20 bg-white dark:bg-black">
                                   {ports.map((p) => (
-                                    <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                      <td className="py-1.5 px-3 font-mono font-bold text-slate-600 dark:text-slate-300">P-{p.port_number}</td>
-                                      <td className="py-1.5 px-3 font-medium text-slate-800 dark:text-slate-100">
+                                    <tr key={p.id} className="hover:bg-black/5 dark:hover:bg-white/5">
+                                      <td className="py-1.5 px-3 font-mono font-bold text-black dark:text-white">P-{p.port_number}</td>
+                                      <td className="py-1.5 px-3 font-medium text-black dark:text-white">
                                         {p.customer_name_cache || p.customer_name || p.notes || '—'}
                                       </td>
                                       <td className="py-1.5 px-3">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${p.status === 'used' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${p.status === 'used' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-black/10 dark:bg-white/10 text-black/70 dark:text-white/70'}`}>
                                           {p.status === 'used' ? 'Terisi' : 'Kosong'}
                                         </span>
                                       </td>
@@ -4405,24 +4973,321 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                     )}
                   </div>
 
-                  <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
+                  {/* Pinned Footer */}
+                  <div className="px-5 py-3.5 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex items-center justify-between flex-shrink-0">
                     {canCrud ? (
                       <div className="flex gap-2">
                         <button
                           onClick={() => { onEditNode(node); closeFullOdpModal(); }}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-all"
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-md shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
                         >
                           Edit ODP
                         </button>
                       </div>
                     ) : <div />}
-                    <button onClick={closeFullOdpModal} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl">Tutup</button>
+                    <button
+                      onClick={closeFullOdpModal}
+                      className="px-4 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-bold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      Tutup
+                    </button>
                   </div>
                 </>
               );
             })()}
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL FITUR MAINTENANCE ODP & BROADCAST ALERT */}
+      {maintenanceModalNode && createPortal(
+        <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen" onClick={closeMaintenanceModal}>
+          <div
+            className="relative w-full max-w-2xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
+            onClick={e => e.stopPropagation()}
+          >
+            
+            {/* Modal Header */}
+            <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-black/20 dark:border-white/20">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-md bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-black dark:text-white tracking-tight">
+                      {maintenanceModalNode.status === 'maintenance'
+                        ? 'Kelola / Selesaikan Maintenance ODP'
+                        : 'Mulai Maintenance ODP & Kirim Alert'}
+                    </h3>
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 uppercase tracking-wider">
+                      ODP NODE
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-black/70 dark:text-white/70 font-mono mt-0.5">
+                    {maintenanceModalNode.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeMaintenanceModal}
+                disabled={submittingMaintenance}
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 text-xs">
+              {/* Status Alert Banner */}
+              {maintenanceModalNode.status === 'maintenance' ? (
+                <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-400 dark:border-amber-600/60 text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+                  <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <h5 className="font-bold text-xs uppercase tracking-wide">Status ODP: Sedang Dalam Maintenance</h5>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
+                      ODP ini saat ini tercatat dalam masa pemeliharaan teknis. Klik tombol <strong>Selesaikan Maintenance</strong> di bawah jika pekerjaan telah rampung agar status kembali <strong>Aktif</strong> dan notifikasi pemulihan dikirim ke sistem &amp; Telegram NOC.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+                  <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <h5 className="font-bold text-xs uppercase tracking-wide">Pemberitahuan Pemeliharaan Jaringan</h5>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
+                      Mengaktifkan maintenance akan mengubah status ODP menjadi <span className="font-bold text-amber-700 dark:text-amber-400">Maintenance</span> dan secara otomatis mendistribusikan notifikasi alert siaran ke seluruh pengguna sistem UNMS serta kanal Telegram NOC mengenai detail pemeliharaan beserta jumlah pelanggan terdampak.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Node Specifications & Affected Customers Summary */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-black/5 dark:bg-white/5 p-3 rounded-lg border border-black/20 dark:border-white/20">
+                  <span className="text-black/50 dark:text-white/50 text-[10px] block font-medium">Upstream ODC</span>
+                  <span className="font-bold text-black dark:text-white text-xs block mt-0.5">
+                    {maintenanceInfo?.node?.parent_name || maintenanceModalNode.parent_node?.name || '—'}
+                  </span>
+                </div>
+                <div className="bg-black/5 dark:bg-white/5 p-3 rounded-lg border border-black/20 dark:border-white/20">
+                  <span className="text-black/50 dark:text-white/50 text-[10px] block font-medium">OLT &amp; Interface PON</span>
+                  <span className="font-bold text-black dark:text-white text-xs block mt-0.5">
+                    {maintenanceInfo?.node?.olt_device || maintenanceModalNode.olt_device?.name || 'Auto-Detect OLT'}
+                  </span>
+                  <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold block">
+                    {displayInterface(maintenanceInfo?.node?.olt_port_ref || maintenanceModalNode.olt_port_ref)}
+                  </span>
+                </div>
+                <div className="bg-black/5 dark:bg-white/5 p-3 rounded-lg border border-amber-500/40 flex flex-col justify-center">
+                  <span className="text-amber-600 dark:text-amber-400 text-[10px] block font-bold uppercase tracking-wider">
+                    Pelanggan Terdampak
+                  </span>
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                      {loadingMaintenanceInfo ? '...' : (maintenanceInfo?.impacted_count ?? 0)}
+                    </span>
+                    <span className="text-xs font-semibold text-amber-600/80 dark:text-amber-400/80">
+                      Pelanggan
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Impacted Customers Table */}
+              <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <svg className="w-4 h-4 text-black/50 dark:text-white/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span>Daftar Pelanggan Terhubung Pada Node Ini</span>
+                  </h4>
+                  <span className="text-[10px] text-black/50 dark:text-white/50 font-mono">
+                    {loadingMaintenanceInfo ? 'Memuat...' : `${maintenanceInfo?.impacted_count ?? 0} Pelanggan`}
+                  </span>
+                </div>
+
+                {loadingMaintenanceInfo ? (
+                  <div className="py-6 text-center text-black/50 dark:text-white/50 space-y-2">
+                    <div className="w-5 h-5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                    <p className="text-[11px]">Memeriksa daftar pelanggan terdampak pada ODP...</p>
+                  </div>
+                ) : maintenanceInfo?.impacted_customers?.length > 0 ? (
+                  <div className="max-h-44 overflow-y-auto rounded-md border border-black/20 dark:border-white/20 bg-white dark:bg-black">
+                    <table className="w-full text-left text-[11px]">
+                      <thead className="bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 font-semibold sticky top-0">
+                        <tr>
+                          <th className="py-1.5 px-3">Nomor Port</th>
+                          <th className="py-1.5 px-3">ID Pelanggan</th>
+                          <th className="py-1.5 px-3">Nama Pelanggan</th>
+                          <th className="py-1.5 px-3 text-right">Redaman</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-black/20 dark:divide-white/20 text-black dark:text-white">
+                        {maintenanceInfo.impacted_customers.map((c, i) => (
+                          <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5">
+                            <td className="py-1.5 px-3 font-mono font-bold text-black/70 dark:text-white/70">P-{c.port_number}</td>
+                            <td className="py-1.5 px-3 font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                              {c.customer_number && c.customer_number !== '—' ? c.customer_number : (c.service_number !== '—' ? c.service_number : '—')}
+                            </td>
+                            <td className="py-1.5 px-3 font-semibold text-black dark:text-white">
+                              {c.name}
+                            </td>
+                            <td className="py-1.5 px-3 text-right font-mono text-[10px]">
+                              {c.rx_power != null && isFinite(Number(c.rx_power))
+                                ? `${parseFloat(c.rx_power).toFixed(2)} dBm`
+                                : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-4 text-center text-black/50 dark:text-white/50 bg-white dark:bg-black rounded-md border border-dashed border-black/30 dark:border-white/30">
+                    <p className="text-[11px] font-medium">Tidak ada pelanggan aktif yang terhubung pada port ODP ini.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Maintenance Settings Form */}
+              <div className="space-y-3 pt-1">
+                {/* Estimated Duration */}
+                <div>
+                  <label className="block text-[11px] font-bold text-black dark:text-white mb-1.5 uppercase tracking-wide">
+                    Estimasi Durasi Pengerjaan
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {['30 Menit', '1 Jam', '2 Jam', '4 Jam', 'Selesai Hari Ini'].map(dur => (
+                      <button
+                        key={dur}
+                        type="button"
+                        onClick={() => setMaintenanceDuration(dur)}
+                        className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                          maintenanceDuration === dur
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-black text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 border border-black/30 dark:border-white/30'
+                        }`}
+                      >
+                        {dur}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={maintenanceDuration}
+                    onChange={e => setMaintenanceDuration(e.target.value)}
+                    placeholder="Atau ketik durasi kustom (misal: 3 Jam, Sampai Pukul 17:00 WIB)"
+                    className="w-full px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs sm:text-sm text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-amber-500 transition-all font-medium"
+                  />
+                </div>
+
+                {/* Maintenance Notes */}
+                <div>
+                  <label className="block text-[11px] font-bold text-black dark:text-white mb-1.5 uppercase tracking-wide">
+                    Keterangan / Rincian Pekerjaan Pemeliharaan
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={maintenanceNotes}
+                    onChange={e => setMaintenanceNotes(e.target.value)}
+                    placeholder="Contoh: Perbaikan kabel distribusi fiber optic, penggantian pigtail splitter ODP, perapihan kabel dropcore..."
+                    className="w-full px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs sm:text-sm text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-amber-500 transition-all font-medium"
+                  />
+                </div>
+
+                {/* Broadcast Telegram & System Notification Checkbox */}
+                <label className="flex items-center gap-2.5 p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={sendTelegramNotif}
+                    onChange={e => setSendTelegramNotif(e.target.checked)}
+                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-black/30 dark:border-white/30"
+                  />
+                  <div className="flex-1">
+                    <span className="font-bold text-black dark:text-white text-xs block">
+                      Kirim Pesan Alert ke Notifikasi Sistem &amp; Telegram NOC
+                    </span>
+                    <span className="text-[10px] text-black/50 dark:text-white/50 block">
+                      Otomatis membuat notifikasi siaran (Broadcast) dan mengirim pesan detail ke bot Telegram NOC dengan rincian {maintenanceInfo?.impacted_count ?? 0} pelanggan terdampak.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Pinned Modal Footer Actions */}
+            <div className="px-5 py-3.5 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex items-center justify-between flex-shrink-0">
+              <button
+                type="button"
+                onClick={closeMaintenanceModal}
+                disabled={submittingMaintenance}
+                className="px-4 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-bold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Batal
+              </button>
+
+              <div className="flex items-center gap-2">
+                {maintenanceModalNode.status === 'maintenance' ? (
+                  <button
+                    type="button"
+                    disabled={submittingMaintenance}
+                    onClick={() => handleToggleMaintenance('end')}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-md shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    {submittingMaintenance ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Memproses...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>Selesaikan Maintenance &amp; Pulihkan Normal</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={submittingMaintenance}
+                    onClick={() => handleToggleMaintenance('start')}
+                    className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-md shadow-md shadow-amber-600/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    {submittingMaintenance ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Mengirim Alert &amp; Memulai...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Mulai Maintenance &amp; Kirim Alert</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -4432,10 +5297,12 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
    MAIN PAGE CONTROLLER
 ══════════════════════════════════════════════════════════════════ */
 export default function NetworkInfrastructure() {
+  const { hasRole } = useAuth();
+  const canCrud = hasRole('Super Administrator', 'Operator Jaringan');
   const [searchParams] = useSearchParams();
   const scopedOltId = searchParams.get('olt_id');
 
-  const [activeTab, setActiveTab] = useState('POP'); // 'POP' | 'ODC' | 'ODP'
+  const [activeTab, setActiveTab] = useState('ODP'); // 'ODP' | 'ODC' | 'POP'
   const [stats, setStats] = useState(null);
   const [allNodes, setAllNodes] = useState([]);
   const [splitterTypes, setSplitterTypes] = useState([]);
@@ -4486,6 +5353,13 @@ export default function NetworkInfrastructure() {
   const [modalAddNode, setModalAddNode] = useState(null); // { type }
   const [showAddCableModal, setShowAddCableModal] = useState(false);
   const [editingCable, setEditingCable] = useState(null);
+  const [showKmlModal, setShowKmlModal] = useState(false);
+  const [kmlInitialTarget, setKmlInitialTarget] = useState('all');
+
+  const handleOpenKml = (target = 'all') => {
+    setKmlInitialTarget(target);
+    setShowKmlModal(true);
+  };
 
   const [savingNode, setSavingNode] = useState(false);
   const [savingCable, setSavingCable] = useState(false);
@@ -4805,13 +5679,13 @@ export default function NetworkInfrastructure() {
           <p>
             Apakah Anda yakin ingin menghapus <strong className="text-rose-600 dark:text-rose-400">SEMUA {count} unit {typeLabel}</strong>?
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-black/70 dark:text-white/70">
             {type === 'ODC'
               ? 'Relasi node induk pada ODP di bawah ODC ini akan dilepaskan secara aman, dan seluruh konfigurasi port ODC akan dibersihkan.'
               : 'Seluruh konfigurasi port, riwayat redaman, dan penugasan pelanggan pada ODP ini akan dibersihkan.'}
           </p>
           <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-[11px] text-rose-700 dark:text-rose-300 font-bold">
-            ⚠️ PERINGATAN: Tindakan ini bersifat permanen dan tidak dapat dibatalkan!
+            PERINGATAN: Tindakan ini bersifat permanen dan tidak dapat dibatalkan!
           </div>
         </div>
       ),
@@ -4834,14 +5708,14 @@ export default function NetworkInfrastructure() {
           const data = await res.json();
           closeConfirm();
           if (res.ok && data.status === 'success') {
-            showToast(`🗑️ ${data.message}`);
+            showToast(data.message);
             refreshAll();
           } else {
-            showToast(`❌ ${data.message || 'Gagal menghapus data'}`, 'error');
+            showToast(data.message || 'Gagal menghapus data', 'error');
           }
         } catch (err) {
           closeConfirm();
-          showToast(`❌ Gagal menghapus: ${err.message}`, 'error');
+          showToast(`Gagal menghapus: ${err.message}`, 'error');
         }
       },
     });
@@ -4856,93 +5730,98 @@ export default function NetworkInfrastructure() {
 
 
       {/* ── Top Header Banner ──────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-5 rounded-lg shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-950 dark:text-white tracking-tight font-sans uppercase">
-            INFRASTRUKTUR JARINGAN FIBER OPTIK
+          <h1 className="text-xl sm:text-2xl font-black text-black dark:text-white tracking-tight font-sans">
+            Data POP - ODC - ODP
           </h1>
         </div>
-        <RefreshButton
-          isRefreshing={isRefreshing}
-          onRefresh={triggerRefresh}
-          lastUpdatedText={timeAgoText}
-          label="Segarkan Infrastruktur"
-        />
-      </div>
-
-      {/* Regional Scoped OLT Banner ("Data Wilayah") */}
-      {scopedOltId && activeScopedOlt && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400">
-                Data Wilayah OLT
-              </span>
-              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                {activeScopedOlt.code || 'OLT REGION'}
-              </span>
-            </div>
-            <h2 className="text-lg sm:text-xl font-bold mt-1 text-slate-950 dark:text-white">
-              Data Wilayah: {activeScopedOlt.name}
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Vendor: {activeScopedOlt.vendor || 'ZTE/Huawei'} · Lokasi Headend: {activeScopedOlt.location || 'Utama'}
-            </p>
-          </div>
-          <Link
-            to="/network"
-            className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 transition-all shrink-0"
-          >
-            Tampilkan Semua Wilayah (Global)
-          </Link>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {canCrud && (
+            <button
+              type="button"
+              onClick={() => handleOpenKml('all')}
+              className="px-3.5 py-2 bg-black hover:bg-black/80 text-white dark:bg-white dark:text-black dark:hover:bg-white/90 rounded-md text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              <span>{scopedOltId && activeScopedOlt ? `Import KMZ/KML (${activeScopedOlt.name})` : 'Import KMZ / KML'}</span>
+            </button>
+          )}
+          <RefreshButton
+            isRefreshing={isRefreshing}
+            onRefresh={triggerRefresh}
+            lastUpdatedText={timeAgoText}
+            label="Segarkan Infrastruktur"
+          />
         </div>
-      )}
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard label="POP" value={pops.length} sub="Point of Presence" badgeText="POP" />
-        <StatCard label="ODC" value={odcs.length} sub="Optical Distribution Cabinet" badgeText="ODC" />
-        <StatCard label="ODP" value={odps.length} sub="Optical Distribution Point" badgeText="ODP" />
-        <StatCard label="Core" value={`${pct(usedCores, totalCores)}%`} sub={`${usedCores} / ${totalCores} Core Aktif`} badgeText="CORE" />
       </div>
 
       {/* TAB NAVIGATION BAR (Sleek & Segmented) */}
-      <div className="bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+      <div className="bg-white dark:bg-black p-1.5 rounded-lg border border-black/70 dark:border-white/70 shadow-xs flex items-center gap-1.5 overflow-x-auto no-scrollbar">
         <button
-          onClick={() => setActiveTab('POP')}
-          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'POP'
-            ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 shadow-xs'
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+          onClick={() => setActiveTab('ODP')}
+          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-md text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'ODP'
+            ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
+            : 'text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
             }`}
         >
-          <span>POP</span>
-          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'POP' ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>{pops.length}</span>
+          <span>ODP</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'ODP' ? 'bg-white/20 dark:bg-black/20 text-white dark:text-black font-bold' : 'bg-black/10 dark:bg-white/10 text-black/70 dark:text-white/70'}`}>{odps.length}</span>
         </button>
 
         <button
           onClick={() => setActiveTab('ODC')}
-          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'ODC'
-            ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 shadow-xs'
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-md text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'ODC'
+            ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
+            : 'text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
             }`}
         >
           <span>ODC / MS</span>
-          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'ODC' ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>{odcs.length}</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'ODC' ? 'bg-white/20 dark:bg-black/20 text-white dark:text-black font-bold' : 'bg-black/10 dark:bg-white/10 text-black/70 dark:text-white/70'}`}>{odcs.length}</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('ODP')}
-          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${activeTab === 'ODP'
-            ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/80 shadow-xs'
-            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+          onClick={() => setActiveTab('POP')}
+          className={`flex-1 min-w-[120px] py-2.5 px-3 rounded-md text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'POP'
+            ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
+            : 'text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
             }`}
         >
-          <span>ODP</span>
-          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'ODP' ? 'bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>{odps.length}</span>
+          <span>POP</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-mono ${activeTab === 'POP' ? 'bg-white/20 dark:bg-black/20 text-white dark:text-black font-bold' : 'bg-black/10 dark:bg-white/10 text-black/70 dark:text-white/70'}`}>{pops.length}</span>
         </button>
       </div>
 
       {/* TAB CONTENTS */}
+      {activeTab === 'ODP' && (
+        <OdpTabContent
+          odps={odps}
+          onAddNode={t => setModalAddNode({ type: t })}
+          onEditNode={node => setModalAddNode({ type: 'ODP', editNode: node })}
+          onDeleteNode={handleDeleteNode}
+          onDeleteAllNodes={handleDeleteAllNodes}
+          refreshKey={refreshKey}
+          onRefreshGlobal={refreshAll}
+          onOpenKmlModal={handleOpenKml}
+        />
+      )}
+
+      {activeTab === 'ODC' && (
+        <OdcTabContent
+          onAddNode={t => setModalAddNode({ type: t })}
+          onAddMsNode={() => setModalAddNode({ type: 'ODP', isMsCreation: true })}
+          onEditNode={node => setModalAddNode({ type: node.is_ms_node ? 'ODP' : 'ODC', editNode: node })}
+          onDeleteNode={handleDeleteNode}
+          onDeleteAllNodes={handleDeleteAllNodes}
+          refreshKey={refreshKey}
+          onRefreshGlobal={refreshAll}
+          scopedOltId={scopedOltId}
+          onOpenKmlModal={handleOpenKml}
+        />
+      )}
+
       {activeTab === 'POP' && (
         <PopTabContent
           pops={pops}
@@ -4958,31 +5837,6 @@ export default function NetworkInfrastructure() {
           onAddNode={t => setModalAddNode({ type: t })}
           onEditNode={node => setModalAddNode({ type: 'POP', editNode: node })}
           onDeleteNode={handleDeleteNode}
-        />
-      )}
-
-      {activeTab === 'ODC' && (
-        <OdcTabContent
-          onAddNode={t => setModalAddNode({ type: t })}
-          onAddMsNode={() => setModalAddNode({ type: 'ODP', isMsCreation: true })}
-          onEditNode={node => setModalAddNode({ type: node.is_ms_node ? 'ODP' : 'ODC', editNode: node })}
-          onDeleteNode={handleDeleteNode}
-          onDeleteAllNodes={handleDeleteAllNodes}
-          refreshKey={refreshKey}
-          onRefreshGlobal={refreshAll}
-          scopedOltId={scopedOltId}
-        />
-      )}
-
-      {activeTab === 'ODP' && (
-        <OdpTabContent
-          odps={odps}
-          onAddNode={t => setModalAddNode({ type: t })}
-          onEditNode={node => setModalAddNode({ type: 'ODP', editNode: node })}
-          onDeleteNode={handleDeleteNode}
-          onDeleteAllNodes={handleDeleteAllNodes}
-          refreshKey={refreshKey}
-          onRefreshGlobal={refreshAll}
         />
       )}
 
@@ -5027,6 +5881,20 @@ export default function NetworkInfrastructure() {
           error={cableErr}
         />
       )}
+
+      {/* Modal Import KML / KMZ */}
+      <KmlImportModal
+        isOpen={showKmlModal}
+        onClose={() => setShowKmlModal(false)}
+        initialTarget={kmlInitialTarget}
+        scopedOltId={scopedOltId ? parseInt(scopedOltId) : null}
+        scopedOltName={activeScopedOlt?.name || null}
+        lockOlt={!!scopedOltId}
+        onSuccess={() => {
+          refreshAll();
+          showToast(`Import KML/KMZ berhasil disimpan${activeScopedOlt ? ` ke OLT ${activeScopedOlt.name}` : ''}!`);
+        }}
+      />
 
       {/* Confirm Dialog */}
       <ConfirmDialog

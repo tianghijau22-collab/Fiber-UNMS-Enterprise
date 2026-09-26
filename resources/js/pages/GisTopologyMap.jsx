@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { decimalToDms, parseCoordsInput } from '../utils/coordinateParser.js';
 import { naturalNodeCompare } from '../utils/naturalSort.js';
@@ -66,7 +67,7 @@ const STATUS_META = {
 };
 
 const getNodeEffectiveStatus = (node) => {
-  if (!node) return { key: 'active', label: 'Aktif Normal', badge: STATUS_META.active.badge, color: '#059669', pinBg: '#059669', isLoss: false, isTotalLoss: false, isInactive: false, hasRadar: false };
+  if (!node) return { key: 'active', label: 'Aktif Normal', badge: STATUS_META.active.badge, color: '#059669', pinBg: '#059669', isLoss: false, isTotalLoss: false, isInactive: false, hasRadar: false, hasNoClients: false };
 
   // 1. Status TIDAK AKTIF (Offline / Nonaktif) - Warna Abu-abu Netral
   if (node.status === 'inactive') {
@@ -82,6 +83,7 @@ const getNodeEffectiveStatus = (node) => {
       isTotalLoss: false,
       isInactive: true,
       hasRadar: false,
+      hasNoClients: false,
     };
   }
 
@@ -99,22 +101,53 @@ const getNodeEffectiveStatus = (node) => {
       isTotalLoss: false,
       isInactive: false,
       hasRadar: false,
+      hasNoClients: false,
     };
   }
 
-  // Check optical clients status
-  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+  const isOdp = node.node_type === 'ODP';
   const rangeStr = (node.rx_power_range || '').trim();
-  const hasNumbersInRange = rangeStr && /-?\d+(\.\d+)?/.test(rangeStr);
-  const hasActiveSignal = (effectivePower != null && !isNaN(parseFloat(effectivePower)) && parseFloat(effectivePower) > -32.0) || hasNumbersInRange;
-  const isOnlyLossText = rangeStr === 'Loss' || rangeStr === 'LOS' || rangeStr === 'Loss Total' || rangeStr === 'Semua Loss';
+  const lowerRange = rangeStr.toLowerCase();
 
-  // Total Loss ONLY when:
-  // - Node status is explicitly damaged, OR
-  // - Node is strictly Loss with 0 working clients (no numbers in range and isOnlyLossText)
-  const isTotalLoss = node.status === 'damaged' || (isOnlyLossText && !hasActiveSignal);
+  // 3. Deteksi BELUM ADA PELANGGAN (ODP Baru / Belum ada klien terhubung)
+  const totalClients = node.total_clients != null ? parseInt(node.total_clients, 10) : (node.used_ports != null ? parseInt(node.used_ports, 10) : null);
+  const hasNoClients = isOdp && (
+    node.total_clients === 0 ||
+    lowerRange.includes('belum ada pelanggan') ||
+    (totalClients === 0 && (!rangeStr || lowerRange.includes('belum')))
+  );
 
-  // 3. Status LOSS TOTAL (Merah dengan Radar Ping)
+  if (hasNoClients) {
+    return {
+      key: 'no_clients',
+      label: 'Belum Ada Pelanggan',
+      badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
+      color: '#059669', // Identitas ODP tetap Emerald
+      pinBg: '#059669',
+      nameBorder: '#cbd5e1',
+      nameText: '#475569',
+      isLoss: false,
+      isTotalLoss: false,
+      isInactive: false,
+      hasRadar: false,
+      hasNoClients: true,
+    };
+  }
+
+  // 4. Deteksi LOSS TOTAL (Seluruh Pelanggan pada ODP Loss)
+  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+  const hasGenuineSignal = effectivePower != null && !isNaN(parseFloat(effectivePower)) && parseFloat(effectivePower) > -35.0;
+  const isLossKeyword = lowerRange.includes('loss') || lowerRange.includes('los') || lowerRange.includes('rusak');
+  const isPartialLoss = lowerRange.includes('ada los') || lowerRange.includes('sebagian');
+
+  const isTotalLoss = isOdp && !hasNoClients && (
+    node.is_loss_total === true ||
+    (node.total_clients > 0 && node.online_clients === 0) ||
+    node.status === 'damaged' ||
+    (isLossKeyword && !isPartialLoss && !hasGenuineSignal)
+  );
+
+  // Status LOSS TOTAL (Merah Menyala dengan Radar Ping)
   if (isTotalLoss) {
     return {
       key: node.status === 'active' ? 'active_loss' : 'damaged',
@@ -128,26 +161,30 @@ const getNodeEffectiveStatus = (node) => {
       isTotalLoss: true,
       hasRadar: true,
       isInactive: false,
+      hasNoClients: false,
     };
   }
 
-  // 4. Status AKTIF NORMAL (Tetap Hijau / Biru / Indigo selama ada pelanggan yang memiliki redaman)
+  // 5. Status AKTIF NORMAL / SEBAGIAN LOS
   let pinColor = '#059669'; // Emerald
   if (node.node_type === 'POP') pinColor = '#4f46e5'; // Indigo
   else if (node.node_type === 'ODC') pinColor = '#2563eb'; // Royal Blue
 
   return {
     key: 'active',
-    label: 'Aktif Normal',
-    badge: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
+    label: isPartialLoss ? 'Aktif (Ada Klien LOS)' : 'Aktif Normal',
+    badge: isPartialLoss
+      ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800',
     color: pinColor,
     pinBg: pinColor,
     nameBorder: '#cbd5e1',
     nameText: '#0f172a',
-    isLoss: false,
+    isLoss: isPartialLoss,
     isTotalLoss: false,
     isInactive: false,
     hasRadar: false,
+    hasNoClients: false,
   };
 };
 
@@ -220,34 +257,40 @@ function StreetViewModal({ lat, lng, title, onClose }) {
   const embedUrl = `https://maps.google.com/maps?q=&layer=c&cbll=${lat},${lng}&cbp=11,0,0,0,0&output=svembed`;
   const directUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between shrink-0 border-b border-slate-800">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-4xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between shrink-0 border-b border-black/20 dark:border-white/20">
           <div>
-            <h3 className="text-base font-bold flex items-center gap-2">
+            <h3 className="text-sm sm:text-base font-bold flex items-center gap-2">
               <span>Google Street View 360°</span>
             </h3>
-            <p className="text-xs text-slate-300 mt-0.5">{title || `Koordinat: ${lat}, ${lng}`}</p>
+            <p className="text-[11px] text-black/70 dark:text-white/70 font-mono mt-0.5">{title || `Koordinat: ${lat}, ${lng}`}</p>
           </div>
           <div className="flex items-center space-x-2">
             <a
               href={directUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-all"
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-md transition-colors shadow-sm"
             >
               Buka di Tab Baru ↗
             </a>
             <button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white font-bold transition-all cursor-pointer"
+              className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors"
             >
               ✕
             </button>
           </div>
         </div>
-        <div className="flex-1 min-h-[440px] bg-slate-950 relative">
+        <div className="flex-1 min-h-[440px] bg-black relative">
           <iframe
             title="Street View 360"
             src={embedUrl}
@@ -257,7 +300,8 @@ function StreetViewModal({ lat, lng, title, onClose }) {
           />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -270,11 +314,13 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
   const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
   const effStatus = getNodeEffectiveStatus(node);
   const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
-  const isLoss = effStatus.isLoss;
+  const isLoss = effStatus.isTotalLoss;
   const optMeta = isLoss 
-    ? { label: 'Loss / Kritis', color: '#ef4444', badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800' }
-    : getOpticalQuality(effectivePower);
-  const p = node.total_ports > 0 ? Math.round((node.used_ports / node.total_ports) * 100) : 0;
+    ? { label: 'Loss Total (Kritis)', color: '#ef4444', badge: 'text-rose-600 dark:text-rose-400 font-bold' }
+    : (effStatus.hasNoClients
+        ? { label: 'Belum Ada Pelanggan', color: '#64748b', badge: 'text-black/60 dark:text-white/60 font-bold' }
+        : getOpticalQuality(effectivePower));
+  const p = node.total_ports > 0 ? Math.round(((node.total_clients ?? node.used_ports) / node.total_ports) * 100) : 0;
 
   const [copied, setCopied] = useState(false);
   const dmsInfo = useMemo(() => {
@@ -291,47 +337,47 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
   };
 
   return (
-    <div className="fixed sm:absolute bottom-0 sm:bottom-auto sm:top-4 left-0 sm:left-4 right-0 sm:right-auto z-[999] w-full sm:w-96 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-t-3xl sm:rounded-2xl shadow-2xl border-t sm:border border-slate-200 dark:border-slate-800 p-4 sm:p-5 transition-all text-slate-800 dark:text-slate-100 max-h-[75vh] sm:max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom sm:slide-in-from-left duration-200">
-      <div className="sm:hidden w-10 h-1 rounded-full bg-slate-300 dark:bg-slate-700 mx-auto mb-3" />
-      <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+    <div className="fixed sm:absolute bottom-0 sm:bottom-auto sm:top-4 left-0 sm:left-4 right-0 sm:right-auto z-[999] w-full sm:w-96 bg-white/95 dark:bg-black/95 backdrop-blur-md rounded-t-xl sm:rounded-lg shadow-2xl border-t sm:border border-black/70 dark:border-white/70 p-4 sm:p-5 transition-all text-black dark:text-white max-h-[75vh] sm:max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom sm:slide-in-from-left duration-200">
+      <div className="sm:hidden w-10 h-1 rounded-full bg-black/20 dark:bg-white/20 mx-auto mb-3" />
+      <div className="flex items-start justify-between pb-3 border-b border-black/20 dark:border-white/20">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${typeMeta.bg}`}>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
               {node.node_type}
             </span>
-            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${effStatus.badge}`}>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20" style={{ color: effStatus.color }}>
               {effStatus.label}
             </span>
           </div>
-          <h4 className="text-base font-extrabold text-slate-900 dark:text-white leading-tight">
+          <h4 className="text-base font-bold text-black dark:text-white leading-tight">
             {node.name}
           </h4>
-          <p className="text-xs text-slate-400 font-mono mt-0.5">{node.code}</p>
+          <p className="text-xs text-black/60 dark:text-white/60 font-mono mt-0.5">{node.code}</p>
         </div>
         <button
           onClick={onClose}
-          className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all text-xs font-bold cursor-pointer"
+          className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold transition-colors cursor-pointer"
         >
           ✕
         </button>
       </div>
 
-      <div className="mt-4 space-y-4 text-xs">
+      <div className="mt-4 space-y-3.5 text-xs">
         {/* Optical Telemetry Signal Box */}
         {node.node_type === 'ODP' && (
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+          <div className="p-3.5 bg-black/5 dark:bg-white/5 rounded-lg border border-black/20 dark:border-white/20 space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Telemetry Redaman Rx</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${optMeta.badge}`}>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-black/70 dark:text-white/70">Telemetry Redaman Rx</span>
+              <span className="text-[10px] font-bold" style={{ color: optMeta.color }}>
                 {optMeta.label}
               </span>
             </div>
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black font-mono" style={{ color: optMeta.color }}>
-                {node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(2)} dBm` : '—')}
+              <span className="text-xl font-bold font-mono" style={{ color: optMeta.color }}>
+                {effStatus.hasNoClients ? 'Belum Ada Pelanggan' : (node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(2)} dBm` : '—'))}
               </span>
-              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                {node.used_ports} Klien Terhubung
+              <span className="text-[10px] font-mono text-black/60 dark:text-white/60">
+                {effStatus.hasNoClients ? '0 Klien Terhubung' : `${node.total_clients ?? node.used_ports} Klien Terhubung`}
               </span>
             </div>
           </div>
@@ -339,61 +385,61 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
 
         {/* GPS Coordinates & Google Earth / Maps Navigation */}
         <div className="space-y-2">
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider block">
+          <span className="text-[10px] text-black/70 dark:text-white/70 font-bold uppercase tracking-wider block">
             Posisi Geografis GPS
           </span>
           {node.latitude && node.longitude ? (
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+            <div className="p-3 bg-black/5 dark:bg-white/5 rounded-lg border border-black/20 dark:border-white/20 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                <span className="text-[11px] font-semibold text-black dark:text-white">
                   Koordinat Desimal:
                 </span>
                 <button
                   onClick={handleCopyCoords}
-                  className="px-2.5 py-0.5 text-[10px] font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all text-slate-700 dark:text-slate-300 cursor-pointer"
+                  className="px-2.5 py-0.5 text-[10px] font-bold bg-white dark:bg-black border border-black/20 dark:border-white/20 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-black dark:text-white cursor-pointer"
                 >
                   {copied ? 'Tersalin!' : 'Salin'}
                 </button>
               </div>
 
               <div className="grid grid-cols-1 gap-1.5 font-mono text-xs">
-                <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                  <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400">Google Maps:</span>
+                <div className="flex items-center justify-between text-black dark:text-white">
+                  <span className="text-[10px] font-sans font-semibold text-black/60 dark:text-white/60">Google Maps:</span>
                   <span className="font-bold">{parseFloat(node.latitude).toFixed(6)}, {parseFloat(node.longitude).toFixed(6)}</span>
                 </div>
                 <div className="flex items-center justify-between text-indigo-600 dark:text-indigo-400">
-                  <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400">Google Earth:</span>
+                  <span className="text-[10px] font-sans font-semibold text-black/60 dark:text-white/60">Google Earth:</span>
                   <span className="font-bold">{dmsInfo.formattedDms || '—'}</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-200 dark:border-slate-800">
+              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-black/10 dark:border-white/10">
                 <button
                   onClick={() => onOpenStreetView(node.latitude, node.longitude, node.name)}
-                  className="py-2 px-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center col-span-3 sm:col-span-1 shadow-2xs cursor-pointer"
+                  className="py-2 px-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold rounded-md flex items-center justify-center gap-1 transition-colors text-center col-span-3 sm:col-span-1 cursor-pointer"
                 >
-                  <span>👁️ Street View</span>
+                  <span>Street View</span>
                 </button>
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${node.latitude},${node.longitude}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="py-2 px-2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center shadow-2xs"
+                  className="py-2 px-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold rounded-md flex items-center justify-center gap-1 transition-colors text-center"
                 >
-                  <span>🗺️ Maps</span>
+                  <span>Maps</span>
                 </a>
                 <a
                   href={`https://earth.google.com/web/search/${node.latitude},${node.longitude}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="py-2 px-2 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-all text-center shadow-2xs"
+                  className="py-2 px-2 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 text-[11px] font-bold rounded-md flex items-center justify-center gap-1 transition-colors text-center"
                 >
-                  <span>🌍 Earth</span>
+                  <span>Earth</span>
                 </a>
               </div>
             </div>
           ) : (
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-900/60 text-xs text-amber-700 dark:text-amber-300">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300">
               Belum ada koordinat GPS terdaftar.
             </div>
           )}
@@ -401,12 +447,12 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
 
         <div className="space-y-3">
           {node.total_ports > 0 && (
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="p-3 bg-black/5 dark:bg-white/5 rounded-lg border border-black/20 dark:border-white/20">
               <div className="flex justify-between items-center mb-1.5">
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Kapasitas Port</span>
-                <span className="font-bold text-slate-700 dark:text-slate-300">{node.used_ports}/{node.total_ports} Port ({p}%)</span>
+                <span className="text-[10px] text-black/70 dark:text-white/70 font-bold uppercase tracking-wider">Kapasitas Port</span>
+                <span className="font-bold text-black dark:text-white font-mono">{node.used_ports}/{node.total_ports} Port ({p}%)</span>
               </div>
-              <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+              <div className="w-full bg-black/10 dark:bg-white/10 h-2 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${p > 90 ? 'bg-rose-600' : p > 75 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                   style={{ width: `${p}%` }}
@@ -415,19 +461,19 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
             </div>
           )}
 
-          <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase block mb-1">OLT &amp; Port Uplink</span>
-            <p className="font-bold text-slate-900 dark:text-white">{node.olt_device?.name || node.parent_node?.olt_device?.name || 'OLT Region'}</p>
-            <p className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{node.olt_port_ref || 'PON 1/1/1'}</p>
+          <div className="p-3 bg-black/5 dark:bg-white/5 rounded-lg border border-black/20 dark:border-white/20 text-black dark:text-white">
+            <span className="text-[10px] text-black/70 dark:text-white/70 font-bold uppercase block mb-1">OLT &amp; Port Uplink</span>
+            <p className="font-bold text-black dark:text-white">{node.olt_device?.name || node.parent_node?.olt_device?.name || 'OLT Region'}</p>
+            <p className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-bold">{node.olt_port_ref || 'PON 1/1/1'}</p>
           </div>
         </div>
 
         {/* Quick Action Button to Trace Path */}
         <button
           onClick={() => onTracePath && onTracePath(node)}
-          className="w-full py-2.5 px-3 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+          className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer"
         >
-          <span>🧭 Lacak Jalur Kabel (Path Tracing)</span>
+          <span>Lacak Jalur Kabel (Path Tracing)</span>
         </button>
       </div>
     </div>
@@ -443,46 +489,46 @@ function RulerHud({ waypoints, totalMeters, onUndo, onReset, onClose }) {
   const displayDist = totalMeters >= 1000 ? `${km} km (${m} m)` : `${m} meter`;
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[999] bg-slate-900/95 text-white backdrop-blur-md border border-amber-500/60 shadow-2xl rounded-2xl p-4 w-full max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-200">
-      <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[999] bg-white/95 dark:bg-black/95 text-black dark:text-white backdrop-blur-md border border-amber-500/70 shadow-2xl rounded-lg p-4 w-full max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-200">
+      <div className="flex items-center justify-between pb-2 border-b border-black/20 dark:border-white/20">
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
-          <span className="font-bold text-xs text-amber-300">📏 Alat Ukur Jarak Kabel Lapangan</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping"></span>
+          <span className="font-bold text-xs text-amber-600 dark:text-amber-400">Alat Ukur Jarak Kabel Lapangan</span>
         </div>
         <button
           onClick={onClose}
-          className="text-slate-400 hover:text-white text-xs font-bold px-1 cursor-pointer"
+          className="text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white text-xs font-bold px-1 cursor-pointer"
         >
           ✕ Selesai
         </button>
       </div>
 
-      <div className="mt-3 bg-slate-800/80 rounded-xl p-3 border border-slate-700/60 flex items-center justify-between">
+      <div className="mt-3 bg-black/5 dark:bg-white/5 rounded-lg p-3 border border-black/20 dark:border-white/20 flex items-center justify-between">
         <div>
-          <span className="text-[10px] font-bold uppercase text-slate-400 block">Total Jarak Kabel</span>
-          <span className="text-xl font-black font-mono text-emerald-400 leading-tight">{displayDist}</span>
+          <span className="text-[10px] font-bold uppercase text-black/70 dark:text-white/70 block">Total Jarak Kabel</span>
+          <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 leading-tight">{displayDist}</span>
         </div>
         <div className="text-right">
-          <span className="text-[10px] font-bold uppercase text-slate-400 block">Titik Waypoint</span>
-          <span className="text-base font-black font-mono text-amber-400 leading-tight">{waypoints.length} Titik</span>
+          <span className="text-[10px] font-bold uppercase text-black/70 dark:text-white/70 block">Titik Waypoint</span>
+          <span className="text-base font-bold font-mono text-amber-600 dark:text-amber-400 leading-tight">{waypoints.length} Titik</span>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
-        <span className="text-[10px]">💡 Klik titik peta / marker node</span>
+      <div className="mt-3 flex items-center justify-between text-[11px] text-black/70 dark:text-white/70 pt-1 border-t border-black/10 dark:border-white/10">
+        <span className="text-[10px]">Klik titik peta / marker node</span>
         <div className="flex items-center gap-1.5">
           <button
             onClick={onUndo}
             disabled={waypoints.length === 0}
-            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-35 disabled:cursor-not-allowed text-slate-200 border border-slate-700 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+            className="px-2.5 py-1 bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 disabled:opacity-35 disabled:cursor-not-allowed text-black dark:text-white border border-black/20 dark:border-white/20 rounded-md text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
             title="Hapus titik waypoint terakhir"
           >
-            ↩️ Undo
+            Undo
           </button>
           <button
             onClick={onReset}
             disabled={waypoints.length === 0}
-            className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/40 disabled:opacity-35 disabled:cursor-not-allowed text-rose-300 border border-rose-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+            className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/30 disabled:opacity-35 disabled:cursor-not-allowed text-rose-600 dark:text-rose-400 border border-rose-500/30 rounded-md text-[10px] font-bold transition-colors cursor-pointer"
           >
             Reset
           </button>
@@ -517,20 +563,23 @@ function TargetCoordModal({ isOpen, onClose, onSetTarget }) {
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 overflow-hidden text-slate-800 dark:text-slate-100">
-        <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">📍</span>
-            <div>
-              <h3 className="text-sm font-bold">Cek Koordinat Rumah Client / Patokan</h3>
-              <p className="text-[11px] text-slate-400">Masukkan koordinat untuk menandai patokan titik ukur di peta</p>
-            </div>
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between border-b border-black/20 dark:border-white/20 shrink-0">
+          <div>
+            <h3 className="text-sm font-bold">Cek Koordinat Rumah Client / Patokan</h3>
+            <p className="text-[11px] text-black/70 dark:text-white/70">Masukkan koordinat untuk menandai patokan titik ukur di peta</p>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white font-bold transition-all cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold transition-colors cursor-pointer"
           >
             ✕
           </button>
@@ -538,7 +587,7 @@ function TargetCoordModal({ isOpen, onClose, onSetTarget }) {
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
           <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block">
+            <label className="text-[11px] font-bold text-black/80 dark:text-white/80 block">
               Koordinat GPS (Desimal / Google Earth DMS) <span className="text-rose-500">*</span>
             </label>
             <input
@@ -548,43 +597,44 @@ function TargetCoordModal({ isOpen, onClose, onSetTarget }) {
               value={inputVal}
               onChange={e => setInputVal(e.target.value)}
               placeholder="Contoh: -0.785123, 100.654123 atau 0°47'5.96&quot;S 100°39'15.87&quot;T"
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl font-mono text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 text-xs"
+              className="w-full px-3.5 py-2.5 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md font-mono text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
             />
             {inputVal && (
               <div className="text-[11px] mt-1">
                 {parsed.isValid ? (
-                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
-                    <span>✓ Valid: <b>{parsed.lat.toFixed(6)}, {parsed.lng.toFixed(6)}</b></span>
+                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-md text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+                    <span>Valid: <b>{parsed.lat.toFixed(6)}, {parsed.lng.toFixed(6)}</b></span>
                     <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">{parsed.formattedDms}</span>
                   </div>
                 ) : (
-                  <div className="p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-700 dark:text-rose-300">
-                    ✕ Format koordinat tidak dikenali. Masukkan contoh: <code>-0.785123, 100.654123</code>
+                  <div className="p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-md text-rose-700 dark:text-rose-300">
+                    Format koordinat tidak dikenali. Masukkan contoh: <code>-0.785123, 100.654123</code>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="pt-3 flex items-center justify-end gap-2 border-t border-black/20 dark:border-white/20">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-xs transition-all cursor-pointer"
+              className="px-4 py-2 bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-black dark:text-white rounded-md font-bold text-xs transition-colors cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={!parsed.isValid}
-              className="px-5 py-2 bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-md font-bold text-xs shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
             >
-              <span>📍 Tampilkan di Peta</span>
+              <span>Tampilkan di Peta</span>
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -595,12 +645,12 @@ function TargetPinBanner({ targetPin, onFlyToTarget, onClearTarget }) {
   if (!targetPin) return null;
 
   return (
-    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[998] bg-slate-900/95 text-white backdrop-blur-md border border-fuchsia-500/70 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 text-xs max-w-[92vw] animate-in fade-in slide-in-from-top-2 duration-200">
+    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[998] bg-white/95 dark:bg-black/95 text-black dark:text-white backdrop-blur-md border border-fuchsia-500/70 shadow-2xl rounded-lg px-4 py-2.5 flex items-center gap-3 text-xs max-w-[92vw] animate-in fade-in slide-in-from-top-2 duration-200">
       <div className="flex items-center gap-2 shrink-0">
-        <span className="w-2.5 h-2.5 rounded-full bg-fuchsia-400 animate-ping"></span>
+        <span className="w-2.5 h-2.5 rounded-full bg-fuchsia-500 animate-ping"></span>
         <div>
-          <span className="font-extrabold text-fuchsia-300 block">🏠 Patokan Titik Rumah</span>
-          <span className="text-[10px] font-mono text-slate-300">
+          <span className="font-bold text-fuchsia-600 dark:text-fuchsia-400 block">Patokan Titik Rumah</span>
+          <span className="text-[10px] font-mono text-black/70 dark:text-white/70">
             {targetPin.lat.toFixed(6)}, {targetPin.lng.toFixed(6)} {targetPin.dms ? `(${targetPin.dms})` : ''}
           </span>
         </div>
@@ -609,14 +659,14 @@ function TargetPinBanner({ targetPin, onFlyToTarget, onClearTarget }) {
       <div className="flex items-center gap-2 shrink-0 ml-auto">
         <button
           onClick={onFlyToTarget}
-          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-[11px] font-bold text-slate-200 transition-all cursor-pointer flex items-center gap-1"
+          className="px-2.5 py-1 bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 border border-black/20 dark:border-white/20 rounded-md text-[11px] font-bold text-black dark:text-white transition-colors cursor-pointer flex items-center gap-1"
         >
-          🎯 Fokus
+          Fokus
         </button>
 
         <button
           onClick={onClearTarget}
-          className="w-6 h-6 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 font-bold text-xs transition-all cursor-pointer"
+          className="w-6 h-6 flex items-center justify-center rounded-md bg-black/10 dark:bg-white/10 hover:bg-rose-600 hover:text-white text-black/60 dark:text-white/60 font-bold text-xs transition-colors cursor-pointer"
           title="Hapus Patokan"
         >
           ✕
@@ -633,24 +683,24 @@ function PathTracingBanner({ pathNodes, activeNodeId, onSelectNode, onClose }) {
   if (!pathNodes || pathNodes.length <= 1) return null;
 
   return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[998] bg-slate-900/95 text-white backdrop-blur-md border border-cyan-500/60 shadow-2xl rounded-2xl px-4 py-2.5 flex items-center gap-3 text-xs max-w-[92vw] overflow-hidden">
-      <div className="flex items-center gap-1.5 font-bold text-cyan-400 shrink-0">
-        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[998] bg-white/95 dark:bg-black/95 text-black dark:text-white backdrop-blur-md border border-cyan-500/70 shadow-2xl rounded-lg px-4 py-2.5 flex items-center gap-3 text-xs max-w-[92vw] overflow-hidden">
+      <div className="flex items-center gap-1.5 font-bold text-cyan-600 dark:text-cyan-400 shrink-0">
+        <span className="w-2 h-2 rounded-full bg-cyan-500 animate-ping"></span>
         <span>Jalur Traced:</span>
       </div>
       <div className="flex items-center gap-2 overflow-x-auto py-0.5 scrollbar-none">
         {pathNodes.map((pn, idx) => (
           <React.Fragment key={pn.id}>
-            {idx > 0 && <span className="text-slate-500 font-mono shrink-0">➔</span>}
+            {idx > 0 && <span className="text-black/40 dark:text-white/40 font-mono shrink-0">➔</span>}
             <button
               onClick={() => onSelectNode(pn)}
-              className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md font-bold text-[11px] transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 pn.id === activeNodeId
-                  ? 'bg-cyan-500 text-slate-950 shadow-md ring-2 ring-cyan-400/50'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-black dark:text-white border border-black/20 dark:border-white/20'
               }`}
             >
-              <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-cyan-300 font-mono font-bold">
+              <span className="text-[9px] px-1 py-0.2 rounded bg-black/20 dark:bg-white/20 text-black dark:text-white font-mono font-bold">
                 {pn.node_type}
               </span>
               <span>{pn.name}</span>
@@ -660,7 +710,7 @@ function PathTracingBanner({ pathNodes, activeNodeId, onSelectNode, onClose }) {
       </div>
       <button
         onClick={onClose}
-        className="ml-1 w-6 h-6 flex items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-bold text-xs transition-all shrink-0 cursor-pointer"
+        className="ml-1 w-6 h-6 flex items-center justify-center rounded-md bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold text-xs transition-colors shrink-0 cursor-pointer"
         title="Tutup Tracing"
       >
         ✕
@@ -935,7 +985,7 @@ function LeafletMap({
             font-size: 18px;
             z-index: 10;
           ">
-            🏠
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           </div>
           <div style="
             background: #18181b;
@@ -1002,7 +1052,7 @@ function LeafletMap({
         poly.bindPopup(`
           <div style="font-family: inherit; font-size: 11px; padding: 4px; min-width: 170px;">
             <div style="font-weight: 800; font-size: 12px; margin-bottom: 4px; color: #1e293b;">
-              🧵 ${cable.name}
+              ${cable.name}
             </div>
             <div><strong>Panjang:</strong> ${lenText}</div>
             <div><strong>Kapasitas:</strong> ${cable.core_count_total || 6} Core</div>
@@ -1013,12 +1063,28 @@ function LeafletMap({
     });
   }, [mapLoaded, safeCables]);
 
-  // Helper to format concise optical text: redaman terkecil - redaman terbesar
+  // Helper to format concise optical text: redaman terkecil - redaman terbesar atau label status
   const formatCompactOptical = (node, effStatus) => {
-    if (effStatus.isTotalLoss) return 'LOS';
-    if (effStatus.isInactive) return '';
+    if (effStatus.hasNoClients) return 'Belum ada pelanggan';
+    if (effStatus.isTotalLoss) return 'Loss Total';
+    if (effStatus.isInactive) return 'Nonaktif';
+    if (effStatus.key === 'maintenance') return 'Maint';
 
     if (node.rx_power_range) {
+      const lower = node.rx_power_range.toLowerCase();
+      if (lower.includes('belum ada pelanggan')) {
+        return 'Belum ada pelanggan';
+      }
+      if (lower.includes('loss total') || lower === 'los' || (lower.includes('loss') && !lower.includes('ada los'))) {
+        return 'Loss Total';
+      }
+      if (lower.includes('ada los')) {
+        const numbers = node.rx_power_range.match(/-?\d+(\.\d+)?/g);
+        if (numbers && numbers.length > 0) {
+          return `${parseFloat(numbers[0]).toFixed(1)} dBm (LOS)`;
+        }
+        return 'Ada LOS';
+      }
       const numbers = node.rx_power_range.match(/-?\d+(\.\d+)?/g);
       if (numbers && numbers.length >= 2) {
         const val1 = parseFloat(numbers[0]);
@@ -1036,7 +1102,7 @@ function LeafletMap({
       return `${parseFloat(effectivePower).toFixed(1)} dBm`;
     }
 
-    return '';
+    return node.node_type === 'ODP' ? 'Belum ada pelanggan' : '';
   };
 
   // 6b. Ultra-Lightweight Unified Enterprise Marker System (Model Bulat / Circular Pin)
@@ -1048,6 +1114,7 @@ function LeafletMap({
     if (effStatus.isTotalLoss) statusCls = 'gis-circle-loss';
     else if (effStatus.isInactive) statusCls = 'gis-circle-inactive';
     else if (effStatus.key === 'maintenance') statusCls = 'gis-circle-maint';
+    else if (effStatus.hasNoClients) statusCls = 'gis-circle-no-clients';
 
     const nodeTypeCls = node.node_type === 'POP' ? 'is-pop' : node.node_type === 'ODC' ? 'is-odc' : 'is-odp';
 
@@ -1145,13 +1212,15 @@ function LeafletMap({
       const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
       const isFault = effStatus.isTotalLoss;
       const optMeta = isFault 
-        ? { label: 'Loss / Kritis', color: '#ef4444', pillBg: '#fff1f2', pillBorder: '#fecdd3' } 
-        : getOpticalQuality(effectiveBestPower);
+        ? { label: 'Loss Total (Kritis)', color: '#ef4444', pillBg: '#fff1f2', pillBorder: '#fecdd3', badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800' } 
+        : (effStatus.hasNoClients
+            ? { label: 'Belum Ada Pelanggan', color: '#64748b', pillBg: '#f8fafc', pillBorder: '#cbd5e1', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700' }
+            : getOpticalQuality(effectiveBestPower));
 
       const opticalDbmText = formatCompactOptical(node, effStatus) || '—';
 
-      const isBadgeMode = zoomTier === 'badge' || isSelected || node.node_type === 'POP' || node.node_type === 'ODC';
-      const isCircleMode = zoomTier !== 'dot' || isSelected || node.node_type === 'POP' || node.node_type === 'ODC';
+      const isBadgeMode = zoomTier === 'badge' || isSelected || isFault || node.node_type === 'POP' || node.node_type === 'ODC';
+      const isCircleMode = zoomTier !== 'dot' || isSelected || isFault || node.node_type === 'POP' || node.node_type === 'ODC';
 
       let existing = currentMarkers.get(id);
 
@@ -1203,7 +1272,13 @@ function LeafletMap({
 
         const marker = Lf.marker([lat, lng], { icon }).addTo(nodesGroup);
 
-        marker.bindTooltip(`<b>${node.name}</b> (${node.code})<br>Tipe: ${node.node_type} • Status: ${effStatus.label}${opticalDbmText !== '—' ? '<br>Rx: ' + opticalDbmText : ''}`, {
+        const tooltipSub = effStatus.hasNoClients 
+          ? '<br><span style="color:#64748b;font-weight:bold;">Belum Ada Pelanggan</span>'
+          : (effStatus.isTotalLoss 
+              ? '<br><span style="color:#ef4444;font-weight:bold;">Loss Total (Semua Klien)</span>'
+              : (opticalDbmText !== '—' ? '<br>Rx: ' + opticalDbmText : ''));
+
+        marker.bindTooltip(`<b>${node.name}</b> (${node.code})<br>Tipe: ${node.node_type} • Status: ${effStatus.label}${tooltipSub}`, {
           direction: 'top',
           offset: [0, -18],
           opacity: 0.95,
@@ -1326,7 +1401,7 @@ function LeafletMap({
           display: flex;
           align-items: center;
           justify-content: center;
-          border: 2.5px solid #10b981;
+          border: 2px solid #10b981;
           background: #ffffff;
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
           position: relative;
@@ -1334,30 +1409,30 @@ function LeafletMap({
           flex-shrink: 0;
         }
         .dark .gis-circle-node {
-          background: #0f172a;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+          background: #000000;
+          box-shadow: 0 2px 8px rgba(255, 255, 255, 0.15);
         }
 
         .gis-circle-marker.is-pop .gis-circle-node {
           width: 36px;
           height: 36px;
-          border-width: 3px;
+          border-width: 2.5px;
         }
         .gis-circle-marker.is-odc .gis-circle-node {
           width: 32px;
           height: 32px;
-          border-width: 2.5px;
+          border-width: 2px;
         }
 
         .gis-circle-icon {
           font-size: 8.5px;
           font-weight: 900;
           letter-spacing: -0.02em;
-          color: #0f172a;
+          color: #000000;
           line-height: 1;
         }
         .dark .gis-circle-icon {
-          color: #f8fafc;
+          color: #ffffff;
         }
         .gis-circle-marker.is-pop .gis-circle-icon {
           font-size: 11px;
@@ -1399,25 +1474,25 @@ function LeafletMap({
           gap: 1.5px;
           margin-top: 3px;
           padding: 2.5px 7px;
-          border-radius: 7px;
-          background: rgba(255, 255, 255, 0.95);
+          border-radius: 6px;
+          background: rgba(255, 255, 255, 0.98);
           backdrop-filter: blur(4px);
-          border: 1px solid #cbd5e1;
+          border: 1px solid rgba(0, 0, 0, 0.5);
           box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2);
           white-space: nowrap;
           max-width: 130px;
           text-align: center;
         }
         .dark .gis-circle-stack {
-          background: rgba(15, 23, 42, 0.94);
-          border-color: #334155;
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+          background: rgba(0, 0, 0, 0.95);
+          border-color: rgba(255, 255, 255, 0.4);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
         }
 
         .gis-circle-name {
           font-size: 10.5px;
           font-weight: 800;
-          color: #0f172a;
+          color: #000000;
           max-width: 115px;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1425,7 +1500,7 @@ function LeafletMap({
           line-height: 1.2;
         }
         .dark .gis-circle-name {
-          color: #f8fafc;
+          color: #ffffff;
         }
 
         .gis-circle-dbm {
@@ -1433,7 +1508,7 @@ function LeafletMap({
           font-size: 9px;
           font-weight: 800;
           padding: 1px 4.5px;
-          border-radius: 5px;
+          border-radius: 4px;
           line-height: 1.2;
           border: 1px solid transparent;
           white-space: nowrap;
@@ -1444,7 +1519,7 @@ function LeafletMap({
           background: #fff1f2 !important;
         }
         .dark .gis-circle-loss .gis-circle-node {
-          background: #2b0b14 !important;
+          background: #000000 !important;
         }
         .gis-circle-loss .gis-circle-icon {
           color: #ef4444 !important;
@@ -1454,8 +1529,8 @@ function LeafletMap({
           background: #fff1f2 !important;
         }
         .dark .gis-circle-loss .gis-circle-stack {
-          border-color: #e11d48 !important;
-          background: #2b0b14 !important;
+          border-color: #ef4444 !important;
+          background: #000000 !important;
         }
         .gis-circle-loss .gis-circle-name {
           color: #e11d48 !important;
@@ -1469,6 +1544,15 @@ function LeafletMap({
         }
         .gis-circle-inactive .gis-circle-node {
           border-color: #94a3b8 !important;
+        }
+
+        .gis-circle-no-clients .gis-circle-stack {
+          max-width: 145px;
+        }
+        .gis-circle-no-clients .gis-circle-dbm {
+          font-size: 8px !important;
+          font-weight: 700 !important;
+          padding: 1px 4.5px !important;
         }
 
         .gis-micro-dot {
@@ -1529,7 +1613,7 @@ function LeafletMap({
 
       <div
         ref={mapRef}
-        className={`w-full overflow-hidden relative z-0 transition-all ${isFullscreen ? 'h-full rounded-none' : 'rounded-2xl shadow-inner'}`}
+        className={`w-full overflow-hidden relative z-0 transition-all ${isFullscreen ? 'h-full rounded-none' : 'rounded-lg border border-black/70 dark:border-white/70 shadow-inner'}`}
         style={{ height: isFullscreen ? '100%' : '640px', minHeight: isFullscreen ? '100%' : '640px' }}
       />
 
@@ -1538,36 +1622,36 @@ function LeafletMap({
         {!isFullscreen && (
           <button
             onClick={onToggleFullscreen}
-            className="px-3.5 py-2 text-xs font-bold rounded-xl border shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer bg-white/95 dark:bg-slate-900/95 hover:bg-white dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700"
+            className="px-3.5 py-2 text-xs font-bold rounded-md border shadow-md backdrop-blur-md transition-colors flex items-center gap-1.5 cursor-pointer bg-white/95 dark:bg-black/95 hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white border-black/70 dark:border-white/70"
             title="Buka Peta Mode Layar Penuh"
           >
-            <span>⛶ Layar Penuh</span>
+            <span>Layar Penuh</span>
           </button>
         )}
 
         <button
           onClick={toggleMapMode}
-          className="px-3.5 py-2 bg-white/95 dark:bg-slate-900/95 hover:bg-white dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 shadow-md backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer"
+          className="px-3.5 py-2 bg-white/95 dark:bg-black/95 hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white text-xs font-bold rounded-md border border-black/70 dark:border-white/70 shadow-md backdrop-blur-md transition-colors flex items-center gap-1.5 cursor-pointer"
         >
-          <span>{isSatellite ? '🗺️ Mode Vektor' : '🛰️ Mode Satelit'}</span>
+          <span>{isSatellite ? 'Mode Vektor' : 'Mode Satelit'}</span>
         </button>
 
         {selectedNode && selectedNode.latitude && selectedNode.longitude && (
           <button
             onClick={() => onOpenStreetView(selectedNode.latitude, selectedNode.longitude, selectedNode.name)}
-            className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-xs font-bold rounded-md shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
           >
-            <span>👁️ Street View 360°</span>
+            <span>Street View 360°</span>
           </button>
         )}
       </div>
 
       <button
         onClick={handleRecenterMap}
-        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-white/95 dark:bg-slate-900/95 hover:bg-white dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 shadow-md backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer"
+        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-white/95 dark:bg-black/95 hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white text-xs font-bold rounded-md border border-black/70 dark:border-white/70 shadow-md backdrop-blur-md flex items-center gap-1.5 transition-colors cursor-pointer"
         title="Pusatkan Peta ke Lokasi Node"
       >
-        <span>🎯 Pusatkan Peta</span>
+        <span>Pusatkan Peta</span>
       </button>
     </div>
   );
@@ -1596,34 +1680,34 @@ function GisStatCards({ nodes = [] }) {
   const inactiveNodes = safeNodes.filter(n => n?.status === 'inactive');
 
   const cards = [
-    { label: 'POP Central', value: pops.length, sub: `${pops.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Core Headend', badgeCls: 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800' },
-    { label: 'ODC Cabinet', value: odcs.length, sub: `${odcs.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Distribution', badgeCls: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800' },
-    { label: 'ODP Point', value: odps.length, sub: `${odps.filter(n => n.status === 'active').length} Total Point ODP`, badge: 'Access Terminal', badgeCls: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' },
+    { label: 'POP Central', value: pops.length, sub: `${pops.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Core Headend', badgeCls: 'bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20' },
+    { label: 'ODC Cabinet', value: odcs.length, sub: `${odcs.filter(n => n.status === 'active').length} Aktif Normal`, badge: 'Distribution', badgeCls: 'bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20' },
+    { label: 'ODP Point', value: odps.length, sub: `${odps.filter(n => n.status === 'active').length} Total Point ODP`, badge: 'Access Terminal', badgeCls: 'bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20' },
     { 
       label: 'Gangguan Loss Total', 
       value: lossNodes.length, 
       sub: inactiveNodes.length > 0 ? `${lossNodes.length} Total Loss • ${inactiveNodes.length} Tidak Aktif` : (lossNodes.length > 0 ? 'Perlu Investigasi Lapangan' : 'Seluruh Jalur Sehat'), 
-      badge: lossNodes.length > 0 ? '🚨 Gangguan' : (inactiveNodes.length > 0 ? `${inactiveNodes.length} Nonaktif` : 'Aman Normal'), 
+      badge: lossNodes.length > 0 ? 'Gangguan' : (inactiveNodes.length > 0 ? `${inactiveNodes.length} Nonaktif` : 'Aman Normal'), 
       badgeCls: lossNodes.length > 0 
-        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800' 
-        : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' 
+        ? 'text-rose-600 dark:text-rose-400 font-bold border border-rose-500/40' 
+        : 'text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/40' 
     },
   ];
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 stagger-enter">
       {cards.map((c, i) => (
-        <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs p-4 transition-colors duration-300">
+        <div key={i} className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-2xs p-4 transition-colors duration-300">
           <div className="flex justify-between items-start mb-1">
-            <span className={`text-2xl font-black leading-none ${c.label.includes('Bermasalah') && c.value > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
+            <span className={`text-2xl font-black leading-none ${c.label.includes('Gangguan') && c.value > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-black dark:text-white'}`}>
               {c.value}
             </span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.badgeCls}`}>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${c.badgeCls}`}>
               {c.badge}
             </span>
           </div>
-          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">{c.label}</p>
-          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 font-medium">{c.sub}</p>
+          <p className="text-xs font-bold text-black dark:text-white mt-1">{c.label}</p>
+          <p className="text-[10px] text-black/70 dark:text-white/70 mt-0.5 font-medium">{c.sub}</p>
         </div>
       ))}
     </div>
@@ -1838,9 +1922,11 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
       if (statusFilter) {
         const eff = getNodeEffectiveStatus(n);
         if (statusFilter === 'active_loss') {
-          if (eff.key !== 'active_loss' && eff.key !== 'damaged') return false;
+          if (eff.key !== 'active_loss' && eff.key !== 'damaged' && !eff.isTotalLoss) return false;
+        } else if (statusFilter === 'no_clients') {
+          if (!eff.hasNoClients) return false;
         } else if (statusFilter === 'active') {
-          if (eff.key !== 'active') return false;
+          if (eff.key !== 'active' || eff.hasNoClients || eff.isTotalLoss) return false;
         } else if (statusFilter === 'inactive') {
           if (n.status !== 'inactive') return false;
         } else if (n.status !== statusFilter) {
@@ -1885,25 +1971,24 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   // Dedicated Clean Fullscreen View (No sidebar, no layout overlap, pure 100vw x 100vh)
   if (isFullscreenPage) {
     return (
-      <div className="fixed inset-0 w-screen h-screen z-[99999] bg-slate-950 flex flex-col overflow-hidden select-none font-sans">
+      <div className="fixed inset-0 w-screen h-screen z-[99999] bg-white dark:bg-black text-black dark:text-white flex flex-col overflow-hidden select-none font-sans">
         {/* Top Control Bar for Fullscreen */}
-        <div className="bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 text-white z-[1000] shrink-0 shadow-lg">
+        <div className="bg-white/95 dark:bg-black/95 backdrop-blur-md border-b border-black/20 dark:border-white/20 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 text-black dark:text-white z-[1000] shrink-0 shadow-lg">
           <div className="flex items-center gap-2.5">
             {/* Back to Standard GIS Map */}
             <button
               type="button"
               onClick={() => navigate('/gis-map')}
-              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-md text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Kembali ke tampilan standar UNMS (Esc)"
             >
-              <span className="text-sm">↩️</span>
               <span>Kembali</span>
-              <span className="text-[10px] opacity-75 font-mono px-1.5 py-0.5 rounded bg-black/40">ESC</span>
+              <span className="text-[10px] opacity-80 font-mono px-1.5 py-0.2 rounded bg-black/30 dark:bg-white/20">ESC</span>
             </button>
 
-            <div className="hidden sm:flex items-center gap-2 border-l border-slate-700 pl-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="font-extrabold text-xs text-slate-200 tracking-tight">🗺️ GIS Peta Spasial (Layar Penuh)</span>
+            <div className="hidden sm:flex items-center gap-2 border-l border-black/20 dark:border-white/20 pl-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="font-bold text-xs text-black dark:text-white tracking-tight">Peta Monitoring (Layar Penuh)</span>
             </div>
           </div>
 
@@ -1913,14 +1998,14 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             <button
               type="button"
               onClick={() => setTargetCoordModal(true)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
                 targetPin
-                  ? 'bg-fuchsia-600 text-white border-fuchsia-500 shadow-md ring-2 ring-fuchsia-400/40'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  ? 'bg-fuchsia-600 text-white border-fuchsia-500 shadow-sm'
+                  : 'bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20'
               }`}
               title="Cek titik koordinat rumah client di peta"
             >
-              <span>📍 {targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat'}</span>
+              <span>{targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat'}</span>
             </button>
 
             {/* Ruler Tool Button */}
@@ -1931,36 +2016,36 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                 setRulerActive(next);
                 if (!next) setRulerPoints([]);
               }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
                 rulerActive
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md ring-2 ring-amber-400/40'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  ? 'bg-amber-500 text-black border-amber-400 shadow-sm'
+                  : 'bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20'
               }`}
               title="Ukur total jarak bentangan kabel FO"
             >
-              <span>📏 {rulerActive ? 'Tutup Penggaris' : 'Ukur Jarak FO'}</span>
+              <span>{rulerActive ? 'Tutup Penggaris' : 'Ukur Jarak FO'}</span>
             </button>
 
             {/* Fault Filter Button */}
             <button
               type="button"
               onClick={() => setFaultOnlyFilter(!faultOnlyFilter)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
                 faultOnlyFilter
-                  ? 'bg-rose-600 text-white border-rose-500 shadow-md ring-2 ring-rose-400/40'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                  ? 'bg-rose-600 text-white border-rose-500 shadow-sm'
+                  : 'bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20'
               }`}
             >
-              <span>🚨 {faultOnlyFilter ? 'Filter: Gangguan' : 'Hanya Gangguan'}</span>
+              <span>{faultOnlyFilter ? 'Filter: Gangguan' : 'Hanya Gangguan'}</span>
             </button>
 
             {/* Import KML / KMZ Button */}
             <button
               onClick={() => setKmlImportModal(true)}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer bg-blue-600/90 hover:bg-blue-600 text-white border-blue-500 shadow-sm"
+              className="px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm"
               title="Import Data Jaringan Google Earth (.kml / .kmz)"
             >
-              <span>📥 Import KML</span>
+              <span>Import KML</span>
             </button>
           </div>
 
@@ -1975,32 +2060,32 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                 placeholder="Cari ODP, ODC, POP..."
-                className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-1.5 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white text-xs font-bold cursor-pointer"
                 >
                   ✕
                 </button>
               )}
               {isSearchFocused && searchSuggestions.length > 0 && (
-                <div className="absolute top-full right-0 mt-1.5 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-[1000] overflow-hidden">
+                <div className="absolute top-full right-0 mt-1.5 w-72 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xl z-[1000] overflow-hidden divide-y divide-black/10 dark:divide-white/10">
                   {searchSuggestions.map(s => (
                     <button
                       key={s.id}
                       type="button"
                       onClick={() => handleSelectSuggestion(s)}
-                      className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center justify-between border-b border-slate-800 last:border-0 cursor-pointer text-xs"
+                      className="w-full text-left px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between cursor-pointer text-xs"
                     >
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] font-bold px-1.5 rounded bg-slate-800 text-blue-400 border border-blue-500/40">{s.node_type}</span>
-                          <span className="font-bold text-slate-200">{s.name}</span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">{s.node_type}</span>
+                          <span className="font-bold text-black dark:text-white">{s.name}</span>
                         </div>
-                        <span className="text-[10px] font-mono text-slate-400 block">{s.code}</span>
+                        <span className="text-[10px] font-mono text-black/60 dark:text-white/60 block">{s.code}</span>
                       </div>
                     </button>
                   ))}
@@ -2012,7 +2097,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             <select
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value)}
-              className="px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none cursor-pointer"
+              className="px-2.5 py-1.5 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none cursor-pointer"
             >
               <option value="">Semua Tipe</option>
               <option value="POP">POP</option>
@@ -2081,22 +2166,20 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
           {/* Sub-Second Real-Time SNMP Trap Live Alert Banner */}
           {recentTrapAlert && (
-            <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-[1000] max-w-lg w-[92%] sm:w-auto px-4 py-2.5 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center gap-3 transition-all animate-in slide-in-from-top-4 duration-300 ${
+            <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-[1000] max-w-lg w-[92%] sm:w-auto px-4 py-2.5 rounded-lg shadow-2xl border backdrop-blur-md flex items-center gap-3 transition-all animate-in slide-in-from-top-4 duration-300 ${
               recentTrapAlert.is_loss
                 ? 'bg-rose-950/90 border-rose-500 text-white ring-2 ring-rose-500/50'
                 : 'bg-emerald-950/90 border-emerald-500 text-white ring-2 ring-emerald-500/50'
             }`}>
-              <span className="text-xl shrink-0 animate-bounce">
-                {recentTrapAlert.is_loss ? (recentTrapAlert.event_type === 'DYING_GASP' ? '⚡' : '🚨') : '🟢'}
-              </span>
+              <span className={`w-3 h-3 rounded-full shrink-0 ${recentTrapAlert.is_loss ? 'bg-rose-400 animate-ping' : 'bg-emerald-400 animate-ping'}`} />
               <div className="text-xs">
-                <div className="font-extrabold flex items-center gap-1.5">
+                <div className="font-bold flex items-center gap-1.5">
                   <span>{recentTrapAlert.event_label}</span>
                   <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/20">
                     {recentTrapAlert.time_human}
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-200 mt-0.5 truncate max-w-sm">
+                <div className="text-[11px] text-white/80 mt-0.5 truncate max-w-sm">
                   <b>{recentTrapAlert.customer_name}</b> {recentTrapAlert.node_name ? `• ODP ${recentTrapAlert.node_name}` : `• Port ${recentTrapAlert.port}`}
                 </div>
               </div>
@@ -2111,7 +2194,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                       }
                     }
                   }}
-                  className="ml-auto px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-[10px] font-bold shrink-0 cursor-pointer"
+                  className="ml-auto px-2.5 py-1 rounded-md bg-white/20 hover:bg-white/30 text-[10px] font-bold shrink-0 cursor-pointer"
                 >
                   Lihat ODP ➔
                 </button>
@@ -2127,10 +2210,9 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
           {/* Leaflet Map Component */}
           {loading && safeAllNodes.length === 0 ? (
-
-            <div className="flex items-center justify-center h-full w-full bg-slate-950 text-slate-400">
+            <div className="flex items-center justify-center h-full w-full bg-white dark:bg-black text-black/60 dark:text-white/60">
               <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                 <span className="text-xs font-semibold">Memuat peta spasial GIS...</span>
               </div>
             </div>
@@ -2186,51 +2268,48 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 text-black dark:text-white">
       {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-5 rounded-lg shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-300">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight font-sans">
-              Peta Topologi GIS Spasial (POP-ODC-ODP)
+            <h3 className="text-xl font-bold text-black dark:text-white tracking-tight font-sans">
+              Peta Monitoring
             </h3>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Monitoring transmisi optik, rute feeder FO, dan sebaran ODP secara real-time
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Import KML / KMZ Button */}
           <button
             onClick={() => setKmlImportModal(true)}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 shadow-2xs"
+            className="px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm"
             title="Import Data Jaringan dari Google Earth (.kml / .kmz)"
           >
-            <span>📥 Import KML / KMZ</span>
+            <span>Import KML / KMZ</span>
           </button>
 
           {/* Target Location / Check Coordinates Button */}
           <button
             onClick={() => setTargetCoordModal(true)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
               targetPin
-                ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-md ring-2 ring-fuchsia-400/40'
-                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-sm'
+                : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
             }`}
             title="Cek lokasi rumah pelanggan dari koordinat GPS"
           >
-            <span>📍 {targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat Rumah'}</span>
+            <span>{targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat Rumah'}</span>
           </button>
 
           {/* Dedicated Fullscreen Page Button */}
           <button
             onClick={() => navigate('/gis-map/fullscreen')}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs"
+            className="px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 shadow-2xs"
             title="Buka Peta GIS di Halaman Khusus Layar Penuh (100% Layar Bersih)"
           >
-            <span>⛶ Buka Layar Penuh</span>
+            <span>Buka Layar Penuh</span>
           </button>
 
           {/* Ruler Button */}
@@ -2240,29 +2319,29 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               setRulerActive(next);
               if (!next) setRulerPoints([]);
             }}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
               rulerActive
-                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md ring-2 ring-amber-400/40'
-                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                ? 'bg-amber-500 text-black border-amber-400 shadow-sm'
+                : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
             }`}
           >
-            <span>📏 {rulerActive ? 'Tutup Penggaris' : 'Ukur Jarak FO'}</span>
+            <span>{rulerActive ? 'Tutup Penggaris' : 'Ukur Jarak FO'}</span>
           </button>
 
           <button
             onClick={() => setActiveView('map')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${activeView === 'map'
-              ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+            className={`px-4 py-2 rounded-md text-xs font-bold border transition-colors cursor-pointer ${activeView === 'map'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+              : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
               }`}
           >
             Peta GIS Interaktif
           </button>
           <button
             onClick={() => setActiveView('list')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${activeView === 'list'
-              ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+            className={`px-4 py-2 rounded-md text-xs font-bold border transition-colors cursor-pointer ${activeView === 'list'
+              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+              : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
               }`}
           >
             Tabel Telemetry Redaman
@@ -2273,7 +2352,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
       <GisStatCards nodes={safeAllNodes} />
 
       {/* Main Controls Filter Bar with Smart Search & Fault Filter */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-2xs transition-colors duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 rounded-lg shadow-2xs transition-colors duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3 relative">
           {/* Smart Search Input with Floating Dropdown Suggestions */}
           <div className="relative w-full sm:w-72">
@@ -2284,12 +2363,12 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               onFocus={() => setIsSearchFocused(true)}
               onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
               placeholder="Cari ODP, ODC, POP, OLT, Port..."
-              className="px-3.5 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+              className="px-3.5 py-2 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs font-bold cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white text-xs font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -2297,24 +2376,23 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
             {/* Suggestions Dropdown */}
             {isSearchFocused && searchSuggestions.length > 0 && (
-              <div className="absolute top-full left-0 mt-1.5 w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-[1000] overflow-hidden">
+              <div className="absolute top-full left-0 mt-1.5 w-full bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xl z-[1000] overflow-hidden divide-y divide-black/10 dark:divide-white/10">
                 {searchSuggestions.map(s => {
-                  const tm = TYPE_META[s.node_type] ?? TYPE_META.ODC;
                   return (
                     <button
                       key={s.id}
                       type="button"
                       onClick={() => handleSelectSuggestion(s)}
-                      className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 last:border-0 cursor-pointer"
+                      className="w-full text-left px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between cursor-pointer"
                     >
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded border ${tm.bg}`}>
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
                             {s.node_type}
                           </span>
-                          <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{s.name}</span>
+                          <span className="font-bold text-xs text-black dark:text-white">{s.name}</span>
                         </div>
-                        <span className="text-[10px] font-mono text-slate-400 block">{s.code} • {s.olt_port_ref || 'PON'}</span>
+                        <span className="text-[10px] font-mono text-black/60 dark:text-white/60 block">{s.code} • {s.olt_port_ref || 'PON'}</span>
                       </div>
                       <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">Fly To ➔</span>
                     </button>
@@ -2327,7 +2405,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            className="px-3 py-2 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
             <option value="">Semua Tipe Node</option>
             <option value="POP">POP Central</option>
@@ -2338,39 +2416,37 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            className="px-3 py-2 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
           >
             <option value="">Semua Status Node</option>
-            <option value="active">🟢 Aktif Normal</option>
-            <option value="active_loss">🔴 Aktif (Gangguan Loss)</option>
-            <option value="damaged">🚨 Rusak / Loss Putus</option>
-            <option value="inactive">⚪ Tidak Aktif (Nonaktif)</option>
-            <option value="maintenance">🟡 Maintenance</option>
+            <option value="active">Aktif Normal</option>
+            <option value="active_loss">Aktif (Gangguan Loss)</option>
+            <option value="no_clients">Belum Ada Pelanggan</option>
+            <option value="damaged">Rusak / Loss Putus</option>
+            <option value="inactive">Tidak Aktif (Nonaktif)</option>
+            <option value="maintenance">Maintenance</option>
           </select>
 
           {/* Quick Filter: Hanya Gangguan Loss */}
           <button
             type="button"
             onClick={() => setFaultOnlyFilter(!faultOnlyFilter)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
               faultOnlyFilter
-                ? 'bg-rose-600 text-white border-rose-600 shadow-md ring-2 ring-rose-400/40'
-                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100'
+                ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20'
             }`}
           >
-            <span>🚨 Hanya Gangguan Loss</span>
+            <span>Hanya Gangguan Loss</span>
           </button>
         </div>
 
         <div className="flex items-center space-x-3">
           <button
             onClick={() => setLivePolling(!livePolling)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${livePolling
-              ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-              : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-              }`}
+            className="px-3 py-2 rounded-md text-xs font-bold border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 text-black dark:text-white transition-colors flex items-center gap-1.5 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10"
           >
-            <span className={`w-2 h-2 rounded-full ${livePolling ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+            <span className={`w-2 h-2 rounded-full ${livePolling ? 'bg-emerald-500 animate-pulse' : 'bg-black/40 dark:bg-white/40'}`} />
             <span>{livePolling ? 'Telemetry Live' : 'Telemetry Paused'}</span>
           </button>
         </div>
@@ -2378,11 +2454,11 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
       {/* Main Content Area */}
       {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-12 text-center text-slate-400 dark:text-slate-500 text-xs animate-pulse">
+        <div className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 p-12 text-center text-black/60 dark:text-white/60 text-xs animate-pulse">
           Memuat topologi spasial GIS &amp; data redaman...
         </div>
       ) : activeView === 'map' ? (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]">
           {/* Node Detail Drawer */}
           <NodeDetailPanel
             node={selectedNode}
@@ -2440,22 +2516,20 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
           {/* Sub-Second Real-Time SNMP Trap Live Alert Banner */}
           {recentTrapAlert && (
-            <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-[1000] max-w-lg w-[92%] sm:w-auto px-4 py-2.5 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center gap-3 transition-all animate-in slide-in-from-top-4 duration-300 ${
+            <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-[1000] max-w-lg w-[92%] sm:w-auto px-4 py-2.5 rounded-lg shadow-2xl border backdrop-blur-md flex items-center gap-3 transition-all animate-in slide-in-from-top-4 duration-300 ${
               recentTrapAlert.is_loss
                 ? 'bg-rose-950/90 border-rose-500 text-white ring-2 ring-rose-500/50'
                 : 'bg-emerald-950/90 border-emerald-500 text-white ring-2 ring-emerald-500/50'
             }`}>
-              <span className="text-xl shrink-0 animate-bounce">
-                {recentTrapAlert.is_loss ? (recentTrapAlert.event_type === 'DYING_GASP' ? '⚡' : '🚨') : '🟢'}
-              </span>
+              <span className={`w-3 h-3 rounded-full shrink-0 ${recentTrapAlert.is_loss ? 'bg-rose-400 animate-ping' : 'bg-emerald-400 animate-ping'}`} />
               <div className="text-xs">
-                <div className="font-extrabold flex items-center gap-1.5">
+                <div className="font-bold flex items-center gap-1.5">
                   <span>{recentTrapAlert.event_label}</span>
                   <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/20">
                     {recentTrapAlert.time_human}
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-200 mt-0.5 truncate max-w-sm">
+                <div className="text-[11px] text-white/80 mt-0.5 truncate max-w-sm">
                   <b>{recentTrapAlert.customer_name}</b> {recentTrapAlert.node_name ? `• ODP ${recentTrapAlert.node_name}` : `• Port ${recentTrapAlert.port}`}
                 </div>
               </div>
@@ -2470,7 +2544,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                       }
                     }
                   }}
-                  className="ml-auto px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-[10px] font-bold shrink-0 cursor-pointer"
+                  className="ml-auto px-2.5 py-1 rounded-md bg-white/20 hover:bg-white/30 text-[10px] font-bold shrink-0 cursor-pointer"
                 >
                   Lihat ODP ➔
                 </button>
@@ -2486,7 +2560,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
           {/* Leaflet Map Component */}
           <LeafletMap
-
             nodes={nodesWithCoords}
             cables={safeAllCables}
             selectedNode={selectedNode}
@@ -2504,11 +2577,11 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         </div>
       ) : (
         /* Tabel Telemetry Redaman */
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xs overflow-hidden transition-colors duration-300">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xs overflow-hidden transition-colors duration-300">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="border-b border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 text-[10px] font-bold text-black/70 dark:text-white/70 uppercase tracking-wider">
                   <th className="px-5 py-3.5">Node &amp; Kode</th>
                   <th className="px-4 py-3.5">Tipe</th>
                   <th className="px-4 py-3.5">Status</th>
@@ -2518,54 +2591,55 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                   <th className="px-4 py-3.5 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+              <tbody className="divide-y divide-black/10 dark:divide-white/10 text-xs">
                 {filteredNodes.map(node => {
-                  const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
                   const effStatus = getNodeEffectiveStatus(node);
                   const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
-                  const isLoss = effStatus.isLoss;
+                  const isLoss = effStatus.isTotalLoss;
                   const optMeta = isLoss 
-                    ? { label: 'Loss / Kritis', color: '#ef4444', badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800' }
-                    : getOpticalQuality(effectivePower);
+                    ? { label: 'Loss Total (Kritis)', color: '#ef4444', badge: 'text-rose-600 dark:text-rose-400 font-bold' }
+                    : (effStatus.hasNoClients
+                        ? { label: 'Belum Ada Pelanggan', color: '#64748b', badge: 'text-black/60 dark:text-white/60 font-bold' }
+                        : getOpticalQuality(effectivePower));
 
                   return (
-                    <tr key={node.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr key={node.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                       <td className="px-5 py-3">
-                        <span className="font-bold text-slate-800 dark:text-slate-200 block">{node.name}</span>
-                        <span className="text-[10px] font-mono text-slate-400">{node.code}</span>
+                        <span className="font-bold text-black dark:text-white block">{node.name}</span>
+                        <span className="text-[10px] font-mono text-black/60 dark:text-white/60">{node.code}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${typeMeta.bg}`}>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
                           {node.node_type}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${effStatus.badge}`}>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded border border-black/20 dark:border-white/20" style={{ color: effStatus.color }}>
                           {effStatus.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-slate-600 dark:text-slate-400">
-                        {node.total_ports > 0 ? `${node.used_ports}/${node.total_ports} Port` : '—'}
+                      <td className="px-4 py-3 font-mono font-bold text-black dark:text-white">
+                        {node.total_ports > 0 ? `${node.total_clients ?? node.used_ports}/${node.total_ports} Port` : '—'}
                       </td>
                       <td className="px-4 py-3">
                         {node.node_type === 'ODP' ? (
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono font-bold" style={{ color: optMeta.color }}>
-                              {node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(2)} dBm` : '—')}
+                              {effStatus.hasNoClients ? 'Belum Ada Pelanggan' : (node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(2)} dBm` : '—'))}
                             </span>
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${optMeta.badge}`}>
+                            <span className="text-[10px] font-bold" style={{ color: optMeta.color }}>
                               {optMeta.label}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-400 font-mono text-[10px]">Headend/Distribution</span>
+                          <span className="text-black/60 dark:text-white/60 font-mono text-[10px]">Headend/Distribution</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 font-mono text-[11px] text-slate-500">
+                      <td className="px-4 py-3 font-mono text-[11px] text-black/70 dark:text-white/70">
                         {node.latitude && node.longitude ? (
                           <span>{parseFloat(node.latitude).toFixed(5)}, {parseFloat(node.longitude).toFixed(5)}</span>
                         ) : (
-                          <span className="text-slate-400 italic">Belum diset</span>
+                          <span className="text-black/40 dark:text-white/40 italic">Belum diset</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -2574,7 +2648,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                             setSelectedNode(node);
                             setActiveView('map');
                           }}
-                          className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 hover:bg-blue-100 rounded-lg text-xs font-bold transition-all border border-blue-200 dark:border-blue-800 cursor-pointer"
+                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold transition-colors shadow-sm cursor-pointer"
                         >
                           Lihat Peta
                         </button>

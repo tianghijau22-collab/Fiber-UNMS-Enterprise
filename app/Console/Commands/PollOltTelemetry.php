@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Services\TelegramService;
+use App\Models\AppNotification;
+use App\Services\Olt\FastOpticalProbeService;
 use Symfony\Component\Process\Process;
 
 class PollOltTelemetry extends Command
@@ -207,6 +209,18 @@ class PollOltTelemetry extends Command
             Cache::put('last_mass_client_down_check_ts', time(), 120);
             try {
                 \App\Services\OpticalFaultLocalizationService::detectMassClientDown(2, 100.0);
+            } catch (\Throwable $e) {
+                // Ignore error agar tidak menghambat worker loop
+            }
+        }
+
+        // ⚡ PILAR 3: Hardware SFP Link Pulse (Interval 15 Detik, Multi-OID ~34ms)
+        // Memeriksa status fisik link SFP (ifOperStatus) seluruh port PON OLT secara serentak
+        $lastSfpPulse = (int)Cache::get('last_hardware_sfp_pulse_ts', 0);
+        if (time() - $lastSfpPulse >= 15) {
+            Cache::put('last_hardware_sfp_pulse_ts', time(), 60);
+            try {
+                $this->executeHardwareSfpLinkPulse();
             } catch (\Throwable $e) {
                 // Ignore error agar tidak menghambat worker loop
             }
@@ -763,10 +777,17 @@ class PollOltTelemetry extends Command
             || (bool)Cache::get($activeMassKeyFull, false);
 
         // Kriteria Gangguan Massal via Polling:
-        // Ada >= 3 pelanggan terdaftar pada port, dan:
-        // 1) onlineCount == 0 (100% mati total), ATAU
-        // 2) jika pelanggan >= 6 dan yang online <= 15% (artinya kabel distribusi/feeder utama putus)
-        $isMassDown = ($found >= 3 && $onlineCount === 0) || ($found >= 6 && $onlineCount <= (int)ceil($found * 0.15));
+        $pctDown = $found > 0 ? round((($found - $onlineCount) / $found) * 100.0, 1) : 0;
+
+        // 🎯 POLA CERDAS GANGGUAN MASSAL INTERFACE (POLLER):
+        // 1. Port >= 10 pelanggan: 100% loss ATAU minimal 90% down & toleransi online <= 3
+        // 2. Port < 10 pelanggan (minimal 3): Wajib 100% loss (onlineCount === 0)
+        $isMassDown = false;
+        if ($found >= 10) {
+            $isMassDown = ($onlineCount === 0) || ($pctDown >= 90.0 && $onlineCount <= 3);
+        } elseif ($found >= 3) {
+            $isMassDown = ($onlineCount === 0);
+        }
 
         if ($isMassDown) {
             // Kunci hierarki mass outage di cache selama 1 jam
@@ -800,6 +821,7 @@ class PollOltTelemetry extends Command
                             'customers.id as customer_id',
                             'customers.customer_number',
                             'ont_registrations.onu_serial',
+                            'ont_registrations.rx_power',
                             'network_nodes.name as odp_name',
                         ])
                         ->get()
@@ -808,10 +830,10 @@ class PollOltTelemetry extends Command
                     \Illuminate\Support\Facades\Log::warning("handleInterfaceMassOutagePollCheck DB query error: " . $dbEx->getMessage());
                 }
 
-                $affectedOnus = array_filter($onus, fn($o) => !in_array(strtolower($o['status'] ?? ''), ['online', 'working']));
-                $displayCount = count($affectedOnus);
+                // 🎯 TAMPILKAN 100% SELURUH PELANGGAN PADA PORT (Down = 🔴, Online = 🟢)
                 $sampleList = [];
-                foreach (array_slice(array_values($affectedOnus), 0, 30) as $idx => $o) {
+                $onlineSerials = [];
+                foreach (array_values($onus) as $idx => $o) {
                     $sn = strtoupper(trim((string)($o['serial_number'] ?? $o['sn'] ?? '—')));
                     $matched = $dbClients->get($sn);
                     $cName = $matched->customer_name ?? ($o['customer_name'] ?? ($o['name'] ?? 'Pelanggan'));
@@ -819,28 +841,45 @@ class PollOltTelemetry extends Command
                     $cIdStr = $cId ? "[{$cId}] " : "";
                     $odpStr = !empty($matched->odp_name) ? " (ODP: {$matched->odp_name})" : "";
 
-                    $sampleList[] = ($idx + 1) . ". 🔴 {$cIdStr}<b>{$cName}</b>{$odpStr}\n   └ SN: <code>{$sn}</code> • <code>-40.00 dBm (LOS)</code>";
-                }
-                if ($displayCount > 30) {
-                    $sampleList[] = "<i>... dan " . ($displayCount - 30) . " pelanggan terdampak lainnya pada interface {$fullP}</i>";
+                    $st = strtolower((string)($o['status'] ?? ''));
+                    $isUp = in_array($st, ['online', 'working', 'active']);
+                    $rxPower = $o['rx_power'] ?? ($matched->rx_power ?? null);
+
+                    if ($isUp) {
+                        $onlineSerials[] = $sn;
+                        $rxStr = ($rxPower !== null && (float)$rxPower > -35.0) ? number_format((float)$rxPower, 2, '.', '') . " dBm (ONLINE)" : "Online";
+                        $sampleList[] = ($idx + 1) . ". 🟢 {$cIdStr}<b>{$cName}</b>{$odpStr}\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
+                    } else {
+                        $sampleList[] = ($idx + 1) . ". 🔴 {$cIdStr}<b>{$cName}</b>{$odpStr}\n   └ SN: <code>{$sn}</code> • <code>-40.00 dBm (LOS)</code>";
+                    }
                 }
                 $sampleListText = !empty($sampleList) ? implode("\n", $sampleList) : "—";
-                $pctDown = $found > 0 ? round((($found - $onlineCount) / $found) * 100) : 100;
-                $totalTerdampakText = "🔴 <b>" . ($found - $onlineCount) . " dari {$found} Pelanggan ({$pctDown}% Terdampak)</b>";
+                $downCount = $found - $onlineCount;
+
+                if ($onlineCount === 0 || $downCount >= $found) {
+                    $smartTitle = "🚨 ALARM GANGGUAN MASSAL: Interface {$fullP} (100% TOTAL LOSS)";
+                    $totalTerdampakText = "🔴 <b>{$found} dari {$found} Pelanggan (100% TOTAL LOSS)</b>";
+                } else {
+                    $smartTitle = "🚨 ALARM GANGGUAN MASSAL: Interface {$fullP} ({$pctDown}% LOSS • {$onlineCount} MODEM MASIH ON)";
+                    $totalTerdampakText = "🔴 <b>{$downCount} dari {$found} Pelanggan ({$pctDown}% LOSS • {$onlineCount} Masih ON)</b>";
+                }
 
                 \App\Models\AppNotification::notifyAll(
-                    "🚨 ALARM GANGGUAN MASSAL: Interface {$fullP}",
+                    $smartTitle,
                     "<b>• OLT:</b> {$oltName}\n" .
                     "<b>• Interface / Port:</b> <code>{$fullP}</code>\n" .
                     "<b>• Penyebab:</b> Kabel Putus / Masalah lainnya\n" .
                     "<b>• Total Terdampak:</b> {$totalTerdampakText}\n\n" .
-                    "<b>Daftar Pelanggan Terdampak:</b>\n{$sampleListText}",
+                    "<b>Daftar Seluruh Pelanggan pada Interface:</b>\n{$sampleListText}",
                     'MASS_OUTAGE',
                     '/network',
                     'MASS_OUTAGE',
                     true,
                     'POLL_TELEMETRY'
                 );
+
+                // 💾 Bulk sync DB hanya untuk yang offline (exclude online modems)
+                \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('inactive', $fullP, null, -40.00, $onlineSerials);
 
                 // Push ke Live Events Queue untuk UI
                 $recentEvents = Cache::get('telemetry_live_events', []);
@@ -920,7 +959,7 @@ class PollOltTelemetry extends Command
 
                 $recList = [];
                 $displayRecCount = count($onus);
-                foreach (array_slice(array_values($onus), 0, 30) as $idx => $o) {
+                foreach (array_values($onus) as $idx => $o) {
                     $sn = strtoupper(trim((string)($o['serial_number'] ?? $o['sn'] ?? '—')));
                     $matched = $dbClients->get($sn);
                     $cName = $matched->customer_name ?? ($o['customer_name'] ?? ($o['name'] ?? 'Pelanggan'));
@@ -934,7 +973,7 @@ class PollOltTelemetry extends Command
 
                     if ($isUp) {
                         $badge = "🟢";
-                        $rxStr = number_format($rxVal, 2, '.', '') . " dBm";
+                        $rxStr = number_format($rxVal, 2, '.', '') . " dBm (ONLINE)";
                     } else {
                         $badge = "🔴";
                         $rxStr = "-40.00 dBm (LOS)";
@@ -942,25 +981,24 @@ class PollOltTelemetry extends Command
 
                     $recList[] = ($idx + 1) . ". {$badge} {$cIdStr}<b>{$cName}</b>{$odpStr}\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
                 }
-                if ($displayRecCount > 30) {
-                    $recList[] = "<i>... dan " . ($displayRecCount - 30) . " pelanggan lainnya pada interface {$fullP}</i>";
-                }
                 $recListText = !empty($recList) ? implode("\n", $recList) : "—";
 
                 if ($onlineCount === $found) {
+                    $smartRecTitle = "🟢 PEMULIHAN GANGGUAN MASSAL: Interface {$fullP} (100% PULIH NORMAL)";
                     $totalKlienText = "<b>{$onlineCount} dari {$found} Pelanggan (100% Pulih Normal)</b>";
                 } else {
+                    $smartRecTitle = "🟢 PEMULIHAN GANGGUAN MASSAL: Interface {$fullP} ({$onlineCount}/{$found} KLIEN ONLINE)";
                     $losCount = max(0, $found - $onlineCount);
                     $totalKlienText = "<b>{$onlineCount} dari {$found} Pelanggan Pulih Online</b> (🔴 {$losCount} Klien Masih LOS)";
                 }
 
                 \App\Models\AppNotification::notifyAll(
-                    "🟢 PEMULIHAN GANGGUAN MASSAL: Interface {$fullP}",
+                    $smartRecTitle,
                     "<b>• OLT:</b> {$oltName}\n" .
                     "<b>• Interface / Port:</b> <code>{$fullP}</code>\n" .
                     "<b>• Status:</b> 🟢 <b>JALUR ON</b>\n" .
                     "<b>• Klien Pulih:</b> {$totalKlienText}\n\n" .
-                    "<b>Daftar Pelanggan Pulih & Nilai Redaman:</b>\n{$recListText}\n\n" .
+                    "<b>Daftar Seluruh Pelanggan pada Interface:</b>\n{$recListText}\n\n" .
                     "<b>Keterangan:</b> Sinyal optik pada interface <code>{$fullP}</code> telah stabil dan normal kembali.",
                     'MASS_RECOVERY',
                     '/network',
@@ -968,6 +1006,92 @@ class PollOltTelemetry extends Command
                     true,
                     'POLL_TELEMETRY'
                 );
+
+                // 💾 Bulk sync DB ke active
+                \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('active', $fullP, null);
+            }
+        }
+    }
+
+    /**
+     * ⚡ PILAR 3: Hardware SFP Link Pulse (Single-Packet Multi-OID ifOperStatus ~34 milidetik)
+     * Memeriksa seluruh modul SFP port PON pada OLT apakah link fisik UP (1) atau DOWN (2).
+     * Mampu mendeteksi kabel patchcord putus atau SFP dicabut dalam 15 detik tanpa menunggu trap!
+     */
+    protected function executeHardwareSfpLinkPulse(): void
+    {
+        $devices = OltDevice::where('status', 'active')->where('connection_mode', 'live')->get();
+        if ($devices->isEmpty()) {
+            return;
+        }
+
+        foreach ($devices as $device) {
+            try {
+                $probe = FastOpticalProbeService::probePortHardwareStatus($device);
+                if (empty($probe['success']) || empty($probe['ports'])) {
+                    continue;
+                }
+
+                $cacheKey = "olt_{$device->id}_sfp_hardware_status";
+                $previousPorts = Cache::get($cacheKey, []);
+                $currentPorts = [];
+
+                foreach ($probe['ports'] as $portName => $pData) {
+                    $currentStatus = $pData['status_str']; // 'UP' or 'DOWN'
+                    $currentPorts[$portName] = $currentStatus;
+                    $prevStatus = $previousPorts[$portName] ?? null;
+
+                    if ($prevStatus !== null) {
+                        // Transisi 1: UP -> DOWN (SFP Dicabut / Kabel Putus Dekat OLT)
+                        if ($prevStatus === 'UP' && $currentStatus === 'DOWN') {
+                            $this->warn("🚨 [HARDWARE SFP PULSE] Port {$portName} pada {$device->name} TRANSISI UP -> DOWN!");
+
+                            // 1. Bulk DB Sync ke inactive & -40.00 dBm seketika (<3ms)
+                            FastOpticalProbeService::instantBulkDbSync('inactive', $portName, null, -40.00);
+
+                            // 2. Kirim Notifikasi Alarm Gangguan Massal (Telegram & Web UI)
+                            AppNotification::notifyAll(
+                                "🚨 ALARM GANGGUAN MASSAL: Interface {$portName}",
+                                "<b>• OLT:</b> {$device->name}\n" .
+                                "<b>• Interface / Port:</b> <code>{$portName}</code>\n" .
+                                "<b>• Penyebab:</b> 🔌 <b>PORT SFP OPTIK PADAM (LINK DOWN)</b>\n" .
+                                "<b>• Deteksi:</b> Sensor fisik Hardware SFP Link Pulse (ifOperStatus)\n\n" .
+                                "<b>Keterangan:</b> Sensor operasional port mendeteksi port fisik mati. Indikasi kabel patchcord putus di dekat OLT, modul SFP longgar/rusak, atau laser padam.",
+                                'MASS_OUTAGE',
+                                '/network',
+                                'MASS_OUTAGE',
+                                true, // sendTelegram = true (Eksklusif Gangguan Massal)
+                                'HARDWARE_SFP_PULSE'
+                            );
+                        }
+                        // Transisi 2: DOWN -> UP (SFP Dicolok / Patchcord Tersambung)
+                        elseif ($prevStatus === 'DOWN' && $currentStatus === 'UP') {
+                            $this->info("🟢 [HARDWARE SFP PULSE] Port {$portName} pada {$device->name} TRANSISI DOWN -> UP!");
+
+                            // 1. Bulk DB Sync ke active seketika
+                            FastOpticalProbeService::instantBulkDbSync('active', $portName, null);
+
+                            // 2. Kirim Notifikasi Pemulihan Massal (Telegram & Web UI)
+                            AppNotification::notifyAll(
+                                "🟢 PEMULIHAN GANGGUAN MASSAL: Interface {$portName}",
+                                "<b>• OLT:</b> {$device->name}\n" .
+                                "<b>• Interface / Port:</b> <code>{$portName}</code>\n" .
+                                "<b>• Status:</b> 🟢 <b>LINK SFP TELAH AKTIF KEMBALI (OPERATIONAL UP)</b>\n" .
+                                "<b>• Deteksi:</b> Sensor fisik Hardware SFP Link Pulse (ifOperStatus)\n\n" .
+                                "<b>Keterangan:</b> Jalur fisik transmisi optik pada port ini telah tersambung kembali dengan normal.",
+                                'MASS_RECOVERY',
+                                '/network',
+                                'MASS_RECOVERY',
+                                true, // sendTelegram = true
+                                'HARDWARE_SFP_PULSE'
+                            );
+                        }
+                    }
+                }
+
+                Cache::put($cacheKey, $currentPorts, 86400);
+            } catch (\Throwable $e) {
+                // Ignore error agar tidak menghambat polling
             }
         }
     }

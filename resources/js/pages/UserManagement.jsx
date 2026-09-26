@@ -42,7 +42,7 @@ const PERMISSIONS = [
   { key: 'cable_edit', label: 'Edit Rute Kabel & Matriks Splicing Core', roles: ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'] },
   { key: 'otdr_trace', label: 'Menjalankan Fitur OTDR Fault Tracing', roles: ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'] },
   { key: 'ticketing', label: 'Kelola Tiket Trouble & Work Order', roles: ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer', 'Customer Service'] },
-  { key: 'crm_customers', label: 'Akses Manajemen Pelanggan & Paket', roles: ['Super Administrator', 'Customer Service', 'Finance & Billing'] },
+  { key: 'crm_customers', label: 'Akses Manajemen Pelanggan & Paket', roles: ['Super Administrator', 'Operator Jaringan', 'Customer Service', 'Finance & Billing'] },
   { key: 'billing', label: 'Akses Invoicing, Billing, & Tagihan', roles: ['Super Administrator', 'Finance & Billing'] },
   { key: 'user_rbac', label: 'Manajemen Hak Akses & Akun Pegawai', roles: ['Super Administrator'] },
 ];

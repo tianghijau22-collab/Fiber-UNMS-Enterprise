@@ -8,54 +8,252 @@ use App\Models\NetworkNode;
 use App\Models\OntRegistration;
 use DOMDocument;
 use DOMXPath;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class SobokScraperService
 {
-    protected string $baseUrl = 'https://sobok.cinoxmedia.net';
-    protected string $loginUrl = 'https://sobok.cinoxmedia.net/index.php';
-    protected string $konfigUrl = 'https://sobok.cinoxmedia.net/halaman_viewer/konfig.php';
+    /**
+     * Daftar domain Sobok yang didukung (Utama & Cadangan / Failover)
+     */
+    protected array $domains = [
+        'sobok.cinoxmedianet.id', // Domain Utama
+        'sobok.cinoxmedia.net',    // Domain Cadangan (Fallback)
+    ];
+
+    protected ?string $lastUsedDomain = null;
 
     /**
-     * Scrape and parse customer data from Sobok
+     * Dapatkan domain aktif yang terakhir berhasil digunakan
+     */
+    public function getLastUsedDomain(): ?string
+    {
+        return $this->lastUsedDomain;
+    }
+
+    /**
+     * Scrape and parse customer data from Sobok (konfig.php)
      */
     public function scrape(string $username = 'jasen', string $password = 'jasen2401'): array
     {
-        $tempCookieFile = tempnam(sys_get_temp_dir(), 'sobok_cookie_');
+        return $this->executeWithFailover(function (string $domain) use ($username, $password) {
+            $tempCookieFile = tempnam(sys_get_temp_dir(), 'sobok_cookie_');
 
-        try {
-            // 1. Authenticate / Login to Sobok
-            $loginSuccess = $this->authenticate($username, $password, $tempCookieFile);
-            if (!$loginSuccess) {
-                throw new \Exception("Gagal login ke sistem Sobok. Periksa username dan password.");
+            try {
+                // 1. Authenticate / Login to Sobok
+                $loginSuccess = $this->authenticate($domain, $username, $password, $tempCookieFile);
+                if (!$loginSuccess) {
+                    throw new \Exception("Gagal login ke sistem Sobok di {$domain}.");
+                }
+
+                // 2. Fetch all customers from konfig.php using keyword = '%'
+                $html = $this->fetchKonfigHtml($domain, $tempCookieFile);
+                if (empty($html)) {
+                    throw new \Exception("Gagal mengambil data dari halaman konfig.php Sobok di {$domain}.");
+                }
+
+                // 3. Parse HTML table
+                $parsedRecords = $this->parseHtml($html);
+
+                // 4. Enrich & Match with Fiber-UNMS Database
+                $enriched = $this->enrichAndMatchRecords($parsedRecords);
+                $enriched['domain_used'] = $domain;
+
+                return $enriched;
+            } finally {
+                if (file_exists($tempCookieFile)) {
+                    @unlink($tempCookieFile);
+                }
             }
+        });
+    }
 
-            // 2. Fetch all customers from konfig.php using keyword = '%'
-            $html = $this->fetchKonfigHtml($tempCookieFile);
-            if (empty($html)) {
-                throw new \Exception("Gagal mengambil data dari halaman konfig.php Sobok.");
+    /**
+     * Sinkronisasi Status Layanan Pelanggan (OPEN vs BLOKIR) dari Sobok (daftar_pelanggan.php)
+     */
+    public function syncServiceStatuses(string $username = 'jasen', string $password = 'jasen2401'): array
+    {
+        return $this->executeWithFailover(function (string $domain) use ($username, $password) {
+            $tempCookieFile = tempnam(sys_get_temp_dir(), 'sobok_dp_cookie_');
+
+            try {
+                // 1. Login ke Sobok
+                $loginSuccess = $this->authenticate($domain, $username, $password, $tempCookieFile);
+                if (!$loginSuccess) {
+                    throw new \Exception("Gagal login ke sistem Sobok di {$domain}.");
+                }
+
+                // 2. Ambil HTML daftar_pelanggan.php (POST keyword=%)
+                $html = $this->fetchDaftarPelangganHtml($domain, $tempCookieFile);
+                if (empty($html)) {
+                    throw new \Exception("Gagal mengambil data dari halaman daftar_pelanggan.php Sobok di {$domain}.");
+                }
+
+                // 3. Parse tabel daftar_pelanggan
+                $parsedSobok = $this->parseDaftarPelangganHtml($html);
+                if (empty($parsedSobok)) {
+                    throw new \Exception("Tidak ada baris data yang ditemukan pada daftar_pelanggan.php Sobok.");
+                }
+
+                // 4. Bangun Indeks Pencarian Sobok
+                $lookupMap = [];
+                foreach ($parsedSobok as $row) {
+                    $u = strtoupper(str_replace(' ', '', $row['username']));
+                    $n = strtoupper(trim(preg_replace('/\s+/', ' ', $row['name'])));
+                    $cleanName = strtoupper(trim(preg_replace('/\([^\)]+\)/', '', $row['name'])));
+
+                    if ($u) {
+                        $lookupMap['user:' . $u] = $row;
+                        if (preg_match('/^CMN0*(\d+)$/i', $u, $m)) {
+                            $lookupMap['cmn_num:' . (int)$m[1]] = $row;
+                        }
+                    }
+
+                    if ($n) {
+                        $lookupMap['name:' . $n] = $row;
+                    }
+                    if ($cleanName && $cleanName !== $n) {
+                        $lookupMap['name:' . $cleanName] = $row;
+                    }
+                }
+
+                // 5. Muat seluruh customer UNMS beserta layanannya
+                $customers = Customer::with('services')->get();
+
+                $now = now();
+                $matchedCount = 0;
+                $openCount = 0;
+                $blockedCount = 0;
+                $unmatchedCount = 0;
+
+                $serviceUpdates = [];
+                $customerStatusUpdates = [];
+
+                foreach ($customers as $c) {
+                    $cNum = strtoupper(str_replace(' ', '', trim($c->customer_number ?? '')));
+                    $cName = strtoupper(trim(preg_replace('/\s+/', ' ', $c->name ?? '')));
+                    $primaryService = $c->services->first();
+                    $pppoeUser = $primaryService?->pppoe_username ? strtoupper(str_replace(' ', '', $primaryService->pppoe_username)) : '';
+
+                    $match = null;
+                    if ($cNum && isset($lookupMap['user:' . $cNum])) {
+                        $match = $lookupMap['user:' . $cNum];
+                    } elseif ($pppoeUser && isset($lookupMap['user:' . $pppoeUser])) {
+                        $match = $lookupMap['user:' . $pppoeUser];
+                    } elseif (preg_match('/^CMN0*(\d+)$/i', $cNum, $m) && isset($lookupMap['cmn_num:' . (int)$m[1]])) {
+                        $match = $lookupMap['cmn_num:' . (int)$m[1]];
+                    } elseif ($cName && isset($lookupMap['name:' . $cName])) {
+                        $match = $lookupMap['name:' . $cName];
+                    }
+
+                    if ($match) {
+                        $matchedCount++;
+                        $isBlocked = $match['status'] === 'BLOKIR';
+                        if ($isBlocked) {
+                            $blockedCount++;
+                        } else {
+                            $openCount++;
+                        }
+
+                        $canonicalServiceStatus = $isBlocked ? 'BLOKIR' : 'OPEN';
+                        $crmStatus = $isBlocked ? 'isolated' : 'active';
+
+                        if ($primaryService) {
+                            $serviceUpdates[] = [
+                                'id'                   => $primaryService->id,
+                                'sobok_service_status' => $canonicalServiceStatus,
+                                'sobok_profile'        => $match['profile'] ?: $primaryService->sobok_profile,
+                                'sobok_sync_at'        => $now,
+                                'status'               => $crmStatus,
+                            ];
+                        }
+
+                        $customerStatusUpdates[] = [
+                            'id'     => $c->id,
+                            'status' => $crmStatus,
+                        ];
+                    } else {
+                        $unmatchedCount++;
+                    }
+                }
+
+                // 6. Jalankan Bulk Update dalam Database Transaction
+                DB::transaction(function () use ($serviceUpdates, $customerStatusUpdates) {
+                    foreach (array_chunk($serviceUpdates, 200) as $chunk) {
+                        foreach ($chunk as $up) {
+                            CustomerService::where('id', $up['id'])->update([
+                                'sobok_service_status' => $up['sobok_service_status'],
+                                'sobok_profile'        => $up['sobok_profile'],
+                                'sobok_sync_at'        => $up['sobok_sync_at'],
+                                'status'               => $up['status'],
+                            ]);
+                        }
+                    }
+
+                    foreach (array_chunk($customerStatusUpdates, 200) as $chunk) {
+                        foreach ($chunk as $up) {
+                            Customer::where('id', $up['id'])->update([
+                                'status' => $up['status'],
+                            ]);
+                        }
+                    }
+                });
+
+                $summary = [
+                    'status'             => 'success',
+                    'domain_used'        => $domain,
+                    'total_sobok'        => count($parsedSobok),
+                    'total_unms'         => $customers->count(),
+                    'matched'            => $matchedCount,
+                    'open_count'         => $openCount,
+                    'blocked_count'      => $blockedCount,
+                    'unmatched'          => $unmatchedCount,
+                    'synced_at'          => $now->toIso8601String(),
+                    'synced_at_human'    => $now->diffForHumans(),
+                ];
+
+                Cache::forever('sobok_service_status_meta', $summary);
+
+                Log::info("Sobok Service Status Synced successfully via {$domain}: {$matchedCount} matched ({$openCount} Open, {$blockedCount} Blokir)");
+
+                return $summary;
+            } finally {
+                if (file_exists($tempCookieFile)) {
+                    @unlink($tempCookieFile);
+                }
             }
+        });
+    }
 
-            // 3. Parse HTML table
-            $parsedRecords = $this->parseHtml($html);
+    /**
+     * Eksekusi pemanggilan Sobok dengan toleransi kegagalan dan failover otomatis
+     */
+    protected function executeWithFailover(callable $callback)
+    {
+        $lastException = null;
 
-            // 4. Enrich & Match with Fiber-UNMS Database
-            $enriched = $this->enrichAndMatchRecords($parsedRecords);
-
-            return $enriched;
-        } finally {
-            if (file_exists($tempCookieFile)) {
-                @unlink($tempCookieFile);
+        foreach ($this->domains as $domain) {
+            try {
+                $result = $callback($domain);
+                $this->lastUsedDomain = $domain;
+                return $result;
+            } catch (\Throwable $e) {
+                $lastException = $e;
+                Log::warning("Sobok Access Error on {$domain}: {$e->getMessage()}. Mencoba domain cadangan...");
             }
         }
+
+        throw new \Exception("Gagal menghubungi seluruh server Sobok (Domain: " . implode(', ', $this->domains) . "). Error: " . $lastException?->getMessage());
     }
 
     /**
      * Authenticate session via cURL
      */
-    protected function authenticate(string $username, string $password, string $cookieFile): bool
+    protected function authenticate(string $domain, string $username, string $password, string $cookieFile): bool
     {
-        $ch = curl_init($this->loginUrl);
+        $url = "https://{$domain}/index.php";
+        $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
@@ -69,7 +267,7 @@ class SobokScraperService
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => 0,
-            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_TIMEOUT        => 20,
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         ]);
 
@@ -83,9 +281,10 @@ class SobokScraperService
     /**
      * Fetch HTML page with all customer records (POST keyword=%)
      */
-    protected function fetchKonfigHtml(string $cookieFile): string
+    protected function fetchKonfigHtml(string $domain, string $cookieFile): string
     {
-        $ch = curl_init($this->konfigUrl);
+        $url = "https://{$domain}/halaman_viewer/konfig.php";
+        $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST           => true,
@@ -108,7 +307,79 @@ class SobokScraperService
     }
 
     /**
-     * Parse HTML DOM into structured customer array
+     * Fetch HTML daftar_pelanggan.php (POST keyword=%)
+     */
+    protected function fetchDaftarPelangganHtml(string $domain, string $cookieFile): string
+    {
+        $url = "https://{$domain}/halaman_viewer/daftar_pelanggan.php";
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => http_build_query([
+                'keyword' => '%',
+                'cari'    => 'Searching',
+            ]),
+            CURLOPT_COOKIEFILE     => $cookieFile,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_TIMEOUT        => 60,
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        ]);
+
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        return $response ?: '';
+    }
+
+    /**
+     * Parse HTML DOM daftar_pelanggan.php ke dalam array terstruktur
+     */
+    protected function parseDaftarPelangganHtml(string $html): array
+    {
+        $records = [];
+        $dom = new DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML($html);
+        libxml_clear_errors();
+
+        $xpath = new DOMXPath($dom);
+        $rows = $xpath->query('//table//tr');
+
+        if (!$rows || $rows->length === 0) {
+            return [];
+        }
+
+        foreach ($rows as $tr) {
+            $tds = $xpath->query('.//td', $tr);
+            if ($tds->length >= 3) {
+                $name     = trim($tds->item(0)->textContent ?? '');
+                $username = trim($tds->item(1)->textContent ?? '');
+                $status   = strtoupper(trim($tds->item(2)->textContent ?? ''));
+                $types    = $tds->length > 3 ? trim($tds->item(3)->textContent ?? '') : '';
+                $profile  = $tds->length > 4 ? trim($tds->item(4)->textContent ?? '') : '';
+
+                if (empty($name) && empty($username)) {
+                    continue;
+                }
+
+                $records[] = [
+                    'name'     => $name,
+                    'username' => $username,
+                    'status'   => $status === 'BLOKIR' ? 'BLOKIR' : 'OPEN',
+                    'type'     => $types,
+                    'profile'  => $profile,
+                ];
+            }
+        }
+
+        return $records;
+    }
+
+    /**
+     * Parse HTML DOM into structured customer array (konfig.php)
      */
     protected function parseHtml(string $html): array
     {

@@ -197,22 +197,44 @@ class TelegramService
             $message .= $cleanBody . "\n\n";
             $message .= "<code>[{$sourceCode}]</code>";
 
-            $payload = [
-                'text'                     => $message,
-                'parse_mode'               => 'HTML',
-                'disable_web_page_preview' => false,
-            ];
+            // Pecah pesan jika panjangnya melebihi batas 3800 karakter Telegram
+            $chunks = [];
+            if (mb_strlen($message) > 3800) {
+                $lines = explode("\n", $message);
+                $curr = "";
+                foreach ($lines as $line) {
+                    if (mb_strlen($curr . $line . "\n") > 3800) {
+                        $chunks[] = trim($curr);
+                        $curr = $line . "\n";
+                    } else {
+                        $curr .= $line . "\n";
+                    }
+                }
+                if (!empty(trim($curr))) {
+                    $chunks[] = trim($curr);
+                }
+            } else {
+                $chunks = [$message];
+            }
 
-            // Pengiriman paralel cepat (Concurrent cURL pool)
-            Http::pool(function ($pool) use ($targetChatIds, $botToken, $payload) {
-                return array_map(function ($chatId) use ($pool, $botToken, $payload) {
-                    $p = array_merge($payload, ['chat_id' => $chatId]);
-                    return $pool->as($chatId)
-                        ->connectTimeout(2)
-                        ->timeout(4)
-                        ->post("https://api.telegram.org/bot{$botToken}/sendMessage", $p);
-                }, $targetChatIds);
-            });
+            foreach ($chunks as $chunk) {
+                $payload = [
+                    'text'                     => $chunk,
+                    'parse_mode'               => 'HTML',
+                    'disable_web_page_preview' => false,
+                ];
+
+                // Pengiriman paralel cepat (Concurrent cURL pool)
+                Http::pool(function ($pool) use ($targetChatIds, $botToken, $payload) {
+                    return array_map(function ($chatId) use ($pool, $botToken, $payload) {
+                        $p = array_merge($payload, ['chat_id' => $chatId]);
+                        return $pool->as($chatId)
+                            ->connectTimeout(2)
+                            ->timeout(4)
+                            ->post("https://api.telegram.org/bot{$botToken}/sendMessage", $p);
+                    }, $targetChatIds);
+                });
+            }
         } catch (\Throwable $e) {
             Log::warning('Telegram Send Dispatch Error: ' . $e->getMessage());
         }

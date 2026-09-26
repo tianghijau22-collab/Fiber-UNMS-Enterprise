@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 
 /**
  * Komponen Diagram Topologi Optik FTTH Mengalir (Flowing Optical Pipeline)
@@ -45,12 +45,12 @@ export default function FtthFlowTopology({
   }
 
   return (
-    <div className={`relative w-full rounded-2xl bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white p-4 sm:p-6 border border-slate-800 shadow-xl overflow-hidden ${className}`}>
+    <div className={`relative w-full rounded-lg bg-white dark:bg-black text-black dark:text-white p-4 sm:p-5 border border-black/70 dark:border-white/70 shadow-xl overflow-hidden ${className}`}>
       {/* Background Optical Ambient Grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b15_1px,transparent_1px),linear-gradient(to_bottom,#1e293b15_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none opacity-40" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
       
       {/* Laser Flow Header */}
-      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 mb-6 pb-3 border-b border-slate-800/80">
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 mb-6 pb-3 border-b border-black/30 dark:border-white/30">
         <div className="flex items-center gap-2.5">
           <div className="relative flex h-3 w-3 items-center justify-center">
             {isOnline ? (
@@ -65,23 +65,23 @@ export default function FtthFlowTopology({
               </>
             )}
           </div>
-          <span className="text-xs font-bold tracking-wider uppercase text-slate-300">
+          <span className="text-xs font-bold tracking-wider uppercase text-black dark:text-white">
             Jalur Optik FTTH Real-Time
           </span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono font-semibold">
+          <span className="text-[10px] px-2 py-0.5 rounded bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20 font-mono font-semibold">
             1490nm Tx / 1310nm Rx
           </span>
         </div>
 
         <div className="flex items-center gap-3 text-xs">
-          <div className="flex items-center gap-1.5 text-slate-400">
+          <div className="flex items-center gap-1.5 text-black/70 dark:text-white/70">
             <span className="text-[10px]">Total Jarak:</span>
-            <span className="font-mono font-bold text-slate-200">{distanceMeters} m</span>
+            <span className="font-mono font-bold text-black dark:text-white">{distanceMeters} m</span>
           </div>
           {pingMs !== null && (
-            <div className="flex items-center gap-1.5 text-slate-400">
+            <div className="flex items-center gap-1.5 text-black/70 dark:text-white/70">
               <span className="text-[10px]">Latensi:</span>
-              <span className="font-mono font-bold text-emerald-400">{pingMs} ms</span>
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{pingMs} ms</span>
             </div>
           )}
         </div>
@@ -91,25 +91,25 @@ export default function FtthFlowTopology({
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-3 items-stretch">
         
         {/* ── NODE 1: OLT HEADEND ── */}
-        <div className="relative group rounded-xl p-4 bg-slate-900/90 border border-blue-500/30 hover:border-blue-500/60 transition-all shadow-lg flex flex-col justify-between">
-          <div className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-md bg-blue-600 text-[10px] font-bold tracking-wider uppercase text-white shadow-xs">
+        <div className="relative group rounded-md p-3.5 bg-white dark:bg-black border border-black/60 dark:border-white/60 hover:border-black dark:hover:border-white transition-all shadow-xs flex flex-col justify-between">
+          <div className="absolute -top-2.5 left-3 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-black text-white dark:bg-white dark:text-black border border-black dark:border-white shadow-xs">
             1. OLT Headend
           </div>
           <div className="space-y-2 mt-1">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors truncate">
+              <span className="text-sm font-bold text-black dark:text-white group-hover:text-blue-500 transition-colors truncate">
                 {oltName}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/80 font-bold">
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20 font-bold">
                 {portName}
               </span>
             </div>
           </div>
-          <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-3 pt-2.5 border-t border-black/30 dark:border-white/30 flex items-center justify-between text-[11px] text-black/70 dark:text-white/70">
             <span>Laser Tx SFP:</span>
-            <span className="font-mono font-semibold text-emerald-400">
+            <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
               {txPower ? `+${txPower} dBm` : '+7.80 dBm'}
             </span>
           </div>
@@ -127,34 +127,34 @@ export default function FtthFlowTopology({
               </defs>
               <line x1="0" y1="12" x2="40" y2="12" stroke="url(#laserGrad1)" strokeWidth="3" className="animate-flow-laser" />
             </svg>
-            <span className="text-[9px] font-mono text-blue-400 bg-slate-950 px-1 rounded border border-blue-900/60 -mt-1">
+            <span className="text-[9px] font-mono text-black dark:text-white bg-white dark:bg-black px-1 rounded border border-black/20 dark:border-white/20 -mt-1">
               Feeder
             </span>
           </div>
         </div>
 
         {/* ── NODE 2: ODC CABINET ── */}
-        <div className="relative group rounded-xl p-4 bg-slate-900/90 border border-indigo-500/30 hover:border-indigo-500/60 transition-all shadow-lg flex flex-col justify-between">
-          <div className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-md bg-indigo-600 text-[10px] font-bold tracking-wider uppercase text-white shadow-xs">
+        <div className="relative group rounded-md p-3.5 bg-white dark:bg-black border border-black/60 dark:border-white/60 hover:border-black dark:hover:border-white transition-all shadow-xs flex flex-col justify-between">
+          <div className="absolute -top-2.5 left-3 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-black text-white dark:bg-white dark:text-black border border-black dark:border-white shadow-xs">
             2. ODC Feeder
           </div>
           <div className="space-y-2 mt-1">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors truncate">
+              <span className="text-sm font-bold text-black dark:text-white group-hover:text-indigo-500 transition-colors truncate">
                 {odcName}
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/15 dark:border-white/15">
                 {odcCode}
               </span>
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+            <div className="flex items-center gap-2 text-[11px] text-black/70 dark:text-white/70">
               <span>Splitter:</span>
-              <span className="font-semibold text-indigo-300">{odcSplitter}</span>
+              <span className="font-semibold text-black dark:text-white">{odcSplitter}</span>
             </div>
           </div>
-          <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-3 pt-2.5 border-t border-black/30 dark:border-white/30 flex items-center justify-between text-[11px] text-black/70 dark:text-white/70">
             <span>Redaman Split:</span>
-            <span className="font-mono font-semibold text-slate-300">-7.20 dB</span>
+            <span className="font-mono font-semibold text-black dark:text-white">-7.20 dB</span>
           </div>
         </div>
 
@@ -170,34 +170,34 @@ export default function FtthFlowTopology({
               </defs>
               <line x1="0" y1="12" x2="40" y2="12" stroke="url(#laserGrad2)" strokeWidth="3" className="animate-flow-laser" />
             </svg>
-            <span className="text-[9px] font-mono text-indigo-400 bg-slate-950 px-1 rounded border border-indigo-900/60 -mt-1">
+            <span className="text-[9px] font-mono text-black dark:text-white bg-white dark:bg-black px-1 rounded border border-black/20 dark:border-white/20 -mt-1">
               Distribusi
             </span>
           </div>
         </div>
 
         {/* ── NODE 3: ODP DISTRIBUTION BOX ── */}
-        <div className="relative group rounded-xl p-4 bg-slate-900/90 border border-purple-500/30 hover:border-purple-500/60 transition-all shadow-lg flex flex-col justify-between">
-          <div className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-md bg-purple-600 text-[10px] font-bold tracking-wider uppercase text-white shadow-xs">
+        <div className="relative group rounded-md p-3.5 bg-white dark:bg-black border border-black/60 dark:border-white/60 hover:border-black dark:hover:border-white transition-all shadow-xs flex flex-col justify-between">
+          <div className="absolute -top-2.5 left-3 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-black text-white dark:bg-white dark:text-black border border-black dark:border-white shadow-xs">
             3. ODP Distribusi
           </div>
           <div className="space-y-2 mt-1">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-white group-hover:text-purple-400 transition-colors truncate">
+              <span className="text-sm font-bold text-black dark:text-white group-hover:text-purple-500 transition-colors truncate">
                 {odpName}
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/15 dark:border-white/15">
                 {odpCode}
               </span>
             </div>
-            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+            <div className="flex items-center gap-2 text-[11px] text-black/70 dark:text-white/70">
               <span>Port Distribusi:</span>
-              <span className="font-mono font-bold text-purple-300">Port {odpPort}</span>
+              <span className="font-mono font-bold text-black dark:text-white">P{odpPort}</span>
             </div>
           </div>
-          <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mt-3 pt-2.5 border-t border-black/30 dark:border-white/30 flex items-center justify-between text-[11px] text-black/70 dark:text-white/70">
             <span>Splitter:</span>
-            <span className="font-semibold text-slate-300">{odpSplitter}</span>
+            <span className="font-semibold text-black dark:text-white">{odpSplitter}</span>
           </div>
         </div>
 
@@ -222,35 +222,35 @@ export default function FtthFlowTopology({
                 strokeDasharray={isLoss ? '4 4' : '6 6'}
               />
             </svg>
-            <span className={`text-[9px] font-mono px-1 rounded border bg-slate-950 -mt-1 ${!isLoss ? 'text-emerald-400 border-emerald-900/60' : 'text-rose-400 border-rose-900/60'}`}>
+            <span className={`text-[9px] font-mono px-1 rounded border bg-white dark:bg-black -mt-1 border-black/20 dark:border-white/20 ${!isLoss ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
               Drop Core
             </span>
           </div>
         </div>
 
         {/* ── NODE 4: ONT / CLIENT MODEM ── */}
-        <div className={`relative group rounded-xl p-4 bg-slate-900/90 border transition-all shadow-lg flex flex-col justify-between ${!isLoss ? 'border-emerald-500/40 hover:border-emerald-500/70' : 'border-rose-500/40 hover:border-rose-500/70'}`}>
-          <div className={`absolute -top-2.5 left-4 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase text-white shadow-xs ${!isLoss ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+        <div className={`relative group rounded-md p-3.5 bg-white dark:bg-black border transition-all shadow-xs flex flex-col justify-between ${!isLoss ? 'border-black/60 dark:border-white/60 hover:border-black dark:hover:border-white' : 'border-rose-500 hover:border-rose-400'}`}>
+          <div className="absolute -top-2.5 left-3 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-black text-white dark:bg-white dark:text-black border border-black dark:border-white shadow-xs">
             4. ONT Pelanggan
           </div>
           <div className="space-y-2 mt-1">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-white truncate max-w-[140px]">
+              <span className="text-sm font-bold text-black dark:text-white truncate max-w-[140px]">
                 {customerName || 'Modem Pelanggan'}
               </span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${!isLoss ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-rose-950 text-rose-300 border border-rose-800'}`}>
+              <span className={`text-[11px] font-bold ${!isLoss ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 {!isLoss ? 'ONLINE' : 'LOS / OFF'}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono text-slate-300 font-bold truncate">
+              <span className="text-[11px] font-mono text-black dark:text-white font-bold truncate">
                 {onuSerial}
               </span>
             </div>
           </div>
-          <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-[11px]">
-            <span className="text-slate-400">Rx Sinyal Optik:</span>
-            <span className={`font-mono text-xs px-1.5 py-0.5 rounded border ${rxBadgeBg}`}>
+          <div className="mt-3 pt-2.5 border-t border-black/30 dark:border-white/30 flex items-center justify-between text-[11px]">
+            <span className="text-black/70 dark:text-white/70">Rx Sinyal Optik:</span>
+            <span className={`font-mono text-xs font-bold ${rxPower !== null && rxPower >= -27 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
               {rxPower !== null ? `${rxPower} dBm` : '—'}
             </span>
           </div>

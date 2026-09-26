@@ -59,3 +59,10 @@ Schedule::call(function () {
     }
 })->everyFiveMinutes()->name('olt:sync-telemetry');
 
+// ─── Schedule Sync Status Layanan Sobok (Setiap 5 Menit) ────────────
+Schedule::command('sobok:sync-status')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->name('sobok:sync-service-status');
+
+

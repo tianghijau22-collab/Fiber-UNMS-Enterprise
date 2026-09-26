@@ -25,12 +25,16 @@ class CustomerService extends Model
         'ip_address',
         'installation_notes',
         'installed_by',
+        'sobok_service_status',
+        'sobok_profile',
+        'sobok_sync_at',
     ];
 
     protected $casts = [
         'installation_date' => 'date',
         'activated_at'      => 'date',
         'terminated_at'     => 'date',
+        'sobok_sync_at'     => 'datetime',
     ];
 
     /**
@@ -105,5 +109,15 @@ class CustomerService extends Model
     public function isSuspended(): bool
     {
         return $this->status === 'suspended';
+    }
+
+    public function isSobokOpen(): bool
+    {
+        return strtoupper($this->sobok_service_status ?? 'OPEN') === 'OPEN';
+    }
+
+    public function isSobokBlocked(): bool
+    {
+        return strtoupper($this->sobok_service_status ?? '') === 'BLOKIR';
     }
 }

@@ -11,6 +11,7 @@ export default function SearchableFilterDropdown({
   options = [],
   searchPlaceholder = 'Cari...',
   minWidth = 'min-w-[190px]',
+  className = '',
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -88,31 +89,27 @@ export default function SearchableFilterDropdown({
   const isSelectedActive = value && value !== 'all';
 
   return (
-    <div className="relative inline-block text-left" ref={dropdownRef}>
+    <div className={`relative ${className || 'inline-block'} text-left`} ref={dropdownRef}>
       {/* Trigger Button */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`px-3 py-2 text-xs rounded-xl border flex items-center justify-between gap-2 shadow-2xs font-semibold transition-all cursor-pointer ${
+        className={`w-full px-3 py-2 text-xs rounded-md border border-black/70 dark:border-white/70 hover:border-black dark:hover:border-white flex items-center justify-between gap-1.5 shadow-2xs font-semibold transition-all cursor-pointer ${
           isSelectedActive
-            ? 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-300 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200'
-            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-750'
+            ? 'bg-black/5 dark:bg-white/10 text-black dark:text-white font-bold'
+            : 'bg-white dark:bg-black text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10'
         }`}
       >
-        <span className="flex items-center gap-1.5 truncate max-w-[220px]">
+        <span className="flex items-center gap-1.5 truncate">
           {label && (
-            <span className={`text-[11px] font-bold uppercase tracking-wider ${
-              isSelectedActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
-            }`}>
+            <span className="text-[11px] font-bold uppercase tracking-wider shrink-0 text-black dark:text-white">
               {label}
             </span>
           )}
-          <span className="truncate">{selectedOption ? selectedOption.label : 'Pilih'}</span>
+          <span className="truncate text-black dark:text-white">{selectedOption ? selectedOption.label : 'Pilih'}</span>
         </span>
         <svg
-          className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
-            isSelectedActive ? 'text-indigo-500' : 'text-slate-400'
-          } ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 text-black dark:text-white ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -124,13 +121,13 @@ export default function SearchableFilterDropdown({
       {/* Popover Dropdown */}
       {isOpen && (
         <div
-          className={`absolute z-[9999] top-full left-0 mt-1.5 ${minWidth} max-w-[340px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100`}
+          className={`absolute z-[9999] top-full left-0 mt-1.5 ${minWidth} w-full sm:w-auto max-w-[340px] bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100`}
         >
           {/* Search Header */}
-          <div className="p-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60">
+          <div className="p-2 border-b border-black/30 dark:border-white/30 bg-white dark:bg-black">
             <div className="relative">
               <svg
-                className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+                className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-black/60 dark:text-white/60"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -143,13 +140,13 @@ export default function SearchableFilterDropdown({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-black border border-black dark:border-white rounded-md text-black dark:text-white placeholder-black/50 dark:placeholder-white/50 focus:outline-none font-medium"
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => setSearch('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold"
                 >
                   ✕
                 </button>
@@ -160,7 +157,7 @@ export default function SearchableFilterDropdown({
           {/* Options List */}
           <div className="max-h-60 overflow-y-auto p-1 space-y-0.5">
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-4 text-center text-xs text-slate-400 italic">
+              <div className="px-3 py-4 text-center text-xs text-black/60 dark:text-white/60 italic">
                 Data tidak ditemukan
               </div>
             ) : (
@@ -172,15 +169,15 @@ export default function SearchableFilterDropdown({
                       key={String(opt.value)}
                       type="button"
                       onClick={() => handleSelect(opt.value)}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                      className={`w-full text-left px-3 py-2 rounded-md text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
                         isSelected
-                          ? 'bg-indigo-600 text-white font-bold shadow-xs'
-                          : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium'
+                          ? 'bg-black text-white dark:bg-white dark:text-black font-bold'
+                          : 'hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white font-medium'
                       }`}
                     >
                       <span className="truncate">{opt.label}</span>
                       {isSelected && (
-                        <svg className="w-4 h-4 shrink-0 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4 shrink-0 text-white dark:text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                         </svg>
                       )}
@@ -188,7 +185,7 @@ export default function SearchableFilterDropdown({
                   );
                 })}
                 {filteredOptions.length > 150 && (
-                  <div className="px-3 py-2 text-[10px] text-center text-slate-400 dark:text-slate-500 italic bg-slate-50/60 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800">
+                  <div className="px-3 py-2 text-[10px] text-center text-black/60 dark:text-white/60 italic border-t border-black/20 dark:border-white/20">
                     Menampilkan 150 dari {filteredOptions.length} opsi. Ketik untuk mencari lebih spesifik...
                   </div>
                 )}

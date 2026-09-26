@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bar, Line } from 'react-chartjs-2';
+import { Bar } from 'react-chartjs-2';
 import { useTheme } from '../components/ThemeContext.jsx';
 import { useAuth } from '../components/AuthContext.jsx';
 import RefreshButton from '../components/RefreshButton.jsx';
@@ -153,7 +153,7 @@ export default function Dashboard() {
     online_rate: 100,
   };
 
-  // 2. Optical Signal Power Distribution Chart (Sesuai Pola Customers & OLT)
+  // 2. Optical Signal Power Distribution Chart
   const rxPowerData = useMemo(() => {
     const rx = metrics?.rx_power;
     return {
@@ -181,7 +181,7 @@ export default function Dashboard() {
             '#f97316', // Kritis (Orange)
             '#ef4444'  // LOS / Offline (Rose / Red)
           ],
-          borderRadius: 6,
+          borderRadius: 4,
           borderWidth: 0,
         }
       ]
@@ -190,24 +190,24 @@ export default function Dashboard() {
 
   const avgPowerDbm = metrics?.rx_power?.avg_power ?? null;
 
-  const barChartOptions = {
+  const barChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
-      tooltip: { padding: 10, cornerRadius: 8 }
+      tooltip: { padding: 10, cornerRadius: 6 }
     },
     scales: {
       y: {
-        grid: { color: isDark ? '#222222' : '#f1f5f9' },
-        ticks: { color: isDark ? '#a1a1aa' : '#64748b', font: { size: 10 } }
+        grid: { color: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' },
+        ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 } }
       },
       x: {
         grid: { display: false },
-        ticks: { color: isDark ? '#a1a1aa' : '#64748b', font: { size: 10 } }
+        ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 } }
       }
     }
-  };
+  }), [isDark]);
 
   // 3. Weekly Incident & MTTR Trend Chart
   const weeklyTrendData = useMemo(() => {
@@ -256,7 +256,7 @@ export default function Dashboard() {
     };
   }, [metrics]);
 
-  const weeklyTrendOptions = {
+  const weeklyTrendOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
@@ -267,43 +267,42 @@ export default function Dashboard() {
       legend: {
         position: 'top',
         labels: {
-          color: isDark ? '#d4d4d8' : '#3f3f46',
+          color: isDark ? '#ffffff' : '#000000',
           font: { size: 10, weight: 'bold' },
           boxWidth: 12,
           usePointStyle: true,
         }
       },
-      tooltip: { padding: 10, cornerRadius: 8 }
+      tooltip: { padding: 10, cornerRadius: 6 }
     },
     scales: {
       y: {
         type: 'linear',
         display: true,
         position: 'left',
-        grid: { color: isDark ? '#222222' : '#f1f5f9' },
-        ticks: { color: isDark ? '#a1a1aa' : '#64748b', font: { size: 10 }, stepSize: 1 }
+        grid: { color: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' },
+        ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 }, stepSize: 1 }
       },
       y1: {
         type: 'linear',
         display: true,
         position: 'right',
         grid: { drawOnChartArea: false },
-        ticks: { color: isDark ? '#a1a1aa' : '#64748b', font: { size: 10 } }
+        ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 } }
       },
       x: {
         grid: { display: false },
-        ticks: { color: isDark ? '#a1a1aa' : '#64748b', font: { size: 10 } }
+        ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 } }
       }
     }
-  };
+  }), [isDark]);
 
-  // 4. Helper to Render / Update GIS Layers In-Place (Without Recreating Map or Resetting Zoom)
+  // 4. Helper to Render / Update GIS Layers In-Place
   const renderGisLayers = useCallback((gisData, isInitial = false) => {
     const map = miniMapInstanceRef.current;
     const Lf = leafletRef.current;
     if (!map || !Lf || !cablesLayerGroupRef.current || !nodesLayerGroupRef.current) return;
 
-    // Bersihkan layer kabel & node lama tanpa menghancurkan instance map
     cablesLayerGroupRef.current.clearLayers();
     nodesLayerGroupRef.current.clearLayers();
 
@@ -391,14 +390,13 @@ export default function Dashboard() {
 
     latestBoundsRef.current = markerBounds;
 
-    // HANYA fitBounds saat pertama kali dibuka! Saat polling auto-reload, jangan ubah zoom / posisi map user
     if ((isInitial || !hasInitialFitRef.current) && markerBounds.length > 0) {
       map.fitBounds(markerBounds, { padding: [35, 35], maxZoom: 15 });
       hasInitialFitRef.current = true;
     }
   }, []);
 
-  // 4a. Mini GIS Map Leaflet Initialization (HANYA SEKALI SAAT MOUNT)
+  // 4a. Mini GIS Map Leaflet Initialization
   useEffect(() => {
     let map = null;
 
@@ -407,9 +405,9 @@ export default function Dashboard() {
       const Lf = leafletRef.current;
 
       if (!miniMapContainerRef.current) return;
-      if (miniMapInstanceRef.current) return; // Peta sudah aktif, jangan recreate!
+      if (miniMapInstanceRef.current) return;
 
-      const defaultCenter = [-0.6865, 100.6480]; // fallback region center
+      const defaultCenter = [-0.6865, 100.6480];
       map = Lf.map(miniMapContainerRef.current, {
         center: defaultCenter,
         zoom: 13,
@@ -417,7 +415,6 @@ export default function Dashboard() {
         attributionControl: false,
       });
 
-      // Tile Layer Setup
       let tileUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
       let subdomains = ['0', '1', '2', '3'];
       if (mapTileType === 'osm') {
@@ -428,18 +425,15 @@ export default function Dashboard() {
       tileLayerRef.current = Lf.tileLayer(tileUrl, { maxZoom: 20, subdomains }).addTo(map);
       Lf.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      // Inisialisasi Layer Groups untuk Polylines dan CircleMarkers
       cablesLayerGroupRef.current = Lf.layerGroup().addTo(map);
       nodesLayerGroupRef.current = Lf.layerGroup().addTo(map);
 
       miniMapInstanceRef.current = map;
 
-      // Invalidate size saat pertama mount
       map.invalidateSize();
       setTimeout(() => map?.invalidateSize(), 150);
       setTimeout(() => map?.invalidateSize(), 400);
 
-      // Render GIS data jika sudah tersedia
       if (metrics?.gis_preview) {
         renderGisLayers(metrics.gis_preview, true);
       }
@@ -455,9 +449,9 @@ export default function Dashboard() {
         hasInitialFitRef.current = false;
       }
     };
-  }, []); // Mount sekali saja
+  }, []);
 
-  // 4b. Ganti Tile Layer secara mulus tanpa recreate map / reset zoom
+  // 4b. Ganti Tile Layer secara mulus
   useEffect(() => {
     if (!miniMapInstanceRef.current || !leafletRef.current) return;
     const Lf = leafletRef.current;
@@ -478,7 +472,7 @@ export default function Dashboard() {
     tileLayerRef.current = Lf.tileLayer(tileUrl, { maxZoom: 20, subdomains }).addTo(map);
   }, [mapTileType]);
 
-  // 4c. Update GIS Layers In-Place saat Auto-Reload (Tanpa mengganggu posisi pan & zoom user)
+  // 4c. Update GIS Layers In-Place saat Auto-Reload
   useEffect(() => {
     if (metrics?.gis_preview && miniMapInstanceRef.current) {
       renderGisLayers(metrics.gis_preview, false);
@@ -493,13 +487,13 @@ export default function Dashboard() {
     return [];
   }, [metrics]);
 
-  // 6. Server & Gateway Health
-  const serverHealth = metrics?.server_health ?? {
-    snmp_daemon: { name: 'SNMP Poller Gateway', status: 'ACTIVE', detail: 'Daemon Real-Time (5s)', driver: 'HSGQ & Multi-Vendor SNMP' },
-    webrtc_gateway: { name: 'WebRTC Dispatch Server', status: 'ONLINE', detail: 'STUN/TURN Protocol' },
-    database: { name: 'Database Storage', status: 'HEALTHY', size_mb: 12.5 },
-    disk_storage: { name: 'VPS SSD Storage', total_gb: 100, used_gb: 35, free_gb: 65, used_pct: 35 },
-  };
+  // Regional Infrastructure List per OLT
+  const regionalInfraList = useMemo(() => {
+    if (metrics?.regional_infrastructure && Array.isArray(metrics.regional_infrastructure)) {
+      return metrics.regional_infrastructure;
+    }
+    return [];
+  }, [metrics]);
 
   // Real-Time Incident Alerts List
   const alertsList = useMemo(() => {
@@ -528,18 +522,18 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-6 w-full max-w-full font-sans transition-colors duration-200">
+    <div className="space-y-5 w-full max-w-full font-sans transition-colors duration-200 text-black dark:text-white">
       {/* ── Top Header Banner with Live Operational Indicator & Date Time ─────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-[#52525b]">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-black/20 dark:border-white/20">
         <div>
-          <div className="flex items-center flex-wrap gap-2 mb-1">
+          <div className="flex items-center flex-wrap gap-2 mb-0.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="font-bold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
+            <span className="font-bold text-sm text-black dark:text-white uppercase tracking-wider">
               FIBER-UNMS Monitoring Center
             </span>
-            <span className="text-slate-300 dark:text-slate-600">|</span>
+            <span className="text-black/30 dark:text-white/30">|</span>
             {currentDateTime && (
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+              <span className="text-xs text-black/70 dark:text-white/70 font-semibold font-mono">
                 {currentDateTime}
               </span>
             )}
@@ -547,9 +541,9 @@ export default function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-neutral-900 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50">
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-black/5 dark:bg-white/5 text-black dark:text-white border border-black/20 dark:border-white/20">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
-            <span>SNMP Daemon: AKTIF</span>
+            <span>SNMP Daemon: <strong className="text-emerald-600 dark:text-emerald-400">AKTIF</strong></span>
           </div>
           <RefreshButton
             onRefresh={triggerRefresh}
@@ -559,157 +553,236 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── SECTION 1: 6 STAT KPI CARDS (PELANGGAN, PORT ODP, ONU, OLT, INFRASTRUKTUR, TIKET) ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3.5 stagger-enter">
+      {/* ── SECTION 1: 4 STAT KPI CARDS (PELANGGAN, OLT, INFRASTRUKTUR, TIKET) ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 stagger-enter">
         {/* Card 1: TOTAL PELANGGAN */}
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-4 flex flex-col justify-between shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 flex flex-col justify-between shadow-xs">
+          <div className="flex items-center justify-between text-black/60 dark:text-white/60">
             <span className="text-[11px] font-bold uppercase tracking-wider">PELANGGAN</span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-indigo-100 dark:bg-neutral-900 text-indigo-700 dark:text-indigo-400">USER</span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400">USER</span>
           </div>
           <div className="my-2.5 flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">{customerStats.total_customers}</span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-neutral-900 text-emerald-700 dark:text-emerald-400">
+            <span className="text-2xl sm:text-3xl font-extrabold text-black dark:text-white">{customerStats.total_customers}</span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               {customerStats.active_customers} Online ({customerStats.active_percentage}%)
             </span>
           </div>
-          <div className="pt-2 border-t border-slate-100 dark:border-[#1f1f1f] text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between font-medium">
+          <div className="pt-2 border-t border-black/10 dark:border-white/10 text-[11px] text-black/70 dark:text-white/70 flex items-center justify-between font-medium">
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs"></span>
               <span className="font-bold text-emerald-600 dark:text-emerald-400">{customerStats.active_customers}</span> Online
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-xs"></span>
+              <span className="w-2 h-2 rounded-full bg-rose-500 shadow-xs"></span>
               <span className="font-bold text-rose-600 dark:text-rose-400">{customerStats.offline_customers ?? (customerStats.total_customers - customerStats.active_customers)}</span> Offline
             </span>
           </div>
         </div>
 
-        {/* Card 2: KAPASITAS PORT ODP */}
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-4 flex flex-col justify-between shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">PORT ODP</span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-emerald-100 dark:bg-neutral-900 text-emerald-700 dark:text-emerald-400">ODP</span>
-          </div>
-          <div className="my-2.5 flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">{odpPortStats.used_ports}</span>
-            <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
-              {odpPortStats.available_ports} Kosong
-            </span>
-          </div>
-          <div className="space-y-1 pt-1 border-t border-slate-100 dark:border-[#1f1f1f]">
-            <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-              <span>Utilisasi Kapasitas</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">{odpPortStats.utilization_pct}% ({odpPortStats.total_ports} Total)</span>
-            </div>
-            <div className="w-full bg-slate-100 dark:bg-neutral-900 rounded-full h-1.5 overflow-hidden">
-              <div className="bg-emerald-500 h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, Math.max(3, odpPortStats.utilization_pct))}%` }}></div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: KESEHATAN MODEM ONU */}
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-4 flex flex-col justify-between shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">MODEM ONU</span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-blue-100 dark:bg-neutral-900 text-blue-700 dark:text-blue-400">ONT</span>
-          </div>
-          <div className="my-2.5 flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">{onuHealth.online_count}</span>
-            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${onuHealth.offline_count > 0 ? 'bg-rose-100 dark:bg-neutral-900 text-rose-700 dark:text-rose-400 animate-pulse' : 'bg-emerald-100 dark:bg-neutral-900 text-emerald-700 dark:text-emerald-400'}`}>
-              {onuHealth.offline_count > 0 ? `${onuHealth.offline_count} Loss Signal` : '100% Online'}
-            </span>
-          </div>
-          <div className="pt-2 border-t border-slate-100 dark:border-[#1f1f1f] text-[10px] text-slate-400 flex items-center justify-between font-mono">
-            <span>Terdaftar: {onuHealth.total_registered} ONU</span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{onuHealth.online_rate}% Normal</span>
-          </div>
-        </div>
-
-        {/* Card 4: PERANGKAT OLT */}
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-4 flex flex-col justify-between shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+        {/* Card 2: PERANGKAT OLT */}
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 flex flex-col justify-between shadow-xs">
+          <div className="flex items-center justify-between text-black/60 dark:text-white/60">
             <span className="text-[11px] font-bold uppercase tracking-wider">PERANGKAT OLT</span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-blue-100 dark:bg-neutral-900 text-blue-700 dark:text-blue-400">OLT</span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-blue-600 dark:text-blue-400">OLT</span>
           </div>
           <div className="my-2.5 flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">{totalOlts}</span>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-neutral-900 text-emerald-700 dark:text-emerald-400">100% Online</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-black dark:text-white">{totalOlts}</span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">100% Online</span>
           </div>
-          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate pt-2 border-t border-slate-100 dark:border-[#1f1f1f]">
+          <p className="text-[10px] text-black/60 dark:text-white/60 truncate pt-2 border-t border-black/10 dark:border-white/10 font-mono">
             SNMP Gateway &amp; Live Telemetry
           </p>
         </div>
 
-        {/* Card 5: TOPOLOGI NODES */}
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-4 flex flex-col justify-between shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+        {/* Card 3: INFRASTRUKTUR NODES */}
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 flex flex-col justify-between shadow-xs">
+          <div className="flex items-center justify-between text-black/60 dark:text-white/60">
             <span className="text-[11px] font-bold uppercase tracking-wider">INFRASTRUKTUR</span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-purple-100 dark:bg-neutral-900 text-purple-700 dark:text-purple-400">NODES</span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-purple-600 dark:text-purple-400">NODES</span>
           </div>
           <div className="my-2.5 flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">{totalPop + totalOdc + totalOdp}</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-black dark:text-white">{totalPop + totalOdc + totalOdp}</span>
             <span className="text-xs sm:text-[11px] font-mono font-bold text-purple-600 dark:text-purple-400">
-              POP : {totalPop} - ODC : {totalOdc} · ODP : {totalOdp}
+              {totalPop} POP · {totalOdc} ODC · {totalOdp} ODP
             </span>
           </div>
-          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate pt-2 border-t border-slate-100 dark:border-[#1f1f1f]">
-            {coreUtilization}% Core Distribusi Terpakai
-          </p>
+          <div className="pt-2 border-t border-black/10 dark:border-white/10 flex items-center justify-between text-[10px] font-mono text-black/60 dark:text-white/60">
+            <span>Utilisasi Core: <strong className="text-black dark:text-white font-bold">{coreUtilization}%</strong></span>
+            <span>{usedCores}/{totalCores || '—'} Core</span>
+          </div>
         </div>
 
-        {/* Card 6: TIKET GANGGUAN */}
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-4 flex flex-col justify-between shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+        {/* Card 4: TIKET GANGGUAN */}
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 flex flex-col justify-between shadow-xs">
+          <div className="flex items-center justify-between text-black/60 dark:text-white/60">
             <span className="text-[11px] font-bold uppercase tracking-wider">TIKET &amp; GANGGUAN</span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-rose-100 dark:bg-neutral-900 text-rose-700 dark:text-rose-400">TICKET</span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-rose-600 dark:text-rose-400">TICKET</span>
           </div>
           <div className="my-2.5 flex items-baseline justify-between">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">{activeTicketsCount}</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-black dark:text-white">{activeTicketsCount}</span>
             {criticalTicketsCount > 0 ? (
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-neutral-900 text-rose-700 dark:text-rose-400 animate-pulse">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 animate-pulse">
                 {criticalTicketsCount} Kritis
               </span>
             ) : (
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-neutral-900 text-emerald-700 dark:text-emerald-400">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                 Normal
               </span>
             )}
           </div>
-          <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate pt-2 border-t border-slate-100 dark:border-[#1f1f1f]">
+          <p className="text-[10px] text-black/60 dark:text-white/60 truncate pt-2 border-t border-black/10 dark:border-white/10 font-mono">
             {inProgressTicketsCount} Tiket Dalam Penanganan
           </p>
         </div>
       </div>
 
-      {/* ── SECTION 2: MINI LIVE GIS MAP & OPTICAL SIGNAL POWER DISTRIBUTION ──────────────── */}
+      {/* ── SECTION 2: SEBARAN INFRASTRUKTUR PER WILAYAH / OLT REGION ─────────────────────── */}
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-black/10 dark:border-white/10">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">
+                Sebaran - OLT Region
+              </h3>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400">
+                {regionalInfraList.length} Wilayah
+              </span>
+            </div>
+          </div>
+          <Link
+            to="/network"
+            className="self-start sm:self-auto px-3 py-1.5 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/30 dark:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 font-bold text-xs transition-colors shrink-0 cursor-pointer"
+          >
+            Kelola Seluruh Infrastruktur →
+          </Link>
+        </div>
+
+        {regionalInfraList.length === 0 ? (
+          <div className="text-center py-8 text-xs text-black/50 dark:text-white/50 italic">
+            Belum ada data infrastruktur wilayah yang terpetakan.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+            {regionalInfraList.map((region, idx) => {
+              const isOnline = ['online', 'active'].includes(String(region.status || '').toLowerCase());
+              return (
+                <div
+                  key={region.olt_id ?? `unmapped_${idx}`}
+                  className="bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-lg p-4 flex flex-col justify-between space-y-3.5 hover:border-black/50 dark:hover:border-white/50 transition-all shadow-2xs"
+                >
+                  {/* Region Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400">
+                          {region.code}
+                        </span>
+                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold ${
+                          isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500 shadow-xs' : 'bg-rose-500 shadow-xs'}`}></span>
+                          {isOnline ? 'ONLINE' : 'OFFLINE'}
+                        </span>
+                      </div>
+                      <h4 className="text-xs sm:text-sm font-bold text-black dark:text-white truncate mt-1">
+                        {region.name}
+                      </h4>
+                      <p className="text-[11px] text-black/60 dark:text-white/60 font-mono mt-0.5 truncate">
+                        {region.vendor} · {region.location} {region.ip_address !== '-' ? `(${region.ip_address})` : ''}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] text-black/50 dark:text-white/50 block font-medium">Total Node</span>
+                      <span className="text-xl font-extrabold text-black dark:text-white font-mono">{region.total_nodes}</span>
+                    </div>
+                  </div>
+
+                  {/* Node Type Breakdown Grid */}
+                  <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-black/10 dark:border-white/10">
+                    <div className="bg-white dark:bg-black rounded-md p-2 border border-black/10 dark:border-white/10">
+                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block uppercase font-mono">POP</span>
+                      <span className="text-sm font-extrabold text-black dark:text-white font-mono">{region.pop_count}</span>
+                    </div>
+                    <div className="bg-white dark:bg-black rounded-md p-2 border border-black/10 dark:border-white/10">
+                      <span className="text-[10px] font-bold text-cyan-600 dark:text-cyan-400 block uppercase font-mono">ODC</span>
+                      <span className="text-sm font-extrabold text-black dark:text-white font-mono">{region.odc_count}</span>
+                    </div>
+                    <div className="bg-white dark:bg-black rounded-md p-2 border border-black/10 dark:border-white/10">
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 block uppercase font-mono">ODP</span>
+                      <span className="text-sm font-extrabold text-black dark:text-white font-mono">{region.odp_count}</span>
+                    </div>
+                  </div>
+
+                  {/* Health & Distribution Proportion Bar */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] text-black/60 dark:text-white/60 font-mono">
+                      <span>Kesehatan Operasional</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{region.active_nodes}/{region.total_nodes} Aktif ({region.healthy_pct}%)</span>
+                    </div>
+                    <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-1.5 overflow-hidden flex">
+                      <div
+                        className="bg-emerald-500 h-1.5 rounded-full transition-all"
+                        style={{ width: `${region.healthy_pct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Direct Action Links */}
+                  <div className="pt-2 border-t border-black/10 dark:border-white/10 flex items-center justify-between gap-2">
+                    <Link
+                      to={region.olt_id ? `/gis-map?olt_id=${region.olt_id}` : '/gis-map'}
+                      className="flex-1 py-1.5 px-2 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 border border-black/20 dark:border-white/20 rounded-md text-[11px] font-semibold text-center text-black dark:text-white transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+                    >
+                      <svg className="w-3.5 h-3.5 text-black/70 dark:text-white/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                      </svg>
+                      <span>Peta Wilayah</span>
+                    </Link>
+                    <Link
+                      to={region.olt_id ? `/network?olt_id=${region.olt_id}` : '/network'}
+                      className="flex-1 py-1.5 px-2 bg-black dark:bg-white text-white dark:text-black hover:bg-black/80 dark:hover:bg-white/80 rounded-md text-[11px] font-bold text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+                    >
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                      </svg>
+                      <span>Detail Node</span>
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── SECTION 3: MINI LIVE GIS MAP & OPTICAL SIGNAL POWER DISTRIBUTION ──────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left (7 Cols): Mini Live GIS Map Preview */}
-        <div className="lg:col-span-7 bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-5 shadow-2xs flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                <h3 className="text-sm font-bold text-black dark:text-white">
                   Peta Sebaran Jaringan
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                  {metrics?.gis_preview?.nodes?.length ?? 0} Nodes Terpasang
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-mono">
+                  {metrics?.gis_preview?.nodes?.length ?? 0} Nodes
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-black/70 dark:text-white/70 mt-0.5">
                 Visualisasi spasial titik POP, ODC, ODP, dan jalur kabel backbone
               </p>
             </div>
             <Link
               to="/gis-map"
-              className="px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-neutral-900 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/60 hover:bg-blue-100 dark:hover:bg-neutral-800 font-bold text-xs transition-colors shrink-0"
+              className="px-3 py-1.5 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/30 dark:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 font-bold text-xs transition-colors shrink-0 cursor-pointer"
             >
               Buka Peta Penuh →
             </Link>
           </div>
 
           {/* Map Container */}
-          <div className="w-full h-64 rounded-xl overflow-hidden border border-slate-200 dark:border-[#222222] relative">
+          <div className="w-full h-64 rounded-lg overflow-hidden border border-black/20 dark:border-white/20 relative">
             <div ref={miniMapContainerRef} className="w-full h-full z-0" />
             
             {/* Layer Switcher & Re-center Buttons */}
@@ -721,43 +794,49 @@ export default function Dashboard() {
                     miniMapInstanceRef.current.fitBounds(latestBoundsRef.current, { padding: [35, 35], maxZoom: 15 });
                   }
                 }}
-                className="px-2.5 py-1 bg-slate-900/85 hover:bg-slate-900 text-white rounded-lg text-[10px] font-bold border border-slate-700 shadow-md backdrop-blur-xs transition-all flex items-center gap-1 cursor-pointer"
+                className="px-2.5 py-1 bg-black/85 hover:bg-black text-white rounded-md text-[10px] font-bold border border-white/30 shadow-md backdrop-blur-xs transition-all flex items-center gap-1.5 cursor-pointer"
                 title="Pusatkan tampilan peta ke seluruh node"
               >
-                🎯 Pusatkan
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v2m0 12v2m8-8h-2M6 12H4m12 0a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span>Pusatkan</span>
               </button>
               <button
                 type="button"
                 onClick={() => setMapTileType(t => t === 'hybrid' ? 'osm' : 'hybrid')}
-                className="px-2.5 py-1 bg-slate-900/85 hover:bg-slate-900 text-white rounded-lg text-[10px] font-bold border border-slate-700 shadow-md backdrop-blur-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-2.5 py-1 bg-black/85 hover:bg-black text-white rounded-md text-[10px] font-bold border border-white/30 shadow-md backdrop-blur-xs transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                {mapTileType === 'hybrid' ? '🛰️ Mode Satelit' : '🗺️ Mode Vektor'}
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span>{mapTileType === 'hybrid' ? 'Mode Satelit' : 'Mode Vektor'}</span>
               </button>
             </div>
 
             {/* Legend */}
-            <div className="absolute bottom-2 left-2 z-[999] bg-white/90 dark:bg-black/90 backdrop-blur-xs px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[#333333] text-[10px] flex items-center gap-3">
+            <div className="absolute bottom-2 left-2 z-[999] bg-white/95 dark:bg-black/95 backdrop-blur-xs px-2.5 py-1.5 rounded-md border border-black/20 dark:border-white/20 text-[10px] flex items-center gap-3">
               <span className="flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span> POP
+                <span className="w-2 h-2 rounded-full bg-indigo-600"></span> POP
               </span>
               <span className="flex items-center gap-1 font-bold text-cyan-600 dark:text-cyan-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-cyan-600"></span> ODC
+                <span className="w-2 h-2 rounded-full bg-cyan-600"></span> ODC
               </span>
               <span className="flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span> ODP
+                <span className="w-2 h-2 rounded-full bg-emerald-600"></span> ODP
               </span>
               <span className="flex items-center gap-1 font-bold text-rose-600 dark:text-rose-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-600"></span> Loss / Offline
+                <span className="w-2 h-2 rounded-full bg-rose-600"></span> Loss
               </span>
             </div>
           </div>
         </div>
 
         {/* Right (5 Cols): Distribusi Sinyal Optical Power ONU */}
-        <div className="lg:col-span-5 bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-5 shadow-2xs flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              <h3 className="text-sm font-bold text-black dark:text-white">
                 Distribusi Sinyal Optical Power ONU
               </h3>
               <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
@@ -768,9 +847,9 @@ export default function Dashboard() {
               <Bar data={rxPowerData} options={barChartOptions} />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-[#1f1f1f] flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 flex items-center justify-between text-xs text-black/70 dark:text-white/70">
             <span>Rata-Rata Redaman Seluruh ONU</span>
-            <span className="font-bold text-slate-800 dark:text-slate-200">
+            <span className="font-bold text-black dark:text-white font-mono">
               {avgPowerDbm ? `${parseFloat(avgPowerDbm).toFixed(2)} dBm (Real-Time)` : 'Data Belum Tersedia'}
             </span>
           </div>
@@ -780,20 +859,20 @@ export default function Dashboard() {
       {/* ── SECTION 3: OLT HARDWARE HEALTH & WEEKLY INCIDENT / MTTR TREND ─────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left (6 Cols): Status Kesehatan Perangkat OLT (CPU, RAM & Suhu SNMP) */}
-        <div className="lg:col-span-6 bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-5 shadow-2xs flex flex-col justify-between">
+        <div className="lg:col-span-6 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                <h3 className="text-sm font-bold text-black dark:text-white">
                   Kesehatan Perangkat OLT (CPU, RAM &amp; Suhu)
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-xs text-black/70 dark:text-white/70 mt-0.5">
                   Telemetri hardware real-time via SNMP Driver
                 </p>
               </div>
               <Link
                 to="/olt-management"
-                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
                 Detail OLT →
               </Link>
@@ -801,41 +880,41 @@ export default function Dashboard() {
 
             <div className="space-y-3">
               {oltHardwareList.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-400 italic">
+                <div className="text-center py-8 text-xs text-black/50 dark:text-white/50 italic">
                   Belum ada perangkat OLT yang terhubung.
                 </div>
               ) : (
                 oltHardwareList.map(olt => (
                   <div
                     key={olt.id}
-                    className="p-4 rounded-xl border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 space-y-3"
+                    className="p-3.5 sm:p-4 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 space-y-3"
                   >
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-sm text-slate-900 dark:text-white">{olt.name}</h4>
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-blue-100 dark:bg-neutral-900 text-blue-700 dark:text-blue-400">
+                          <h4 className="font-bold text-sm text-black dark:text-white">{olt.name}</h4>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400">
                             {olt.vendor} - {olt.model}
                           </span>
                         </div>
-                        <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+                        <p className="text-[11px] font-mono text-black/60 dark:text-white/60 mt-0.5">
                           IP: {olt.ip_address} · Uptime: {olt.uptime}
                         </p>
                       </div>
-                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                      <span className="px-2.5 py-1 rounded-md text-xs font-bold font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                         {olt.temperature}°C SFP
                       </span>
                     </div>
 
                     {/* Hardware Metrics Gauges */}
-                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-[#1f1f1f]">
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-black/10 dark:border-white/10">
                       {/* CPU Usage */}
                       <div>
                         <div className="flex justify-between text-xs mb-1">
-                          <span className="text-slate-500 dark:text-slate-400 font-semibold">CPU Usage</span>
-                          <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{olt.cpu_usage}%</span>
+                          <span className="text-black/70 dark:text-white/70 font-semibold">CPU Usage</span>
+                          <span className="font-mono font-bold text-black dark:text-white">{olt.cpu_usage}%</span>
                         </div>
-                        <div className="w-full bg-slate-200 dark:bg-neutral-900 rounded-full h-2 overflow-hidden">
+                        <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-2 overflow-hidden">
                           <div
                             className={`h-2 rounded-full ${olt.cpu_usage > 80 ? 'bg-rose-500' : olt.cpu_usage > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                             style={{ width: `${Math.max(4, olt.cpu_usage)}%` }}
@@ -846,10 +925,10 @@ export default function Dashboard() {
                       {/* Memory Usage */}
                       <div>
                         <div className="flex justify-between text-xs mb-1">
-                          <span className="text-slate-500 dark:text-slate-400 font-semibold">Memory Usage</span>
-                          <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{olt.memory_usage}%</span>
+                          <span className="text-black/70 dark:text-white/70 font-semibold">Memory Usage</span>
+                          <span className="font-mono font-bold text-black dark:text-white">{olt.memory_usage}%</span>
                         </div>
-                        <div className="w-full bg-slate-200 dark:bg-neutral-900 rounded-full h-2 overflow-hidden">
+                        <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-2 overflow-hidden">
                           <div
                             className={`h-2 rounded-full ${olt.memory_usage > 80 ? 'bg-rose-500' : 'bg-indigo-500'}`}
                             style={{ width: `${Math.max(4, olt.memory_usage)}%` }}
@@ -865,20 +944,20 @@ export default function Dashboard() {
         </div>
 
         {/* Right (6 Cols): Tren Insiden & Waktu Pemulihan (Weekly SLA & MTTR Trend) */}
-        <div className="lg:col-span-6 bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-5 shadow-2xs flex flex-col justify-between">
+        <div className="lg:col-span-6 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                <h3 className="text-sm font-bold text-black dark:text-white">
                   Tren Insiden &amp; Waktu Pemulihan (7 Hari Terakhir)
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-xs text-black/70 dark:text-white/70 mt-0.5">
                   Statistik tiket gangguan masuk vs diselesaikan beserta MTTR
                 </p>
               </div>
               <Link
                 to="/tickets"
-                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
               >
                 Daftar Tiket →
               </Link>
@@ -889,21 +968,21 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-[#1f1f1f] grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 grid grid-cols-3 gap-2 text-center text-xs">
             <div>
-              <span className="text-[10px] text-slate-400 block font-semibold">Total Tiket 7 Hari</span>
-              <span className="font-bold text-slate-900 dark:text-white">
+              <span className="text-[10px] text-black/60 dark:text-white/60 block font-semibold uppercase">Total Tiket 7 Hari</span>
+              <span className="font-bold text-black dark:text-white font-mono">
                 {metrics?.weekly_incident_trend?.new_incidents?.reduce((a, b) => a + b, 0) ?? 0} Tiket
               </span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 block font-semibold">Terselesaikan</span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+              <span className="text-[10px] text-black/60 dark:text-white/60 block font-semibold uppercase">Terselesaikan</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                 {metrics?.weekly_incident_trend?.resolved_incidents?.reduce((a, b) => a + b, 0) ?? 0} Tiket
               </span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 block font-semibold">Rata-Rata MTTR</span>
+              <span className="text-[10px] text-black/60 dark:text-white/60 block font-semibold uppercase">Rata-Rata MTTR</span>
               <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">
                 ~32 Menit
               </span>
@@ -914,23 +993,23 @@ export default function Dashboard() {
 
       {/* ── SECTION 4: SERVER HEALTH & MONITORING QUICK SHORTCUT (KHUSUS SUPER ADMINISTRATOR) ── */}
       {isSuperAdmin && (
-        <div className="bg-gradient-to-r from-indigo-900/10 via-slate-50 to-white dark:from-indigo-950/20 dark:via-neutral-950 dark:to-neutral-900 border border-slate-200 dark:border-[#222222] rounded-xl p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="bg-black/5 dark:bg-white/5 border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="p-3 rounded-xl bg-indigo-600 text-white shadow-xs">
+            <div className="w-10 h-10 rounded-md bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
               </svg>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                <h3 className="text-sm font-bold text-black dark:text-white">
                   Monitoring Sumber Daya &amp; Kesehatan Server UNMS
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400">
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                   Realtime Active
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-black/70 dark:text-white/70 mt-0.5">
                 Pantau grafik real-time penggunaan CPU, RAM, SSD Storage, Bandwidth Rx/Tx, serta status gateway daemon di halaman terdedikasi.
               </p>
             </div>
@@ -938,7 +1017,7 @@ export default function Dashboard() {
 
           <Link
             to="/server-monitoring"
-            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-2 shrink-0"
+            className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-2 shrink-0 cursor-pointer"
           >
             <span>Buka Monitoring Server</span>
             <span>→</span>
@@ -949,43 +1028,43 @@ export default function Dashboard() {
       {/* ── SECTION 5: INCIDENT ALERTS & REAL-TIME AUDIT ACTIVITIES ──────────────────────── */}
       <div className={`grid grid-cols-1 ${isSuperAdmin ? 'lg:grid-cols-2' : ''} gap-5`}>
         {/* Left Column: Peringatan Real-Time & Insiden Log */}
-        <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-5 shadow-2xs flex flex-col justify-between">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                <h3 className="text-sm font-bold text-black dark:text-white">
                   Log Peringatan &amp; Gangguan Real-Time
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-xs text-black/70 dark:text-white/70 mt-0.5">
                   Feed insiden otomatis terhubung dengan sistem tiket
                 </p>
               </div>
 
               {/* Filter Tabs */}
-              <div className="flex items-center gap-1 bg-slate-100 dark:bg-neutral-900 p-0.5 rounded-md text-xs">
+              <div className="flex items-center gap-1 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 p-0.5 rounded-md text-xs">
                 <button
                   onClick={() => setActiveAlertFilter('all')}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${activeAlertFilter === 'all'
-                    ? 'bg-white dark:bg-black text-slate-900 dark:text-white shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all cursor-pointer ${activeAlertFilter === 'all'
+                    ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
+                    : 'text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
                     }`}
                 >
                   Semua
                 </button>
                 <button
                   onClick={() => setActiveAlertFilter('critical')}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${activeAlertFilter === 'critical'
-                    ? 'bg-rose-600 text-white shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all cursor-pointer ${activeAlertFilter === 'critical'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
                     }`}
                 >
                   Critical
                 </button>
                 <button
                   onClick={() => setActiveAlertFilter('warning')}
-                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${activeAlertFilter === 'warning'
-                    ? 'bg-amber-600 text-white shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all cursor-pointer ${activeAlertFilter === 'warning'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
                     }`}
                 >
                   Warning
@@ -996,44 +1075,39 @@ export default function Dashboard() {
             {/* List of Alerts */}
             <div className="space-y-2.5 overflow-y-auto max-h-72 pr-1">
               {filteredAlerts.length === 0 ? (
-                <div className="text-center py-10 text-xs text-slate-400 italic">
+                <div className="text-center py-10 text-xs text-black/50 dark:text-white/50 italic">
                   Tidak ada insiden gangguan aktif saat ini.
                 </div>
               ) : (
                 filteredAlerts.map((alert) => {
                   const isCrit = alert.severity === 'critical';
                   const isWarn = alert.severity === 'warning';
-                  const cardBorder = isCrit
-                    ? 'border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/20'
-                    : isWarn
-                    ? 'border-amber-300 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20'
-                    : 'border-blue-300 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20';
                   const dotColor = isCrit ? 'bg-rose-500' : (isWarn ? 'bg-amber-500' : 'bg-emerald-500');
                   const badgeCls = isCrit
-                    ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                     : isWarn
-                    ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800'
-                    : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800';
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
 
                   return (
                     <div
                       key={alert.id}
-                      className={`p-3 rounded-xl border ${cardBorder} flex items-center justify-between gap-3 transition-all`}
+                      className="p-3 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 flex items-center justify-between gap-3 transition-all"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full ${dotColor} shrink-0 ${isCrit ? 'animate-ping' : ''}`}></span>
-                          <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                          <span className={`w-2 h-2 rounded-full ${dotColor} shrink-0 ${isCrit ? 'animate-ping' : ''}`}></span>
+                          <span className="font-bold text-xs text-black dark:text-white truncate">
                             {alert.title}
                           </span>
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${badgeCls}`}>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider ${badgeCls}`}>
                             {alert.severity || 'WARNING'}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 line-clamp-2">
+                        <p className="text-[11px] text-black/70 dark:text-white/70 mt-1 line-clamp-2">
                           {alert.description}
                         </p>
-                        <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-mono">
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-black/50 dark:text-white/50 font-mono">
                           <span>Node: {alert.node}</span>
                           <span>•</span>
                           <span>{alert.time}</span>
@@ -1048,7 +1122,7 @@ export default function Dashboard() {
 
                       <Link
                         to="/otdr-tracing"
-                        className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-neutral-900 border border-slate-200 dark:border-[#222222] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-neutral-800 transition-colors"
+                        className="shrink-0 px-2.5 py-1 rounded-md text-xs font-semibold bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
                       >
                         Tracing OTDR
                       </Link>
@@ -1062,37 +1136,37 @@ export default function Dashboard() {
 
         {/* Right Column: Aktivitas Pengguna & Sistem Real-Time (Khusus Superadmin) */}
         {isSuperAdmin && (
-          <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#222222] rounded-xl p-5 shadow-2xs flex flex-col justify-between">
+          <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col justify-between">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
+              <h3 className="text-sm font-bold text-black dark:text-white mb-1">
                 Aktivitas Pengguna &amp; Sistem Real-Time
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+              <p className="text-xs text-black/70 dark:text-white/70 mb-3">
                 Audit log riwayat mutasi data dan pembaruan infrastruktur jaringan
               </p>
 
               <div className="space-y-2.5 overflow-y-auto max-h-72 pr-1">
                 {recentActivities.length === 0 ? (
-                  <div className="text-center py-10 text-xs text-slate-400 italic">
+                  <div className="text-center py-10 text-xs text-black/50 dark:text-white/50 italic">
                     Belum ada riwayat aktivitas tercatat.
                   </div>
                 ) : (
                   recentActivities.map((act) => (
                     <div
                       key={act.id}
-                      className="p-2.5 rounded-lg border border-slate-200 dark:border-[#222222] bg-slate-50/50 dark:bg-neutral-950 flex items-start gap-2.5"
+                      className="p-2.5 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 flex items-start gap-2.5"
                     >
-                      <div className="w-6 h-6 rounded bg-slate-200 dark:bg-neutral-800 text-slate-700 dark:text-slate-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                      <div className="w-6 h-6 rounded bg-black/10 dark:bg-white/10 text-black dark:text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
                         {getInitial(act.user)}
                       </div>
                       <div className="min-w-0 flex-1">
                         <span className="font-bold text-[11px] text-blue-600 dark:text-blue-400 block truncate">
                           {act.action}
                         </span>
-                        <p className="text-[11px] text-slate-700 dark:text-slate-300 truncate">
+                        <p className="text-[11px] text-black/80 dark:text-white/80 truncate">
                           {act.node}
                         </p>
-                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                        <span className="text-[10px] text-black/50 dark:text-white/50 font-mono block mt-0.5">
                           {act.user} • {act.time}
                         </span>
                       </div>

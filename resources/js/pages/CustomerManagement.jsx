@@ -6,7 +6,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import SearchableFilterDropdown from '../components/SearchableFilterDropdown';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
-import FtthFlowTopology from '../components/FtthFlowTopology.jsx';
+import CustomerFilterPopover from '../components/CustomerFilterPopover';
 import SobokScraperModal from '../components/SobokScraperModal.jsx';
 
 // Memoized single row component for ultra-fast, zero-delay typing in Auto-Discovery
@@ -18,6 +18,7 @@ const UnmappedOnuCard = React.memo(function UnmappedOnuCard({
   isSubmitting,
   odpPortsCache,
   onFetchPorts,
+  onExpandOdpSplitter,
 }) {
   const [customerNumber, setCustomerNumber] = useState('');
   const [name, setName] = useState('');
@@ -89,13 +90,14 @@ const UnmappedOnuCard = React.memo(function UnmappedOnuCard({
 
   const handleProvision = (e) => {
     e.preventDefault();
-    if (!name.trim() || !odpPortNumber || isOdpFull) return;
+    if (!name.trim()) return;
+    if (odpId && (isOdpFull || !odpPortNumber)) return;
     onProvision(item, {
       customer_number: customerNumber,
       name,
       address,
-      odp_id: odpId,
-      odp_port_number: odpPortNumber,
+      odp_id: odpId || null,
+      odp_port_number: odpId ? odpPortNumber : null,
     });
   };
 
@@ -238,18 +240,20 @@ const UnmappedOnuCard = React.memo(function UnmappedOnuCard({
             <button
               type="button"
               onClick={handleProvision}
-              disabled={isSubmitting || !name.trim() || !odpPortNumber || isOdpFull}
-              className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              disabled={isSubmitting || !name.trim() || (odpId && (!odpPortNumber || isOdpFull))}
+              className="w-full py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
               {isSubmitting ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                   <span>Menghubungkan...</span>
                 </>
               ) : isOdpFull ? (
-                <span>⚠️ ODP Penuh</span>
-              ) : (
+                <span>ODP Penuh</span>
+              ) : odpId ? (
                 <span>Konekkan ODP {odpPortNumber ? `(Port ${odpPortNumber})` : ''}</span>
+              ) : (
+                <span>Konekkan (Tanpa ODP)</span>
               )}
             </button>
           </div>
@@ -257,9 +261,31 @@ const UnmappedOnuCard = React.memo(function UnmappedOnuCard({
 
         {/* Warning if ODP is full */}
         {isOdpFull && (
-          <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-xl border border-rose-200 dark:border-rose-800 flex items-center gap-1.5">
-            <span>⚠️</span>
-            <span>Seluruh port ({currentPorts.length}/{currentPorts.length}) pada ODP ini sudah terisi. Silakan pilih ODP lain yang memiliki port kosong agar data pelanggan tidak berdempet.</span>
+          <div className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-xl border border-amber-300 dark:border-amber-800 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span>Seluruh port ({currentPorts.length}/{currentPorts.length}) pada ODP ini sudah terisi.</span>
+              <button
+                type="button"
+                onClick={() => { setOdpId(''); setOdpPortNumber(''); }}
+                className="text-[10px] font-bold text-amber-900 dark:text-amber-200 underline cursor-pointer"
+              >
+                Konekkan Tanpa ODP
+              </button>
+            </div>
+            {onExpandOdpSplitter && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onExpandOdpSplitter(odpId, '1:8')}
+                  className="px-2.5 py-1 bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-white dark:text-neutral-900 rounded-lg text-[10px] font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>+ Tambah Splitter 1:8 (+8 Port)</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -269,7 +295,8 @@ const UnmappedOnuCard = React.memo(function UnmappedOnuCard({
 
 export default function CustomerManagement() {
   const { hasRole } = useAuth();
-  const canCrud = hasRole('Super Administrator', 'Operator Jaringan', 'NOC Operator');
+  const isSuperAdmin = hasRole('Super Administrator');
+  const canCrud = hasRole('Super Administrator', 'Operator Jaringan');
   const [customers, setCustomers] = useState([]);
   const [odpNodes, setOdpNodes] = useState([]);
   const [odcNodes, setOdcNodes] = useState([]);
@@ -278,16 +305,20 @@ export default function CustomerManagement() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterServiceStatus, setFilterServiceStatus] = useState('all');
+  const [syncMeta, setSyncMeta] = useState(null);
+  const [isSyncingSobok, setIsSyncingSobok] = useState(false);
   const [filterOlt, setFilterOlt] = useState('all');
   const [filterInterface, setFilterInterface] = useState('all');
   const [filterOdc, setFilterOdc] = useState('all');
   const [filterOdp, setFilterOdp] = useState('all');
+  const [filterPackage, setFilterPackage] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const perPage = 8;
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterStatus, filterOlt, filterInterface, filterOdc, filterOdp]);
+  }, [search, filterStatus, filterServiceStatus, filterOlt, filterInterface, filterOdc, filterOdp, filterPackage]);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -295,52 +326,6 @@ export default function CustomerManagement() {
   const [saving, setSaving] = useState(false);
   const [formErr, setFormErr] = useState(null);
   const [toast, setToast] = useState(null);
-
-  // Diagnostics Modal State
-  const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false);
-  const [activeDiagnosticCustomer, setActiveDiagnosticCustomer] = useState(null);
-  const [diagnosticsData, setDiagnosticsData] = useState(null);
-  const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
-  const [pingingLive, setPingingLive] = useState(false);
-
-  const openDiagnosticsModal = async (c) => {
-    setActiveDiagnosticCustomer(c);
-    setShowDiagnosticsModal(true);
-    setLoadingDiagnostics(true);
-    setDiagnosticsData(null);
-    try {
-      const res = await fetch(`/api/customers/${c.id}/diagnostics`);
-      const d = await res.json();
-      if (d.status === 'success') {
-        setDiagnosticsData(d);
-      } else {
-        showToastMsg('Gagal memuat data diagnostik pelanggan', 'error');
-      }
-    } catch {
-      showToastMsg('Terjadi kesalahan saat memuat diagnostik', 'error');
-    } finally {
-      setLoadingDiagnostics(false);
-    }
-  };
-
-  const handleRunLivePing = async () => {
-    if (!activeDiagnosticCustomer) return;
-    setPingingLive(true);
-    try {
-      const res = await fetch(`/api/customers/${activeDiagnosticCustomer.id}/diagnostics`, {
-        method: 'POST',
-      });
-      const d = await res.json();
-      if (d.status === 'success') {
-        setDiagnosticsData(d);
-        showToastMsg(`⚡ Uji Ping ke ${d.ping?.target_ip || 'Modem'}: ${d.ping?.latency_ms || 0} ms`);
-      }
-    } catch {
-      showToastMsg('Gagal menjalankan uji ping langsung', 'error');
-    } finally {
-      setPingingLive(false);
-    }
-  };
 
   // OLT Auto-Discovery Wizard State
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
@@ -375,17 +360,25 @@ export default function CustomerManagement() {
   }, [odpPortsCache]);
 
   const odpSelectOptions = useMemo(() => {
-    return odpNodes.map(odp => {
+    const list = odpNodes.map(odp => {
       const used = odp.used_ports || 0;
       const total = odp.total_ports || 8;
       const free = Math.max(0, total - used);
       const isFull = used >= total;
       return {
         value: odp.id,
-        label: `${odp.name} ${isFull ? '🔴 (PENUH)' : `🟢 (${free} Port Kosong)`}`,
-        sublabel: `Kapasitas: ${used}/${total} Port Terpakai ${isFull ? '— SUDAH PENUH' : `(Sisa ${free} Port)`}`
+        label: `${odp.name} ${isFull ? '[PENUH]' : `[${free} Port Kosong]`}`,
+        sublabel: `Kapasitas: ${used}/${total} Port Terpakai ${isFull ? '— SUDAH PENUH' : `(Sisa ${free} Port Kosong)`}`
       };
     });
+    return [
+      {
+        value: '',
+        label: '— Tanpa ODP (Belum Terhubung) —',
+        sublabel: 'Daftarkan pelanggan tanpa mengalokasikan port ODP'
+      },
+      ...list
+    ];
   }, [odpNodes]);
 
   const filteredUnmappedOnus = useMemo(() => {
@@ -444,6 +437,8 @@ export default function CustomerManagement() {
   // ODP Ports for selection
   const [odpPorts, setOdpPorts] = useState([]);
   const [loadingPorts, setLoadingPorts] = useState(false);
+  const [isWithoutOdp, setIsWithoutOdp] = useState(false);
+  const [expandingOdp, setExpandingOdp] = useState(false);
 
   // Form State
   const [form, setForm] = useState({
@@ -479,12 +474,47 @@ export default function CustomerManagement() {
       if (d.data) {
         setCustomers(d.data);
       }
+      if (d.sync_meta) {
+        setSyncMeta(d.sync_meta);
+      }
     } catch {
       // Keep existing data on background error
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // Handle on-demand sync of Sobok service status
+  const handleSyncSobokStatus = async () => {
+    if (!isSuperAdmin) {
+      showToastMsg('Akses ditolak: Hanya Super Administrator yang berwenang menyinkronkan status layanan.', 'error');
+      return;
+    }
+    setIsSyncingSobok(true);
+    try {
+      const res = await fetch('/api/customers/sobok/sync-service-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        showToastMsg(data.message || 'Status layanan Sobok berhasil diperbarui', 'success');
+        if (data.data) {
+          setSyncMeta(data.data);
+        }
+        await fetchCustomers(true);
+      } else {
+        showToastMsg(data.message || 'Gagal menyinkronkan status layanan Sobok', 'error');
+      }
+    } catch {
+      showToastMsg('Terjadi kesalahan jaringan saat sinkronisasi Sobok', 'error');
+    } finally {
+      setIsSyncingSobok(false);
+    }
+  };
 
   // Fetch ODP Nodes
   const fetchOdpNodes = useCallback(async () => {
@@ -548,7 +578,7 @@ export default function CustomerManagement() {
     ]);
   }, [fetchCustomers, fetchOdpNodes, fetchOdcNodes, fetchOlts, fetchServicePackages]);
 
-  const isAnyModalOpen = showModal || showDiagnosticsModal || showDiscoveryModal || showSobokModal || confirmDialog.isOpen;
+  const isAnyModalOpen = showModal || showDiscoveryModal || showSobokModal || confirmDialog.isOpen;
 
   // Background polling specifically targets customer list & redaman (ultra fast & silent)
   const silentCustomerPoll = useCallback(async (silent = true) => {
@@ -578,6 +608,10 @@ export default function CustomerManagement() {
   };
 
   const handleOpenDiscoveryModal = () => {
+    if (!isSuperAdmin) {
+      showToastMsg('Akses ditolak: Hanya Super Administrator yang berwenang melakukan Auto-Discovery ONU.', 'error');
+      return;
+    }
     setShowDiscoveryModal(true);
     fetchUnmappedOnus();
   };
@@ -698,8 +732,47 @@ export default function CustomerManagement() {
 
   const handleOdpChange = (e) => {
     const odpId = e.target.value;
+    if (!odpId) {
+      setIsWithoutOdp(true);
+      setForm(f => ({ ...f, odp_id: '', odp_port_number: '', odp_port_id: '' }));
+      setOdpPorts([]);
+      return;
+    }
+    setIsWithoutOdp(false);
     setForm(f => ({ ...f, odp_id: odpId, odp_port_number: '', odp_port_id: '' }));
     fetchOdpPorts(odpId, false);
+  };
+
+  const handleExpandOdpSplitter = async (targetNodeId, ratio = '1:8') => {
+    if (!targetNodeId) return;
+    setExpandingOdp(true);
+    try {
+      const res = await fetch(`/api/network-nodes/${targetNodeId}/add-splitter`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
+        body: JSON.stringify({ splitter_ratio: ratio }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.status !== 'success') {
+        throw new Error(data.message || 'Gagal menambahkan splitter ke ODP');
+      }
+
+      showToastMsg(data.message || `Splitter ${ratio} berhasil ditambahkan!`);
+
+      // Refresh list node ODP agar dropdown opsi kapasitas terupdate
+      fetchOdpNodes();
+
+      // Refresh ports untuk ODP ini
+      await fetchOdpPorts(targetNodeId, false);
+    } catch (err) {
+      showToastMsg(err.message || 'Gagal menambahkan splitter', 'error');
+    } finally {
+      setExpandingOdp(false);
+    }
   };
 
   // ─── Auto-open Add Customer modal if navigated from OLT Belum Terdaftar ──
@@ -709,6 +782,7 @@ export default function CustomerManagement() {
       const onuSn = params.get('onu_sn') || '';
       const onuName = params.get('onu_name') || '';
       setEditingCustomer(null);
+      setIsWithoutOdp(false);
       setForm({
         customer_number: '',
         name: onuName && !onuName.startsWith('ONU ') ? onuName : '',
@@ -726,7 +800,12 @@ export default function CustomerManagement() {
   }, []);
 
   const openAddModal = () => {
+    if (!canCrud) {
+      showToastMsg('Akses ditolak: Anda tidak memiliki wewenang untuk mendaftarkan pelanggan.', 'error');
+      return;
+    }
     setEditingCustomer(null);
+    setIsWithoutOdp(false);
     setForm({
       customer_number: '',
       name: '',
@@ -743,7 +822,12 @@ export default function CustomerManagement() {
   };
 
   const openEditModal = (c) => {
+    if (!canCrud) {
+      showToastMsg('Akses ditolak: Anda tidak memiliki wewenang untuk mengubah data pelanggan.', 'error');
+      return;
+    }
     setEditingCustomer(c);
+    setIsWithoutOdp(!c.odp_id);
     setForm({
       customer_number: c.customer_number ?? '',
       name: c.name ?? '',
@@ -774,6 +858,10 @@ export default function CustomerManagement() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!canCrud) {
+      showToastMsg('Akses ditolak: Anda tidak memiliki wewenang untuk menyimpan data pelanggan.', 'error');
+      return;
+    }
     setSaving(true);
     setFormErr(null);
 
@@ -810,6 +898,10 @@ export default function CustomerManagement() {
 
   const handleDelete = (c) => {
     if (!c) return;
+    if (!canCrud) {
+      showToastMsg('Akses ditolak: Anda tidak memiliki wewenang untuk menghapus data pelanggan.', 'error');
+      return;
+    }
     openConfirm({
       title: 'Hapus Data Pelanggan?',
       message: (
@@ -988,16 +1080,48 @@ export default function CustomerManagement() {
   const allOdpListOptions = useMemo(() => {
     return [...odpNodes]
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }))
-      .map(odp => ({ value: odp.id, label: odp.name }));
+      .map(odp => {
+        const total = parseInt(odp.total_ports) || 0;
+        const used = parseInt(odp.used_ports) || 0;
+        const available = Math.max(0, total - used);
+        const isFull = total > 0 && available === 0;
+        return {
+          value: odp.id,
+          label: odp.name,
+          total,
+          used,
+          available,
+          isFull,
+        };
+      });
   }, [odpNodes]);
 
   const statusOptions = useMemo(() => [
-    { value: 'all', label: 'Semua Status' },
-    { value: 'Online', label: '🟢 Online' },
-    { value: 'Offline / LOS', label: '🔴 Offline / LOS' },
+    { value: 'all', label: 'Semua Perangkat' },
+    { value: 'Online', label: 'Online' },
+    { value: 'Offline / LOS', label: 'Offline / LOS' },
   ], []);
 
-  // Filtered customers (Multi-level OLT / Interface / ODC / ODP / Status / Search)
+  const serviceStatusOptions = useMemo(() => [
+    { value: 'all', label: 'Semua Layanan' },
+    { value: 'OPEN', label: 'Layanan Open (Aktif)' },
+    { value: 'BLOKIR', label: 'Layanan Terblokir' },
+    { value: 'LOSS_PHYSICAL', label: 'Kabel Putus (Offline & Open)' },
+    { value: 'LOSS_BLOCKED', label: 'Isolir Tagihan (Offline & Blokir)' },
+  ], []);
+
+  // Unique service packages list for filtering
+  const packageOptions = useMemo(() => {
+    const set = new Set();
+    customers.forEach(c => {
+      if (c.package_name && c.package_name.trim()) {
+        set.add(c.package_name.trim());
+      }
+    });
+    return Array.from(set).sort().map(pkg => ({ value: pkg, label: pkg }));
+  }, [customers]);
+
+  // Filtered customers (Multi-level OLT / Interface / ODC / ODP / Status / Layanan / Paket / Alamat / Search)
   const filtered = useMemo(() => {
     return customers.filter(c => {
       const q = search.toLowerCase();
@@ -1018,141 +1142,134 @@ export default function CustomerManagement() {
         (filterStatus === 'Online' && (c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0))) ||
         (filterStatus === 'Offline / LOS' && (c.status !== 'Online' && (c.rx_power === null || parseFloat(c.rx_power) <= -38.0)));
 
+      const cServiceStatus = (c.service_status || 'OPEN').toUpperCase();
+      const isClientOnline = c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0);
+      const matchService = filterServiceStatus === 'all' ||
+        (filterServiceStatus === 'OPEN' && cServiceStatus === 'OPEN') ||
+        (filterServiceStatus === 'BLOKIR' && cServiceStatus === 'BLOKIR') ||
+        (filterServiceStatus === 'LOSS_PHYSICAL' && !isClientOnline && cServiceStatus === 'OPEN') ||
+        (filterServiceStatus === 'LOSS_BLOCKED' && !isClientOnline && cServiceStatus === 'BLOKIR');
+
       const matchOlt = filterOlt === 'all' || String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt;
       const matchInterface = filterInterface === 'all' || 
         c.gpon_interface === filterInterface || 
         (c.gpon_interface && c.gpon_interface.toLowerCase() === filterInterface.toLowerCase());
       const matchOdc = filterOdc === 'all' || String(c.odc_id) === String(filterOdc) || c.odc_name === filterOdc;
       const matchOdp = filterOdp === 'all' || String(c.odp_id) === String(filterOdp) || c.odp_name === filterOdp;
+      const matchPackage = filterPackage === 'all' || c.package_name === filterPackage;
 
-      return matchSearch && matchStatus && matchOlt && matchInterface && matchOdc && matchOdp;
+      return matchSearch && matchStatus && matchService && matchOlt && matchInterface && matchOdc && matchOdp && matchPackage;
     });
-  }, [customers, search, filterStatus, filterOlt, filterInterface, filterOdc, filterOdp]);
-
-  // Overall Statistics for KPI Cards
-  const stats = useMemo(() => {
-    const total = customers.length;
-    const online = customers.filter(c => c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0)).length;
-    const offline = total - online;
-    const normalSignal = customers.filter(c => {
-      const rx = parseFloat(c.rx_power);
-      return !isNaN(rx) && rx >= -24.0 && rx > -38.0;
-    }).length;
-    const lossSignal = offline;
-
-    return { total, online, offline, normalSignal, lossSignal };
-  }, [customers]);
+  }, [customers, search, filterStatus, filterServiceStatus, filterOlt, filterInterface, filterOdc, filterOdp, filterPackage]);
 
   const totalPages = Math.ceil(filtered.length / perPage) || 1;
   const paginated = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
 
-  const isFilterActive = search || filterStatus !== 'all' || filterOlt !== 'all' || filterInterface !== 'all' || filterOdc !== 'all' || filterOdp !== 'all';
+  const isFilterActive = search || filterStatus !== 'all' || filterServiceStatus !== 'all' || filterOlt !== 'all' || filterInterface !== 'all' || filterOdc !== 'all' || filterOdp !== 'all' || filterPackage !== 'all';
+
   const handleResetFilters = () => {
     setSearch('');
     setFilterStatus('all');
+    setFilterServiceStatus('all');
     setFilterOlt('all');
     setFilterInterface('all');
     setFilterOdc('all');
     setFilterOdp('all');
+    setFilterPackage('all');
+  };
+
+  const handleApplyFilterPopover = ({
+    oltValue,
+    interfaceValue,
+    odcValue,
+    odpValue,
+    statusValue,
+    serviceStatusValue,
+    packageValue,
+  }) => {
+    setFilterOlt(oltValue);
+    setFilterInterface(interfaceValue);
+    setFilterOdc(odcValue);
+    setFilterOdp(odpValue);
+    setFilterStatus(statusValue);
+    setFilterServiceStatus(serviceStatusValue);
+    setFilterPackage(packageValue);
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-12">
 
-
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-black p-4 sm:p-5 rounded-lg border border-black/70 dark:border-white/70 shadow-xs">
         <div>
-          <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Manajemen Pelanggan &amp; Pemetaan FTTH
+          <h3 className="text-xl sm:text-2xl font-bold text-black dark:text-white tracking-tight">
+            Data Pelanggan - Redaman
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Monitoring koneksi OLT, ODC, ODP, live redaman optik dBm, dan status modem realtime.
-          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
           <RefreshButton
             isRefreshing={isRefreshing}
             onRefresh={triggerRefresh}
             lastUpdatedText={timeAgoText}
+            className="w-full sm:w-auto"
           />
-          {canCrud && (
+          {isSuperAdmin && (
             <>
               <button
                 type="button"
-                onClick={() => setShowSobokModal(true)}
-                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                onClick={handleSyncSobokStatus}
+                disabled={isSyncingSobok}
+                className="w-full sm:w-auto px-3.5 py-2.5 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white font-bold rounded-md text-xs border border-black/70 dark:border-white/70 hover:border-black dark:hover:border-white shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                title={`Sinkronisasi Status Layanan (${syncMeta?.domain_used || 'sobok.cinoxmedianet.id'}) - Terakhir: ${syncMeta?.synced_at_human || 'Belum'}`}
               >
-                <span>⚡ Tarik Data Sobok</span>
+                <svg className={`w-3.5 h-3.5 text-blue-500 ${isSyncingSobok ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="truncate">{isSyncingSobok ? 'Menyinkronkan...' : 'Sinkron Status'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSobokModal(true)}
+                className="w-full sm:w-auto px-3.5 py-2.5 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white font-bold rounded-md text-xs border border-black/70 dark:border-white/70 hover:border-black dark:hover:border-white shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                <span className="truncate">Tarik Data pelanggan</span>
               </button>
               <button
                 type="button"
                 onClick={handleOpenDiscoveryModal}
-                className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full sm:w-auto px-3.5 py-2.5 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white font-bold rounded-md text-xs border border-black/70 dark:border-white/70 hover:border-black dark:hover:border-white shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Sync Auto-Discover ONU ({unmappedOnus.length > 0 ? unmappedOnus.length : '1.700+'})</span>
-              </button>
-              <button
-                type="button"
-                onClick={openAddModal}
-                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Registrasi Manual</span>
+                <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <span className="truncate">Sync Auto-Discover ONU</span>
               </button>
             </>
+          )}
+          {canCrud && (
+            <button
+              type="button"
+              onClick={openAddModal}
+              className="col-span-2 sm:col-span-1 w-full sm:w-auto px-4 py-2.5 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 font-bold rounded-md text-xs border border-black dark:border-white shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Registrasi Manual</span>
+            </button>
           )}
         </div>
       </div>
 
-      {/* ─── 4 KARTU STATISTIK UTAMA PELANGGAN (KPI) ─── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* 1. Total Pelanggan */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Pelanggan</span>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-slate-950 dark:text-white mt-1">
-            {stats.total.toLocaleString()}
-          </div>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Terdaftar di UNMS</p>
-        </div>
-
-        {/* 2. Pelanggan Online */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status Online</span>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1">
-            {stats.online.toLocaleString()}
-          </div>
-          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
-            {stats.total > 0 ? `${((stats.online / stats.total) * 100).toFixed(1)}% Dari Total` : '100%'}
-          </p>
-        </div>
-
-        {/* 3. Offline / LOS */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Offline / LOS</span>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-rose-600 dark:text-rose-400 mt-1">
-            {stats.offline.toLocaleString()}
-          </div>
-          <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold mt-1">
-            {stats.total > 0 ? `${((stats.offline / stats.total) * 100).toFixed(1)}% Dari Total` : '0%'}
-          </p>
-        </div>
-
-        {/* 4. Sinyal Optik Prima */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Optik Prima</span>
-          <div className="text-2xl sm:text-3xl font-black font-mono text-cyan-600 dark:text-cyan-400 mt-1">
-            {stats.normalSignal.toLocaleString()}
-          </div>
-          <p className="text-[11px] text-cyan-600 dark:text-cyan-400 font-semibold mt-1">≥ -24.0 dBm (Prima)</p>
-        </div>
-      </div>
-
-      {/* ─── SEARCH & HIERARCHICAL MULTI-LEVEL FILTER BAR ─── */}
-      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
-        <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
+      {/* ─── SEARCH & COMPACT POPUP FILTER BAR ─── */}
+      <div className="bg-white dark:bg-black p-3.5 sm:p-4 rounded-lg border border-black/70 dark:border-white/70 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
           {/* Main Search Input */}
-          <div className="w-full lg:w-96 relative">
-            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none">
+          <div className="relative flex-1">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-black/60 dark:text-white/60 pointer-events-none">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
@@ -1162,90 +1279,108 @@ export default function CustomerManagement() {
               placeholder="Cari ID, nama pelanggan, ODP, SN modem..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-950 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
+              className="w-full pl-9 pr-9 py-2 bg-white dark:bg-black border border-black/70 dark:border-white/70 focus:border-black dark:focus:border-white rounded-md text-xs text-black dark:text-white placeholder-black/50 dark:placeholder-white/50 focus:outline-none transition-all font-medium"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white cursor-pointer"
               >
                 ✕
               </button>
             )}
           </div>
 
-          {/* Filter Dropdowns Grid */}
-          <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-            {/* Filter OLT */}
-            <SearchableFilterDropdown
-              label="OLT:"
-              value={filterOlt}
-              onChange={handleOltChange}
-              options={oltOptions}
-              searchPlaceholder="Cari OLT..."
-              minWidth="min-w-[210px]"
+          {/* Compact Popup Filter & Quick Reset */}
+          <div className="flex items-center gap-2 shrink-0">
+            <CustomerFilterPopover
+              filterOlt={filterOlt}
+              filterInterface={filterInterface}
+              filterOdc={filterOdc}
+              filterOdp={filterOdp}
+              filterStatus={filterStatus}
+              filterServiceStatus={filterServiceStatus}
+              filterPackage={filterPackage}
+              olts={olts}
+              availableInterfaces={availableInterfaces}
+              availableOdcs={availableOdcs}
+              availableOdps={availableOdps}
+              statusOptions={statusOptions}
+              serviceStatusOptions={serviceStatusOptions}
+              packageOptions={packageOptions}
+              onApplyFilters={handleApplyFilterPopover}
+              onResetFilters={handleResetFilters}
             />
 
-            {/* Filter Interface (Menyesuaikan OLT atau Global) */}
-            <SearchableFilterDropdown
-              label="Interface:"
-              value={filterInterface}
-              onChange={handleInterfaceChange}
-              options={interfaceOptions}
-              searchPlaceholder="Cari port interface..."
-              minWidth="min-w-[210px]"
-            />
-
-            {/* Filter ODC (Nama Saja Tanpa Kode) */}
-            <SearchableFilterDropdown
-              label="ODC:"
-              value={filterOdc}
-              onChange={handleOdcChange}
-              options={odcOptions}
-              searchPlaceholder="Cari nama ODC..."
-              minWidth="min-w-[200px]"
-            />
-
-            {/* Filter ODP (Nama Saja Tanpa Kode) */}
-            <SearchableFilterDropdown
-              label="ODP:"
-              value={filterOdp}
-              onChange={setFilterOdp}
-              options={odpOptions}
-              searchPlaceholder="Cari nama ODP..."
-              minWidth="min-w-[200px]"
-            />
-
-            {/* Filter Status */}
-            <SearchableFilterDropdown
-              label="Status:"
-              value={filterStatus}
-              onChange={setFilterStatus}
-              options={statusOptions}
-              searchPlaceholder="Cari status..."
-              minWidth="min-w-[170px]"
-            />
-
-            {/* Reset Filters */}
+            {/* Quick Reset Filter */}
             {isFilterActive && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="px-3 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-2.5 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 bg-white dark:bg-black border border-rose-500/80 rounded-md hover:bg-rose-500/10 transition-all cursor-pointer flex items-center gap-1 shrink-0"
                 title="Reset Semua Filter"
               >
                 <span>✕</span>
-                <span>Reset Filter</span>
+                <span className="hidden sm:inline">Reset</span>
               </button>
             )}
           </div>
         </div>
 
+        {/* Active Filter Tags / Chips */}
+        {isFilterActive && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
+            <span className="text-[11px] font-semibold text-black/60 dark:text-white/60">Filter Aktif:</span>
+            {filterOlt !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
+                <span>OLT: <strong>{olts.find(o => String(o.id) === String(filterOlt))?.name || filterOlt}</strong></span>
+                <button type="button" onClick={() => setFilterOlt('all')} className="hover:text-rose-500 cursor-pointer font-bold ml-0.5">✕</button>
+              </span>
+            )}
+            {filterInterface !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
+                <span>IF: <strong>{filterInterface}</strong></span>
+                <button type="button" onClick={() => setFilterInterface('all')} className="hover:text-rose-500 cursor-pointer font-bold ml-0.5">✕</button>
+              </span>
+            )}
+            {filterOdc !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
+                <span>ODC: <strong>{availableOdcs.find(o => String(o.id) === String(filterOdc))?.name || filterOdc}</strong></span>
+                <button type="button" onClick={() => setFilterOdc('all')} className="hover:text-rose-500 cursor-pointer font-bold ml-0.5">✕</button>
+              </span>
+            )}
+            {filterOdp !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
+                <span>ODP: <strong>{availableOdps.find(o => String(o.id) === String(filterOdp))?.name || filterOdp}</strong></span>
+                <button type="button" onClick={() => setFilterOdp('all')} className="hover:text-rose-500 cursor-pointer font-bold ml-0.5">✕</button>
+              </span>
+            )}
+            {filterStatus !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
+                <span>Perangkat: <strong>{filterStatus}</strong></span>
+                <button type="button" onClick={() => setFilterStatus('all')} className="hover:text-rose-500 cursor-pointer font-bold ml-0.5">✕</button>
+              </span>
+            )}
+            {filterServiceStatus !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
+                <span>Layanan: <strong>{filterServiceStatus}</strong></span>
+                <button type="button" onClick={() => setFilterServiceStatus('all')} className="hover:text-rose-500 cursor-pointer font-bold ml-0.5">✕</button>
+              </span>
+            )}
+            {filterPackage !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
+                <span>Paket: <strong>{filterPackage}</strong></span>
+                <button type="button" onClick={() => setFilterPackage('all')} className="hover:text-rose-500 cursor-pointer font-bold ml-0.5">✕</button>
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Filter Summary Stats */}
-        <div className="flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between text-xs font-semibold text-black dark:text-white pt-2.5 border-t border-black/20 dark:border-white/20">
           <div>
-            Menampilkan: <span className="text-indigo-600 dark:text-indigo-400 font-bold">{filtered.length}</span> dari {customers.length} total pelanggan
+            Menampilkan: <span className="font-bold">{filtered.length}</span> dari {customers.length} total pelanggan
           </div>
           {isFilterActive && (
             <div className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
@@ -1268,32 +1403,33 @@ export default function CustomerManagement() {
           </div>
           <p className="font-bold text-sm text-slate-900 dark:text-white">Belum Ada Pelanggan Ditemukan</p>
           <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-            Coba sesuaikan kriteria filter pencarian atau gunakan tombol Registrasi Manual untuk mendaftarkan pelanggan baru.
+            Coba sesuaikan kriteria filter pencarian{canCrud ? ' atau gunakan tombol Registrasi Manual untuk mendaftarkan pelanggan baru.' : '.'}
           </p>
         </div>
       ) : (
         <>
           {/* Desktop Table View */}
-          <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+          <div className="hidden md:block bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 uppercase font-bold text-slate-700 dark:text-slate-300 text-[11px] tracking-wider">
+              <table className="w-full text-left text-xs text-black dark:text-white">
+                <thead className="bg-white dark:bg-black border-b border-black/30 dark:border-white/30 uppercase font-bold text-black dark:text-white text-[11px] tracking-wider">
                   <tr>
                     <th className="px-4 py-3.5">ID Pelanggan</th>
                     <th className="px-4 py-3.5">Nama Pelanggan</th>
-                    <th className="px-4 py-3.5">ODC &amp; ODP</th>
+                    <th className="px-4 py-3.5">ODP</th>
                     <th className="px-4 py-3.5">OLT &amp; Interface</th>
                     <th className="px-4 py-3.5">Serial (SN) &amp; Sinyal Rx</th>
+                    <th className="px-4 py-3.5">Perangkat</th>
                     <th className="px-4 py-3.5">Status</th>
-                    <th className="px-4 py-3.5 text-right">Aksi</th>
+                    {canCrud && <th className="px-4 py-3.5 text-right">Aksi</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-sans">
+                <tbody className="divide-y divide-black/15 dark:divide-white/15 font-sans">
                   {paginated.map(c => {
                     const isClientOnline = c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0);
                     const rx = !isClientOnline ? null : (c.rx_power != null ? parseFloat(c.rx_power) : null);
                     let rxLabel = '—';
-                    let rxColorClass = 'text-slate-400';
+                    let rxColorClass = 'text-black/50 dark:text-white/50';
 
                     if (!isClientOnline) {
                       rxLabel = 'Offline (-40.00 dBm)';
@@ -1312,91 +1448,110 @@ export default function CustomerManagement() {
                     }
 
                     return (
-                      <tr key={c.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                      <tr key={c.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                         {/* 1. ID Pelanggan */}
-                        <td className="px-4 py-3.5 font-mono text-slate-800 dark:text-slate-200 font-bold whitespace-nowrap">
+                        <td className="px-4 py-3.5 font-mono text-black dark:text-white font-bold whitespace-nowrap">
                           {c.customer_number || `CMN ${String(c.id).padStart(4, '0')}`}
                         </td>
 
                         {/* 2. Nama Pelanggan */}
                         <td className="px-4 py-3.5">
-                          <span className="font-bold text-slate-950 dark:text-white block">{c.name}</span>
+                          <span className="font-bold text-black dark:text-white block">{c.name}</span>
                           {c.phone && c.phone !== '-' && (
-                            <span className="text-slate-400 text-[11px] block">{c.phone}</span>
+                            <span className="text-black/60 dark:text-white/60 text-[11px] block">{c.phone}</span>
                           )}
                         </td>
 
-                        {/* 3. ODC & ODP */}
-                        <td className="px-4 py-3.5 text-slate-700 dark:text-slate-300">
+                        {/* 3. ODP */}
+                        <td className="px-4 py-3.5 text-black dark:text-white">
                           {c.odp_name ? (
                             <div className="flex flex-col gap-0.5">
                               <span>
-                                {c.odc_name ? `${c.odc_name} / ` : ''}
                                 <strong>{c.odp_name}</strong>
                               </span>
                               {c.odp_port_number && (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
                                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                                  Port {c.odp_port_number}
+                                  P{c.odp_port_number}
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-slate-400 italic">Belum terhubung</span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-black/5 dark:bg-white/10 text-black/70 dark:text-white/70 font-semibold text-[10px] border border-black/15 dark:border-white/15">
+                              Tanpa ODP
+                            </span>
                           )}
                         </td>
 
                         {/* 4. OLT & Interface */}
-                        <td className="px-4 py-3.5 text-slate-700 dark:text-slate-300">
+                        <td className="px-4 py-3.5 text-black dark:text-white">
                           <span>{c.olt_name || '—'}</span>
                           {c.gpon_interface && c.gpon_interface !== '—' && (
-                            <span className="text-slate-500 font-mono text-[11px] ml-1">({c.gpon_interface})</span>
+                            <span className="text-black/60 dark:text-white/60 font-mono text-[11px] ml-1">({c.gpon_interface})</span>
                           )}
                         </td>
 
                         {/* 5. Serial (SN) & Sinyal Rx */}
-                        <td className="px-4 py-3.5 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        <td className="px-4 py-3.5 font-mono text-black dark:text-white whitespace-nowrap">
                           <span>{c.onu_serial || '—'}</span>
                           {rxLabel !== '—' && (
                             <span className={`ml-1.5 ${rxColorClass}`}>({rxLabel})</span>
                           )}
                         </td>
 
-                        {/* 6. Status */}
+                        {/* 6. Perangkat ONU */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
-                          <span className={isClientOnline ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-rose-600 dark:text-rose-400 font-semibold'}>
-                            {isClientOnline ? 'Online' : 'Offline / LOS'}
-                          </span>
-                        </td>
-
-                        {/* 7. Actions */}
-                        <td className="px-4 py-3.5 text-right whitespace-nowrap space-x-2">
-                          <button
-                            type="button"
-                            onClick={() => openDiagnosticsModal(c)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/80 transition-all cursor-pointer"
-                          >
-                            Diagnostik
-                          </button>
-                          {canCrud && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => openEditModal(c)}
-                                className="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(c)}
-                                className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/80 transition-all cursor-pointer"
-                              >
-                                Hapus
-                              </button>
-                            </>
+                          {isClientOnline ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 font-sans">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              Online
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 font-sans">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                              Offline / LOS
+                            </span>
                           )}
                         </td>
+
+                        {/* 7. Status */}
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          {(c.service_status || '').toUpperCase() === 'BLOKIR' ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 font-sans tracking-wide">
+                              <svg className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                              </svg>
+                              BLOKIR
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 font-sans tracking-wide">
+                              <svg className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              OPEN
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 8. Actions */}
+                        {canCrud && (
+                          <td className="px-4 py-3.5 text-right whitespace-nowrap space-x-2">
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(c)}
+                              className="px-2.5 py-1 rounded-md text-xs font-semibold text-black dark:text-white bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 border border-black/30 dark:border-white/30 transition-all cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(c)}
+                              className="px-2.5 py-1 rounded-md text-xs font-semibold text-rose-600 dark:text-rose-400 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 border border-rose-500/40 dark:border-rose-400/40 transition-all cursor-pointer"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -1405,27 +1560,27 @@ export default function CustomerManagement() {
             </div>
 
             {/* Desktop Pagination Bar */}
-            <div className="p-4 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-              <span className="text-slate-500 dark:text-slate-400 font-medium">
-                Menampilkan data <strong className="text-slate-800 dark:text-slate-200">{(currentPage - 1) * perPage + 1}</strong> - <strong className="text-slate-800 dark:text-slate-200">{Math.min(currentPage * perPage, filtered.length)}</strong> dari total <strong className="text-indigo-600 dark:text-indigo-400">{filtered.length}</strong> pelanggan
+            <div className="p-4 bg-white dark:bg-black border-t border-black/30 dark:border-white/30 flex items-center justify-between text-xs text-black dark:text-white">
+              <span className="font-medium">
+                Menampilkan data <strong className="font-bold">{(currentPage - 1) * perPage + 1}</strong> - <strong className="font-bold">{Math.min(currentPage * perPage, filtered.length)}</strong> dari total <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{filtered.length}</strong> pelanggan
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                  className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-40 hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer"
                 >
                   Sebelumnya
                 </button>
-                <span className="px-2 font-bold text-slate-800 dark:text-slate-200">
+                <span className="px-2 font-bold text-black dark:text-white">
                   Halaman {currentPage} dari {totalPages}
                 </span>
                 <button
                   type="button"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                  className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-40 hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer"
                 >
                   Berikutnya
                 </button>
@@ -1459,53 +1614,77 @@ export default function CustomerManagement() {
               }
 
               return (
-                <div key={c.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                    {/* Row 1: Index & Status */}
-                    <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/70 dark:bg-slate-800/40">
-                      <span className="text-slate-400 font-semibold">#{globalIndex} • {c.customer_number || `CMN ${c.id}`}</span>
-                      <span className={isClientOnline ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-rose-600 dark:text-rose-400 font-semibold'}>
-                        {isClientOnline ? 'Online' : 'Offline / LOS'}
-                      </span>
+                <div key={c.id} className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs overflow-hidden">
+                  <div className="divide-y divide-black/15 dark:divide-white/15 text-xs text-black dark:text-white">
+                    {/* Row 1: Index & Status Badges */}
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-black">
+                      <span className="text-black/70 dark:text-white/70 font-semibold">#{globalIndex} • {c.customer_number || `CMN ${c.id}`}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${
+                          isClientOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isClientOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+                          {isClientOnline ? 'Online' : 'Offline'}
+                        </span>
+                        <span className="text-black/30 dark:text-white/30">|</span>
+                        {(c.service_status || '').toUpperCase() === 'BLOKIR' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 tracking-wide">
+                            <svg className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            BLOKIR
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 tracking-wide">
+                            <svg className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            OPEN
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Row 2: Nama */}
                     <div className="px-4 py-3">
-                      <span className="text-slate-400 text-[11px] block">Nama Pelanggan</span>
-                      <span className="font-bold text-slate-950 dark:text-white text-sm">{c.name}</span>
+                      <span className="text-black/70 dark:text-white/70 text-[11px] block">Nama Pelanggan</span>
+                      <span className="font-bold text-black dark:text-white text-sm">{c.name}</span>
                     </div>
 
-                    {/* Row 3: ODC & ODP */}
+                    {/* Row 3: ODP */}
                     <div className="px-4 py-2.5 grid grid-cols-3 gap-2">
-                      <span className="text-slate-400">ODC / ODP</span>
-                      <span className="col-span-2 text-slate-800 dark:text-slate-200 font-medium">
+                      <span className="text-black/70 dark:text-white/70">ODP</span>
+                      <span className="col-span-2 text-black dark:text-white font-medium">
                         {c.odp_name ? (
                           <span>
-                            {c.odc_name ? `${c.odc_name} / ` : ''}
                             <strong>{c.odp_name}</strong>
                             {c.odp_port_number && (
                               <span className="ml-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
-                                (Port {c.odp_port_number})
+                                (P{c.odp_port_number})
                               </span>
                             )}
                           </span>
-                        ) : '—'}
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-black/5 dark:bg-white/10 text-black/70 dark:text-white/70 font-semibold text-[10px] border border-black/15 dark:border-white/15">
+                            Tanpa ODP
+                          </span>
+                        )}
                       </span>
                     </div>
 
                     {/* Row 4: OLT & Interface */}
                     <div className="px-4 py-2.5 grid grid-cols-3 gap-2 items-center">
-                      <span className="text-slate-400">OLT / Interface</span>
-                      <span className="col-span-2 text-slate-800 dark:text-slate-200 font-medium">
-                        {c.olt_name || '—'} {c.gpon_interface && c.gpon_interface !== '—' ? <span className="font-mono text-[11px] text-slate-500">({c.gpon_interface})</span> : ''}
+                      <span className="text-black/70 dark:text-white/70">OLT / Interface</span>
+                      <span className="col-span-2 text-black dark:text-white font-medium">
+                        {c.olt_name || '—'} {c.gpon_interface && c.gpon_interface !== '—' ? <span className="font-mono text-[11px] text-black/60 dark:text-white/60">({c.gpon_interface})</span> : ''}
                       </span>
                     </div>
 
                     {/* Row 5: Serial & Rx */}
                     <div className="px-4 py-2.5 grid grid-cols-3 gap-2 items-center">
-                      <span className="text-slate-400">SN &amp; Sinyal</span>
+                      <span className="text-black/70 dark:text-white/70">SN &amp; Sinyal</span>
                       <div className="col-span-2 flex items-center gap-1.5 font-mono">
-                        <span className="text-slate-800 dark:text-slate-200 font-bold">{c.onu_serial || '—'}</span>
+                        <span className="text-black dark:text-white font-bold">{c.onu_serial || '—'}</span>
                         {rxLabel !== '—' && (
                           <span className={`ml-1 font-semibold ${rxColorClass}`}>
                             ({rxLabel})
@@ -1514,34 +1693,25 @@ export default function CustomerManagement() {
                       </div>
                     </div>
 
-                    {/* Row 5: Actions */}
-                    <div className="px-4 py-3 bg-slate-50/50 dark:bg-slate-800/20 flex items-center justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openDiagnosticsModal(c)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 cursor-pointer"
-                      >
-                        Diagnostik
-                      </button>
-                      {canCrud && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(c)}
-                            className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(c)}
-                            className="px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 cursor-pointer"
-                          >
-                            Hapus
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    {/* Row 6: Actions */}
+                    {canCrud && (
+                      <div className="px-4 py-3 bg-white dark:bg-black border-t border-black/30 dark:border-white/30 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(c)}
+                          className="px-3 py-1.5 rounded-md text-xs font-semibold text-black dark:text-white bg-white dark:bg-black border border-black/30 dark:border-white/30 hover:border-black dark:hover:border-white transition-all cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(c)}
+                          className="px-3 py-1.5 rounded-md text-xs font-semibold text-rose-600 dark:text-rose-400 bg-white dark:bg-black border border-rose-500/40 dark:border-rose-400/40 hover:border-rose-500 dark:hover:border-rose-400 transition-all cursor-pointer"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1549,23 +1719,23 @@ export default function CustomerManagement() {
 
             {/* Mobile Pagination Control */}
             {totalPages > 1 && (
-              <div className="p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-center justify-between text-xs">
+              <div className="p-3 bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs flex items-center justify-between text-xs text-black dark:text-white">
                 <button
                   type="button"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 cursor-pointer"
+                  className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-40 cursor-pointer"
                 >
                   ← Prev
                 </button>
-                <span className="font-bold text-slate-800 dark:text-slate-200">
+                <span className="font-bold text-black dark:text-white">
                   {currentPage} / {totalPages} (Total {filtered.length})
                 </span>
                 <button
                   type="button"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold disabled:opacity-40 cursor-pointer"
+                  className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-40 cursor-pointer"
                 >
                   Next →
                 </button>
@@ -1676,101 +1846,212 @@ export default function CustomerManagement() {
 
               {/* Section Konek Ke ODP */}
               <div className="p-4 bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-3">
-                <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                  Alokasi Koneksi ODP (Optical Distribution Point)
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1 text-[11px]">
-                      Pilih ODP *
-                    </label>
-                    <SearchableSelect
-                      value={form.odp_id}
-                      onChange={val => {
-                        handleOdpChange({ target: { value: val } });
-                      }}
-                      placeholder="-- Pilih ODP --"
-                      searchPlaceholder="Cari nama ODP..."
-                      options={odpSelectOptions}
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide text-[11px]">
-                        Port ODP *
-                      </label>
-                      {odpPorts.length > 0 && (
-                        <span className={`text-[10px] font-bold ${
-                          odpPorts.some(p => !p.customer_id && !p.customer_service_id && p.status !== 'used' && p.status !== 'connected' && (!p.customer_name_cache || !p.customer_name_cache.trim()))
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-rose-500'
-                        }`}>
-                          {odpPorts.filter(p => !p.customer_id && !p.customer_service_id && p.status !== 'used' && p.status !== 'connected' && (!p.customer_name_cache || !p.customer_name_cache.trim())).length} Port Tersedia
-                        </span>
-                      )}
-                    </div>
-                    <select
-                      value={form.odp_port_number}
-                      disabled={!form.odp_id || loadingPorts}
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                    Alokasi Koneksi ODP (Optical Distribution Point)
+                  </h4>
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none text-xs">
+                    <input
+                      type="checkbox"
+                      checked={isWithoutOdp}
                       onChange={e => {
-                        const portNum = e.target.value;
-                        const selectedPortObj = odpPorts.find(p => String(p.port_number) === String(portNum));
-                        setForm(f => ({
-                          ...f,
-                          odp_port_number: portNum,
-                          odp_port_id: selectedPortObj?.id || '',
-                        }));
+                        const checked = e.target.checked;
+                        setIsWithoutOdp(checked);
+                        if (checked) {
+                          setForm(f => ({ ...f, odp_id: '', odp_port_number: '', odp_port_id: '' }));
+                          setOdpPorts([]);
+                        }
                       }}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 font-medium cursor-pointer"
-                    >
-                      <option value="">-- Pilih Port --</option>
-                      {loadingPorts ? (
-                        <option disabled>Memuat port ODP...</option>
-                      ) : (
-                        odpPorts.map(p => {
-                          const isOccupied = !!(
-                            p.customer_id ||
-                            p.customer_service_id ||
-                            p.status === 'used' ||
-                            p.status === 'connected' ||
-                            (p.customer_name_cache && p.customer_name_cache.trim())
-                          );
-                          const occupantName = p.customer_name || p.customer_name_cache || 'Terisi';
-                          const isCurrentCustomer = editingCustomer && (
-                            p.customer_id === editingCustomer.id ||
-                            p.customer_name_cache === editingCustomer.name ||
-                            (editingCustomer.customer_number && p.customer_number === editingCustomer.customer_number)
-                          );
-                          return (
-                            <option
-                              key={p.id}
-                              value={p.port_number}
-                              disabled={isOccupied && !isCurrentCustomer}
-                            >
-                              Port {p.port_number} {isOccupied ? (isCurrentCustomer ? '🔹 (Port Pelanggan Ini Saat Ini)' : `❌ (Terisi: ${occupantName})`) : '✅ (Tersedia)'}
-                            </option>
-                          );
-                        })
-                      )}
-                    </select>
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
+                    />
+                    <span className={`text-[11px] font-semibold ${isWithoutOdp ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-slate-500 dark:text-slate-400'}`}>
+                      Tanpa ODP / Belum Terhubung
+                    </span>
+                  </label>
+                </div>
+
+                {isWithoutOdp ? (
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 flex items-start gap-2.5">
+                    <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="text-xs">
+                      <p className="font-bold text-amber-900 dark:text-amber-200">Mode Tanpa ODP Aktif</p>
+                      <p className="text-amber-700 dark:text-amber-300/90 text-[11px] mt-0.5">
+                        Pelanggan akan didaftarkan tanpa sambungan port fisik ODP. Anda dapat memetakan ke ODP kapan saja nanti saat instalasi kabel lapangan selesai.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1 text-[11px]">
+                          Pilih ODP *
+                        </label>
+                        <SearchableSelect
+                          value={form.odp_id}
+                          onChange={val => {
+                            if (!val) {
+                              setIsWithoutOdp(true);
+                              setForm(f => ({ ...f, odp_id: '', odp_port_number: '', odp_port_id: '' }));
+                              setOdpPorts([]);
+                            } else {
+                              handleOdpChange({ target: { value: val } });
+                            }
+                          }}
+                          placeholder="-- Pilih ODP --"
+                          searchPlaceholder="Cari nama ODP..."
+                          options={odpSelectOptions}
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide text-[11px]">
+                            Port ODP *
+                          </label>
+                          <div className="flex items-center gap-2">
+                            {odpPorts.length > 0 && (
+                              <span className={`text-[10px] font-bold ${
+                                odpPorts.some(p => !p.customer_id && !p.customer_service_id && p.status !== 'used' && p.status !== 'connected' && (!p.customer_name_cache || !p.customer_name_cache.trim()))
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-rose-500'
+                              }`}>
+                                {odpPorts.filter(p => !p.customer_id && !p.customer_service_id && p.status !== 'used' && p.status !== 'connected' && (!p.customer_name_cache || !p.customer_name_cache.trim())).length} Port Tersedia
+                              </span>
+                            )}
+                            {form.odp_id && (
+                              <button
+                                type="button"
+                                onClick={() => handleExpandOdpSplitter(form.odp_id, '1:8')}
+                                disabled={expandingOdp}
+                                className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 cursor-pointer disabled:opacity-50"
+                                title="Tambah Kapasitas Splitter (+8 Port)"
+                              >
+                                {expandingOdp ? 'Menambah...' : '+ Splitter (+8)'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <select
+                          value={form.odp_port_number}
+                          disabled={!form.odp_id || loadingPorts}
+                          onChange={e => {
+                            const portNum = e.target.value;
+                            const selectedPortObj = odpPorts.find(p => String(p.port_number) === String(portNum));
+                            setForm(f => ({
+                              ...f,
+                              odp_port_number: portNum,
+                              odp_port_id: selectedPortObj?.id || '',
+                            }));
+                          }}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 font-medium cursor-pointer"
+                        >
+                          <option value="">-- Pilih Port --</option>
+                          {loadingPorts ? (
+                            <option disabled>Memuat port ODP...</option>
+                          ) : (
+                            odpPorts.map(p => {
+                              const isOccupied = !!(
+                                p.customer_id ||
+                                p.customer_service_id ||
+                                p.status === 'used' ||
+                                p.status === 'connected' ||
+                                (p.customer_name_cache && p.customer_name_cache.trim())
+                              );
+                              const occupantName = p.customer_name || p.customer_name_cache || 'Terisi';
+                              const isCurrentCustomer = editingCustomer && (
+                                p.customer_id === editingCustomer.id ||
+                                p.customer_name_cache === editingCustomer.name ||
+                                (editingCustomer.customer_number && p.customer_number === editingCustomer.customer_number)
+                              );
+                              return (
+                                <option
+                                  key={p.id}
+                                  value={p.port_number}
+                                  disabled={isOccupied && !isCurrentCustomer}
+                                >
+                                  Port {p.port_number} {isOccupied ? (isCurrentCustomer ? '(Port Pelanggan Ini Saat Ini)' : `(Terisi: ${occupantName})`) : '(Tersedia)'}
+                                </option>
+                              );
+                            })
+                          )}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Jika ODP Dipilih dan Penuh, tampilkan Splitter Expansion Box */}
                     {form.odp_id && odpPorts.length > 0 && odpPorts.every(p => {
                       const isOccupied = !!(p.customer_id || p.customer_service_id || p.status === 'used' || p.status === 'connected' || (p.customer_name_cache && p.customer_name_cache.trim()));
                       const isCurrentCustomer = editingCustomer && (p.customer_id === editingCustomer.id || p.customer_name_cache === editingCustomer.name);
                       return isOccupied && !isCurrentCustomer;
                     }) && (
-                      <p className="text-[11px] font-bold text-rose-500 mt-1">
-                        ⚠️ Semua port pada ODP ini sudah terisi penuh! Silakan pilih ODP lain.
-                      </p>
-                    )}
-                  </div>
-                </div>
+                      <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 space-y-2.5">
+                        <div className="flex items-start gap-2">
+                          <svg className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <div className="flex-1">
+                            <p className="font-bold text-xs text-rose-900 dark:text-rose-200">
+                              Semua port pada ODP ini sudah terisi penuh!
+                            </p>
+                            <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">
+                              Anda dapat langsung menambah splitter port ke ODP ini sekarang, memilih ODP lain, atau mendaftar tanpa ODP.
+                            </p>
+                          </div>
+                        </div>
 
-                <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  Saat disimpan, pelanggan akan otomatis terhubung ke Port ODP yang dipilih dan muncul di monitoring sinyal optik /network.
-                </p>
+                        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-200 dark:border-rose-900/40">
+                          <span className="text-[11px] font-bold text-rose-800 dark:text-rose-300">Ekspansi ODP:</span>
+                          <button
+                            type="button"
+                            disabled={expandingOdp}
+                            onClick={() => handleExpandOdpSplitter(form.odp_id, '1:8')}
+                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] flex items-center gap-1 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            {expandingOdp ? 'Memproses...' : 'Tambah Splitter 1:8 (+8 Port)'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={expandingOdp}
+                            onClick={() => handleExpandOdpSplitter(form.odp_id, '1:4')}
+                            className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-[11px] flex items-center gap-1 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            + Splitter 1:4 (+4)
+                          </button>
+                          <button
+                            type="button"
+                            disabled={expandingOdp}
+                            onClick={() => handleExpandOdpSplitter(form.odp_id, '1:16')}
+                            className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold text-[11px] flex items-center gap-1 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            + Splitter 1:16 (+16)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsWithoutOdp(true);
+                              setForm(f => ({ ...f, odp_id: '', odp_port_number: '', odp_port_id: '' }));
+                              setOdpPorts([]);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-bold text-[11px] transition-colors cursor-pointer ml-auto"
+                          >
+                            Daftarkan Tanpa ODP
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Saat disimpan, pelanggan akan otomatis terhubung ke Port ODP yang dipilih dan muncul di monitoring sinyal optik /network.
+                    </p>
+                  </>
+                )}
               </div>
 
               {/* Section ONT & Optical Power */}
@@ -1830,7 +2111,7 @@ export default function CustomerManagement() {
                       <span>Menyimpan...</span>
                     </>
                   ) : (
-                    <span>Simpan &amp; Konekkan ke ODP</span>
+                    <span>{isWithoutOdp || !form.odp_id ? 'Simpan Data Pelanggan (Tanpa ODP)' : 'Simpan & Konekkan ke ODP'}</span>
                   )}
                 </button>
               </div>
@@ -1848,7 +2129,9 @@ export default function CustomerManagement() {
             <div className="bg-white dark:bg-slate-900 px-6 py-4 border-b border-slate-200 dark:border-slate-800 text-slate-950 dark:text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-lg">
-                  ⚡
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-950 dark:text-white">Auto-Discover &amp; Fast Mapping ONU OLT</h3>
@@ -1956,7 +2239,9 @@ export default function CustomerManagement() {
               ) : filteredUnmappedOnus.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-xs">
                   <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto mb-2 text-base">
-                    🔍
+                    <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
                   </div>
                   <p className="font-semibold text-slate-700 dark:text-slate-300">Tidak ada modem yang cocok dengan kata kunci</p>
                   <p className="mt-1 text-slate-400">Coba ubah kata kunci pencarian SN, Vendor, atau OLT.</p>
@@ -1973,6 +2258,7 @@ export default function CustomerManagement() {
                       isSubmitting={submittingSn === item.serial_number}
                       odpPortsCache={odpPortsCache}
                       onFetchPorts={fetchPortsForOdp}
+                      onExpandOdpSplitter={handleExpandOdpSplitter}
                     />
                   ))}
                 </div>
@@ -2020,265 +2306,12 @@ export default function CustomerManagement() {
         document.body
       )}
 
-      {/* ─── MODAL DIAGNOSTIK OPTIK & UJI PING PELANGGAN ─── */}
-      {showDiagnosticsModal && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-6 space-y-6">
-            {/* Header Modal */}
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="text-base sm:text-lg font-bold text-slate-950 dark:text-white">
-                    Diagnostik Optik &amp; Uji Ping Pelanggan
-                  </h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {activeDiagnosticCustomer?.name} • <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{activeDiagnosticCustomer?.customer_number || `CMN ${activeDiagnosticCustomer?.id}`}</span>
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDiagnosticsModal(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all font-bold cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {loadingDiagnostics ? (
-              <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-3">
-                <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                <p className="font-bold text-slate-800 dark:text-slate-200">Menghubungkan ke OLT &amp; Menarik Diagnostik Optik...</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">Mengukur Rx Optical Power, SFP Laser Tx, dan Uji Ping Latensi</p>
-              </div>
-            ) : diagnosticsData ? (
-              <div className="space-y-6">
-                {/* 1. Top Metrics Summary Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {/* Rx Optical Power */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
-                      Rx Power (Daya Terima)
-                    </span>
-                    <div className="text-lg sm:text-xl font-black font-mono text-slate-950 dark:text-white">
-                      {diagnosticsData.optical?.rx_power !== null && diagnosticsData.optical?.rx_power !== undefined
-                        ? `${diagnosticsData.optical.rx_power.toFixed(2)} dBm`
-                        : 'Loss of Signal'}
-                    </div>
-                    <span className={`inline-block mt-1.5 px-2 py-0.5 rounded text-[10px] font-bold border ${
-                      diagnosticsData.optical?.rx_power >= -19
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                        : diagnosticsData.optical?.rx_power >= -24
-                        ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-400 border-teal-200 dark:border-teal-800'
-                        : diagnosticsData.optical?.rx_power >= -27
-                        ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border-amber-200 dark:border-amber-800'
-                        : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border-rose-200 dark:border-rose-800'
-                    }`}>
-                      {diagnosticsData.optical?.quality || 'Good'}
-                    </span>
-                  </div>
-
-                  {/* Tx Optical Power */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
-                      Tx Power (Laser OLT)
-                    </span>
-                    <div className="text-lg sm:text-xl font-black font-mono text-blue-600 dark:text-blue-400">
-                      +{diagnosticsData.optical?.tx_power?.toFixed(2) || '2.15'} dBm
-                    </div>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
-                      Laser SFP Class C+
-                    </span>
-                  </div>
-
-                  {/* Attenuation Loss */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
-                      Total Redaman (Loss)
-                    </span>
-                    <div className="text-lg sm:text-xl font-black font-mono text-purple-600 dark:text-purple-400">
-                      {diagnosticsData.optical?.attenuation_loss_db || '10.5'} dB
-                    </div>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
-                      Kabel + Splitter ODC/ODP
-                    </span>
-                  </div>
-
-                  {/* Jarak Fiber */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
-                      Estimasi Jarak Fiber
-                    </span>
-                    <div className="text-lg sm:text-xl font-black font-mono text-emerald-600 dark:text-emerald-400">
-                      {diagnosticsData.optical?.distance_meters || 650} m
-                    </div>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
-                      ~{((diagnosticsData.optical?.distance_meters || 650) / 1000).toFixed(2)} km dari OLT
-                    </span>
-                  </div>
-                </div>
-
-                {/* 2. Visual Grafis Riwayat Redaman Optik (SVG Line Chart 24 Jam) */}
-                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h5 className="text-xs font-bold text-slate-950 dark:text-white">
-                        Riwayat Redaman Optik Rx (24 Jam Terakhir)
-                      </h5>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                        Fluktuasi redaman sinyal optik fiber harian. Batas aman minimum adalah -27.0 dBm.
-                      </p>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                      Live Telemetry
-                    </span>
-                  </div>
-
-                  {/* SVG Chart */}
-                  <div className="w-full bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-700/60">
-                    <svg viewBox="0 0 500 140" className="w-full h-36 overflow-visible">
-                      <defs>
-                        <linearGradient id="rxGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.35" />
-                          <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-
-                      {/* Grid Lines */}
-                      <line x1="40" y1="20" x2="480" y2="20" stroke="#e2e8f0" strokeDasharray="3 3" className="dark:stroke-slate-800" />
-                      <line x1="40" y1="60" x2="480" y2="60" stroke="#e2e8f0" strokeDasharray="3 3" className="dark:stroke-slate-800" />
-                      <line x1="40" y1="100" x2="480" y2="100" stroke="#f43f5e" strokeDasharray="4 4" strokeWidth="1" />
-                      
-                      {/* Grid Labels (dBm) */}
-                      <text x="35" y="24" textAnchor="end" className="text-[9px] fill-slate-400 dark:fill-slate-500 font-mono">-15 dBm</text>
-                      <text x="35" y="64" textAnchor="end" className="text-[9px] fill-slate-400 dark:fill-slate-500 font-mono">-21 dBm</text>
-                      <text x="35" y="104" textAnchor="end" className="text-[9px] fill-rose-500 font-bold font-mono">-27 dBm (Batas)</text>
-
-                      {/* Curve Calculation */}
-                      {(() => {
-                        const history = diagnosticsData.optical?.history || [];
-                        if (history.length === 0) return null;
-
-                        const minDb = -30;
-                        const maxDb = -14;
-                        const range = maxDb - minDb;
-
-                        const points = history.map((h, i) => {
-                          const x = 50 + (i * (420 / (history.length - 1)));
-                          const clampedRx = Math.max(minDb, Math.min(maxDb, h.rx_power));
-                          const y = 110 - ((clampedRx - minDb) / range) * 90;
-                          return { x, y, h };
-                        });
-
-                        const pathData = points.reduce((acc, p, i) => {
-                          return i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`;
-                        }, '');
-
-                        const areaData = `${pathData} L ${points[points.length - 1].x} 115 L ${points[0].x} 115 Z`;
-
-                        return (
-                          <>
-                            {/* Area Fill */}
-                            <path d={areaData} fill="url(#rxGradient)" />
-
-                            {/* Line */}
-                            <path d={pathData} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-
-                            {/* Data Points */}
-                            {points.map((p, i) => (
-                              <g key={i}>
-                                <circle cx={p.x} cy={p.y} r="4" fill="#4f46e5" stroke="#ffffff" strokeWidth="2" className="dark:stroke-slate-900" />
-                                <text x={p.x} y={p.y - 8} textAnchor="middle" className="text-[8px] font-mono font-bold fill-indigo-600 dark:fill-indigo-400">
-                                  {p.h.rx_power}
-                                </text>
-                                <text x={p.x} y="130" textAnchor="middle" className="text-[9px] fill-slate-400 dark:fill-slate-500 font-medium">
-                                  {p.h.time}
-                                </text>
-                              </g>
-                            ))}
-                          </>
-                        );
-                      })()}
-                    </svg>
-                  </div>
-                </div>
-
-                {/* 3. Live Ping & Latency Sweep Box */}
-                <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">
-                        Uji Ping &amp; Latensi Modem Pelanggan
-                      </span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                        IP: {diagnosticsData.ping?.target_ip || '10.20.15.42'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs font-mono text-slate-600 dark:text-slate-300">
-                      <span>Latensi: <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{diagnosticsData.ping?.latency_ms ? `${diagnosticsData.ping.latency_ms} ms` : '—'}</strong></span>
-                      <span>Packet Loss: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{diagnosticsData.ping?.packet_loss_pct || 0}%</strong></span>
-                      <span>Jitter: <strong className="text-slate-800 dark:text-slate-200 font-bold">{diagnosticsData.ping?.jitter_ms || 0.4} ms</strong></span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleRunLivePing}
-                    disabled={pingingLive}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 shrink-0"
-                  >
-                    <span>{pingingLive ? 'Menguji Ping...' : 'Jalankan Uji Ping Ulang'}</span>
-                  </button>
-                </div>
-
-                {/* 4. End-to-End FTTH Flowing Topology Diagram */}
-                <div className="space-y-2">
-                  <FtthFlowTopology
-                    oltName={diagnosticsData.topology?.olt_name || 'OLT'}
-                    portName={diagnosticsData.topology?.gpon_interface || '1/1/1'}
-                    odcName={diagnosticsData.topology?.odc_name || 'ODC Utama'}
-                    odcCode={diagnosticsData.topology?.odc_code || 'ODC-01'}
-                    odpName={diagnosticsData.topology?.odp_name || 'ODP Pelanggan'}
-                    odpCode={diagnosticsData.topology?.odp_code || 'ODP-01'}
-                    odpPort={diagnosticsData.topology?.odp_port || '1'}
-                    customerName={diagnosticsData.customer?.name}
-                    onuSerial={diagnosticsData.topology?.onu_serial || diagnosticsData.customer?.customer_number}
-                    onuType={diagnosticsData.topology?.onu_type || 'GPON ONT'}
-                    rxPower={diagnosticsData.optical?.rx_power}
-                    txPower={diagnosticsData.optical?.tx_power}
-                    distanceMeters={diagnosticsData.optical?.distance_meters || 850}
-                    pingMs={diagnosticsData.ping?.latency_ms}
-                    isOnline={diagnosticsData.optical?.status === 'Online' || diagnosticsData.ping?.online}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            {/* Footer Buttons */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => setShowDiagnosticsModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold transition-all text-xs cursor-pointer"
-              >
-                Tutup Diagnostik
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
       {/* Sobok Scraper & Import Modal */}
       <SobokScraperModal
         isOpen={showSobokModal}
         onClose={() => setShowSobokModal(false)}
         odpOptions={allOdpListOptions}
+        onExpandOdpSplitter={handleExpandOdpSplitter}
         onCustomerImported={(newCust) => {
           showToastMsg(`Pelanggan ${newCust.name} (${newCust.customer_number}) berhasil ditambahkan ke sistem!`);
           fetchCustomers(true);

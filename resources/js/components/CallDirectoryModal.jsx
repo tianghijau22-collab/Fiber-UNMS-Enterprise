@@ -57,16 +57,16 @@ export default function CallDirectoryModal({ isOpen, onClose, onCallUser }) {
     <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#3f3f46] rounded-xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-[#3f3f46] flex items-center justify-between">
+        <div className="p-4 sm:p-5 border-b border-black/20 dark:border-white/20 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-neutral-900 border border-blue-200 dark:border-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-sm">
-              📞
+            <div className="w-8 h-8 rounded-md bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/20 text-black dark:text-white flex items-center justify-center font-bold text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
             </div>
             <div>
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white font-sans">
+              <h3 className="text-sm sm:text-base font-bold text-black dark:text-white font-sans">
                 Direktori Panggilan Suara Tim
               </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] text-black/60 dark:text-white/60">
                 Panggilan WebRTC langsung antar-staf operasional jaringan
               </p>
             </div>
@@ -74,34 +74,34 @@ export default function CallDirectoryModal({ isOpen, onClose, onCallUser }) {
 
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
+            className="p-1 rounded-md text-black/40 hover:text-black dark:text-white/40 dark:hover:text-white font-bold cursor-pointer"
           >
             ✕
           </button>
         </div>
 
         {/* Tab & Search Navigation */}
-        <div className="p-4 border-b border-slate-100 dark:border-[#1f1f1f] space-y-3 bg-slate-50/50 dark:bg-black">
+        <div className="p-4 border-b border-black/10 dark:border-white/10 space-y-3 bg-black/5 dark:bg-black">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab('users')}
-              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex-1 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'users'
-                  ? 'bg-white dark:bg-neutral-900 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-[#3f3f46] shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-950'
+                  ? 'bg-white dark:bg-white/10 text-blue-600 dark:text-blue-400 border border-black/20 dark:border-white/20 shadow-2xs font-bold'
+                  : 'text-black/70 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/5'
               }`}
             >
-              👥 Kontak Pengguna ({users.length})
+              Kontak Pengguna ({users.length})
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
+              className={`flex-1 py-2 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                 activeTab === 'history'
-                  ? 'bg-white dark:bg-neutral-900 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-[#3f3f46] shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-neutral-950'
+                  ? 'bg-white dark:bg-white/10 text-blue-600 dark:text-blue-400 border border-black/20 dark:border-white/20 shadow-2xs font-bold'
+                  : 'text-black/70 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/5'
               }`}
             >
-              📋 Riwayat Panggilan ({history.length})
+              Riwayat Panggilan ({history.length})
             </button>
           </div>
 
@@ -111,7 +111,7 @@ export default function CallDirectoryModal({ isOpen, onClose, onCallUser }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari nama pegawai, role, divisi (NOC, Jointer, CS)..."
-              className="w-full px-3 py-2 bg-white dark:bg-black border border-slate-200 dark:border-[#3f3f46] rounded-lg text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 bg-white dark:bg-black border border-black/20 dark:border-white/20 rounded-md text-xs text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-blue-500"
             />
           )}
         </div>
@@ -119,37 +119,37 @@ export default function CallDirectoryModal({ isOpen, onClose, onCallUser }) {
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {loading ? (
-            <div className="py-12 text-center text-xs text-slate-400 italic">
+            <div className="py-12 text-center text-xs text-black/40 dark:text-white/40 italic">
               Memuat data pengguna...
             </div>
           ) : activeTab === 'users' ? (
             filteredUsers.length === 0 ? (
-              <div className="py-12 text-center text-xs text-slate-400">
+              <div className="py-12 text-center text-xs text-black/40 dark:text-white/40">
                 Tidak ada pengguna yang cocok dengan pencarian.
               </div>
             ) : (
               filteredUsers.map((user) => (
                 <div
                   key={user.id}
-                  className="p-3 bg-white dark:bg-black border border-slate-200 dark:border-[#3f3f46] rounded-lg flex items-center justify-between gap-3 hover:border-blue-400 dark:hover:border-blue-500 transition-all shadow-2xs"
+                  className="p-3 bg-white dark:bg-black border border-black/20 dark:border-white/20 rounded-md flex items-center justify-between gap-3 hover:border-blue-400 dark:hover:border-blue-500 transition-all shadow-2xs"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="relative">
-                      <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-neutral-900 border border-slate-200 dark:border-[#3f3f46] text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/20 text-black dark:text-white font-bold text-xs flex items-center justify-center shrink-0">
                         {user.name.charAt(0).toUpperCase()}
                       </div>
                       <span
                         className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-black ${
-                          user.is_online ? 'bg-emerald-500' : 'bg-slate-400'
+                          user.is_online ? 'bg-emerald-500' : 'bg-neutral-400'
                         }`}
                         title={user.is_online ? 'Online' : 'Offline'}
                       />
                     </div>
                     <div className="min-w-0">
-                      <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                      <div className="font-bold text-xs text-black dark:text-white truncate">
                         {user.name}
                       </div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                      <div className="text-[10px] text-black/60 dark:text-white/60 mt-0.5 truncate">
                         {user.role} · Divisi {user.division || 'Umum'}
                       </div>
                     </div>
@@ -160,9 +160,9 @@ export default function CallDirectoryModal({ isOpen, onClose, onCallUser }) {
                       onClose();
                       onCallUser(user);
                     }}
-                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-xs transition-all flex items-center gap-1.5 shrink-0"
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md text-xs shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
                   >
-                    <span>📞 Panggil</span>
+                    <span>Panggil</span>
                   </button>
                 </div>
               ))

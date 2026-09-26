@@ -1,6 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
-export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarget = 'all' }) {
+export default function KmlImportModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  initialTarget = 'all',
+  scopedOltId = null,
+  scopedOltName = null,
+  lockOlt = false,
+}) {
   const [step, setStep] = useState(1); // 1: Upload & Target, 2: Preview, 3: Processing, 4: Done
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -10,15 +19,25 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
 
   // User Options
   const [importTarget, setImportTarget] = useState(initialTarget); // 'all' | 'odp' | 'odc' | 'cable'
-  const [targetOltId, setTargetOltId] = useState('');
+  const [targetOltId, setTargetOltId] = useState(scopedOltId ? String(scopedOltId) : '');
 
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       setImportTarget(initialTarget || 'all');
+      if (scopedOltId) {
+        setTargetOltId(String(scopedOltId));
+      } else {
+        setTargetOltId('');
+      }
+      setStep(1);
+      setFile(null);
+      setError(null);
+      setPreviewData(null);
+      setResultData(null);
     }
-  }, [isOpen, initialTarget]);
+  }, [isOpen, initialTarget, scopedOltId]);
 
   if (!isOpen) return null;
 
@@ -81,6 +100,8 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
     setLoading(true);
     setError(null);
 
+    const finalOltId = lockOlt && scopedOltId ? scopedOltId : (targetOltId ? parseInt(targetOltId) : null);
+
     try {
       const res = await fetch('/api/kml-import/execute', {
         method: 'POST',
@@ -91,7 +112,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
         body: JSON.stringify({
           token: previewData.token,
           import_target: importTarget,
-          target_olt_id: targetOltId ? parseInt(targetOltId) : null,
+          target_olt_id: finalOltId,
         }),
       });
 
@@ -124,47 +145,77 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
       id: 'all',
       title: 'Semua Data (Otomatis)',
       desc: 'Import ODP, ODC, POP, dan Garis Kabel sekaligus',
-      icon: '🌐',
-      badgeColor: 'border-slate-300 dark:border-neutral-700'
+      iconSvg: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
     },
     {
       id: 'odp',
       title: 'Hanya ODP',
       desc: 'Semua titik lokasi (point) diimpor sebagai node ODP',
-      icon: '📍',
-      badgeColor: 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+      iconSvg: (
+        <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      ),
     },
     {
       id: 'odc',
       title: 'Hanya ODC',
       desc: 'Semua titik lokasi (point) diimpor sebagai kabinet ODC',
-      icon: '📦',
-      badgeColor: 'border-blue-400 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
+      iconSvg: (
+        <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+      ),
     },
     {
       id: 'cable',
       title: 'Hanya Kabel Fiber',
       desc: 'Semua garis rute (LineString) diimpor sebagai bentangan kabel',
-      icon: '〰️',
-      badgeColor: 'border-violet-400 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300'
+      iconSvg: (
+        <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      ),
     },
   ];
 
-  return (
-    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-3xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-neutral-800 flex items-center justify-between bg-slate-50/50 dark:bg-neutral-950">
-          <div className="flex items-center gap-2.5">
-            <span className="p-2 bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-xl text-lg">
-              📥
-            </span>
+        <div className="px-5 py-4 border-b border-black/20 dark:border-white/20 flex items-center justify-between bg-white dark:bg-black shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-black/10 dark:bg-white/10 text-black dark:text-white rounded-md">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+            </div>
             <div>
-              <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
-                Import KML / KMZ (Google Earth)
-              </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                Pilih kategori data yang ingin diimpor secara spesifik atau sekaligus
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-bold text-black dark:text-white tracking-tight">
+                  Import KML / KMZ
+                </h3>
+                {scopedOltName && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
+                    {scopedOltName}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-black/70 dark:text-white/70 font-medium">
+                {lockOlt && scopedOltName
+                  ? `Data yang diimpor akan diisolasi khusus untuk OLT ${scopedOltName}`
+                  : 'Import data titik ODP, ODC, POP dan kabel dari file Google Earth'}
               </p>
             </div>
           </div>
@@ -172,7 +223,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
           <button
             onClick={onClose}
             disabled={loading}
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-white font-bold text-lg p-1 rounded-lg cursor-pointer"
+            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors"
           >
             ✕
           </button>
@@ -182,8 +233,30 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
         <div className="p-6 overflow-y-auto flex-1 space-y-5">
           {error && (
             <div className="p-3.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
-              <span>⚠️</span>
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
               <span>{error}</span>
+            </div>
+          )}
+
+          {/* OLT Scope Banner */}
+          {lockOlt && scopedOltName && (
+            <div className="p-3 bg-neutral-100 dark:bg-neutral-800/80 border border-neutral-300 dark:border-neutral-700 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <div>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    Target OLT Aktif: {scopedOltName}
+                  </span>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    Semua node ODC, ODP, POP dan kabel akan tersimpan khusus untuk OLT ini.
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 text-slate-700 dark:text-slate-300 font-bold">
+                OLT ID #{scopedOltId}
+              </span>
             </div>
           )}
 
@@ -207,18 +280,18 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
                         onClick={() => setImportTarget(opt.id)}
                         className={`p-3 rounded-xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
                           isSelected
-                            ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/40 ring-2 ring-blue-500/20 dark:ring-blue-400/20'
+                            ? 'border-neutral-900 bg-neutral-100/90 dark:border-white dark:bg-neutral-800/90 ring-1 ring-neutral-900 dark:ring-white'
                             : 'border-slate-200 dark:border-neutral-800 hover:bg-slate-50 dark:hover:bg-neutral-800/60'
                         }`}
                       >
-                        <span className="text-2xl shrink-0 mt-0.5">{opt.icon}</span>
+                        <div className="shrink-0 mt-0.5">{opt.iconSvg}</div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <span className={`text-xs font-bold ${isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-slate-800 dark:text-slate-200'}`}>
+                            <span className={`text-xs font-bold ${isSelected ? 'text-neutral-900 dark:text-white' : 'text-slate-800 dark:text-slate-200'}`}>
                               {opt.title}
                             </span>
                             {isSelected && (
-                              <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                              <span className="w-2 h-2 rounded-full bg-neutral-900 dark:bg-white shrink-0"></span>
                             )}
                           </div>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
@@ -242,8 +315,8 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
                   onClick={() => fileInputRef.current?.click()}
                   className={`border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition-all ${
                     file
-                      ? 'border-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20'
-                      : 'border-slate-300 dark:border-neutral-700 hover:border-blue-500 bg-slate-50/50 dark:bg-neutral-900/50'
+                      ? 'border-neutral-900 bg-neutral-100/50 dark:border-white dark:bg-neutral-800/40'
+                      : 'border-slate-300 dark:border-neutral-700 hover:border-neutral-600 dark:hover:border-neutral-400 bg-slate-50/50 dark:bg-neutral-900/50'
                   }`}
                 >
                   <input
@@ -254,17 +327,21 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
                     className="hidden"
                   />
 
-                  <div className="text-3xl mb-1.5">{file ? '📄' : '☁️'}</div>
+                  <div className="flex justify-center mb-2 text-slate-400 dark:text-slate-500">
+                    <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  </div>
                   {file ? (
                     <div>
-                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{file.name}</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{file.name}</p>
                       <p className="text-xs text-slate-500 mt-1 font-mono">
                         {(file.size / 1024 / 1024).toFixed(2)} MB • Klik untuk ganti file
                       </p>
                     </div>
                   ) : (
                     <div>
-                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
                         Tarik &amp; Lepaskan file .kml atau .kmz ke sini
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
@@ -277,12 +354,14 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
 
               {/* Clean Import Info Box */}
               <div className="p-3.5 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 rounded-xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
-                <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 text-xs">
-                  <span>💡</span>
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white text-xs">
+                  <svg className="w-4 h-4 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                   <span>Logika Import Bersih &amp; Praktis:</span>
                 </div>
                 <p className="text-[11px] leading-relaxed">
-                  Sistem akan mengekstrak nama dan koordinat geografis secara langsung tanpa pembacaan catatan berbelit. Penentuan node induk (ODC / MS / POP) dapat Anda atur secara leluasa dan presisi nanti melalui form edit node.
+                  Sistem mengekstrak koordinat geografis dan nama node secara akurat. Jika nama ODC induk tertera pada nama atau deskripsi ODP, sistem akan menghubungkannya secara otomatis ke ODC dalam OLT yang sama.
                 </p>
               </div>
             </div>
@@ -294,14 +373,18 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
           {step === 2 && previewData && (
             <div className="space-y-5">
               {/* Target Mode Badge */}
-              <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🎯</span>
+              <div className="flex items-center justify-between p-3 bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-xl">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-lg text-neutral-800 dark:text-neutral-200">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
                   <div>
-                    <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
                       Target Import: {TARGET_OPTIONS.find(o => o.id === importTarget)?.title}
                     </span>
-                    <span className="text-[11px] text-blue-700 dark:text-blue-400 block">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
                       {TARGET_OPTIONS.find(o => o.id === importTarget)?.desc}
                     </span>
                   </div>
@@ -309,9 +392,9 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 dark:text-blue-300 underline"
+                  className="px-2.5 py-1 text-[11px] font-bold text-neutral-900 dark:text-white underline cursor-pointer"
                 >
-                  Ubah Target
+                  Ubah Kategori
                 </button>
               </div>
 
@@ -321,33 +404,33 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
                   Rangkuman Elemen di File KML:
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div className={`p-3 rounded-xl border ${importTarget === 'odp' ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-400 ring-2 ring-emerald-500/20' : 'bg-slate-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700'}`}>
-                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 block">Titik ODP</span>
-                    <span className="text-2xl font-black text-emerald-800 dark:text-emerald-200">
+                  <div className={`p-3 rounded-xl border ${importTarget === 'odp' ? 'bg-neutral-100 dark:bg-neutral-800 border-neutral-900 dark:border-white' : 'bg-slate-50 dark:bg-neutral-900 border-slate-200 dark:border-neutral-800'}`}>
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block">Titik ODP</span>
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">
                       {importTarget === 'odp' ? previewData.summary.total_nodes : previewData.summary.odp_count}
                     </span>
                     <span className="text-[10px] text-slate-500 block mt-0.5">Terminal Akses</span>
                   </div>
 
-                  <div className={`p-3 rounded-xl border ${importTarget === 'odc' ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-400 ring-2 ring-blue-500/20' : 'bg-slate-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700'}`}>
-                    <span className="text-[10px] font-bold text-blue-700 dark:text-blue-300 block">Titik ODC</span>
-                    <span className="text-2xl font-black text-blue-800 dark:text-blue-200">
+                  <div className={`p-3 rounded-xl border ${importTarget === 'odc' ? 'bg-neutral-100 dark:bg-neutral-800 border-neutral-900 dark:border-white' : 'bg-slate-50 dark:bg-neutral-900 border-slate-200 dark:border-neutral-800'}`}>
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block">Titik ODC</span>
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">
                       {importTarget === 'odc' ? previewData.summary.total_nodes : previewData.summary.odc_count}
                     </span>
                     <span className="text-[10px] text-slate-500 block mt-0.5">Kabinet Feeder</span>
                   </div>
 
-                  <div className={`p-3 rounded-xl border ${importTarget === 'cable' ? 'bg-violet-50 dark:bg-violet-950/60 border-violet-400 ring-2 ring-violet-500/20' : 'bg-slate-50 dark:bg-neutral-800 border-slate-200 dark:border-neutral-700'}`}>
-                    <span className="text-[10px] font-bold text-violet-700 dark:text-violet-300 block">Garis Kabel FO</span>
-                    <span className="text-2xl font-black text-violet-800 dark:text-violet-200">
+                  <div className={`p-3 rounded-xl border ${importTarget === 'cable' ? 'bg-neutral-100 dark:bg-neutral-800 border-neutral-900 dark:border-white' : 'bg-slate-50 dark:bg-neutral-900 border-slate-200 dark:border-neutral-800'}`}>
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block">Garis Kabel FO</span>
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">
                       {previewData.summary.total_cables}
                     </span>
                     <span className="text-[10px] text-slate-500 block mt-0.5">Bentangan Jalur</span>
                   </div>
 
-                  <div className="p-3 bg-slate-50 dark:bg-neutral-800 border border-slate-200 dark:border-neutral-700 rounded-xl">
+                  <div className="p-3 bg-slate-50 dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-xl">
                     <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block">Total Node Titik</span>
-                    <span className="text-2xl font-black text-slate-800 dark:text-slate-200">
+                    <span className="text-2xl font-black text-slate-900 dark:text-white">
                       {previewData.summary.total_nodes}
                     </span>
                     <span className="text-[10px] text-slate-500 block mt-0.5">Semua Point</span>
@@ -355,26 +438,37 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
                 </div>
               </div>
 
-              {/* OLT Mapping Setup (Simplified Single Dropdown) */}
+              {/* OLT Mapping Setup */}
               <div className="p-4 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-neutral-800 rounded-xl space-y-2">
                 <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                  Hubungkan ke Perangkat OLT (Opsional):
+                  Hubungkan ke Perangkat OLT:
                 </label>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Jika dipilih, semua node yang diimpor akan otomatis terafiliasi ke OLT ini. Boleh dikosongkan jika Anda ingin mengaturnya nanti.
-                </p>
-                <select
-                  value={targetOltId}
-                  onChange={(e) => setTargetOltId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200"
-                >
-                  <option value="">— Kosongkan / Tetapkan Nanti —</option>
-                  {previewData.available_olts?.map(o => (
-                    <option key={o.id} value={o.id}>
-                      {o.name} {o.ip_address ? `(${o.ip_address})` : ''}
-                    </option>
-                  ))}
-                </select>
+                {lockOlt && scopedOltName ? (
+                  <div className="flex items-center gap-2 p-2.5 bg-neutral-200/70 dark:bg-neutral-800/80 rounded-xl text-xs font-bold text-slate-900 dark:text-white">
+                    <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>Terkunci ke: {scopedOltName} (OLT #{scopedOltId})</span>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Jika dipilih, semua node yang diimpor akan otomatis terafiliasi ke OLT ini. Boleh dikosongkan jika ingin diatur nanti.
+                    </p>
+                    <select
+                      value={targetOltId}
+                      onChange={(e) => setTargetOltId(e.target.value)}
+                      className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200"
+                    >
+                      <option value="">— Kosongkan / Tetapkan Nanti —</option>
+                      {previewData.available_olts?.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name} {o.ip_address ? `(${o.ip_address})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </div>
 
               {/* Sample Data Table */}
@@ -428,7 +522,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
                           <tr key={i} className="hover:bg-slate-50 dark:hover:bg-neutral-800/50">
                             <td className="px-3 py-1.5 font-bold">{n.name}</td>
                             <td className="px-2 py-1.5">
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-white border border-neutral-300 dark:border-neutral-700">
                                 {importTarget === 'odp' ? 'ODP' : importTarget === 'odc' ? 'ODC' : n.node_type}
                               </span>
                             </td>
@@ -453,13 +547,13 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
           ══════════════════════════════════════════════════════════ */}
           {step === 3 && (
             <div className="py-12 text-center space-y-4">
-              <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+              <div className="w-12 h-12 border-4 border-neutral-900 dark:border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
               <div>
                 <h4 className="text-sm font-black text-slate-900 dark:text-white">
                   Menyimpan Data KML ke Database...
                 </h4>
                 <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                  Memproses titik node dan bentangan rute kabel sesuai kategori yang Anda pilih.
+                  Memproses titik node dan bentangan rute kabel ke dalam database OLT {scopedOltName || ''}.
                 </p>
               </div>
             </div>
@@ -470,8 +564,10 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
           ══════════════════════════════════════════════════════════ */}
           {step === 4 && resultData && (
             <div className="py-8 text-center space-y-4">
-              <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center text-3xl mx-auto shadow-inner">
-                ✓
+              <div className="w-14 h-14 bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 rounded-full flex items-center justify-center mx-auto shadow-md">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
               </div>
               <div>
                 <h4 className="text-base font-black text-slate-900 dark:text-white">
@@ -507,13 +603,13 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
         </div>
 
         {/* Footer Buttons */}
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-neutral-800 bg-slate-50/50 dark:bg-neutral-950 flex items-center justify-between">
+        <div className="px-5 py-3.5 border-t border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 flex items-center justify-between shrink-0">
           {step === 1 && (
             <>
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-700 dark:text-slate-300 cursor-pointer"
+                className="px-4 py-2 text-xs font-bold rounded-md border border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 text-black dark:text-white cursor-pointer transition-colors"
               >
                 Batal
               </button>
@@ -522,13 +618,27 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
                 type="button"
                 onClick={handlePreviewUpload}
                 disabled={!file || loading}
-                className={`px-5 py-2 text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-5 py-2 text-xs font-bold rounded-md shadow-sm transition-all flex items-center gap-2 cursor-pointer ${
                   file && !loading
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
-                    : 'bg-slate-200 dark:bg-neutral-800 text-slate-400 cursor-not-allowed'
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white font-bold'
+                    : 'bg-black/10 dark:bg-white/10 text-black/40 dark:text-white/40 cursor-not-allowed'
                 }`}
               >
-                {loading ? 'Membaca File...' : '🔍 Lanjut ke Pratinjau KML'}
+                {loading ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Membaca File...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <span>Lanjut ke Pratinjau KML</span>
+                  </>
+                )}
               </button>
             </>
           )}
@@ -539,18 +649,24 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
                 type="button"
                 onClick={handleReset}
                 disabled={loading}
-                className="px-4 py-2 text-xs font-bold rounded-xl border border-slate-200 dark:border-neutral-700 hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-700 dark:text-slate-300 cursor-pointer"
+                className="px-4 py-2 text-xs font-bold rounded-md border border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 text-black dark:text-white cursor-pointer flex items-center gap-1.5 transition-colors"
               >
-                ↩️ Ganti File / Kategori
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                <span>Ganti File / Kategori</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleExecuteImport}
                 disabled={loading}
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-md shadow-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95"
               >
-                <span>🚀 Simpan Data ke Database</span>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                <span>Simpan Data ke Database</span>
               </button>
             </>
           )}
@@ -560,7 +676,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
               <button
                 type="button"
                 onClick={onClose}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md cursor-pointer"
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-md shadow-sm cursor-pointer transition-colors"
               >
                 Tutup Selesai
               </button>
@@ -568,6 +684,7 @@ export default function KmlImportModal({ isOpen, onClose, onSuccess, initialTarg
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

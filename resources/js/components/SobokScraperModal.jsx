@@ -10,24 +10,31 @@ function RowOdpPicker({
   isManualOdp = false,
   onSelectOdp,
   onResetOdp,
+  onExpandOdpSplitter,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [dropUp, setDropUp] = useState(false);
+  const [expandingOdpId, setExpandingOdpId] = useState(null);
   const containerRef = useRef(null);
   const inputRef = useRef(null);
 
+  const isNoneSelected = selectedOdpId === 'none' || selectedOdpId === '' || selectedOdpId === 0;
+
   // Find currently selected ODP option
   const selectedOption = useMemo(() => {
+    if (isNoneSelected) {
+      return { value: 'none', label: 'Tanpa ODP (Belum Terhubung)', isNone: true };
+    }
     return odpOptions.find(o => String(o.value) === String(selectedOdpId));
-  }, [odpOptions, selectedOdpId]);
+  }, [odpOptions, selectedOdpId, isNoneSelected]);
 
   // Check positioning (drop up or drop down)
   useEffect(() => {
     if (isOpen && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      setDropUp(spaceBelow < 280);
+      setDropUp(spaceBelow < 320);
       if (inputRef.current) {
         setTimeout(() => inputRef.current?.focus(), 50);
       }
@@ -62,7 +69,7 @@ function RowOdpPicker({
 
   // Smart Filter with digit and name matching
   const filteredOptions = useMemo(() => {
-    const list = odpOptions.filter(o => o.value !== 'all');
+    const list = odpOptions.filter(o => o.value !== 'all' && o.value !== 'none');
     if (!searchTerm.trim()) return list.slice(0, 80);
 
     const q = searchTerm.trim().toLowerCase();
@@ -78,6 +85,16 @@ function RowOdpPicker({
       .slice(0, 80);
   }, [odpOptions, searchTerm]);
 
+  const handleExpandSplitter = async (nodeId, ratio = '1:8') => {
+    if (!onExpandOdpSplitter) return;
+    setExpandingOdpId(nodeId);
+    try {
+      await onExpandOdpSplitter(nodeId, ratio);
+    } finally {
+      setExpandingOdpId(null);
+    }
+  };
+
   return (
     <div className="relative w-full" ref={containerRef}>
       {/* Trigger Button with Search Icon */}
@@ -85,11 +102,15 @@ function RowOdpPicker({
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full px-2.5 py-1.5 rounded-xl text-left text-xs flex items-center justify-between gap-1.5 border transition-all cursor-pointer ${
-          isManualOdp
-            ? 'border-amber-400 dark:border-amber-500 bg-amber-50/70 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100 font-bold ring-1 ring-amber-400/50'
-            : selectedOption
-              ? 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold hover:border-slate-400'
-              : 'border-rose-300 dark:border-rose-700 bg-rose-50/60 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 font-bold ring-1 ring-rose-400/40'
+          isNoneSelected
+            ? 'border-slate-300 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 font-semibold'
+            : isManualOdp
+              ? 'border-amber-400 dark:border-amber-500 bg-amber-50/70 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100 font-bold ring-1 ring-amber-400/50'
+              : selectedOption
+                ? selectedOption.isFull
+                  ? 'border-rose-300 dark:border-rose-700 bg-rose-50/70 dark:bg-rose-950/40 text-rose-900 dark:text-rose-100 font-bold ring-1 ring-rose-400/40'
+                  : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold hover:border-slate-400'
+                : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400'
         }`}
       >
         <span className="flex items-center gap-1.5 truncate">
@@ -99,6 +120,11 @@ function RowOdpPicker({
           <span className="truncate">
             {selectedOption ? selectedOption.label : '-- Pilih ODP (Cari) --'}
           </span>
+          {selectedOption?.isFull && (
+            <span className="ml-1 text-[9px] px-1 py-0.2 rounded bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300 font-bold shrink-0">
+              Penuh
+            </span>
+          )}
         </span>
         <svg
           className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -113,7 +139,7 @@ function RowOdpPicker({
       {/* Searchable Dropdown Popover */}
       {isOpen && (
         <div
-          className={`absolute z-[9999] left-0 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100 ${
+          className={`absolute z-[9999] left-0 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100 ${
             dropUp ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
           }`}
         >
@@ -148,6 +174,34 @@ function RowOdpPicker({
             </div>
           </div>
 
+          {/* Opsi 1: Tanpa ODP */}
+          <div className="p-1 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
+            <button
+              type="button"
+              onClick={() => {
+                onSelectOdp('none');
+                setIsOpen(false);
+              }}
+              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                isNoneSelected
+                  ? 'bg-slate-800 dark:bg-slate-700 text-white font-bold'
+                  : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold'
+              }`}
+            >
+              <span className="flex items-center gap-1.5 text-[11px]">
+                <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                — Tanpa ODP (Belum Terhubung) —
+              </span>
+              {isNoneSelected && (
+                <svg className="w-3.5 h-3.5 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          </div>
+
           {/* Shortcut to Auto-Match if available */}
           {row.matched_odp_id && (
             <div className="px-2 pt-1.5 pb-1 border-b border-slate-100 dark:border-slate-800/80 bg-emerald-50/40 dark:bg-emerald-950/20 flex items-center justify-between">
@@ -162,7 +216,7 @@ function RowOdpPicker({
                 }}
                 className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer shrink-0"
               >
-                Pilih ★
+                Pilih
               </button>
             </div>
           )}
@@ -179,35 +233,64 @@ function RowOdpPicker({
                 const isAutoMatch = String(opt.value) === String(row.matched_odp_id);
 
                 return (
-                  <button
+                  <div
                     key={String(opt.value)}
-                    type="button"
-                    onClick={() => {
-                      onSelectOdp(opt.value);
-                      setIsOpen(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                    className={`w-full px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-1.5 transition-colors ${
                       isSelected
                         ? 'bg-amber-500 text-white font-bold shadow-xs'
                         : isAutoMatch
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 font-semibold hover:bg-emerald-100'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-950/70'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium'
                     }`}
                   >
-                    <span className="truncate">{opt.label}</span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {isAutoMatch && !isSelected && (
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 font-bold">
-                          Auto
-                        </span>
-                      )}
-                      {isSelected && (
-                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </div>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectOdp(opt.value);
+                        setIsOpen(false);
+                      }}
+                      className="flex-1 text-left flex items-center justify-between gap-1.5 truncate cursor-pointer"
+                    >
+                      <span className="truncate">{opt.label}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {opt.isFull ? (
+                          <span className={`text-[10px] font-bold ${isSelected ? 'text-rose-100' : 'text-rose-500 dark:text-rose-400'}`}>
+                            Penuh (0/{opt.total})
+                          </span>
+                        ) : (
+                          <span className={`text-[10px] font-medium ${isSelected ? 'text-amber-100' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            Sisa {opt.available}
+                          </span>
+                        )}
+                        {isAutoMatch && !isSelected && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 font-bold">
+                            Auto
+                          </span>
+                        )}
+                        {isSelected && (
+                          <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Inline Quick Splitter Button if full */}
+                    {opt.isFull && onExpandOdpSplitter && (
+                      <button
+                        type="button"
+                        disabled={expandingOdpId === opt.value}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleExpandSplitter(opt.value, '1:8');
+                        }}
+                        className="px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[9px] shrink-0 cursor-pointer disabled:opacity-50"
+                        title="Tambah Kapasitas Splitter (+8 Port)"
+                      >
+                        {expandingOdpId === opt.value ? '...' : '+8 Port'}
+                      </button>
+                    )}
+                  </div>
                 );
               })
             )}
@@ -223,6 +306,7 @@ export default function SobokScraperModal({
   onClose,
   odpOptions = [],
   onCustomerImported,
+  onExpandOdpSplitter,
 }) {
   // Scraping & Auth state
   const [username, setUsername] = useState('jasen');
@@ -386,9 +470,13 @@ export default function SobokScraperModal({
       ? overrides.customer_number
       : (autoNormalizeId ? row.normalized_id : row.raw_id);
 
-    const finalOdpId = overrides.odp_id !== undefined
+    let finalOdpId = overrides.odp_id !== undefined
       ? overrides.odp_id
       : (row.matched_odp_id || null);
+
+    if (finalOdpId === 'none' || finalOdpId === '' || finalOdpId === 0) {
+      finalOdpId = null;
+    }
 
     setSubmittingRowId(row.id);
     setRowErrors(prev => ({ ...prev, [row.id]: null }));
@@ -496,7 +584,9 @@ export default function SobokScraperModal({
         <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-slate-800/30">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-black text-lg border border-amber-500/20">
-              ⚡
+              <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -722,26 +812,47 @@ export default function SobokScraperModal({
             </label>
 
             {/* Batch Action Button if any selected */}
-            {selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={handleBatchImport}
-                disabled={isBatchImporting}
-                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                onClick={() => {
+                  const unmappedRows = records.filter(r => !r.already_exists && !r.matched_odp_id && (!rowOverrides[r.id]?.odp_id || rowOverrides[r.id]?.odp_id === 'none'));
+                  if (unmappedRows.length === 0) return;
+                  setRowOverrides(prev => {
+                    const next = { ...prev };
+                    unmappedRows.forEach(r => {
+                      next[r.id] = { ...(next[r.id] || {}), odp_id: 'none' };
+                    });
+                    return next;
+                  });
+                }}
+                className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                title="Tandai semua data yang belum punya ODP sebagai Tanpa ODP"
               >
-                {isBatchImporting ? (
-                  <>
-                    <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Menambahkan {selectedIds.size} Pelanggan...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>+</span>
-                    <span>Tambahkan {selectedIds.size} Data Terpilih ke Sistem</span>
-                  </>
-                )}
+                Set Semua Data Kosong Jadi "Tanpa ODP"
               </button>
-            )}
+
+              {selectedIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBatchImport}
+                  disabled={isBatchImporting}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isBatchImporting ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Menambahkan {selectedIds.size} Pelanggan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>+</span>
+                      <span>Tambahkan {selectedIds.size} Data Terpilih ke Sistem</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -755,7 +866,11 @@ export default function SobokScraperModal({
             </div>
           ) : filteredRecords.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 gap-2 text-slate-500 dark:text-slate-400">
-              <span className="text-3xl">🔍</span>
+              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
               <p className="font-bold text-sm">Tidak ada data pelanggan yang cocok dengan filter.</p>
               <p className="text-xs">Coba ubah kata kunci pencarian atau reset filter ODP / Format ID.</p>
             </div>
@@ -851,7 +966,7 @@ export default function SobokScraperModal({
                       </td>
 
                       {/* ODP */}
-                      <td className="p-3 min-w-[210px] max-w-[260px]">
+                      <td className="p-3 min-w-[220px] max-w-[280px]">
                         {isAlreadyExists ? (
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5">
@@ -874,17 +989,21 @@ export default function SobokScraperModal({
                                 <span className={`font-mono font-bold px-1.5 py-0.5 rounded border ${
                                   row.has_odp
                                     ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700'
-                                    : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                                 }`}>
                                   {row.raw_odp || 'Kosong'}
                                 </span>
                               </div>
 
                               {/* Status Badge */}
-                              {isManualOdp ? (
+                              {selectedOdpId === 'none' || (!selectedOdpId && isManualOdp) ? (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                  Tanpa ODP
+                                </span>
+                              ) : isManualOdp ? (
                                 <div className="flex items-center gap-1">
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                                    ✏️ Pilihan Manual
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                                    Pilihan Manual
                                   </span>
                                   {row.matched_odp_id && (
                                     <button
@@ -902,9 +1021,19 @@ export default function SobokScraperModal({
                                   ✓ Auto-Match
                                 </span>
                               ) : (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                  Wajib Pilih
-                                </span>
+                                <div className="flex items-center gap-1">
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                    Belum Terhubung
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRowOverrideChange(row.id, 'odp_id', 'none')}
+                                    className="px-1 py-0.2 rounded text-[9px] font-bold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 cursor-pointer"
+                                    title="Set tanpa koneksi ODP"
+                                  >
+                                    Set Tanpa ODP
+                                  </button>
+                                </div>
                               )}
                             </div>
 
@@ -914,9 +1043,44 @@ export default function SobokScraperModal({
                               selectedOdpId={selectedOdpId}
                               odpOptions={odpOptions}
                               isManualOdp={isManualOdp}
-                              onSelectOdp={(val) => handleRowOverrideChange(row.id, 'odp_id', val ? parseInt(val) : null)}
+                              onSelectOdp={(val) => handleRowOverrideChange(row.id, 'odp_id', val === 'none' ? 'none' : (val ? parseInt(val) : null))}
                               onResetOdp={() => handleRowOverrideChange(row.id, 'odp_id', row.matched_odp_id || null)}
+                              onExpandOdpSplitter={onExpandOdpSplitter}
                             />
+
+                            {/* Alert jika ODP yang dipilih penuh */}
+                            {selectedOdpId && selectedOdpId !== 'none' && (() => {
+                              const currOpt = odpOptions.find(o => String(o.value) === String(selectedOdpId));
+                              if (currOpt && currOpt.isFull) {
+                                return (
+                                  <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-[10px] space-y-1.5">
+                                    <div className="flex items-center justify-between text-rose-800 dark:text-rose-200 font-bold">
+                                      <span>Port ODP Ini Penuh! (0/{currOpt.total})</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRowOverrideChange(row.id, 'odp_id', 'none')}
+                                        className="text-[9px] font-semibold text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
+                                      >
+                                        Set Tanpa ODP
+                                      </button>
+                                    </div>
+                                    {onExpandOdpSplitter && (
+                                      <button
+                                        type="button"
+                                        onClick={() => onExpandOdpSplitter(currOpt.value, '1:8')}
+                                        className="w-full py-1 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] flex items-center justify-center gap-1 shadow-xs cursor-pointer transition-colors"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                        </svg>
+                                        + Tambah Splitter 1:8 (+8 Port)
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         )}
                       </td>
@@ -949,7 +1113,10 @@ export default function SobokScraperModal({
                               title={`SN ini juga digunakan oleh ${row.duplicate_with || 'pelanggan lain'}`}
                               className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shrink-0 cursor-help"
                             >
-                              <span>⚠️ SN Berbagi/Kembar</span>
+                              <svg className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span>SN Berbagi/Kembar</span>
                             </span>
                           )}
                         </div>
@@ -1002,7 +1169,7 @@ export default function SobokScraperModal({
                             ) : (
                               <>
                                 <span>+</span>
-                                <span>Tambahkan ke Sistem</span>
+                                <span>{selectedOdpId && selectedOdpId !== 'none' ? 'Tambahkan ke Sistem' : 'Tambahkan (Tanpa ODP)'}</span>
                               </>
                             )}
                           </button>

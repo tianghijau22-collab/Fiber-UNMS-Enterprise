@@ -101,6 +101,23 @@ class NetworkPort extends Model
         return $this->hasMany(OntRegistration::class, 'olt_port_id');
     }
 
+    public function customerService()
+    {
+        return $this->belongsTo(CustomerService::class, 'customer_service_id');
+    }
+
+    public function customer()
+    {
+        return $this->hasOneThrough(
+            Customer::class,
+            CustomerService::class,
+            'id',
+            'id',
+            'customer_service_id',
+            'customer_id'
+        );
+    }
+
     // ─── Helpers ────────────────────────────────────────────────────────────────
 
     public function isAvailable(): bool

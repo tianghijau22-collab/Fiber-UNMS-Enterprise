@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { toPng } from 'html-to-image';
 
-// ─── Inline SVG Icons ──────────────────────────────────────────────────────────
+// ─── Inline SVG Icons (Design System Compliant) ──────────────────────────────
 const IconBot = ({ className = "w-4 h-4" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -48,6 +48,12 @@ const IconCheck = ({ className = "w-3 h-3" }) => (
 const IconCheckCheck = ({ className = "w-3.5 h-3.5" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+
+const IconX = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
   </svg>
 );
 
@@ -101,9 +107,43 @@ const IconClock = ({ className = "w-3 h-3" }) => (
   </svg>
 );
 
+const IconCalendar = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <rect x="3" y="4" width="18" height="18" rx="2" strokeWidth="2" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 2v4M8 2v4M3 10h18" />
+  </svg>
+);
+
 const IconEyeOff = ({ className = "w-3.5 h-3.5" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+  </svg>
+);
+
+const IconServer = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <rect x="2" y="2" width="20" height="8" rx="2" strokeWidth="2" />
+    <rect x="2" y="14" width="20" height="8" rx="2" strokeWidth="2" />
+    <line x1="6" y1="6" x2="6.01" y2="6" strokeWidth="3" strokeLinecap="round" />
+    <line x1="6" y1="18" x2="6.01" y2="18" strokeWidth="3" strokeLinecap="round" />
+  </svg>
+);
+
+const IconBox = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+  </svg>
+);
+
+const IconChevronLeft = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+  </svg>
+);
+
+const IconChevronRight = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
   </svg>
 );
 
@@ -113,8 +153,15 @@ export default function SystemAlertChat() {
   const [stats, setStats] = useState({
     total_all: 0,
     total_today: 0,
-    outages_today: 0,
+    outage_interface_today: 0,
+    outage_odp_today: 0,
+    recovery_interface_today: 0,
+    recovery_odp_today: 0,
+    dying_gasp_today: 0,
+    trap_individual_today: 0,
+    mass_outages_today: 0,
     recovery_today: 0,
+    polling_today: 0,
     last_alert_at: null,
     last_alert_ago: 'Belum ada',
   });
@@ -134,9 +181,19 @@ export default function SystemAlertChat() {
   const [capturingId, setCapturingId] = useState(null);
   const [isClearing, setIsClearing] = useState(false);
 
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
   const chatContainerRef = useRef(null);
+  const filterContainerRef = useRef(null);
   const audioRef = useRef(null);
   const lastKnownIdRef = useRef(null);
+
+  // Mouse drag-to-scroll refs
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const scrollLeftRef = useRef(0);
+  const hasMovedRef = useRef(false);
 
   // Play synthetic beep on new critical alert
   const playAlertSound = () => {
@@ -200,12 +257,12 @@ export default function SystemAlertChat() {
     }
   };
 
-  // Initial load & Polling interval tiap 4 detik
+  // Initial load & Polling interval tiap 2.5 detik (Real-Time Push/Pull)
   useEffect(() => {
     fetchAlerts();
     const interval = setInterval(() => {
       fetchAlerts(true);
-    }, 4000);
+    }, 2500);
     return () => clearInterval(interval);
   }, [filterType, searchQuery]);
 
@@ -218,6 +275,74 @@ export default function SystemAlertChat() {
       });
     }
   }, [messages, autoScroll]);
+
+  // ─── Horizontal Filter Scroll & Drag-to-Scroll Mechanics ──────────────────
+  const checkFilterScroll = () => {
+    const el = filterContainerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 6);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 6);
+  };
+
+  const scrollFilters = (dir) => {
+    const el = filterContainerRef.current;
+    if (!el) return;
+    const offset = 260;
+    el.scrollBy({ left: dir === 'left' ? -offset : offset, behavior: 'smooth' });
+    setTimeout(checkFilterScroll, 320);
+  };
+
+  // Convert mouse wheel on filter bar to horizontal scroll
+  useEffect(() => {
+    const el = filterContainerRef.current;
+    if (!el) return;
+
+    const onWheel = (e) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+        checkFilterScroll();
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    checkFilterScroll();
+    el.addEventListener('scroll', checkFilterScroll);
+    window.addEventListener('resize', checkFilterScroll);
+
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('scroll', checkFilterScroll);
+      window.removeEventListener('resize', checkFilterScroll);
+    };
+  }, [stats]);
+
+  // Mouse drag-to-scroll handlers
+  const handleMouseDown = (e) => {
+    const el = filterContainerRef.current;
+    if (!el) return;
+    isDraggingRef.current = true;
+    hasMovedRef.current = false;
+    startXRef.current = e.pageX - el.offsetLeft;
+    scrollLeftRef.current = el.scrollLeft;
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDraggingRef.current) return;
+    const el = filterContainerRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - startXRef.current) * 1.3;
+    if (Math.abs(walk) > 4) {
+      hasMovedRef.current = true;
+    }
+    el.scrollLeft = scrollLeftRef.current - walk;
+    checkFilterScroll();
+  };
+
+  const handleMouseUpOrLeave = () => {
+    isDraggingRef.current = false;
+  };
 
   const handleToggleSound = () => {
     const next = !soundEnabled;
@@ -248,7 +373,7 @@ export default function SystemAlertChat() {
       const dataUrl = await toPng(cardElement, {
         pixelRatio: 2,
         cacheBust: true,
-        backgroundColor: isDark ? '#0f172a' : '#ffffff',
+        backgroundColor: isDark ? '#000000' : '#ffffff',
         filter: (node) => {
           if (node?.classList && node.classList.contains('no-screenshot')) {
             return false;
@@ -327,132 +452,242 @@ export default function SystemAlertChat() {
   }, [messages]);
 
   const filterButtons = [
-    { id: 'ALL', label: `Semua (${stats.total_all || 0})`, icon: null, activeCls: 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm' },
-    { id: 'MASS_OUTAGE', label: `🚨 Gangguan Massal (${stats.mass_outages_today || 0})`, icon: <IconShieldAlert className="w-3 h-3 text-rose-500" />, activeCls: 'bg-rose-600 text-white shadow-sm' },
-    { id: 'TRAP_INDIVIDUAL', label: `⚡ Alert Perorangan (${stats.trap_individual_today || 0})`, icon: <IconZap className="w-3 h-3 text-purple-500" />, activeCls: 'bg-purple-600 text-white shadow-sm' },
-    { id: 'POLL', label: `🔄 Polling Telemetri (${stats.polling_today || 0})`, icon: <IconRefresh className="w-3 h-3 text-amber-500" />, activeCls: 'bg-amber-600 text-white shadow-sm' },
-    { id: 'RECOVERY', label: `🟢 Pemulihan (${stats.recovery_today || 0})`, icon: <IconCheckCircle className="w-3 h-3 text-emerald-500" />, activeCls: 'bg-emerald-600 text-white shadow-sm' },
+    { 
+      id: 'ALL', 
+      label: 'Semua', 
+      count: stats.total_all || 0,
+      icon: null, 
+      activeCls: 'bg-black text-white dark:bg-white dark:text-black border-black dark:border-white shadow-2xs' 
+    },
+    { 
+      id: 'OUTAGE_INTERFACE', 
+      label: 'Gangguan Interface', 
+      count: stats.outage_interface_today || 0,
+      icon: <IconServer className="w-3.5 h-3.5 text-rose-500" />, 
+      activeCls: 'bg-rose-600 text-white border-rose-600 shadow-2xs' 
+    },
+    { 
+      id: 'OUTAGE_ODP', 
+      label: 'Gangguan ODP', 
+      count: stats.outage_odp_today || 0,
+      icon: <IconBox className="w-3.5 h-3.5 text-amber-500" />, 
+      activeCls: 'bg-amber-600 text-white border-amber-600 shadow-2xs' 
+    },
+    { 
+      id: 'RECOVERY_INTERFACE', 
+      label: 'Pemulihan Interface', 
+      count: stats.recovery_interface_today || 0,
+      icon: <IconCheckCircle className="w-3.5 h-3.5 text-emerald-500" />, 
+      activeCls: 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' 
+    },
+    { 
+      id: 'RECOVERY_ODP', 
+      label: 'Pemulihan ODP', 
+      count: stats.recovery_odp_today || 0,
+      icon: <IconCheckCircle className="w-3.5 h-3.5 text-teal-500" />, 
+      activeCls: 'bg-teal-600 text-white border-teal-600 shadow-2xs' 
+    },
+    { 
+      id: 'DYING_GASP', 
+      label: 'Mati Listrik (Dying Gasp)', 
+      count: stats.dying_gasp_today || 0,
+      icon: <IconZap className="w-3.5 h-3.5 text-purple-500" />, 
+      activeCls: 'bg-purple-600 text-white border-purple-600 shadow-2xs' 
+    },
+    { 
+      id: 'TRAP_INDIVIDUAL', 
+      label: 'Alert Perorangan', 
+      count: stats.trap_individual_today || 0,
+      icon: <IconActivity className="w-3.5 h-3.5 text-sky-500" />, 
+      activeCls: 'bg-sky-600 text-white border-sky-600 shadow-2xs' 
+    },
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5.5rem)] w-full space-y-2.5">
+    <div className="flex flex-col h-[calc(100vh-5.5rem)] w-full space-y-3 font-sans transition-colors duration-200 text-black dark:text-white">
 
-      {/* ── FILTER, SEARCH & ACTION TOOLBAR ── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 sm:p-3 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 transition-colors duration-200">
+      {/* ── FILTER, SEARCH & ACTION TOOLBAR (DESIGN SYSTEM COMPLIANT) ── */}
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-3 sm:p-3.5 shadow-xs space-y-3 transition-colors duration-200">
         
-        {/* Filter Pills */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto w-full lg:w-auto pb-1 lg:pb-0 scrollbar-none">
-          {filterButtons.map(btn => {
-            const isActive = filterType === btn.id;
-            return (
-              <button
-                key={btn.id}
-                onClick={() => setFilterType(btn.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 flex items-center gap-1.5 cursor-pointer ${
-                  isActive
-                    ? btn.activeCls
-                    : 'bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60'
-                }`}
-              >
-                {btn.icon}
-                <span>{btn.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right Controls: Search Input + Action Buttons */}
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full lg:w-auto">
+        {/* ROW 1: Search Bar (Left) & Utility Actions (Right) */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-2.5">
           {/* Search Input */}
-          <div className="relative flex-1 sm:w-60">
-            <IconSearch className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="relative w-full md:w-80">
+            <IconSearch className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-black/50 dark:text-white/50" />
             <input
               type="text"
-              placeholder="Cari OLT, port, ODP, tiket..."
+              placeholder="Cari OLT, port, ODP, tiket, nama..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-7 py-1.5 text-xs font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1.5 focus:ring-sky-500/30 focus:border-sky-500 transition-all"
+              className="w-full bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md pl-8.5 pr-7 py-1.5 text-xs font-medium text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white transition-colors"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs font-bold cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white cursor-pointer p-0.5"
               >
-                ✕
+                <IconX className="w-3 h-3" />
               </button>
             )}
           </div>
 
-          {/* Hide/Show Time Toggle Button */}
-          <button
-            onClick={handleToggleHideTime}
-            title={hideTime ? 'Tampilkan Waktu Notifikasi' : 'Sembunyikan Waktu Notifikasi'}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              hideTime 
-                ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/30 dark:border-indigo-500/30' 
-                : 'bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border-slate-200/60 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            {hideTime ? <IconEyeOff className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> : <IconClock className="w-3.5 h-3.5" />}
-            <span className="text-[11px]">{hideTime ? 'Waktu Tersembunyi' : 'Sembunyikan Waktu'}</span>
-          </button>
+          {/* Right Controls: Hide Time, Sound, Refresh, Clear */}
+          <div className="flex items-center gap-1.5 w-full md:w-auto justify-end overflow-x-auto pb-0.5 md:pb-0">
+            {/* Hide/Show Time Toggle Button */}
+            <button
+              onClick={handleToggleHideTime}
+              title={hideTime ? 'Tampilkan Waktu Notifikasi' : 'Sembunyikan Waktu Notifikasi'}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-semibold border transition-all duration-150 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                hideTime 
+                  ? 'bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/40' 
+                  : 'bg-white dark:bg-black text-black/70 dark:text-white/70 border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10'
+              }`}
+            >
+              {hideTime ? <IconEyeOff className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> : <IconClock className="w-3.5 h-3.5 text-black/60 dark:text-white/60" />}
+              <span className="text-[11px]">{hideTime ? 'Waktu Tersembunyi' : 'Sembunyikan Waktu'}</span>
+            </button>
 
-          {/* Sound Toggle Button */}
-          <button
-            onClick={handleToggleSound}
-            title={soundEnabled ? 'Matikan Notifikasi Suara' : 'Aktifkan Notifikasi Suara'}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              soundEnabled 
-                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 dark:border-amber-500/30' 
-                : 'bg-slate-50 dark:bg-slate-800/80 text-slate-500 border-slate-200/60 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            {soundEnabled ? <IconVolume2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> : <IconVolumeX className="w-3.5 h-3.5" />}
-            <span className="text-[11px]">{soundEnabled ? 'Suara Aktif' : 'Suara Mati'}</span>
-          </button>
+            {/* Sound Toggle Button */}
+            <button
+              onClick={handleToggleSound}
+              title={soundEnabled ? 'Matikan Notifikasi Suara' : 'Aktifkan Notifikasi Suara'}
+              className={`px-2.5 py-1.5 rounded-md text-xs font-semibold border transition-all duration-150 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                soundEnabled 
+                  ? 'bg-black/10 dark:bg-white/10 text-amber-600 dark:text-amber-400 border-amber-500/40' 
+                  : 'bg-white dark:bg-black text-black/70 dark:text-white/70 border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10'
+              }`}
+            >
+              {soundEnabled ? <IconVolume2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> : <IconVolumeX className="w-3.5 h-3.5 text-black/60 dark:text-white/60" />}
+              <span className="text-[11px]">{soundEnabled ? 'Suara Aktif' : 'Suara Mati'}</span>
+            </button>
 
-          {/* Refresh Button */}
-          <button
-            onClick={() => fetchAlerts()}
-            disabled={refreshing}
-            title="Perbarui Feed Notifikasi"
-            className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 rounded-lg text-xs font-semibold transition-all duration-150 shadow-2xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-          >
-            <IconRefresh className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-sky-500' : ''}`} />
-            <span className="text-[11px]">Refresh</span>
-          </button>
+            {/* Refresh Button */}
+            <button
+              onClick={() => fetchAlerts()}
+              disabled={refreshing}
+              title="Perbarui Feed Notifikasi"
+              className="px-2.5 py-1.5 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            >
+              <IconRefresh className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} />
+              <span className="text-[11px]">Refresh</span>
+            </button>
 
-          {/* Clear History Button */}
-          <button
-            onClick={handleClearHistory}
-            disabled={isClearing}
-            title="Bersihkan Semua Pesan"
-            className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/20 dark:border-rose-500/30 rounded-lg text-xs font-semibold transition-all duration-150 shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
-          >
-            <IconTrash className="w-3.5 h-3.5" />
-            <span className="text-[11px]">Bersihkan</span>
-          </button>
+            {/* Clear History Button */}
+            <button
+              onClick={handleClearHistory}
+              disabled={isClearing}
+              title="Bersihkan Semua Pesan"
+              className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 dark:border-rose-500/30 rounded-md text-xs font-semibold transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+            >
+              <IconTrash className="w-3.5 h-3.5" />
+              <span className="text-[11px]">Bersihkan</span>
+            </button>
+          </div>
         </div>
+
+        {/* Separator Line */}
+        <div className="border-t border-black/10 dark:border-white/10" />
+
+        {/* ROW 2: Horizontal Scrollable Category Filter Pills with Navigation Controls */}
+        <div className="relative flex items-center w-full">
+          
+          {/* Scroll Left Chevron Button */}
+          {canScrollLeft && (
+            <button
+              onClick={() => scrollFilters('left')}
+              title="Geser ke kiri"
+              className="absolute -left-1 sm:-left-2 z-10 p-1.5 rounded-md bg-white/95 dark:bg-black/95 text-black dark:text-white shadow-md border border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer flex items-center justify-center backdrop-blur-xs"
+            >
+              <IconChevronLeft className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Filter Pills Container */}
+          <div
+            ref={filterContainerRef}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUpOrLeave}
+            onMouseLeave={handleMouseUpOrLeave}
+            className="flex items-center space-x-2 overflow-x-auto w-full py-1 px-1 scroll-smooth select-none cursor-grab active:cursor-grabbing [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-black/5 dark:[&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-black/20 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 hover:[&::-webkit-scrollbar-thumb]:bg-black/40 dark:hover:[&::-webkit-scrollbar-thumb]:bg-white/40"
+            style={{ scrollbarWidth: 'thin' }}
+          >
+            {filterButtons.map(btn => {
+              const isActive = filterType === btn.id;
+              return (
+                <button
+                  key={btn.id}
+                  onClick={() => {
+                    if (hasMovedRef.current) return;
+                    setFilterType(btn.id);
+                  }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition-all duration-150 flex items-center gap-2 cursor-pointer shrink-0 border ${
+                    isActive
+                      ? btn.activeCls
+                      : 'bg-white dark:bg-black text-black/80 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 border-black/20 dark:border-white/20'
+                  }`}
+                >
+                  {btn.icon}
+                  <span>{btn.label}</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+                    isActive 
+                      ? 'bg-black/20 text-white dark:bg-white/25 dark:text-black' 
+                      : 'bg-black/10 dark:bg-white/10 text-black dark:text-white'
+                  }`}>
+                    {btn.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Scroll Right Chevron Button */}
+          {canScrollRight && (
+            <button
+              onClick={() => scrollFilters('right')}
+              title="Geser ke kanan"
+              className="absolute -right-1 sm:-right-2 z-10 p-1.5 rounded-md bg-white/95 dark:bg-black/95 text-black dark:text-white shadow-md border border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer flex items-center justify-center backdrop-blur-xs"
+            >
+              <IconChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+        </div>
+
       </div>
 
       {/* ── CHAT BOT STREAM CONTAINER (ENTERPRISE NOC FEED) ── */}
       <div 
         ref={chatContainerRef}
-        className="flex-1 bg-slate-50/60 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800/90 rounded-xl p-3 md:p-3.5 overflow-y-auto space-y-2.5 relative scroll-smooth shadow-inner transition-colors duration-200"
+        className="flex-1 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-3 sm:p-4 overflow-y-auto space-y-3 relative scroll-smooth shadow-xs transition-colors duration-200"
       >
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-full space-y-2.5 py-20 text-slate-400">
-            <div className="w-8 h-8 rounded-full border-2 border-slate-200 dark:border-slate-800 border-t-sky-500 animate-spin" />
+          <div className="flex flex-col items-center justify-center h-full space-y-2.5 py-20 text-black/50 dark:text-white/50">
+            <div className="w-8 h-8 rounded-full border-2 border-black/20 dark:border-white/20 border-t-indigo-600 dark:border-t-indigo-400 animate-spin" />
             <span className="text-xs font-medium">Memuat log alert realtime...</span>
           </div>
         ) : groupedMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full py-20 text-slate-400 space-y-2.5">
-            <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-900 flex items-center justify-center text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex flex-col items-center justify-center h-full py-20 text-black/50 dark:text-white/50 space-y-2.5">
+            <div className="w-12 h-12 rounded-lg bg-black/5 dark:bg-white/5 flex items-center justify-center text-black/50 dark:text-white/50 border border-black/20 dark:border-white/20 shadow-2xs">
               <IconBot className="w-6 h-6" />
             </div>
-            <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Belum Ada Riwayat Notifikasi Alert</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-500 max-w-sm text-center">
-              Seluruh sinyal gangguan massal, pemulihan port, ODP down, dan alarm SNMP Trap akan otomatis muncul di sini.
+            <p className="text-xs font-bold text-black dark:text-white">
+              {filterType === 'OUTAGE_INTERFACE' && 'Tidak Ada Gangguan Interface'}
+              {filterType === 'OUTAGE_ODP' && 'Tidak Ada Gangguan ODP'}
+              {filterType === 'RECOVERY_INTERFACE' && 'Tidak Ada Pemulihan Interface'}
+              {filterType === 'RECOVERY_ODP' && 'Tidak Ada Pemulihan ODP'}
+              {filterType === 'DYING_GASP' && 'Tidak Ada Alert Mati Listrik (Dying Gasp)'}
+              {filterType === 'TRAP_INDIVIDUAL' && 'Tidak Ada Alert Perorangan'}
+              {filterType === 'ALL' && 'Belum Ada Riwayat Notifikasi Alert'}
+            </p>
+            <p className="text-[11px] text-black/60 dark:text-white/60 max-w-sm text-center">
+              {filterType === 'OUTAGE_INTERFACE' && 'Seluruh interface / port PON terpantau normal dan tidak ada insiden putus jalur.'}
+              {filterType === 'OUTAGE_ODP' && 'Seluruh splitter dan ODP jaringan beroperasi normal tanpa indikasi loss massal.'}
+              {filterType === 'RECOVERY_INTERFACE' && 'Belum ada catatan pemulihan interface port PON untuk periode ini.'}
+              {filterType === 'RECOVERY_ODP' && 'Belum ada catatan pemulihan splitter ODP untuk periode ini.'}
+              {filterType === 'DYING_GASP' && 'Tidak ada sinyal padam listrik / power cut dari perangkat modem pelanggan.'}
+              {filterType === 'TRAP_INDIVIDUAL' && 'Tidak ada notifikasi trap modem perorangan yang tercatat.'}
+              {filterType === 'ALL' && 'Seluruh sinyal gangguan massal, pemulihan port, ODP down, dan alarm SNMP Trap akan otomatis muncul di sini.'}
             </p>
           </div>
         ) : (
@@ -461,57 +696,97 @@ export default function SystemAlertChat() {
               return (
                 <div key={`divider-${index}`} className="flex items-center justify-center my-3 relative">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200/80 dark:border-slate-800/80" />
+                    <div className="w-full border-t border-black/10 dark:border-white/10" />
                   </div>
-                  <span className="relative bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold px-3 py-0.5 rounded-full shadow-2xs tracking-wide">
-                    📅 {item.date}
+                  <span className="relative bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white text-[10px] font-mono font-bold px-3 py-0.5 rounded shadow-2xs tracking-wider flex items-center gap-1.5">
+                    <IconCalendar className="w-3 h-3 text-black/70 dark:text-white/70" />
+                    <span>{item.date}</span>
                   </span>
                 </div>
               );
             }
 
             const msg = item.data;
+            const isDyingGasp = msg.is_dying_gasp || msg.category === 'DYING_GASP' || /DYING GASP|MATI LISTRIK|POWER CUT|PADAM LISTRIK/i.test(msg.title) || /DYING GASP|MATI LISTRIK|POWER CUT|PADAM LISTRIK/i.test(msg.body);
+            const isOutageInterface = msg.is_outage_interface || msg.category === 'OUTAGE_INTERFACE';
+            const isOutageOdp = msg.is_outage_odp || msg.category === 'OUTAGE_ODP';
+            const isRecoveryInterface = msg.is_recovery_interface || msg.category === 'RECOVERY_INTERFACE';
+            const isRecoveryOdp = msg.is_recovery_odp || msg.category === 'RECOVERY_ODP';
             const isRecovery = msg.is_recovery || /PEMULIHAN|PULIH|RECOVERY|RESTORED|RESOLVED|NORMAL/i.test(msg.title);
             const isMassOutage = !isRecovery && (msg.type === 'MASS_OUTAGE' || /GANGGUAN MASSAL/i.test(msg.title));
-            const isTrapIndividual = !isRecovery && !isMassOutage && (msg.type === 'TRAP_INDIVIDUAL' || msg.source === 'SNMP_TRAP');
-            const isPoll = !isRecovery && !isMassOutage && !isTrapIndividual && (msg.source === 'POLL_TELEMETRY');
-            const isOutage = !isRecovery && (isMassOutage || msg.is_outage || /GANGGUAN|ALARM|LOS|DOWN|PUTUS|DYING GASP|CRITICAL/i.test(msg.title));
+            const isTrapIndividual = !isRecovery && !isMassOutage && !isDyingGasp && (msg.type === 'TRAP_INDIVIDUAL' || msg.source === 'SNMP_TRAP');
+            const isPoll = !isRecovery && !isMassOutage && !isTrapIndividual && !isDyingGasp && (msg.source === 'POLL_TELEMETRY');
 
-            // Distinctive Enterprise Card Styling with Left Border Accent
-            let cardAccentBorder = 'border-l-4 border-l-slate-400 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900';
-            let headerBg = 'bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200/60 dark:border-slate-800/60';
-            let titleColor = 'text-slate-900 dark:text-white';
-            let bodyBg = 'bg-slate-50/70 dark:bg-slate-950/50 border-slate-200/70 dark:border-slate-800/70';
-            let avatarCls = 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700';
-            let badgeIcon = <IconBot className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />;
+            // High Contrast Sharp Border Accent & Semantic Color
+            let cardAccentBorder = 'border-l-2 border-l-black/40 dark:border-l-white/40 border border-black/20 dark:border-white/20 bg-white dark:bg-black';
+            let headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
+            let titleColor = 'text-black dark:text-white font-bold';
+            let bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+            let avatarCls = 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20';
+            let badgeIcon = <IconBot className="w-3.5 h-3.5 text-black/60 dark:text-white/60" />;
 
-            if (isRecovery) {
-              cardAccentBorder = 'border-l-4 border-l-emerald-500 border border-emerald-300/80 dark:border-emerald-800 bg-white dark:bg-slate-900 shadow-2xs';
-              headerBg = 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-b border-emerald-200 dark:border-emerald-900/60';
-              titleColor = 'text-emerald-600 dark:text-emerald-400 font-extrabold';
-              bodyBg = 'bg-emerald-50/70 dark:bg-slate-950 border-emerald-200/80 dark:border-emerald-950';
-              avatarCls = 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800';
+            if (isDyingGasp) {
+              cardAccentBorder = 'border-l-2 border-l-purple-500 border border-black/20 dark:border-white/20 bg-white dark:bg-black shadow-xs';
+              headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
+              titleColor = 'text-purple-600 dark:text-purple-400 font-bold';
+              bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+              avatarCls = 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30';
+              badgeIcon = <IconZap className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 animate-pulse" />;
+            } else if (isOutageInterface) {
+              cardAccentBorder = 'border-l-2 border-l-rose-500 border border-black/20 dark:border-white/20 bg-white dark:bg-black shadow-xs';
+              headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
+              titleColor = 'text-rose-600 dark:text-rose-400 font-bold tracking-tight';
+              bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+              avatarCls = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 animate-pulse';
+              badgeIcon = <IconServer className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
+            } else if (isOutageOdp) {
+              cardAccentBorder = 'border-l-2 border-l-amber-500 border border-black/20 dark:border-white/20 bg-white dark:bg-black shadow-xs';
+              headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
+              titleColor = 'text-amber-600 dark:text-amber-400 font-bold tracking-tight';
+              bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+              avatarCls = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 animate-pulse';
+              badgeIcon = <IconBox className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
+            } else if (isRecoveryInterface) {
+              cardAccentBorder = 'border-l-2 border-l-emerald-500 border border-black/20 dark:border-white/20 bg-white dark:bg-black shadow-xs';
+              headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
+              titleColor = 'text-emerald-600 dark:text-emerald-400 font-bold';
+              bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+              avatarCls = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
+              badgeIcon = <IconCheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
+            } else if (isRecoveryOdp) {
+              cardAccentBorder = 'border-l-2 border-l-teal-500 border border-black/20 dark:border-white/20 bg-white dark:bg-black shadow-xs';
+              headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
+              titleColor = 'text-teal-600 dark:text-teal-400 font-bold';
+              bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+              avatarCls = 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/30';
+              badgeIcon = <IconCheckCircle className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />;
+            } else if (isRecovery) {
+              cardAccentBorder = 'border-l-2 border-l-emerald-500 border border-black/20 dark:border-white/20 bg-white dark:bg-black shadow-xs';
+              headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
+              titleColor = 'text-emerald-600 dark:text-emerald-400 font-bold';
+              bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+              avatarCls = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
               badgeIcon = <IconCheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />;
             } else if (isMassOutage) {
-              cardAccentBorder = 'border-l-4 border-l-rose-600 border border-rose-300/80 dark:border-rose-800 bg-white dark:bg-slate-900 shadow-sm';
-              headerBg = 'bg-rose-100/80 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border-b border-rose-200 dark:border-rose-900/60';
-              titleColor = 'text-rose-600 dark:text-rose-400 font-black tracking-tight';
-              bodyBg = 'bg-rose-50/70 dark:bg-slate-950 border-rose-200/80 dark:border-rose-950';
-              avatarCls = 'bg-rose-200 dark:bg-rose-900 text-rose-700 dark:text-rose-300 border-rose-400 dark:border-rose-700 animate-pulse';
+              cardAccentBorder = 'border-l-2 border-l-rose-600 border border-black/20 dark:border-white/20 bg-white dark:bg-black shadow-xs';
+              headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
+              titleColor = 'text-rose-600 dark:text-rose-400 font-bold tracking-tight';
+              bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+              avatarCls = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 animate-pulse';
               badgeIcon = <IconShieldAlert className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />;
             } else if (isTrapIndividual) {
-              cardAccentBorder = 'border-l-4 border-l-purple-500 border border-purple-200/80 dark:border-purple-800 bg-white dark:bg-slate-900 shadow-2xs';
-              headerBg = 'bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border-b border-purple-200 dark:border-purple-900/60';
-              titleColor = 'text-purple-600 dark:text-purple-400 font-bold';
-              bodyBg = 'bg-purple-50/70 dark:bg-slate-950 border-purple-200/80 dark:border-purple-950';
-              avatarCls = 'bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800';
-              badgeIcon = <IconZap className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />;
+              cardAccentBorder = 'border-l-2 border-l-sky-500 border border-black/20 dark:border-white/20 bg-white dark:bg-black shadow-xs';
+              headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
+              titleColor = 'text-sky-600 dark:text-sky-400 font-bold';
+              bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+              avatarCls = 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30';
+              badgeIcon = <IconActivity className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />;
             } else if (isPoll) {
-              cardAccentBorder = 'border-l-4 border-l-amber-500 border border-amber-200/80 dark:border-amber-800 bg-white dark:bg-slate-900 shadow-2xs';
-              headerBg = 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border-b border-amber-200 dark:border-amber-900/60';
+              cardAccentBorder = 'border-l-2 border-l-amber-500 border border-black/20 dark:border-white/20 bg-white dark:bg-black shadow-xs';
+              headerBg = 'bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10';
               titleColor = 'text-amber-600 dark:text-amber-400 font-bold';
-              bodyBg = 'bg-amber-50/70 dark:bg-slate-950 border-amber-200/80 dark:border-amber-950';
-              avatarCls = 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800';
+              bodyBg = 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10';
+              avatarCls = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30';
               badgeIcon = <IconRefresh className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />;
             }
 
@@ -519,8 +794,8 @@ export default function SystemAlertChat() {
               <div key={`msg-${msg.id}`} className="flex items-start space-x-2.5 w-full group">
                 
                 {/* Bot Small Avatar */}
-                <div className="flex-shrink-0 mt-0.5">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center border shadow-2xs ${avatarCls}`}>
+                <div className="shrink-0 mt-0.5">
+                  <div className={`w-8 h-8 rounded-md flex items-center justify-center border shadow-2xs ${avatarCls}`}>
                     {badgeIcon}
                   </div>
                 </div>
@@ -528,13 +803,13 @@ export default function SystemAlertChat() {
                 {/* NOC Alert Card */}
                 <div 
                   id={`alert-card-${msg.id}`} 
-                  className={`flex-1 rounded-xl overflow-hidden shadow-2xs transition-all duration-150 hover:shadow-sm ${cardAccentBorder}`}
+                  className={`flex-1 rounded-lg overflow-hidden shadow-2xs transition-all duration-150 hover:border-black/50 dark:hover:border-white/50 ${cardAccentBorder}`}
                 >
                   
                   {/* Card Header */}
-                  <div className={`px-4 py-2.5 ${headerBg} flex items-center justify-between`}>
+                  <div className={`px-3.5 py-2 ${headerBg} flex items-center justify-between`}>
                     <div className="flex items-center space-x-2">
-                      <span className="text-[11.5px] sm:text-[12px] font-extrabold tracking-wider uppercase flex items-center gap-1.5">
+                      <span className="text-[11px] sm:text-[11.5px] font-bold tracking-wider uppercase font-mono text-black dark:text-white">
                         {msg.source_short_badge || 'ALERT MONITORING SISTEM'}
                       </span>
                     </div>
@@ -542,7 +817,7 @@ export default function SystemAlertChat() {
                     <div className="flex items-center space-x-2">
                       {/* Timestamp (hidden if hideTime is active) */}
                       {!hideTime && (
-                        <span className="text-xs sm:text-[12.5px] font-mono font-medium text-slate-500 dark:text-slate-400 mr-1">
+                        <span className="text-xs sm:text-[12px] font-mono font-medium text-black/60 dark:text-white/60 mr-1">
                           {msg.time_seconds || msg.time_human}
                         </span>
                       )}
@@ -553,12 +828,12 @@ export default function SystemAlertChat() {
                           onClick={() => handleScreenshotCard(msg.id)}
                           disabled={capturingId === msg.id}
                           title="Ambil Screenshot Card Alert"
-                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 text-black dark:text-white transition cursor-pointer"
                         >
                           {capturingId === msg.id ? (
-                            <IconRefresh className="w-4 h-4 animate-spin text-sky-500" />
+                            <IconRefresh className="w-3.5 h-3.5 animate-spin text-indigo-600 dark:text-indigo-400" />
                           ) : (
-                            <IconCamera className="w-4 h-4" />
+                            <IconCamera className="w-3.5 h-3.5" />
                           )}
                         </button>
 
@@ -566,14 +841,14 @@ export default function SystemAlertChat() {
                         <button
                           onClick={() => handleCopyText(msg.telegram_text, msg.id)}
                           title="Salin Teks Pesan"
-                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+                          className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 text-black dark:text-white transition cursor-pointer"
                         >
                           {copiedId === msg.id ? (
                             <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                              <IconCheck className="w-4 h-4" />
+                              <IconCheck className="w-3.5 h-3.5" />
                             </span>
                           ) : (
-                            <IconCopy className="w-4 h-4" />
+                            <IconCopy className="w-3.5 h-3.5" />
                           )}
                         </button>
                       </div>
@@ -581,27 +856,27 @@ export default function SystemAlertChat() {
                   </div>
 
                   {/* Card Content */}
-                  <div className="p-4 space-y-3">
+                  <div className="p-3.5 sm:p-4 space-y-2.5">
                     
                     {/* Title */}
                     <div 
-                      className={`text-sm sm:text-[15.5px] font-bold tracking-tight flex items-center gap-1.5 ${titleColor}`}
+                      className={`text-xs sm:text-sm font-bold tracking-tight flex items-center gap-1.5 ${titleColor}`}
                       dangerouslySetInnerHTML={{ __html: msg.title }}
                     />
 
-                    {/* Body Text with Clean Monospace Text (No Blue Background on SN/Redaman) */}
+                    {/* Body Text with Clean Monospace Text */}
                     <div 
-                      className={`text-[13.5px] sm:text-[14.5px] leading-relaxed text-slate-800 dark:text-slate-200 font-mono whitespace-pre-wrap ${bodyBg} p-4 rounded-lg border [&_b]:font-bold [&_b]:text-slate-900 dark:[&_b]:text-white [&_code]:font-mono [&_code]:font-medium [&_code]:text-inherit [&_code]:bg-transparent [&_code]:border-0 [&_code]:p-0 [&_i]:italic [&_i]:text-slate-600 dark:[&_i]:text-slate-400`}
+                      className={`text-xs sm:text-[13px] leading-relaxed text-black dark:text-white font-mono whitespace-pre-wrap ${bodyBg} p-3 sm:p-3.5 rounded-md border [&_b]:font-bold [&_b]:text-black dark:[&_b]:text-white [&_code]:font-mono [&_code]:font-medium [&_code]:text-inherit [&_code]:bg-transparent [&_code]:border-0 [&_code]:p-0 [&_i]:italic [&_i]:text-black/70 dark:[&_i]:text-white/70`}
                       dangerouslySetInnerHTML={{ __html: msg.body }}
                     />
 
                     {/* Footer Info (Hidden if hideTime is active) */}
                     {!hideTime && (
-                      <div className="flex items-center justify-between text-[11px] sm:text-[12px] text-slate-400 dark:text-slate-500 pt-0.5">
+                      <div className="flex items-center justify-between text-[10.5px] sm:text-[11px] text-black/50 dark:text-white/50 pt-0.5 font-mono">
                         <div className="flex items-center space-x-1.5">
-                          <IconClock className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-semibold text-slate-400 dark:text-slate-500">Waktu:</span>
-                          <span className="font-mono font-medium text-slate-600 dark:text-slate-400">{msg.datetime_human}</span>
+                          <IconClock className="w-3 h-3 text-black/40 dark:text-white/40" />
+                          <span>Waktu:</span>
+                          <span className="font-semibold text-black/70 dark:text-white/70">{msg.datetime_human}</span>
                         </div>
                       </div>
                     )}
@@ -613,51 +888,51 @@ export default function SystemAlertChat() {
           })
         )}
 
-        {/* Floating Scroll to Bottom Button - Simplified & Modern */}
+        {/* Floating Scroll to Bottom Button */}
         {!autoScroll && (
           <button
             onClick={scrollToBottom}
             title="Scroll ke Pesan Terbaru"
-            className="fixed bottom-14 right-8 z-30 bg-slate-900/90 hover:bg-slate-900 dark:bg-white/90 dark:hover:bg-white text-white dark:text-slate-900 backdrop-blur-xs px-2.5 py-1 rounded-full shadow-md hover:shadow-lg transition-all duration-150 border border-slate-700/40 dark:border-slate-300/40 flex items-center space-x-1 cursor-pointer"
+            className="fixed bottom-14 right-8 z-30 bg-black/90 hover:bg-black dark:bg-white/90 dark:hover:bg-white text-white dark:text-black backdrop-blur-xs px-3 py-1.5 rounded-md shadow-md hover:shadow-lg transition-all border border-black/30 dark:border-white/30 flex items-center space-x-1.5 cursor-pointer text-xs font-bold"
           >
-            <IconArrowDown className="w-3 h-3 text-sky-400 dark:text-sky-600" />
-            <span className="text-[10px] font-bold">Terbaru</span>
+            <IconArrowDown className="w-3 h-3" />
+            <span>Terbaru</span>
           </button>
         )}
       </div>
 
       {/* ── CHAT FOOTER: STATUS & REAL-TIME SYNC INDICATOR ── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 gap-2 shadow-2xs transition-colors duration-200">
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg px-3.5 py-2 flex flex-col sm:flex-row items-center justify-between text-xs text-black/70 dark:text-white/70 gap-2 shadow-xs transition-colors duration-200">
         <div className="flex items-center space-x-2">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="text-slate-800 dark:text-slate-200 font-bold">
+          <span className="text-black dark:text-white font-bold">
             SNMP Trap & Poller Daemon Aktif
           </span>
-          <span className="text-slate-300 dark:text-slate-700">|</span>
-          <span>
-            Alert terakhir: <strong className="text-slate-800 dark:text-slate-200 font-semibold">{stats.last_alert_ago}</strong>
+          <span className="text-black/20 dark:text-white/20">|</span>
+          <span className="font-mono text-[11px]">
+            Alert terakhir: <strong className="text-black dark:text-white font-semibold">{stats.last_alert_ago}</strong>
           </span>
         </div>
 
         <div className="flex items-center space-x-3">
-          <label className="flex items-center space-x-1.5 cursor-pointer select-none">
+          <label className="flex items-center space-x-1.5 cursor-pointer select-none text-xs">
             <input
               type="checkbox"
               checked={autoScroll}
               onChange={(e) => setAutoScroll(e.target.checked)}
-              className="rounded bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-0 cursor-pointer w-3.5 h-3.5"
+              className="rounded bg-black/5 dark:bg-white/10 border-black/30 dark:border-white/30 text-indigo-600 focus:ring-0 cursor-pointer w-3.5 h-3.5"
             />
-            <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200">Auto-Scroll Pesan</span>
+            <span className="font-medium text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white">Auto-Scroll Pesan</span>
           </label>
 
-          <span className="text-slate-300 dark:text-slate-700">|</span>
+          <span className="text-black/20 dark:text-white/20">|</span>
 
-          <div className="flex items-center space-x-1 text-sky-600 dark:text-sky-400 font-mono text-[10px] font-bold">
+          <div className="flex items-center space-x-1 text-indigo-600 dark:text-indigo-400 font-mono text-[10px] font-bold">
             <span>Dual Sync</span>
-            <IconCheckCheck className="w-3 h-3" />
+            <IconCheckCheck className="w-3.5 h-3.5" />
           </div>
         </div>
       </div>

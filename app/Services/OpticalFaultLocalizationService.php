@@ -89,37 +89,53 @@ class OpticalFaultLocalizationService
             });
 
             $downCount = $downOnus->count();
+            $onlineCount = max(0, $totalOnus - $downCount);
+            $pctVal = $totalOnus > 0 ? round(($downCount / $totalOnus) * 100.0, 1) : 0;
 
-            // 🚨 Deteksi ODP Down:
-            // 1. 100% seluruh pelanggan pada ODP tersebut LOS, ATAU
-            // 2. Untuk ODP dengan >= 6 pelanggan: jika >= 85% pelanggan LOS (mengantisipasi jika ada 1 entri ghost di OLT)
-            $isOdpDown = ($totalOnus >= $minThreshold && $downCount === $totalOnus)
-                || ($totalOnus >= 6 && $downCount >= ($totalOnus - 1) && ($downCount / $totalOnus) >= 0.85);
+            // 🎯 POLA CERDAS ODP:
+            // 1. 100% Total Loss (Seluruh pelanggan pada ODP down)
+            // 2. Parsial Berat (>= 80% down DAN hanya 1 s/d 3 modem yang masih ON)
+            $isOdpDown = ($totalOnus >= 2 && $downCount === $totalOnus)
+                || ($totalOnus >= 4 && $pctVal >= 80.0 && $onlineCount <= 3);
 
             if ($isOdpDown) {
-                $pctVal = round(($downCount / $totalOnus) * 100.0, 1);
-                $alertItem = [
-                    'odp_id'          => $odpId,
-                    'odp_name'        => $odpName,
-                    'odp_code'        => $odpCode,
-                    'odc_name'        => $odcName,
-                    'olt_name'        => $oltName,
-                    'olt_port_ref'    => $portRef,
-                    'total_clients'   => $totalOnus,
-                    'down_clients'    => $downCount,
-                    'down_percentage' => $pctVal,
-                    'sample_onus'     => $downOnus->take(10)->pluck('onu_serial')->toArray(),
-                ];
-
-                $alerts[] = $alertItem;
-
-                // Anti-spam key: hanya kirim sekali saat pertama kali terdeteksi (cooldown 12 jam)
+                // Anti-spam key: hanya evaluasi jika belum dalam cooldown
                 if (!\Illuminate\Support\Facades\Cache::has($massKey)) {
+                    // 🚀 LIVE PROBE VERIFICATION: Verifikasi langsung ke OLT fisik (~35ms)
+                    // Jangan percaya 100% pada database statis jika OLT melaporkan pelanggan sebenarnya hidup!
+                    $liveProbe = \App\Services\Olt\FastOpticalProbeService::probeOdpStatus($odpId);
+                    if (!empty($liveProbe['success'])) {
+                        if (!$liveProbe['is_odp_down']) {
+                            // OLT fisik membuktikan ODP ini TIDAK down (mayoritas pelanggan sehat)!
+                            // Batalkan alert palsu dan sinkronkan data aktif ke DB
+                            \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('active', null, $odpId);
+                            continue;
+                        }
+                        $downCount = $liveProbe['down_count'];
+                        $onlineCount = $liveProbe['online_count'];
+                        $pctVal = $liveProbe['pct_down'];
+                        $probeStates = $liveProbe['onu_states'] ?? [];
+                    } else {
+                        $probeStates = [];
+                    }
+
+                    $alertItem = [
+                        'odp_id'          => $odpId,
+                        'odp_name'        => $odpName,
+                        'odp_code'        => $odpCode,
+                        'odc_name'        => $odcName,
+                        'olt_name'        => $oltName,
+                        'olt_port_ref'    => $portRef,
+                        'total_clients'   => $totalOnus,
+                        'down_clients'    => $downCount,
+                        'down_percentage' => $pctVal,
+                        'sample_onus'     => $downOnus->take(10)->pluck('onu_serial')->toArray(),
+                    ];
+                    $alerts[] = $alertItem;
+
                     \Illuminate\Support\Facades\Cache::put($massKey, true, now()->addHours(12));
 
                     // 🛡️ HIERARCHY GUARD: Jika Interface OLT induk sedang dalam status Gangguan Massal Interface
-                    // (misal SFP dicabut atau kabel feeder utama putus total),
-                    // TAHAN notifikasi ODP individual ini agar grup NOC tidak dibanjiri puluhan alert ODP sekaligus!
                     $isParentInterfaceInMassOutage = false;
                     if (!empty($portRef)) {
                         $cleanP = strtolower(trim($portRef));
@@ -136,42 +152,90 @@ class OpticalFaultLocalizationService
                     if (!$isParentInterfaceInMassOutage) {
                         $cleanOdpTitle = preg_match('/^odp/i', $odpName) ? $odpName : "ODP {$odpName}";
 
-                        // Susun daftar seluruh pelanggan beserta ID Pelanggan dan nilai redamannya
+                        // Susun daftar seluruh pelanggan beserta nilai redaman riil hasil probe
                         $clientLines = [];
+                        $onlineSerials = [];
                         $idx = 1;
                         foreach ($onus as $onu) {
                             $cName = $onu->customer_name ?: "Pelanggan #{$onu->ont_id}";
                             $cId   = $onu->customer_number ?: ($onu->customer_id ? "ID-{$onu->customer_id}" : "ID-{$onu->ont_id}");
-                            $sn    = $onu->onu_serial ?: ($onu->onu_mac ?: '—');
-                            $isDown = ($onu->status !== 'active' || $onu->rx_power === null || !is_numeric($onu->rx_power) || (float)$onu->rx_power <= -32.0);
-                            $badge = $isDown ? "🔴" : "🟢";
-                            $rxStr = ($onu->rx_power !== null && is_numeric($onu->rx_power) && (float)$onu->rx_power > -35.0) ? "{$onu->rx_power} dBm" : "-40.00 dBm (LOS)";
+                            $sn    = strtoupper(trim((string)($onu->onu_serial ?: ($onu->onu_mac ?: '—'))));
+
+                            $isDown = true;
+                            $rxVal = -40.00;
+                            if (isset($probeStates[$sn])) {
+                                $isDown = !$probeStates[$sn]['is_online'];
+                                $rxVal = $probeStates[$sn]['rx_power'] ?? ($isDown ? -40.00 : -21.50);
+                            } else {
+                                $isDown = ($onu->status !== 'active' || $onu->rx_power === null || !is_numeric($onu->rx_power) || (float)$onu->rx_power <= -32.0);
+                                $rxVal = $isDown ? -40.00 : (float)$onu->rx_power;
+                            }
+
+                            if ($isDown) {
+                                $badge = "🔴";
+                                $rxStr = "-40.00 dBm (LOS)";
+                            } else {
+                                $badge = "🟢";
+                                $onlineSerials[] = $sn;
+                                $rxStr = number_format($rxVal, 2, '.', '') . " dBm (ONLINE)";
+                            }
+
                             $clientLines[] = "{$idx}. {$badge} [{$cId}] <b>{$cName}</b>\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
                             $idx++;
                         }
                         $clientListText = implode("\n", $clientLines);
 
+                        // 💾 Bulk sync hanya ke yang offline (exclude modem online!)
+                        \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('inactive', null, $odpId, -40.00, $onlineSerials);
+
+                        if ($downCount === $totalOnus || $onlineCount === 0) {
+                            $smartOdpTitle = "🚨 ALARM GANGGUAN MASSAL: {$cleanOdpTitle} (100% TOTAL LOSS)";
+                            $terdampakOdpText = "🔴 <b>{$totalOnus} dari {$totalOnus} Pelanggan (100% TOTAL LOSS)</b>";
+                        } else {
+                            $smartOdpTitle = "🚨 ALARM GANGGUAN MASSAL: {$cleanOdpTitle} ({$pctVal}% LOSS • {$onlineCount} MODEM MASIH ON)";
+                            $terdampakOdpText = "🔴 <b>{$downCount} dari {$totalOnus} Pelanggan ({$pctVal}% LOSS • {$onlineCount} Masih ON)</b>";
+                        }
+
                         $cleanMassMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
                                         "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
-                                        "<b>• Klien Terdampak:</b> 🔴 <b>{$downCount} dari {$totalOnus} Pelanggan ({$pctVal}% LOS)</b>\n\n" .
-                                        "<b>Daftar Klien Terdampak:</b>\n" .
+                                        "<b>• Klien Terdampak:</b> {$terdampakOdpText}\n\n" .
+                                        "<b>Daftar Klien pada ODP:</b>\n" .
                                         "{$clientListText}\n\n" .
-                                        "<i>Status: Pelanggan pada ODP ini terdeteksi mengalami pemutusan sinyal bersamaan.</i>";
+                                        "<i>Status: Terdeteksi indikasi gangguan fisik kabel distribusi pada splitter ODP.</i>";
 
                         AppNotification::notifyAll(
-                            "🚨 ALARM GANGGUAN MASSAL: {$cleanOdpTitle}",
+                            $smartOdpTitle,
                             $cleanMassMsg,
-                            'NOC',
-                            '/network'
+                            'MASS_OUTAGE',
+                            '/network',
+                            'MASS_OUTAGE',
+                            true,
+                            'POLL_TELEMETRY'
                         );
                     }
                     \Illuminate\Support\Facades\Cache::forget('dashboard_metrics_payload');
                 }
             } else {
-                // Jika sebelumnya ODP ini tercatat sedang gangguan massal dan sekarang telah pulih (downCount < totalOnus):
+                // 🟢 PEMULIHAN ODP: Jika sebelumnya tercatat gangguan massal
                 if (\Illuminate\Support\Facades\Cache::has($massKey)) {
+                    // 🚀 LIVE PROBE RECOVERY VERIFICATION:
+                    // JANGAN langsung kirim pemulihan jika hanya 1-2 pelanggan yang pulih!
+                    // Wajib verifikasi via SNMP ke OLT bahwa minimal 70% pelanggan sudah ON
+                    $probeRec = \App\Services\Olt\FastOpticalProbeService::probeOdpStatus($odpId, null, null, true);
+                    $probeOnline = $probeRec['online_count'] ?? $onlineCount;
+                    $probeStates = $probeRec['onu_states'] ?? [];
+
+                    $minRecoveryCount = (int)ceil($totalOnus * 0.70);
+                    if ($probeOnline < $minRecoveryCount) {
+                        // Masih belum memenuhi syarat pemulihan massal (masih dianggap gangguan)
+                        continue;
+                    }
+
                     \Illuminate\Support\Facades\Cache::forget($massKey);
                     \Illuminate\Support\Facades\Cache::forget('dashboard_metrics_payload');
+
+                    // 💾 Bulk sync DB ke active
+                    \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('active', null, $odpId);
 
                     // Jika port induk sedang dalam pemulihan massal interface, jangan kirim per ODP agar tidak spam
                     $isParentInterfaceInMassOutage = false;
@@ -190,35 +254,53 @@ class OpticalFaultLocalizationService
                     if (!$isParentInterfaceInMassOutage) {
                         $cleanOdpTitle = preg_match('/^odp/i', $odpName) ? $odpName : "ODP {$odpName}";
 
-                        // Susun daftar seluruh pelanggan yang telah pulih beserta ID Pelanggan dan nilai redaman sehatnya
                         $clientRecoveryLines = [];
-                        $recoveredCount = 0;
                         $idx = 1;
                         foreach ($onus as $onu) {
                             $cName = $onu->customer_name ?: "Pelanggan #{$onu->ont_id}";
                             $cId   = $onu->customer_number ?: ($onu->customer_id ? "ID-{$onu->customer_id}" : "ID-{$onu->ont_id}");
-                            $sn    = $onu->onu_serial ?: ($onu->onu_mac ?: '—');
-                            $isUp  = ($onu->status === 'active' && $onu->rx_power !== null && is_numeric($onu->rx_power) && (float)$onu->rx_power > -32.0);
-                            if ($isUp) $recoveredCount++;
+                            $sn    = strtoupper(trim((string)($onu->onu_serial ?: ($onu->onu_mac ?: '—'))));
+
+                            $isUp = true;
+                            $rxVal = null;
+                            if (isset($probeStates[$sn])) {
+                                $isUp = $probeStates[$sn]['is_online'];
+                                $rxVal = $probeStates[$sn]['rx_power'] ?? null;
+                            } else {
+                                $isUp = ($onu->status === 'active' && is_numeric($onu->rx_power) && (float)$onu->rx_power > -32.0);
+                                $rxVal = (float)$onu->rx_power;
+                            }
+
                             $badge = $isUp ? "🟢" : "🔴";
-                            $rxStr = $isUp ? "{$onu->rx_power} dBm" : "-40.00 dBm (LOS)";
+                            if ($isUp && $rxVal !== null && $rxVal > -35.0) {
+                                $rxStr = number_format($rxVal, 2, '.', '') . " dBm (ONLINE)";
+                            } else {
+                                $rxStr = $isUp ? "Pulih Normal" : "-40.00 dBm (LOS)";
+                            }
                             $clientRecoveryLines[] = "{$idx}. {$badge} [{$cId}] <b>{$cName}</b>\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
                             $idx++;
                         }
                         $recoveryDetailText = implode("\n", $clientRecoveryLines);
 
+                        $smartRecTitle = ($probeOnline === $totalOnus)
+                            ? "🟢 PEMULIHAN GANGGUAN MASSAL: {$cleanOdpTitle} (100% PULIH NORMAL)"
+                            : "🟢 PEMULIHAN GANGGUAN MASSAL: {$cleanOdpTitle} ({$probeOnline}/{$totalOnus} KLIEN ONLINE)";
+
                         $cleanRecoveryMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
                                             "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
-                                            "<b>• Status:</b> 🟢 <b>LAYANAN ODP PULIH NORMAL ({$recoveredCount}/{$totalOnus} Klien Online)</b>\n\n" .
-                                            "<b>Daftar Pelanggan Pulih:</b>\n" .
+                                            "<b>• Status:</b> 🟢 <b>LAYANAN ODP PULIH ({$probeOnline}/{$totalOnus} Klien Online)</b>\n\n" .
+                                            "<b>Daftar Seluruh Pelanggan pada ODP:</b>\n" .
                                             "{$recoveryDetailText}\n\n" .
                                             "<i>Koneksi optik pada splitter ODP {$cleanOdpTitle} telah kembali normal dan stabil.</i>";
 
                         AppNotification::notifyAll(
-                            "🟢 PEMULIHAN GANGGUAN MASSAL: {$cleanOdpTitle}",
+                            $smartRecTitle,
                             $cleanRecoveryMsg,
-                            'NOC',
-                            '/network'
+                            'MASS_RECOVERY',
+                            '/network',
+                            'MASS_RECOVERY',
+                            true,
+                            'POLL_TELEMETRY'
                         );
                     }
                 }

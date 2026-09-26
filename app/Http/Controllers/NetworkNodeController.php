@@ -8,9 +8,11 @@ use App\Models\AuditLog;
 use App\Models\OltDevice;
 use App\Models\Customer;
 use App\Models\NetworkCable;
+use App\Models\AppNotification;
 use App\Http\Requests\StoreNetworkNodeRequest;
 use App\Http\Requests\UpdateNetworkNodeRequest;
 use App\Http\Resources\NetworkNodeResource;
+use App\Services\Olt\FastOpticalProbeService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +23,7 @@ class NetworkNodeController extends Controller
     private function checkCrudPermission()
     {
         $user = auth()->user();
-        if ($user && in_array($user->role, ['Teknisi Jointer', 'Customer Service', 'Finance & Billing'])) {
+        if ($user && !in_array($user->role, ['Super Administrator', 'Operator Jaringan'])) {
             abort(response()->json([
                 'message' => "Akses Ditolak: Peran {$user->role} hanya diizinkan melihat data infrastruktur (Read-Only) dan tidak dapat menambah, mengubah, atau menghapus node."
             ], 403));
@@ -36,7 +38,7 @@ class NetworkNodeController extends Controller
     public function gisMapData(Request $request)
     {
         $useCache = !$request->has('nocache');
-        $cacheKey = 'gis_map_data_payload_v1';
+        $cacheKey = 'gis_map_data_payload_v2';
 
         if ($useCache && Cache::has($cacheKey)) {
             return response()->json(Cache::get($cacheKey));
@@ -88,6 +90,13 @@ class NetworkNodeController extends Controller
             ->get()
             ->groupBy('node_id');
 
+        // 3b. Batch Query: Port yang terpakai / memiliki customer di node_id
+        $portsByNode = DB::table('network_ports')
+            ->whereIn('node_id', $nodeIds)
+            ->select('node_id', 'status', 'customer_service_id', 'customer_name_cache')
+            ->get()
+            ->groupBy('node_id');
+
         // 4. Batch Query untuk Customer Services (Auto-detected interface)
         $custServicesByNode = DB::table('network_ports')
             ->join('customer_services', 'customer_services.id', '=', 'network_ports.customer_service_id')
@@ -103,9 +112,22 @@ class NetworkNodeController extends Controller
         $formattedNodes = [];
         foreach ($nodes as $node) {
             $nodeOnts = $ontsByNode->get($node->id) ?? collect();
+            $nodePorts = $portsByNode->get($node->id) ?? collect();
+
+            $usedPortCount = $nodePorts->filter(function ($p) {
+                return !empty($p->customer_service_id) || $p->status === 'used' || !empty($p->customer_name_cache);
+            })->count();
+
+            $totalClients = $nodeOnts->isNotEmpty()
+                ? max($nodeOnts->count(), $usedPortCount)
+                : max($usedPortCount, (int)($node->used_ports ?? 0));
 
             $powers = [];
             $hasLoss = false;
+            $onlineClients = 0;
+            $lossClients = 0;
+            $isLossTotal = false;
+
             if ($node->node_type === 'ODP' && $nodeOnts->isNotEmpty()) {
                 foreach ($nodeOnts as $ont) {
                     $snKey = strtolower(trim($ont->onu_serial ?? ''));
@@ -128,9 +150,15 @@ class NetworkNodeController extends Controller
 
                     if ($isOnline) {
                         $powers[] = $rxPower;
+                        $onlineClients++;
                     } else {
                         $hasLoss = true;
+                        $lossClients++;
                     }
+                }
+
+                if ($totalClients > 0 && $onlineClients === 0) {
+                    $isLossTotal = true;
                 }
             }
 
@@ -139,9 +167,12 @@ class NetworkNodeController extends Controller
             $opticalDbm = $worstPower;
 
             $rangeStr = null;
-            if ($nodeOnts->isNotEmpty()) {
-                if (empty($powers)) {
-                    $rangeStr = "Loss (-∞ dBm)";
+            if ($node->node_type === 'ODP') {
+                if ($totalClients === 0) {
+                    $rangeStr = "Belum ada pelanggan";
+                } elseif ($isLossTotal || empty($powers)) {
+                    $rangeStr = "Loss Total";
+                    $isLossTotal = true;
                 } elseif ($hasLoss) {
                     $rangeStr = "{$bestPower} dBm (Ada LOS)";
                 } elseif ($bestPower === $worstPower) {
@@ -275,6 +306,10 @@ class NetworkNodeController extends Controller
                 'best_rx_power'          => $bestPower,
                 'worst_rx_power'         => $worstPower,
                 'rx_power_range'         => $rangeStr,
+                'total_clients'          => $totalClients,
+                'online_clients'         => $onlineClients,
+                'loss_clients'           => $lossClients,
+                'is_loss_total'          => $isLossTotal,
             ];
         }
 
@@ -807,8 +842,13 @@ class NetworkNodeController extends Controller
     /**
      * Detail ODP: port grid + data pelanggan per port + auto-detect interface OLT + stats redaman (optical power)
      */
-    public function portDetail(NetworkNode $networkNode)
+    public function portDetail(Request $request, NetworkNode $networkNode)
     {
+        $liveProbeResult = null;
+        if ($request->boolean('live') || $request->boolean('refresh')) {
+            $liveProbeResult = FastOpticalProbeService::probeOdpLiveOptical($networkNode->id);
+        }
+
         $this->syncPhysicalPorts($networkNode);
         NetworkPort::recalculateNodeUsedPorts($networkNode->id);
         $node = $networkNode->load(['splitterType', 'oltDevice', 'parent']);
@@ -837,6 +877,8 @@ class NetworkNodeController extends Controller
                 'customer_services.id as service_id',
                 'customer_services.service_number',
                 'customer_services.status as service_status',
+                'customer_services.sobok_service_status',
+                'customer_services.sobok_profile',
                 'service_packages.name as package_name',
                 'ont_registrations.onu_serial',
                 'ont_registrations.onu_mac',
@@ -848,6 +890,29 @@ class NetworkNodeController extends Controller
                 'olt_ports.port_number as olt_port_name'
             )
             ->get();
+
+        // Enrich port data with live ONU telemetry and normalized Sobok service status
+        $liveOnuMap = NetworkNode::getLiveOnuTelemetryMap();
+        foreach ($ports as $port) {
+            $rawStatus = strtoupper($port->sobok_service_status ?: ($port->service_status ?: 'OPEN'));
+            if (in_array($rawStatus, ['BLOKIR', 'ISOLIR', 'SUSPEND', 'SUSPENDED', 'DISABLED'])) {
+                $port->sobok_service_status = 'BLOKIR';
+            } else {
+                $port->sobok_service_status = 'OPEN';
+            }
+
+            $snKey = strtolower(trim($port->onu_serial ?? ''));
+            $macKey = strtolower(trim($port->onu_mac ?? ''));
+            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
+            if ($liveData) {
+                if (isset($liveData['rx_power']) && is_numeric($liveData['rx_power'])) {
+                    $port->rx_power = (float)$liveData['rx_power'];
+                }
+                if (isset($liveData['status'])) {
+                    $port->ont_status = $liveData['status'];
+                }
+            }
+        }
 
         // 1. Auto-detect Interface OLT & Device
         $autoData = $networkNode->getAutoDetectedInterfaceAndOlt();
@@ -894,6 +959,7 @@ class NetworkNodeController extends Controller
             'ports'             => $ports,
             'auto_olt_port_ref' => $autoOltPortRef ?: null,
             'display_olt_ref'   => $displayOltRef,
+            'live_probe'        => $liveProbeResult,
             'attenuation'       => [
                 'connected_count' => $connectedPorts->count(),
                 'avg_rx_power'    => $avgRx,
@@ -1014,6 +1080,80 @@ class NetworkNodeController extends Controller
         );
 
         return new NetworkNodeResource($networkNode->load('splitterType'));
+    }
+
+    /**
+     * Tambah Splitter Pasif Baru ke Node (Ekspansi Kapasitas Port ODP / ODC)
+     */
+    public function addSplitter(Request $request, NetworkNode $networkNode)
+    {
+        $this->checkCrudPermission();
+
+        $validated = $request->validate([
+            'splitter_ratio' => ['required', 'string', 'regex:/^\d+:\d+$/'],
+        ]);
+
+        $ratio = $validated['splitter_ratio'];
+        preg_match('/\d+:(\d+)/', $ratio, $matches);
+        $addedCapacity = isset($matches[1]) ? (int)$matches[1] : 8;
+
+        $oldTotalPorts = (int) $networkNode->total_ports;
+        $newTotalPorts = $oldTotalPorts + $addedCapacity;
+
+        // Ambil konfigurasi splitter saat ini
+        $existingConfig = $networkNode->splitter_config;
+        if (is_string($existingConfig)) {
+            $existingConfig = json_decode($existingConfig, true) ?: [];
+        } elseif (!is_array($existingConfig)) {
+            $existingConfig = [];
+        }
+
+        $existingConfig[] = $ratio;
+        $networkNode->splitter_config = $existingConfig;
+        $networkNode->splitter_count = count($existingConfig);
+        $networkNode->total_ports = $newTotalPorts;
+
+        // Jika belum ada splitter_type_id, pasangkan ke tipe splitter yang cocok
+        if (!$networkNode->splitter_type_id) {
+            $matchingType = DB::table('splitter_types')->where('ratio', $ratio)->first();
+            if ($matchingType) {
+                $networkNode->splitter_type_id = $matchingType->id;
+            }
+        }
+
+        $networkNode->save();
+
+        // Generate port fisik baru
+        $this->syncPhysicalPorts($networkNode);
+        NetworkPort::recalculateNodeUsedPorts($networkNode->id);
+
+        // Hapus cache GIS & metrics
+        Cache::forget('gis_map_data_payload_v2');
+        Cache::forget('dashboard_metrics_payload');
+        Cache::forget('gis_topology_hierarchy_all');
+
+        AuditLog::record(
+            'UPDATE',
+            'Infrastruktur Jaringan',
+            "Penambahan Splitter {$ratio} pada {$networkNode->node_type} {$networkNode->name} ({$networkNode->code}). Kapasitas bertambah dari {$oldTotalPorts} menjadi {$newTotalPorts} port.",
+            ['total_ports' => $oldTotalPorts],
+            ['total_ports' => $newTotalPorts, 'added_splitter' => $ratio]
+        );
+
+        $freshPorts = DB::table('network_ports')
+            ->where('node_id', $networkNode->id)
+            ->get()
+            ->sortBy('port_number', SORT_NATURAL)
+            ->values();
+
+        return response()->json([
+            'status'          => 'success',
+            'message'         => "Splitter {$ratio} berhasil ditambahkan! Kapasitas bertambah {$addedCapacity} port baru (Total: {$newTotalPorts} Port).",
+            'data'            => new NetworkNodeResource($networkNode->load('splitterType')),
+            'ports'           => $freshPorts,
+            'added_capacity'  => $addedCapacity,
+            'new_total_ports' => $newTotalPorts,
+        ]);
     }
 
     private function syncPhysicalPorts(NetworkNode $node)
@@ -1251,5 +1391,239 @@ class NetworkNodeController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * Ambil informasi ODP dan daftar seluruh pelanggan terdampak untuk persiapan Maintenance
+     * GET /api/network-nodes/{networkNode}/maintenance
+     */
+    public function maintenanceInfo(NetworkNode $networkNode)
+    {
+        $node = $networkNode->load(['splitterType', 'oltDevice', 'parent']);
+
+        $ports = DB::table('network_ports')
+            ->leftJoin('customer_services', 'network_ports.customer_service_id', '=', 'customer_services.id')
+            ->leftJoin('customers', 'customer_services.customer_id', '=', 'customers.id')
+            ->leftJoin('service_packages', 'customer_services.service_package_id', '=', 'service_packages.id')
+            ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
+            ->where('network_ports.node_id', $node->id)
+            ->orderByRaw('CAST(network_ports.port_number AS integer) ASC NULLS LAST')
+            ->select(
+                'network_ports.id as port_id',
+                'network_ports.port_number',
+                'network_ports.status as port_status',
+                'network_ports.customer_service_id',
+                'network_ports.customer_name_cache',
+                'customers.id as customer_id',
+                'customers.customer_number',
+                'customers.name as customer_name',
+                'customers.phone as customer_phone',
+                'customer_services.id as service_id',
+                'customer_services.service_number',
+                'service_packages.name as package_name',
+                'ont_registrations.onu_serial',
+                'ont_registrations.rx_power',
+                'ont_registrations.status as ont_status'
+            )
+            ->get();
+
+        $impactedCustomers = [];
+        foreach ($ports as $p) {
+            $name = $p->customer_name ?: ($p->customer_name_cache ?: null);
+            if ($name || $p->customer_service_id || $p->port_status === 'used') {
+                $impactedCustomers[] = [
+                    'port_id'         => $p->port_id,
+                    'port_number'     => $p->port_number,
+                    'name'            => $name ?: "Port {$p->port_number}",
+                    'customer_number' => $p->customer_number ?: '—',
+                    'service_number'  => $p->service_number ?: '—',
+                    'phone'           => $p->customer_phone ?: '—',
+                    'package_name'    => $p->package_name ?: '—',
+                    'onu_serial'      => $p->onu_serial ?: '—',
+                    'rx_power'        => $p->rx_power,
+                    'ont_status'      => $p->ont_status ?: 'unknown',
+                ];
+            }
+        }
+
+        $autoData = $node->getAutoDetectedInterfaceAndOlt();
+        $effectivePortRef = $node->olt_port_ref ?: ($autoData['port_ref'] ?: ($node->parent?->olt_port_ref ?: '—'));
+        $oltDeviceName = $node->oltDevice?->name ?: ($autoData['olt_device']['name'] ?? ($node->parent?->oltDevice?->name ?? 'Auto-Detect OLT'));
+
+        return response()->json([
+            'status' => 'success',
+            'node'   => [
+                'id'           => $node->id,
+                'name'         => $node->name,
+                'code'         => $node->code,
+                'status'       => $node->status,
+                'address'      => $node->address,
+                'total_ports'  => $node->total_ports,
+                'used_ports'   => $node->used_ports,
+                'olt_device'   => $oltDeviceName,
+                'olt_port_ref' => $effectivePortRef,
+                'parent_name'  => $node->parent?->name ?? '—',
+            ],
+            'impacted_count'     => count($impactedCustomers),
+            'impacted_customers' => $impactedCustomers,
+        ]);
+    }
+
+    /**
+     * Mulai atau Selesaikan Maintenance ODP dan kirimkan Notifikasi Alert Sistem & Telegram
+     * POST /api/network-nodes/{networkNode}/maintenance
+     */
+    public function toggleMaintenance(Request $request, NetworkNode $networkNode)
+    {
+        $this->checkCrudPermission();
+        $node = $networkNode->load(['splitterType', 'oltDevice', 'parent']);
+
+        $validated = $request->validate([
+            'action'             => 'required|in:start,end',
+            'notes'              => 'nullable|string|max:1000',
+            'estimated_duration' => 'nullable|string|max:100',
+            'send_notification'  => 'nullable|boolean',
+        ]);
+
+        $action = $validated['action'];
+        $notes = trim($validated['notes'] ?? '');
+        $estimatedDuration = trim($validated['estimated_duration'] ?? '1 Jam');
+        $sendNotif = $request->boolean('send_notification', true);
+
+        // Ambil data pelanggan terdampak
+        $ports = DB::table('network_ports')
+            ->leftJoin('customer_services', 'network_ports.customer_service_id', '=', 'customer_services.id')
+            ->leftJoin('customers', 'customer_services.customer_id', '=', 'customers.id')
+            ->leftJoin('service_packages', 'customer_services.service_package_id', '=', 'service_packages.id')
+            ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
+            ->where('network_ports.node_id', $node->id)
+            ->orderByRaw('CAST(network_ports.port_number AS integer) ASC NULLS LAST')
+            ->select(
+                'network_ports.id as port_id',
+                'network_ports.port_number',
+                'network_ports.status as port_status',
+                'network_ports.customer_service_id',
+                'network_ports.customer_name_cache',
+                'customers.id as customer_id',
+                'customers.customer_number',
+                'customers.name as customer_name',
+                'customers.phone as customer_phone',
+                'customer_services.id as service_id',
+                'customer_services.service_number',
+                'ont_registrations.onu_serial',
+                'ont_registrations.rx_power'
+            )
+            ->get();
+
+        $impactedCustomers = [];
+        foreach ($ports as $p) {
+            $name = $p->customer_name ?: ($p->customer_name_cache ?: null);
+            if ($name || $p->customer_service_id || $p->port_status === 'used') {
+                $impactedCustomers[] = [
+                    'port_number'     => $p->port_number,
+                    'name'            => $name ?: "Port {$p->port_number}",
+                    'customer_number' => $p->customer_number ?: '—',
+                    'service_number'  => $p->service_number ?: '—',
+                    'phone'           => $p->customer_phone ?: '—',
+                    'onu_serial'      => $p->onu_serial ?: '—',
+                    'rx_power'        => $p->rx_power,
+                ];
+            }
+        }
+
+        $impactedCount = count($impactedCustomers);
+
+        $autoData = $node->getAutoDetectedInterfaceAndOlt();
+        $oltPort = $node->olt_port_ref ?: ($autoData['port_ref'] ?: ($node->parent?->olt_port_ref ?: '—'));
+        $oltName = $node->oltDevice?->name ?: ($autoData['olt_device']['name'] ?? ($node->parent?->oltDevice?->name ?? 'Auto-Detect OLT'));
+
+        if ($action === 'start') {
+            $node->status = 'maintenance';
+            $defaultNotes = $notes ?: 'Pemeliharaan rutin / perbaikan jaringan & splitter ODP';
+        } else {
+            $node->status = 'active';
+            $defaultNotes = $notes ?: 'Pemeliharaan telah selesai dilakukan. Layanan kembali beroperasi normal.';
+        }
+        $node->save();
+
+        if ($sendNotif) {
+            if ($action === 'start') {
+                $title = "🛠️ PEMBERITAHUAN MAINTENANCE: ODP {$node->name} ({$impactedCount} Pelanggan Terdampak)";
+                $body = "⚠️ PEMBERITAHUAN PEMELIHARAAN JARINGAN (MAINTENANCE)\n\n"
+                      . "• Node: {$node->name}\n"
+                      . "• Lokasi: " . ($node->address ?: 'Sesuai Data Jaringan') . "\n"
+                      . "• OLT / Interface: {$oltName} ({$oltPort})\n"
+                      . "• Estimasi Waktu Pengerjaan: {$estimatedDuration}\n"
+                      . "• Total Pelanggan Terdampak: {$impactedCount} Pelanggan\n"
+                      . "• Keterangan Pekerjaan: {$defaultNotes}\n\n";
+
+                if ($impactedCount > 0) {
+                    $body .= "📋 Daftar Pelanggan Terdampak:\n";
+                    $listSlice = array_slice($impactedCustomers, 0, 15);
+                    foreach ($listSlice as $idx => $c) {
+                        $custPrefix = ($c['customer_number'] !== '—' && $c['customer_number']) ? "[{$c['customer_number']}] " : "";
+                        $body .= ($idx + 1) . ". [P-{$c['port_number']}] {$custPrefix}{$c['name']}\n";
+                    }
+                    if ($impactedCount > 15) {
+                        $remaining = $impactedCount - 15;
+                        $body .= "... dan {$remaining} pelanggan lainnya.\n";
+                    }
+                } else {
+                    $body .= "ℹ️ Tidak ada pelanggan aktif pada node ini.\n";
+                }
+
+                $body .= "\nMohon maaf atas ketidaknyamanan yang ditimbulkan selama proses pemeliharaan berlangsung.";
+            } else {
+                $title = "🟢 PEMELIHARAAN SELESAI: ODP {$node->name} Kembali Normal";
+                $body = "✅ PEMELIHARAAN JARINGAN SELESAI\n\n"
+                      . "• Node: {$node->name}\n"
+                      . "• Status: Kembali Aktif & Normal\n"
+                      . "• OLT / Interface: {$oltName} ({$oltPort})\n"
+                      . "• Total Pelanggan Terhubung: {$impactedCount} Pelanggan\n"
+                      . "• Catatan: {$defaultNotes}\n\n"
+                      . "Seluruh layanan pelanggan pada node {$node->name} telah pulih dan dapat digunakan normal.";
+            }
+
+            AppNotification::notifyAll(
+                $title,
+                $body,
+                'MAINTENANCE',
+                '/network',
+                'MAINTENANCE',
+                true,
+                'SYSTEM'
+            );
+        }
+
+        AuditLog::record(
+            'UPDATE',
+            'Infrastruktur Jaringan',
+            ($action === 'start' ? "Memulai maintenance" : "Menyelesaikan maintenance") . " pada ODP {$node->name} - {$impactedCount} pelanggan terdampak",
+            null,
+            [
+                'node_id'            => $node->id,
+                'node_name'          => $node->name,
+                'node_code'          => $node->code,
+                'action'             => $action,
+                'status'             => $node->status,
+                'impacted_count'     => $impactedCount,
+                'notes'              => $defaultNotes,
+                'estimated_duration' => $estimatedDuration,
+            ]
+        );
+
+        Cache::forget('gis_map_data_payload_v2');
+        Cache::forget('dashboard_metrics_payload');
+        Cache::forget('gis_topology_hierarchy_all');
+
+        return response()->json([
+            'status'             => 'success',
+            'message'            => $action === 'start'
+                ? "Maintenance untuk ODP {$node->name} berhasil diaktifkan. Notifikasi siaran ({$impactedCount} pelanggan terdampak) telah dikirim."
+                : "Maintenance untuk ODP {$node->name} telah diselesaikan. Node kembali aktif normal.",
+            'node'               => $this->formatNode($node),
+            'impacted_count'     => $impactedCount,
+            'impacted_customers' => $impactedCustomers,
+        ]);
     }
 }

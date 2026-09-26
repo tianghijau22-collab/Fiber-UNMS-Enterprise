@@ -391,11 +391,70 @@ class NotificationController extends Controller
             ->orderBy('created_at', 'desc');
 
         if ($type !== 'ALL') {
-            if ($type === 'MASS_OUTAGE' || $type === 'OUTAGE') {
-                $query->where(function ($q) {
-                    $q->where('type', 'MASS_OUTAGE')
-                      ->orWhere('title', 'like', '%GANGGUAN MASSAL%');
-                })->where('title', 'not like', '%PEMULIHAN%');
+            if ($type === 'OUTAGE_INTERFACE') {
+                $query->where(function ($sub) {
+                    $sub->where('title', 'like', '%Interface%')
+                        ->orWhere('title', 'like', '%Port PON%')
+                        ->orWhere(function ($s2) {
+                            $s2->where('body', 'like', '%• Interface / Port:%')
+                               ->where('body', 'not like', '%• Node ODP:%');
+                        });
+                })->where(function ($sub) {
+                    $sub->where('type', 'MASS_OUTAGE')
+                        ->orWhere('title', 'like', '%GANGGUAN MASSAL%');
+                })->where('title', 'not like', '%PEMULIHAN%')
+                  ->where('title', 'not like', '%PULIH%')
+                  ->where('title', 'not like', '%ODP%')
+                  ->where('body', 'not like', '%• Node ODP:%')
+                  ->where('type', '!=', 'MASS_RECOVERY');
+            } elseif ($type === 'OUTAGE_ODP') {
+                $query->where(function ($sub) {
+                    $sub->where('title', 'like', '%ODP%')
+                        ->orWhere('body', 'like', '%• Node ODP:%')
+                        ->orWhere('body', 'like', '%Node ODP%');
+                })->where(function ($sub) {
+                    $sub->where('type', 'MASS_OUTAGE')
+                        ->orWhere('title', 'like', '%GANGGUAN MASSAL%');
+                })->where('title', 'not like', '%PEMULIHAN%')
+                  ->where('title', 'not like', '%PULIH%')
+                  ->where('type', '!=', 'MASS_RECOVERY');
+            } elseif ($type === 'RECOVERY_INTERFACE') {
+                $query->where(function ($sub) {
+                    $sub->where('title', 'like', '%Interface%')
+                        ->orWhere('title', 'like', '%Port PON%')
+                        ->orWhere(function ($s2) {
+                            $s2->where('body', 'like', '%• Interface / Port:%')
+                               ->where('body', 'not like', '%• Node ODP:%');
+                        });
+                })->where(function ($sub) {
+                    $sub->where('title', 'like', '%PEMULIHAN%')
+                        ->orWhere('title', 'like', '%PULIH%')
+                        ->orWhere('title', 'like', '%RECOVERY%')
+                        ->orWhere('type', 'MASS_RECOVERY');
+                })->where('title', 'not like', '%ODP%')
+                  ->where('body', 'not like', '%• Node ODP:%');
+            } elseif ($type === 'RECOVERY_ODP') {
+                $query->where(function ($sub) {
+                    $sub->where('title', 'like', '%ODP%')
+                        ->orWhere('body', 'like', '%• Node ODP:%')
+                        ->orWhere('body', 'like', '%Node ODP%');
+                })->where(function ($sub) {
+                    $sub->where('title', 'like', '%PEMULIHAN%')
+                        ->orWhere('title', 'like', '%PULIH%')
+                        ->orWhere('title', 'like', '%RECOVERY%')
+                        ->orWhere('type', 'MASS_RECOVERY');
+                });
+            } elseif ($type === 'DYING_GASP') {
+                $query->where(function ($sub) {
+                    $sub->where('title', 'ilike', '%dying gasp%')
+                        ->orWhere('title', 'ilike', '%mati listrik%')
+                        ->orWhere('title', 'ilike', '%power cut%')
+                        ->orWhere('title', 'ilike', '%padam listrik%')
+                        ->orWhere('body', 'ilike', '%dying gasp%')
+                        ->orWhere('body', 'ilike', '%mati listrik%')
+                        ->orWhere('body', 'ilike', '%power cut%')
+                        ->orWhere('body', 'ilike', '%padam listrik%');
+                });
             } elseif ($type === 'TRAP_INDIVIDUAL' || $type === 'TRAP') {
                 $query->where(function ($q) {
                     $q->where('type', 'TRAP_INDIVIDUAL')
@@ -407,6 +466,11 @@ class NotificationController extends Controller
                               ->where('type', '!=', 'MASS_RECOVERY');
                       });
                 });
+            } elseif ($type === 'MASS_OUTAGE' || $type === 'OUTAGE') {
+                $query->where(function ($q) {
+                    $q->where('type', 'MASS_OUTAGE')
+                      ->orWhere('title', 'like', '%GANGGUAN MASSAL%');
+                })->where('title', 'not like', '%PEMULIHAN%');
             } elseif ($type === 'POLL') {
                 $query->where(function ($q) {
                     $q->where('icon', 'POLL_TELEMETRY')
@@ -445,6 +509,30 @@ class NotificationController extends Controller
             $isRecovery = str_contains($n->title, 'PEMULIHAN') || str_contains($n->title, 'PULIH') || str_contains($n->title, 'RECOVERY') || str_contains($n->title, 'NORMAL') || str_contains($n->title, 'RESTORED') || $n->type === 'MASS_RECOVERY';
             $isMassOutage = !$isRecovery && (str_contains($n->title, 'GANGGUAN MASSAL') || $n->type === 'MASS_OUTAGE');
 
+            // Deteksi spesifik jenis alert
+            $isDyingGasp = stripos($n->title, 'dying gasp') !== false 
+                || stripos($n->title, 'mati listrik') !== false 
+                || stripos($n->title, 'power cut') !== false 
+                || stripos($n->title, 'padam listrik') !== false 
+                || stripos($n->body, 'dying gasp') !== false 
+                || stripos($n->body, 'mati listrik') !== false 
+                || stripos($n->body, 'power cut') !== false
+                || stripos($n->body, 'padam listrik') !== false;
+
+            $hasOdpRef = stripos($n->title, 'ODP') !== false 
+                || stripos($n->body, '• Node ODP:') !== false 
+                || stripos($n->body, 'Node ODP') !== false;
+
+            $hasInterfaceRef = stripos($n->title, 'Interface') !== false 
+                || stripos($n->title, 'Port PON') !== false 
+                || (stripos($n->body, '• Interface / Port:') !== false && !$hasOdpRef);
+
+            $isOutageInterface = $isMassOutage && $hasInterfaceRef && !$hasOdpRef;
+            $isOutageOdp = $isMassOutage && $hasOdpRef;
+
+            $isRecoveryInterface = $isRecovery && $hasInterfaceRef && !$hasOdpRef;
+            $isRecoveryOdp = $isRecovery && $hasOdpRef;
+
             // Resolusi identitas sumber: SNMP Trap vs Polling Telemetri
             $source = $n->icon;
             if (!$source || in_array($source, ['NOC', 'SYSTEM', 'MASS_OUTAGE', 'MASS_RECOVERY'])) {
@@ -457,30 +545,54 @@ class NotificationController extends Controller
                 }
             }
 
-            $isTrapIndividual = !$isRecovery && !$isMassOutage && ($n->type === 'TRAP_INDIVIDUAL' || $source === 'SNMP_TRAP');
+            $isTrapIndividual = !$isRecovery && !$isMassOutage && !$isDyingGasp && ($n->type === 'TRAP_INDIVIDUAL' || $source === 'SNMP_TRAP');
+
+            $category = match(true) {
+                $isDyingGasp            => 'DYING_GASP',
+                $isOutageInterface      => 'OUTAGE_INTERFACE',
+                $isOutageOdp            => 'OUTAGE_ODP',
+                $isRecoveryInterface    => 'RECOVERY_INTERFACE',
+                $isRecoveryOdp          => 'RECOVERY_ODP',
+                $isTrapIndividual       => 'TRAP_INDIVIDUAL',
+                $isRecovery             => 'RECOVERY_GENERAL',
+                $isMassOutage           => 'MASS_OUTAGE',
+                default                 => 'SYSTEM',
+            };
 
             $sourceLabel = match(true) {
-                $isMassOutage     => '🚨 Gangguan Massal (ODP / Feeder)',
-                $isRecovery       => '🟢 Pemulihan Sistem & Layanan',
-                $isTrapIndividual => '⚡ SNMP Trap Engine (Alert Perorangan)',
+                $isDyingGasp            => '⚡ Mati Listrik (Dying Gasp)',
+                $isOutageInterface      => '🚨 Gangguan Interface (Port PON)',
+                $isOutageOdp            => '🚨 Gangguan Massal (ODP / Splitter)',
+                $isRecoveryInterface    => '🟢 Pemulihan Interface (Port PON)',
+                $isRecoveryOdp          => '🟢 Pemulihan Layanan (ODP)',
+                $isRecovery             => '🟢 Pemulihan Sistem & Layanan',
+                $isTrapIndividual       => '👤 Alert Perorangan (SNMP Trap)',
                 $source === 'POLL_TELEMETRY' => '🔄 Polling Telemetri Daemon',
-                default           => '🖥️ Sistem Otomatis UNMS',
+                default                 => '🖥️ Sistem Otomatis UNMS',
             };
 
             $sourceCode = match(true) {
-                $isMassOutage     => '#MASS_OUTAGE',
-                $isRecovery       => '#RECOVERY',
-                $isTrapIndividual => '#TRAP',
+                $isDyingGasp            => '#DYING_GASP',
+                $isOutageInterface      => '#OUTAGE_IF',
+                $isOutageOdp            => '#OUTAGE_ODP',
+                $isRecoveryInterface    => '#RECOVERY_IF',
+                $isRecoveryOdp          => '#RECOVERY_ODP',
+                $isRecovery             => '#RECOVERY',
+                $isTrapIndividual       => '#TRAP',
                 $source === 'POLL_TELEMETRY' => '#POLL',
-                default           => '#UNMS',
+                default                 => '#UNMS',
             };
 
             $sourceShortBadge = match(true) {
-                $isMassOutage     => '🚨 GANGGUAN MASSAL',
-                $isRecovery       => '🟢 PEMULIHAN',
-                $isTrapIndividual => '⚡ ALERT PERORANGAN',
+                $isDyingGasp            => '⚡ MATI LISTRIK (DYING GASP)',
+                $isOutageInterface      => '🚨 GANGGUAN INTERFACE',
+                $isOutageOdp            => '🚨 GANGGUAN ODP',
+                $isRecoveryInterface    => '🟢 PEMULIHAN INTERFACE',
+                $isRecoveryOdp          => '🟢 PEMULIHAN ODP',
+                $isRecovery             => '🟢 PEMULIHAN',
+                $isTrapIndividual       => '👤 ALERT PERORANGAN',
                 $source === 'POLL_TELEMETRY' => '🔄 POLLING TELEMETRI',
-                default           => 'SISTEM UNMS',
+                default                 => 'SISTEM UNMS',
             };
 
             // Bersihkan format lama (hapus Diagnosa NOC, Tindakan, ODC Induk, dan footer lama)
@@ -505,41 +617,119 @@ class NotificationController extends Controller
             $isOutage = !$isRecovery && ($isMassOutage || str_contains($n->title, 'GANGGUAN') || str_contains($n->title, 'ALARM') || str_contains($n->title, 'LOS') || str_contains($n->title, 'DOWN') || str_contains($n->title, 'PUTUS') || str_contains($n->title, 'DYING GASP') || str_contains($n->title, 'CRITICAL'));
 
             return [
-                'id'                 => $n->id,
-                'type'               => $n->type,
-                'source'             => $source,
-                'source_code'        => $sourceCode,
-                'source_label'       => $sourceLabel,
-                'source_short_badge' => $sourceShortBadge,
-                'title'              => $n->title,
-                'body'               => $cardBody,
-                'url'                => $n->url,
-                'is_read'            => (bool)$n->is_read,
-                'created_at'         => $n->created_at->toIso8601String(),
-                'time_human'         => $createdCarbon->format('H:i'),
-                'time_seconds'       => $createdCarbon->format('H:i:s'),
-                'date_human'         => $createdCarbon->isoFormat('D MMMM Y'),
-                'datetime_human'     => $createdCarbon->format('d/m/Y H:i:s'),
-                'is_outage'          => $isOutage,
-                'is_recovery'        => $isRecovery,
-                'level'              => $isRecovery ? 'recovery' : ($isOutage ? 'critical' : 'info'),
-                'telegram_text'      => $telegramText,
+                'id'                    => $n->id,
+                'type'                  => $n->type,
+                'category'              => $category,
+                'source'                => $source,
+                'source_code'           => $sourceCode,
+                'source_label'          => $sourceLabel,
+                'source_short_badge'    => $sourceShortBadge,
+                'title'                 => $n->title,
+                'body'                  => $cardBody,
+                'url'                   => $n->url,
+                'is_read'               => (bool)$n->is_read,
+                'created_at'            => $n->created_at->toIso8601String(),
+                'time_human'            => $createdCarbon->format('H:i'),
+                'time_seconds'          => $createdCarbon->format('H:i:s'),
+                'date_human'            => $createdCarbon->isoFormat('D MMMM Y'),
+                'datetime_human'        => $createdCarbon->format('d/m/Y H:i:s'),
+                'is_outage'             => $isOutage,
+                'is_recovery'           => $isRecovery,
+                'is_dying_gasp'         => $isDyingGasp,
+                'is_outage_interface'   => $isOutageInterface,
+                'is_outage_odp'         => $isOutageOdp,
+                'is_recovery_interface' => $isRecoveryInterface,
+                'is_recovery_odp'       => $isRecoveryOdp,
+                'level'                 => $isRecovery ? 'recovery' : ($isOutage ? 'critical' : 'info'),
+                'telegram_text'         => $telegramText,
             ];
         });
 
-        // Metrik Statistik
+        // Metrik Statistik Hari Ini
         $todayStart = now()->startOfDay();
         $totalAll = AppNotification::count();
         $totalToday = AppNotification::where('created_at', '>=', $todayStart)->count();
 
-        $massOutagesToday = AppNotification::where('created_at', '>=', $todayStart)
-            ->where(function ($q) {
-                $q->where('type', 'MASS_OUTAGE')
-                  ->orWhere('title', 'like', '%GANGGUAN MASSAL%');
+        // 1. Gangguan Interface Hari Ini
+        $outageInterfaceToday = AppNotification::where('created_at', '>=', $todayStart)
+            ->where(function ($sub) {
+                $sub->where('title', 'like', '%Interface%')
+                    ->orWhere('title', 'like', '%Port PON%')
+                    ->orWhere(function ($s2) {
+                        $s2->where('body', 'like', '%• Interface / Port:%')
+                           ->where('body', 'not like', '%• Node ODP:%');
+                    });
+            })->where(function ($sub) {
+                $sub->where('type', 'MASS_OUTAGE')
+                    ->orWhere('title', 'like', '%GANGGUAN MASSAL%');
+            })->where('title', 'not like', '%PEMULIHAN%')
+              ->where('title', 'not like', '%PULIH%')
+              ->where('title', 'not like', '%ODP%')
+              ->where('body', 'not like', '%• Node ODP:%')
+              ->where('type', '!=', 'MASS_RECOVERY')
+              ->count();
+
+        // 2. Gangguan ODP Hari Ini
+        $outageOdpToday = AppNotification::where('created_at', '>=', $todayStart)
+            ->where(function ($sub) {
+                $sub->where('title', 'like', '%ODP%')
+                    ->orWhere('body', 'like', '%• Node ODP:%')
+                    ->orWhere('body', 'like', '%Node ODP%');
+            })->where(function ($sub) {
+                $sub->where('type', 'MASS_OUTAGE')
+                    ->orWhere('title', 'like', '%GANGGUAN MASSAL%');
+            })->where('title', 'not like', '%PEMULIHAN%')
+              ->where('title', 'not like', '%PULIH%')
+              ->where('type', '!=', 'MASS_RECOVERY')
+              ->count();
+
+        // 3. Pemulihan Interface Hari Ini
+        $recoveryInterfaceToday = AppNotification::where('created_at', '>=', $todayStart)
+            ->where(function ($sub) {
+                $sub->where('title', 'like', '%Interface%')
+                    ->orWhere('title', 'like', '%Port PON%')
+                    ->orWhere(function ($s2) {
+                        $s2->where('body', 'like', '%• Interface / Port:%')
+                           ->where('body', 'not like', '%• Node ODP:%');
+                    });
+            })->where(function ($sub) {
+                $sub->where('title', 'like', '%PEMULIHAN%')
+                    ->orWhere('title', 'like', '%PULIH%')
+                    ->orWhere('title', 'like', '%RECOVERY%')
+                    ->orWhere('type', 'MASS_RECOVERY');
+            })->where('title', 'not like', '%ODP%')
+              ->where('body', 'not like', '%• Node ODP:%')
+              ->count();
+
+        // 4. Pemulihan ODP Hari Ini
+        $recoveryOdpToday = AppNotification::where('created_at', '>=', $todayStart)
+            ->where(function ($sub) {
+                $sub->where('title', 'like', '%ODP%')
+                    ->orWhere('body', 'like', '%• Node ODP:%')
+                    ->orWhere('body', 'like', '%Node ODP%');
+            })->where(function ($sub) {
+                $sub->where('title', 'like', '%PEMULIHAN%')
+                    ->orWhere('title', 'like', '%PULIH%')
+                    ->orWhere('title', 'like', '%RECOVERY%')
+                    ->orWhere('type', 'MASS_RECOVERY');
             })
-            ->where('title', 'not like', '%PEMULIHAN%')
             ->count();
 
+        // 5. Mati Listrik (Dying Gasp) Hari Ini
+        $dyingGaspToday = AppNotification::where('created_at', '>=', $todayStart)
+            ->where(function ($sub) {
+                $sub->where('title', 'ilike', '%dying gasp%')
+                    ->orWhere('title', 'ilike', '%mati listrik%')
+                    ->orWhere('title', 'ilike', '%power cut%')
+                    ->orWhere('title', 'ilike', '%padam listrik%')
+                    ->orWhere('body', 'ilike', '%dying gasp%')
+                    ->orWhere('body', 'ilike', '%mati listrik%')
+                    ->orWhere('body', 'ilike', '%power cut%')
+                    ->orWhere('body', 'ilike', '%padam listrik%');
+            })
+            ->count();
+
+        // 6. Alert Perorangan Hari Ini
         $trapIndividualToday = AppNotification::where('created_at', '>=', $todayStart)
             ->where(function ($q) {
                 $q->where('type', 'TRAP_INDIVIDUAL')
@@ -553,6 +743,7 @@ class NotificationController extends Controller
             })
             ->count();
 
+        // Polling Telemetri Hari Ini
         $pollingToday = AppNotification::where('created_at', '>=', $todayStart)
             ->where(function ($q) {
                 $q->where('icon', 'POLL_TELEMETRY')
@@ -563,29 +754,25 @@ class NotificationController extends Controller
             ->where('title', 'not like', '%PEMULIHAN%')
             ->count();
 
-        $recoveryToday = AppNotification::where('created_at', '>=', $todayStart)
-            ->where(function ($q) {
-                $q->where('title', 'like', '%PEMULIHAN%')
-                  ->orWhere('title', 'like', '%PULIH%')
-                  ->orWhere('title', 'like', '%RECOVERY%')
-                  ->orWhere('type', 'MASS_RECOVERY');
-            })
-            ->count();
-
         $lastNotif = AppNotification::latest('created_at')->first();
 
         return response()->json([
             'status'   => 'success',
             'messages' => $formatted,
             'stats'    => [
-                'total_all'             => $totalAll,
-                'total_today'           => $totalToday,
-                'mass_outages_today'    => $massOutagesToday,
-                'trap_individual_today' => $trapIndividualToday,
-                'polling_today'         => $pollingToday,
-                'recovery_today'        => $recoveryToday,
-                'last_alert_at'         => $lastNotif?->created_at?->toIso8601String(),
-                'last_alert_ago'        => $lastNotif ? Carbon::parse($lastNotif->created_at)->diffForHumans() : 'Belum ada',
+                'total_all'                => $totalAll,
+                'total_today'              => $totalToday,
+                'outage_interface_today'   => $outageInterfaceToday,
+                'outage_odp_today'         => $outageOdpToday,
+                'recovery_interface_today' => $recoveryInterfaceToday,
+                'recovery_odp_today'       => $recoveryOdpToday,
+                'dying_gasp_today'         => $dyingGaspToday,
+                'trap_individual_today'    => $trapIndividualToday,
+                'mass_outages_today'       => $outageInterfaceToday + $outageOdpToday,
+                'recovery_today'           => $recoveryInterfaceToday + $recoveryOdpToday,
+                'polling_today'            => $pollingToday,
+                'last_alert_at'            => $lastNotif?->created_at?->toIso8601String(),
+                'last_alert_ago'           => $lastNotif ? Carbon::parse($lastNotif->created_at)->diffForHumans() : 'Belum ada',
             ],
             'bot_info' => [
                 'name'     => 'Fiber-UNMS NOC Alert Bot',

@@ -15,7 +15,7 @@ class NetworkCableController extends Controller
     private function checkCrudPermission()
     {
         $user = auth()->user();
-        if ($user && in_array($user->role, ['Teknisi Jointer', 'Customer Service', 'Finance & Billing'])) {
+        if ($user && !in_array($user->role, ['Super Administrator', 'Operator Jaringan'])) {
             abort(response()->json([
                 'message' => "Akses Ditolak: Peran {$user->role} hanya diizinkan melihat data kabel (Read-Only) dan tidak dapat memodifikasi rute kabel."
             ], 403));

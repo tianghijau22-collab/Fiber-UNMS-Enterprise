@@ -188,7 +188,7 @@ class DashboardController extends Controller
                 'name'         => $o->name,
                 'code'         => $o->code,
                 'ip_address'   => $o->ip_address,
-                'status'       => $o->status ?: 'online',
+                'status'       => in_array(strtolower((string)$o->status), ['active', 'online']) ? 'online' : 'offline',
                 'vendor'       => $o->vendor ?: ($devInfo['vendor'] ?? 'HSGQ'),
                 'model'        => $o->model ?: ($devInfo['model'] ?? 'HSGQ-E04 (4-Port EPON)'),
                 'cpu_usage'    => isset($devInfo['cpu_usage']) && (int)$devInfo['cpu_usage'] > 0 ? (int)$devInfo['cpu_usage'] : 9,
@@ -360,7 +360,7 @@ class DashboardController extends Controller
                 $recentAlerts[] = [
                     'id'          => 'mass_outage_' . md5($pKey),
                     'severity'    => 'critical',
-                    'title'       => "🚨 ALARM GANGGUAN MATI MASSAL: {$pTrack['port_ref']} ({$pTrack['olt_name']})",
+                    'title'       => "ALARM GANGGUAN MATI MASSAL: {$pTrack['port_ref']} ({$pTrack['olt_name']})",
                     'description' => "Seluruh {$pTrack['total_clients']} pelanggan pada port PON ini terdeteksi Loss of Signal (Redaman -40.00 dBm). Indikasi kabel feeder/backbone putus atau modul SFP laser mati!",
                     'node'        => $pTrack['port_ref'],
                     'time'        => 'Sedang Berlangsung (Kritis)',
@@ -376,7 +376,7 @@ class DashboardController extends Controller
             $recentAlerts[] = [
                 'id'          => 'onu_los_' . $offOnu['ont']->id,
                 'severity'    => 'critical',
-                'title'       => '🚨 ALARM LOS: Modem ' . $offOnu['cust_name'],
+                'title'       => 'ALARM LOS: Modem ' . $offOnu['cust_name'],
                 'description' => "Modem pelanggan mengalami gangguan Loss of Signal (LOS) dengan redaman {$formattedRx} dBm pada SN {$offOnu['sn']}.",
                 'node'        => 'Pelanggan FTTH',
                 'time'        => 'Sedang Berlangsung',
@@ -441,6 +441,70 @@ class DashboardController extends Controller
             ];
         });
 
+        // ── 9. Distribusi Node per Wilayah / OLT Region ──
+        $allNodes = NetworkNode::with(['parent.parent'])->get();
+        $allOlts = OltDevice::all();
+        $regionalInfra = [];
+
+        foreach ($allOlts as $olt) {
+            $oltId = $olt->id;
+            $oltNodes = $allNodes->filter(function ($n) use ($oltId) {
+                if ($n->olt_device_id == $oltId) return true;
+                if ($n->parent && $n->parent->olt_device_id == $oltId) return true;
+                if ($n->parent && $n->parent->parent && $n->parent->parent->olt_device_id == $oltId) return true;
+                return false;
+            });
+
+            $popCount = $oltNodes->where('node_type', 'POP')->count();
+            $odcCount = $oltNodes->where('node_type', 'ODC')->count();
+            $odpCount = $oltNodes->where('node_type', 'ODP')->count();
+            $totalNodeCount = $popCount + $odcCount + $odpCount;
+            $activeCount = $oltNodes->where('status', 'active')->count();
+
+            $regionalInfra[] = [
+                'olt_id'          => $olt->id,
+                'name'            => $olt->name,
+                'code'            => $olt->code ?: ('OLT-' . $olt->id),
+                'location'        => $olt->location ?: 'Headend Utama',
+                'vendor'          => $olt->vendor ?: 'ZTE/Huawei',
+                'status'          => in_array(strtolower((string)$olt->status), ['active', 'online']) ? 'online' : 'offline',
+                'ip_address'      => $olt->ip_address,
+                'total_nodes'     => $totalNodeCount,
+                'pop_count'       => $popCount,
+                'odc_count'       => $odcCount,
+                'odp_count'       => $odpCount,
+                'active_nodes'    => $activeCount,
+                'healthy_pct'     => $totalNodeCount > 0 ? round(($activeCount / $totalNodeCount) * 100) : 100,
+            ];
+        }
+
+        // Unmapped nodes (if any)
+        $unassignedNodes = $allNodes->filter(function ($n) {
+            $hasOlt = $n->olt_device_id || ($n->parent && $n->parent->olt_device_id) || ($n->parent && $n->parent->parent && $n->parent->parent->olt_device_id);
+            return !$hasOlt;
+        });
+        if ($unassignedNodes->count() > 0) {
+            $popCount = $unassignedNodes->where('node_type', 'POP')->count();
+            $odcCount = $unassignedNodes->where('node_type', 'ODC')->count();
+            $odpCount = $unassignedNodes->where('node_type', 'ODP')->count();
+            $totalNodeCount = $popCount + $odcCount + $odpCount;
+            $regionalInfra[] = [
+                'olt_id'          => null,
+                'name'            => 'Node Global / Tanpa OLT',
+                'code'            => 'UNASSIGNED',
+                'location'        => 'Semua Area',
+                'vendor'          => 'Standar',
+                'status'          => 'online',
+                'ip_address'      => '-',
+                'total_nodes'     => $totalNodeCount,
+                'pop_count'       => $popCount,
+                'odc_count'       => $odcCount,
+                'odp_count'       => $odpCount,
+                'active_nodes'    => $unassignedNodes->where('status', 'active')->count(),
+                'healthy_pct'     => $totalNodeCount > 0 ? round(($unassignedNodes->where('status', 'active')->count() / $totalNodeCount) * 100) : 100,
+            ];
+        }
+
         return [
             'overview' => [
                     'total_olts'          => $totalOlts,
@@ -498,6 +562,7 @@ class DashboardController extends Controller
                 ],
                 'recent_alerts'     => array_values($recentAlerts),
                 'recent_activities' => is_array($recentActivities) ? array_values($recentActivities) : $recentActivities->values()->all(),
+                'regional_infrastructure' => $regionalInfra,
             ];
         });
 

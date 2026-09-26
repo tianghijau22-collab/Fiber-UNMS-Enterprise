@@ -7,21 +7,21 @@ const IconRefresh = ({ className = "w-4 h-4" }) => (
   </svg>
 );
 
-export default function RefreshButton({ isRefreshing, onRefresh, lastUpdatedText = null, label = "Segarkan Data" }) {
+export default function RefreshButton({ isRefreshing, onRefresh, lastUpdatedText = null, label = "Segarkan Data", className = "" }) {
   return (
     <button
       type="button"
       onClick={() => onRefresh && onRefresh(true)}
       disabled={isRefreshing}
       title="Perbarui data dari server secara instan"
-      className="px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs transition-all flex items-center gap-2 disabled:opacity-60"
+      className={`px-3.5 py-2.5 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white text-xs font-semibold rounded-md border border-black/70 dark:border-white/70 hover:border-black dark:hover:border-white shadow-2xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 ${className}`}
     >
       <span className={`text-indigo-600 dark:text-indigo-400 ${isRefreshing ? 'animate-spin' : ''}`}>
         <IconRefresh />
       </span>
-      <span>{isRefreshing ? 'Memperbarui...' : label}</span>
+      <span className="truncate">{isRefreshing ? 'Memperbarui...' : label}</span>
       {lastUpdatedText && (
-        <span className="hidden sm:inline text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+        <span className="hidden lg:inline text-[10px] text-black/60 dark:text-white/60 font-normal">
           • {lastUpdatedText}
         </span>
       )}

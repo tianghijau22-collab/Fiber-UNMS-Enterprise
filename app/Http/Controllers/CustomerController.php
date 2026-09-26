@@ -96,46 +96,93 @@ class CustomerController extends Controller
             $distance = $isOnline ? ($liveData['distance_meters'] ?? ($ont?->distance_meters ?? 650)) : 0;
             $realtimeStatus = $isOnline ? 'Online' : 'Offline / LOS';
 
+            $sobokServiceStatus = strtoupper($primaryService?->sobok_service_status ?: 'OPEN');
+            $isSobokBlocked = ($sobokServiceStatus === 'BLOKIR');
+            $sobokProfile = $primaryService?->sobok_profile;
+            $sobokSyncAt = $primaryService?->sobok_sync_at;
+
+            // Intelligent Loss / Operation Analysis for Field Technicians:
+            if (!$isOnline) {
+                if ($isSobokBlocked) {
+                    $lossReason = 'blocked';
+                    $lossReasonLabel = 'Layanan Terblokir (Isolir)';
+                } else {
+                    $lossReason = 'physical_loss';
+                    $lossReasonLabel = 'Potensi Gangguan Fisik / LOS';
+                }
+            } else {
+                if ($isSobokBlocked) {
+                    $lossReason = 'blocked_online';
+                    $lossReasonLabel = 'Modem Online Tapi Terblokir';
+                } else {
+                    $lossReason = 'normal';
+                    $lossReasonLabel = 'Normal / Aktif';
+                }
+            }
+
             return [
-                'id'                 => $c->id,
-                'customer_number'    => $c->customer_number,
-                'name'               => $c->name,
-                'phone'              => $c->phone,
-                'email'              => $c->email,
-                'address'            => $c->address,
-                'status'             => $realtimeStatus,
-                'is_online'          => $isOnline,
-                'onu_status'         => $realtimeStatus,
-                'service_id'         => $primaryService?->id,
-                'service_number'     => $primaryService?->service_number,
-                'service_package_id' => $primaryService?->service_package_id,
-                'package_name'       => $primaryService?->servicePackage?->name ?? 'Paket Internet',
-                'package_speed'      => $primaryService?->servicePackage?->speed_mbps ?? 20,
-                'ip_address'         => $primaryService?->ip_address ?: '10.20.' . rand(10, 50) . '.' . rand(2, 250),
-                'olt_id'             => $oltId,
-                'olt_name'           => $oltName,
-                'odc_id'             => $odcNode?->id,
-                'odc_name'           => $odcNode?->name,
-                'odc_code'           => $odcNode?->code,
-                'odp_id'             => $odpNode?->id,
-                'odp_name'           => $odpNode?->name,
-                'odp_code'           => $odpNode?->code,
-                'odp_port_id'        => $port?->id,
-                'odp_port_number'    => $port?->port_number,
-                'gpon_interface'     => $interfaceDisplay,
-                'onu_serial'         => $ont?->onu_serial ?? $primaryService?->onu_serial,
-                'onu_mac'            => $ont?->onu_mac,
-                'onu_type'           => $ont?->onu_type ?: 'HGU GPON/EPON',
-                'rx_power'           => $rxPower !== null ? number_format((float)$rxPower, 2, '.', '') : '-40.00',
-                'tx_power'           => $txPower !== null ? number_format((float)$txPower, 2, '.', '') : '0.00',
-                'distance_meters'    => $distance,
-                'created_at'         => $c->created_at,
+                'id'                   => $c->id,
+                'customer_number'      => $c->customer_number,
+                'name'                 => $c->name,
+                'phone'                => $c->phone,
+                'email'                => $c->email,
+                'address'              => $c->address,
+                'status'               => $realtimeStatus,
+                'is_online'            => $isOnline,
+                'onu_status'           => $realtimeStatus,
+                'service_status'       => $sobokServiceStatus,
+                'is_service_blocked'   => $isSobokBlocked,
+                'service_status_label' => $isSobokBlocked ? 'Blokir' : 'Open',
+                'service_profile'      => $sobokProfile,
+                'sobok_sync_at'        => $sobokSyncAt ? (\Carbon\Carbon::parse($sobokSyncAt)->toIso8601String()) : null,
+                'loss_reason'          => $lossReason,
+                'loss_reason_label'    => $lossReasonLabel,
+                'service_id'           => $primaryService?->id,
+                'service_number'       => $primaryService?->service_number,
+                'service_package_id'   => $primaryService?->service_package_id,
+                'package_name'         => $primaryService?->servicePackage?->name ?? 'Paket Internet',
+                'package_speed'        => $primaryService?->servicePackage?->speed_mbps ?? 20,
+                'ip_address'           => $primaryService?->ip_address ?: '10.20.' . rand(10, 50) . '.' . rand(2, 250),
+                'olt_id'               => $oltId,
+                'olt_name'             => $oltName,
+                'odc_id'               => $odcNode?->id,
+                'odc_name'             => $odcNode?->name,
+                'odc_code'             => $odcNode?->code,
+                'odp_id'               => $odpNode?->id,
+                'odp_name'             => $odpNode?->name,
+                'odp_code'             => $odpNode?->code,
+                'odp_port_id'          => $port?->id,
+                'odp_port_number'      => $port?->port_number,
+                'gpon_interface'       => $interfaceDisplay,
+                'onu_serial'           => $ont?->onu_serial ?? $primaryService?->onu_serial,
+                'onu_mac'              => $ont?->onu_mac,
+                'onu_type'             => $ont?->onu_type ?: 'HGU GPON/EPON',
+                'rx_power'             => $rxPower !== null ? number_format((float)$rxPower, 2, '.', '') : '-40.00',
+                'tx_power'             => $txPower !== null ? number_format((float)$txPower, 2, '.', '') : '0.00',
+                'distance_meters'      => $distance,
+                'created_at'           => $c->created_at,
             ];
         });
 
+        $syncMeta = \Illuminate\Support\Facades\Cache::get('sobok_service_status_meta');
+        if (!$syncMeta) {
+            $lastSync = CustomerService::whereNotNull('sobok_sync_at')->max('sobok_sync_at');
+            $openCount = CustomerService::where('sobok_service_status', 'OPEN')->count();
+            $blockedCount = CustomerService::where('sobok_service_status', 'BLOKIR')->count();
+            $syncMeta = [
+                'status'          => 'ready',
+                'domain_used'     => 'sobok.cinoxmedianet.id',
+                'open_count'      => $openCount,
+                'blocked_count'   => $blockedCount,
+                'synced_at'       => $lastSync,
+                'synced_at_human' => $lastSync ? \Carbon\Carbon::parse($lastSync)->diffForHumans() : 'Belum pernah',
+            ];
+        }
+
         return response()->json([
-            'status' => 'success',
-            'data'   => $formatted
+            'status'    => 'success',
+            'data'      => $formatted,
+            'sync_meta' => $syncMeta,
         ]);
     }
 
@@ -369,13 +416,20 @@ class CustomerController extends Controller
                 ->update(['customer_name_cache' => $customer->name]);
 
             // Jika ada perubahan Port ODP
-            if (isset($validated['odp_id'])) {
+            if (array_key_exists('odp_id', $validated)) {
+                // Catat node lama sebelum dilepaskan untuk recalculate used_ports
+                $oldNodeIds = NetworkPort::where('customer_service_id', $service->id)->pluck('node_id')->unique()->filter();
+
                 // Lepaskan port lama
                 NetworkPort::where('customer_service_id', $service->id)->update([
                     'customer_service_id' => null,
                     'customer_name_cache' => null,
                     'status'              => 'available',
                 ]);
+
+                foreach ($oldNodeIds as $oldNid) {
+                    NetworkPort::recalculateNodeUsedPorts($oldNid);
+                }
 
                 // Bind port baru
                 $odpId = $validated['odp_id'];

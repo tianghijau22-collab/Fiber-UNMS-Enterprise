@@ -123,6 +123,9 @@ Route::get('network-nodes/olt-topology',                 [NetworkNodeController:
 Route::get('network-nodes/{networkNode}/children',       [NetworkNodeController::class, 'childrenOf']);
 Route::get('network-nodes/{networkNode}/port-detail',    [NetworkNodeController::class, 'portDetail']);
 Route::get('network-nodes/{networkNode}/odc-ports',      [NetworkNodeController::class, 'odcPortDetail']);
+Route::get('network-nodes/{networkNode}/maintenance',    [NetworkNodeController::class, 'maintenanceInfo']);
+Route::post('network-nodes/{networkNode}/maintenance',   [NetworkNodeController::class, 'toggleMaintenance']);
+Route::post('network-nodes/{networkNode}/add-splitter',  [NetworkNodeController::class, 'addSplitter']);
 Route::get('network-nodes/{networkNode}/pop-cables',     [NetworkCableController::class, 'popCables']);
 Route::put('network-cable-cores/{networkCableCore}',     [NetworkCableController::class, 'updateCore']);
 Route::put('network-cables/{networkCable}/route',            [NetworkCableController::class, 'updateRoute']);
@@ -150,6 +153,8 @@ Route::post('customers/batch-provision', [CustomerController::class, 'batchProvi
 Route::post('customers/sobok/scrape', [\App\Http\Controllers\SobokImportController::class, 'scrape']);
 Route::post('customers/sobok/import-single', [\App\Http\Controllers\SobokImportController::class, 'importSingle']);
 Route::post('customers/sobok/import-batch', [\App\Http\Controllers\SobokImportController::class, 'importBatch']);
+Route::post('customers/sobok/sync-service-status', [\App\Http\Controllers\SobokImportController::class, 'syncServiceStatus']);
+Route::get('customers/sobok/sync-meta', [\App\Http\Controllers\SobokImportController::class, 'getSyncMeta']);
 Route::post('customers/{id}/swap-onu', [CustomerController::class, 'swapOnu']);
 Route::match(['get', 'post'], 'customers/{id}/diagnostics', [CustomerController::class, 'diagnostics']);
 Route::apiResource('customers', CustomerController::class);

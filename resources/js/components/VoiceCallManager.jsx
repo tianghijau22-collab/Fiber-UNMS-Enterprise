@@ -368,18 +368,18 @@ export default function VoiceCallManager({ currentUser }) {
 
       {/* Error Toast Notification */}
       {errorMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] bg-rose-600 text-white px-4 py-2.5 rounded-lg shadow-xl text-xs font-semibold flex items-center gap-2">
-          <span>⚠️ {errorMessage}</span>
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[200] bg-rose-600 text-white px-4 py-2.5 rounded-md shadow-xl text-xs font-semibold flex items-center gap-2">
+          <span>{errorMessage}</span>
         </div>
       )}
 
       {/* ── 1. INCOMING CALL MODAL ───────────────────────────────────────────── */}
       {callState === 'incoming' && (
         <div className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#3f3f46] rounded-xl p-6 w-full max-w-sm text-center shadow-2xl space-y-6">
+          <div className="bg-white dark:bg-black border border-black/20 dark:border-white/20 rounded-lg p-6 w-full max-w-sm text-center shadow-2xl space-y-6">
             <div className="relative inline-block mx-auto">
-              <div className="w-20 h-20 rounded-full bg-blue-50 dark:bg-neutral-900 border-2 border-blue-500 text-blue-600 dark:text-blue-400 flex items-center justify-center text-3xl font-extrabold shadow-lg animate-bounce">
-                📞
+              <div className="w-20 h-20 rounded-full bg-black/5 dark:bg-white/10 border-2 border-blue-500 text-blue-600 dark:text-blue-400 flex items-center justify-center text-3xl font-extrabold shadow-lg animate-bounce">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
               </div>
               <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -388,13 +388,13 @@ export default function VoiceCallManager({ currentUser }) {
             </div>
 
             <div>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-100 dark:bg-neutral-900 text-blue-700 dark:text-blue-400">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/5 dark:bg-white/10 text-blue-700 dark:text-blue-400">
                 Panggilan Suara Masuk
               </span>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-2 font-sans">
+              <h3 className="text-lg font-bold text-black dark:text-white mt-2 font-sans">
                 {peerInfo?.name || 'Pengguna UNMS'}
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
                 {peerInfo?.role || 'Staff'} · Divisi {peerInfo?.division || 'Teknis'}
               </p>
             </div>
@@ -403,15 +403,15 @@ export default function VoiceCallManager({ currentUser }) {
             <div className="flex items-center justify-center gap-4 pt-2">
               <button
                 onClick={() => endCall('rejected')}
-                className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-md font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>✕ Tolak</span>
+                <span>Tolak</span>
               </button>
               <button
                 onClick={answerCall}
-                className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 animate-pulse"
+                className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 animate-pulse cursor-pointer"
               >
-                <span>📞 Terima</span>
+                <span>Terima</span>
               </button>
             </div>
           </div>
@@ -421,19 +421,19 @@ export default function VoiceCallManager({ currentUser }) {
       {/* ── 2. OUTGOING CALL MODAL ───────────────────────────────────────────── */}
       {callState === 'outgoing' && (
         <div className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#3f3f46] rounded-xl p-6 w-full max-w-sm text-center shadow-2xl space-y-6">
-            <div className="w-20 h-20 rounded-full bg-blue-50 dark:bg-neutral-900 border-2 border-blue-500/50 text-blue-600 dark:text-blue-400 flex items-center justify-center text-3xl font-extrabold mx-auto animate-pulse">
-              📡
+          <div className="bg-white dark:bg-black border border-black/20 dark:border-white/20 rounded-lg p-6 w-full max-w-sm text-center shadow-2xl space-y-6">
+            <div className="w-20 h-20 rounded-full bg-black/5 dark:bg-white/10 border-2 border-blue-500/50 text-blue-600 dark:text-blue-400 flex items-center justify-center text-3xl font-extrabold mx-auto animate-pulse">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10 10 0 0114.142 0M1.394 9.393a15 15 0 0121.213 0" /></svg>
             </div>
 
             <div>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-neutral-900 text-slate-600 dark:text-slate-400">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/5 dark:bg-white/10 text-black/60 dark:text-white/60">
                 Memanggil Lawan Bicara...
               </span>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-2 font-sans">
+              <h3 className="text-lg font-bold text-black dark:text-white mt-2 font-sans">
                 {peerInfo?.name || 'Pengguna'}
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
                 {peerInfo?.role || 'Staff'} · {peerInfo?.phone || ''}
               </p>
             </div>
@@ -441,9 +441,9 @@ export default function VoiceCallManager({ currentUser }) {
             <div className="pt-2">
               <button
                 onClick={() => endCall('ended')}
-                className="w-full py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                className="w-full py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-md font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>⏹️ Batalkan Panggilan</span>
+                <span>Batalkan Panggilan</span>
               </button>
             </div>
           </div>
@@ -452,14 +452,14 @@ export default function VoiceCallManager({ currentUser }) {
 
       {/* ── 3. ACTIVE IN-CALL FLOATING BAR / MODAL ───────────────────────────── */}
       {callState === 'connected' && (
-        <div className="fixed bottom-5 right-5 z-[150] bg-white dark:bg-black border-2 border-emerald-500 rounded-xl p-4 shadow-2xl w-80 animate-fade-in space-y-4">
+        <div className="fixed bottom-5 right-5 z-[150] bg-white dark:bg-black border-2 border-emerald-500 rounded-lg p-4 shadow-2xl w-80 animate-fade-in space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-500 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm shrink-0">
-                🎙️
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
               </div>
               <div className="min-w-0">
-                <h4 className="font-bold text-xs text-slate-900 dark:text-white truncate font-sans">
+                <h4 className="font-bold text-xs text-black dark:text-white truncate font-sans">
                   {peerInfo?.name || 'Panggilan Terhubung'}
                 </h4>
                 <div className="flex items-center gap-1.5 mt-0.5">
@@ -477,23 +477,23 @@ export default function VoiceCallManager({ currentUser }) {
           </div>
 
           {/* Controls: Mute, Speaker, Hangup */}
-          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-[#222222]">
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-black/10 dark:border-white/10">
             <button
               onClick={toggleMute}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
+              className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 border cursor-pointer ${
                 isMuted
                   ? 'bg-amber-500 text-white border-amber-600'
-                  : 'bg-slate-100 dark:bg-neutral-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#3f3f46]'
+                  : 'bg-black/5 dark:bg-white/10 text-black dark:text-white border-black/20 dark:border-white/20'
               }`}
             >
-              <span>{isMuted ? '🔇 Unmute' : '🎤 Mute'}</span>
+              <span>{isMuted ? 'Unmute' : 'Mute'}</span>
             </button>
 
             <button
               onClick={() => endCall('ended')}
-              className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5"
+              className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              <span>🔴 Tutup</span>
+              <span>Tutup</span>
             </button>
           </div>
         </div>
@@ -501,8 +501,8 @@ export default function VoiceCallManager({ currentUser }) {
 
       {/* ── 4. CALL ENDED NOTIFICATION ───────────────────────────────────────── */}
       {callState === 'ended' && (
-        <div className="fixed bottom-5 right-5 z-[150] bg-slate-900 text-white border border-slate-700 rounded-xl px-4 py-3 shadow-2xl flex items-center gap-2 text-xs font-semibold animate-fade-in">
-          <span>📞 Panggilan telah berakhir.</span>
+        <div className="fixed bottom-5 right-5 z-[150] bg-black text-white border border-white/20 rounded-md px-4 py-3 shadow-2xl flex items-center gap-2 text-xs font-semibold animate-fade-in">
+          <span>Panggilan telah berakhir.</span>
         </div>
       )}
     </>
