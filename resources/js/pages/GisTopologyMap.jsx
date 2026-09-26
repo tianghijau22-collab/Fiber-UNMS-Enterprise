@@ -352,7 +352,6 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
           <h4 className="text-base font-bold text-black dark:text-white leading-tight">
             {node.name}
           </h4>
-          <p className="text-xs text-black/60 dark:text-white/60 font-mono mt-0.5">{node.code}</p>
         </div>
         <button
           onClick={onClose}
@@ -672,49 +671,6 @@ function TargetPinBanner({ targetPin, onFlyToTarget, onClearTarget }) {
           ✕
         </button>
       </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════════
-   PATH TRACING BREADCRUMB BANNER
-══════════════════════════════════════════════════════════════════ */
-function PathTracingBanner({ pathNodes, activeNodeId, onSelectNode, onClose }) {
-  if (!pathNodes || pathNodes.length <= 1) return null;
-
-  return (
-    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[998] bg-white/95 dark:bg-black/95 text-black dark:text-white backdrop-blur-md border border-cyan-500/70 shadow-2xl rounded-lg px-4 py-2.5 flex items-center gap-3 text-xs max-w-[92vw] overflow-hidden">
-      <div className="flex items-center gap-1.5 font-bold text-cyan-600 dark:text-cyan-400 shrink-0">
-        <span className="w-2 h-2 rounded-full bg-cyan-500 animate-ping"></span>
-        <span>Jalur Traced:</span>
-      </div>
-      <div className="flex items-center gap-2 overflow-x-auto py-0.5 scrollbar-none">
-        {pathNodes.map((pn, idx) => (
-          <React.Fragment key={pn.id}>
-            {idx > 0 && <span className="text-black/40 dark:text-white/40 font-mono shrink-0">➔</span>}
-            <button
-              onClick={() => onSelectNode(pn)}
-              className={`px-2.5 py-1 rounded-md font-bold text-[11px] transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer ${
-                pn.id === activeNodeId
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-black dark:text-white border border-black/20 dark:border-white/20'
-              }`}
-            >
-              <span className="text-[9px] px-1 py-0.2 rounded bg-black/20 dark:bg-white/20 text-black dark:text-white font-mono font-bold">
-                {pn.node_type}
-              </span>
-              <span>{pn.name}</span>
-            </button>
-          </React.Fragment>
-        ))}
-      </div>
-      <button
-        onClick={onClose}
-        className="ml-1 w-6 h-6 flex items-center justify-center rounded-md bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold text-xs transition-colors shrink-0 cursor-pointer"
-        title="Tutup Tracing"
-      >
-        ✕
-      </button>
     </div>
   );
 }
@@ -2128,21 +2084,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             }}
           />
 
-          {/* Path Tracing Hierarchy Breadcrumb Banner */}
-          {tracedPath.pathNodes.length > 1 && (
-            <PathTracingBanner
-              pathNodes={tracedPath.pathNodes}
-              activeNodeId={selectedNode?.id}
-              onSelectNode={node => {
-                setSelectedNode(node);
-                if (node.latitude && node.longitude && externalFlyToRef.current) {
-                  externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
-                }
-              }}
-              onClose={() => setSelectedNode(null)}
-            />
-          )}
-
           {/* Target House Pin Floating Banner */}
           {targetPin && (
             <TargetPinBanner
@@ -2507,21 +2448,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               }
             }}
           />
-
-          {/* Path Tracing Hierarchy Breadcrumb Banner */}
-          {tracedPath.pathNodes.length > 1 && (
-            <PathTracingBanner
-              pathNodes={tracedPath.pathNodes}
-              activeNodeId={selectedNode?.id}
-              onSelectNode={node => {
-                setSelectedNode(node);
-                if (node.latitude && node.longitude && externalFlyToRef.current) {
-                  externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
-                }
-              }}
-              onClose={() => setSelectedNode(null)}
-            />
-          )}
 
           {/* Target House Pin Floating Banner */}
           {targetPin && (
