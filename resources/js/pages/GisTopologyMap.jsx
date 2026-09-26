@@ -1663,9 +1663,24 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   // Target Coordinate / Client Benchmark State
   const [targetCoordModal, setTargetCoordModal] = useState(false);
   const [targetPin, setTargetPin] = useState(null);
-
   // KML / KMZ Import Modal State
   const [kmlImportModal, setKmlImportModal] = useState(false);
+
+  // Tools Dropdown Menu State
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (toolsDropdownRef.current && !toolsDropdownRef.current.contains(e.target)) {
+        setToolsOpen(false);
+      }
+    };
+    if (toolsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [toolsOpen]);
 
   // Esc key listener to exit fullscreen
   useEffect(() => {
@@ -2155,109 +2170,130 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   return (
     <div className="space-y-5 text-black dark:text-white">
       {/* Header Banner */}
-      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-colors duration-300">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <h3 className="text-xl font-bold text-black dark:text-white tracking-tight font-sans">
-              Peta Monitoring
-            </h3>
-          </div>
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 transition-colors duration-300">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <h3 className="text-xl font-bold text-black dark:text-white tracking-tight font-sans">
+            Peta Monitoring
+          </h3>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full lg:w-auto">
-          {/* Action Buttons Grid (2 columns on mobile, flex on desktop) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:items-center gap-2 w-full sm:w-auto">
-            {/* Import KML / KMZ Button */}
-            <button
-              onClick={() => setKmlImportModal(true)}
-              className="w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm text-center"
-              title="Import Data Jaringan dari Google Earth (.kml / .kmz)"
-            >
-              <span>Import KML</span>
-            </button>
-
-            {/* Mode Satelit / Mode Vektor Button */}
-            <button
-              onClick={() => setIsSatellite(!isSatellite)}
-              className="w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 text-center"
-              title="Ganti Tampilan Peta (Satelit / Vektor)"
-            >
-              <span>{isSatellite ? 'Mode Vektor' : 'Mode Satelit'}</span>
-            </button>
-
-            {/* Pusatkan Peta Button */}
-            <button
-              onClick={() => {
-                if (externalRecenterRef.current) {
-                  externalRecenterRef.current();
-                }
-              }}
-              className="w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 text-center"
-              title="Pusatkan Kamera Peta ke Seluruh Node"
-            >
-              <span>Pusatkan Peta</span>
-            </button>
-
-            {/* Target Location / Check Coordinates Button */}
-            <button
-              onClick={() => setTargetCoordModal(true)}
-              className={`w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer text-center ${
-                targetPin
-                  ? 'bg-fuchsia-600 text-white border-fuchsia-600 shadow-sm'
-                  : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
-              }`}
-              title="Cek lokasi rumah pelanggan dari koordinat GPS"
-            >
-              <span>{targetPin ? 'Patokan Aktif' : 'Cek Koordinat'}</span>
-            </button>
-
-            {/* Dedicated Fullscreen Page Button */}
-            <button
-              onClick={() => navigate('/gis-map/fullscreen')}
-              className="w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10 shadow-2xs text-center"
-              title="Buka Peta GIS di Halaman Khusus Layar Penuh (100% Layar Bersih)"
-            >
-              <span>Layar Penuh</span>
-            </button>
-
-            {/* Ruler Button */}
-            <button
-              onClick={() => {
-                const next = !rulerActive;
-                setRulerActive(next);
-                if (!next) setRulerPoints([]);
-              }}
-              className={`w-full sm:w-auto px-3 py-2 rounded-md text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 cursor-pointer text-center ${
-                rulerActive
-                  ? 'bg-amber-500 text-black border-amber-400 shadow-sm'
-                  : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
-              }`}
-            >
-              <span>{rulerActive ? 'Tutup Ukur' : 'Ukur Jarak FO'}</span>
-            </button>
-          </div>
-
-          {/* View Tab Switchers (2 columns on mobile) */}
-          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 pt-1 sm:pt-0 sm:border-l sm:border-black/20 sm:dark:border-white/20 sm:pl-2.5 w-full sm:w-auto">
+        <div className="flex items-center gap-2.5 self-stretch sm:self-auto justify-between sm:justify-end">
+          {/* View Tab Switchers (Segmented control) */}
+          <div className="flex items-center bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 p-1 rounded-lg">
             <button
               onClick={() => setActiveView('map')}
-              className={`w-full sm:w-auto px-3.5 py-2 rounded-md text-xs font-bold border transition-colors cursor-pointer text-center ${activeView === 'map'
-                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
-                }`}
+              className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                activeView === 'map'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white'
+              }`}
             >
               Peta GIS
             </button>
             <button
               onClick={() => setActiveView('list')}
-              className={`w-full sm:w-auto px-3.5 py-2 rounded-md text-xs font-bold border transition-colors cursor-pointer text-center ${activeView === 'list'
-                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                : 'bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10'
-                }`}
+              className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                activeView === 'list'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-black/70 dark:text-white/70 hover:text-black dark:hover:text-white'
+              }`}
             >
               Tabel Redaman
             </button>
+          </div>
+
+          {/* Tools Dropdown Menu Button */}
+          <div className="relative" ref={toolsDropdownRef}>
+            <button
+              onClick={() => setToolsOpen(!toolsOpen)}
+              className="px-3.5 py-2 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-black dark:text-white text-xs font-bold rounded-lg border border-black/20 dark:border-white/20 transition-colors flex items-center gap-2 cursor-pointer shadow-2xs"
+            >
+              <span>Tools</span>
+              <span className={`transition-transform text-[10px] ${toolsOpen ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+
+            {toolsOpen && (
+              <div className="absolute right-0 top-full mt-2 w-60 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xl z-[1100] py-1 divide-y divide-black/10 dark:divide-white/10 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-3.5 py-2 text-[10px] font-bold text-black/50 dark:text-white/50 uppercase tracking-wider">
+                  Opsi Tools Peta
+                </div>
+
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      setKmlImportModal(true);
+                      setToolsOpen(false);
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
+                  >
+                    <span>Import KML / KMZ</span>
+                    <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400">Google Earth</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsSatellite(!isSatellite);
+                      setToolsOpen(false);
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
+                  >
+                    <span>Ganti Tampilan Peta</span>
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10">
+                      {isSatellite ? 'Mode Vektor' : 'Mode Satelit'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (externalRecenterRef.current) {
+                        externalRecenterRef.current();
+                      }
+                      setToolsOpen(false);
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
+                  >
+                    <span>Pusatkan Peta</span>
+                    <span className="text-[10px] text-black/50 dark:text-white/50">Fit Bounds</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setTargetCoordModal(true);
+                      setToolsOpen(false);
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
+                  >
+                    <span>{targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat Rumah'}</span>
+                    <span className="text-[10px] font-mono text-fuchsia-600 dark:text-fuchsia-400">GPS</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const next = !rulerActive;
+                      setRulerActive(next);
+                      if (!next) setRulerPoints([]);
+                      setToolsOpen(false);
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
+                  >
+                    <span>{rulerActive ? 'Tutup Alat Ukur' : 'Ukur Jarak Kabel FO'}</span>
+                    <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400">Ruler</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      navigate('/gis-map/fullscreen');
+                      setToolsOpen(false);
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
+                  >
+                    <span>Buka Layar Penuh</span>
+                    <span className="text-[10px] text-black/50 dark:text-white/50">100% Layar</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
