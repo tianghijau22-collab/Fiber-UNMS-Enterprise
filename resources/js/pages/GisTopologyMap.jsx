@@ -2159,50 +2159,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             />
           )}
 
-          {/* Sub-Second Real-Time SNMP Trap Live Alert Banner */}
-          {recentTrapAlert && (
-            <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-[1000] max-w-lg w-[92%] sm:w-auto px-4 py-2.5 rounded-lg shadow-2xl border backdrop-blur-md flex items-center gap-3 transition-all animate-in slide-in-from-top-4 duration-300 ${
-              recentTrapAlert.is_loss
-                ? 'bg-rose-950/90 border-rose-500 text-white ring-2 ring-rose-500/50'
-                : 'bg-emerald-950/90 border-emerald-500 text-white ring-2 ring-emerald-500/50'
-            }`}>
-              <span className={`w-3 h-3 rounded-full shrink-0 ${recentTrapAlert.is_loss ? 'bg-rose-400 animate-ping' : 'bg-emerald-400 animate-ping'}`} />
-              <div className="text-xs">
-                <div className="font-bold flex items-center gap-1.5">
-                  <span>{recentTrapAlert.event_label}</span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white/20">
-                    {recentTrapAlert.time_human}
-                  </span>
-                </div>
-                <div className="text-[11px] text-white/80 mt-0.5 truncate max-w-sm">
-                  <b>{recentTrapAlert.customer_name}</b> {recentTrapAlert.node_name ? `• ODP ${recentTrapAlert.node_name}` : `• Port ${recentTrapAlert.port}`}
-                </div>
-              </div>
-              {recentTrapAlert.node_id && (
-                <button
-                  onClick={() => {
-                    const matched = safeAllNodes.find(n => n.id === recentTrapAlert.node_id);
-                    if (matched) {
-                      setSelectedNode(matched);
-                      if (externalFlyToRef.current && matched.latitude && matched.longitude) {
-                        externalFlyToRef.current(matched.latitude, matched.longitude, 18);
-                      }
-                    }
-                  }}
-                  className="ml-auto px-2.5 py-1 rounded-md bg-white/20 hover:bg-white/30 text-[10px] font-bold shrink-0 cursor-pointer"
-                >
-                  Lihat ODP ➔
-                </button>
-              )}
-              <button
-                onClick={() => setRecentTrapAlert(null)}
-                className="text-white/60 hover:text-white text-xs font-bold ml-1 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
           {/* Leaflet Map Component */}
           {loading && safeAllNodes.length === 0 ? (
             <div className="flex items-center justify-center h-full w-full bg-white dark:bg-black text-black/60 dark:text-white/60">
