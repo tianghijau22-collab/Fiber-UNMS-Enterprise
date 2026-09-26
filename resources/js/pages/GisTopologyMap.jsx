@@ -732,10 +732,12 @@ function LeafletMap({
   setRulerPoints,
   targetPin,
   isFullscreen,
+  isSatellite = true,
   onToggleFullscreen,
   onSelectNode,
   onOpenStreetView,
   externalFlyToRef,
+  externalRecenterRef,
 }) {
   const safeNodes = useMemo(() => Array.isArray(nodes) ? nodes : (nodes && typeof nodes === 'object' ? Object.values(nodes) : []), [nodes]);
   const safeCables = useMemo(() => Array.isArray(cables) ? cables : (cables && typeof cables === 'object' ? Object.values(cables) : []), [cables]);
@@ -755,7 +757,6 @@ function LeafletMap({
   const rulerActiveRef = useRef(rulerActive);
   const markersMapRef = useRef(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [isSatellite, setIsSatellite] = useState(true);
 
   useEffect(() => {
     rulerActiveRef.current = rulerActive;
@@ -811,10 +812,12 @@ function LeafletMap({
         // Zoom control at bottom right
         Lf.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        const satUrl = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+        const satUrl = isSatellite
+          ? 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
+          : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
         tileLayerRef.current = Lf.tileLayer(satUrl, {
-          maxZoom: 20,
-          subdomains: ['0', '1', '2', '3'],
+          maxZoom: isSatellite ? 20 : 19,
+          subdomains: isSatellite ? ['0', '1', '2', '3'] : ['a', 'b', 'c'],
         }).addTo(map);
 
         // Separate layer groups for high-performance in-place updates
@@ -855,17 +858,16 @@ function LeafletMap({
     };
   }, []);
 
-  // 2. Toggle Satelit Hybrid vs Vektor smoothly
-  const toggleMapMode = () => {
-    if (!mapInstanceRef.current || !leafletRef.current || !tileLayerRef.current) return;
+  // 2. Synchronize Satelit Hybrid vs Vektor tile layer
+  useEffect(() => {
+    if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current) return;
     const Lf = leafletRef.current;
     const map = mapInstanceRef.current;
 
-    map.removeLayer(tileLayerRef.current);
-    const nextMode = !isSatellite;
-    setIsSatellite(nextMode);
-
-    if (nextMode) {
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+    }
+    if (isSatellite) {
       tileLayerRef.current = Lf.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
         maxZoom: 20,
         subdomains: ['0', '1', '2', '3'],
@@ -877,7 +879,7 @@ function LeafletMap({
       });
     }
     tileLayerRef.current.addTo(map);
-  };
+  }, [isSatellite, mapLoaded]);
 
   // 3. Recenter to all nodes
   const handleRecenterMap = useCallback(() => {
@@ -892,6 +894,12 @@ function LeafletMap({
       mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
     }
   }, [safeNodes]);
+
+  useEffect(() => {
+    if (externalRecenterRef) {
+      externalRecenterRef.current = handleRecenterMap;
+    }
+  }, [externalRecenterRef, handleRecenterMap]);
 
   // 4. Ruler Map Click Listener
   useEffect(() => {
@@ -1612,42 +1620,17 @@ function LeafletMap({
         style={{ height: isFullscreen ? '100%' : '640px', minHeight: isFullscreen ? '100%' : '640px' }}
       />
 
-      {/* Floating Mode Controls */}
-      <div className="absolute top-4 right-4 z-[999] flex flex-wrap items-center justify-end gap-2">
-        {!isFullscreen && (
-          <button
-            onClick={onToggleFullscreen}
-            className="px-3.5 py-2 text-xs font-bold rounded-md border shadow-md backdrop-blur-md transition-colors flex items-center gap-1.5 cursor-pointer bg-white/95 dark:bg-black/95 hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white border-black/70 dark:border-white/70"
-            title="Buka Peta Mode Layar Penuh"
-          >
-            <span>Layar Penuh</span>
-          </button>
-        )}
-
-        <button
-          onClick={toggleMapMode}
-          className="px-3.5 py-2 bg-white/95 dark:bg-black/95 hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white text-xs font-bold rounded-md border border-black/70 dark:border-white/70 shadow-md backdrop-blur-md transition-colors flex items-center gap-1.5 cursor-pointer"
-        >
-          <span>{isSatellite ? 'Mode Vektor' : 'Mode Satelit'}</span>
-        </button>
-
-        {selectedNode && selectedNode.latitude && selectedNode.longitude && (
+      {/* Floating Street View Trigger (only when a node is selected) */}
+      {selectedNode && selectedNode.latitude && selectedNode.longitude && (
+        <div className="absolute top-4 right-4 z-[999]">
           <button
             onClick={() => onOpenStreetView(selectedNode.latitude, selectedNode.longitude, selectedNode.name)}
             className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-xs font-bold rounded-md shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <span>Street View 360°</span>
           </button>
-        )}
-      </div>
-
-      <button
-        onClick={handleRecenterMap}
-        className="absolute bottom-4 left-4 z-[999] px-3.5 py-2 bg-white/95 dark:bg-black/95 hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white text-xs font-bold rounded-md border border-black/70 dark:border-white/70 shadow-md backdrop-blur-md flex items-center gap-1.5 transition-colors cursor-pointer"
-        title="Pusatkan Peta ke Lokasi Node"
-      >
-        <span>Pusatkan Peta</span>
-      </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1736,6 +1719,10 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   const [rulerActive, setRulerActive] = useState(false);
   const [rulerPoints, setRulerPoints] = useState([]);
   const externalFlyToRef = useRef(null);
+  const externalRecenterRef = useRef(null);
+
+  // Satellite vs Vector Map Mode State
+  const [isSatellite, setIsSatellite] = useState(true);
 
   // Target Coordinate / Client Benchmark State
   const [targetCoordModal, setTargetCoordModal] = useState(false);
@@ -2042,6 +2029,30 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             >
               <span>Import KML</span>
             </button>
+
+            {/* Mode Satelit / Vektor Button */}
+            <button
+              type="button"
+              onClick={() => setIsSatellite(!isSatellite)}
+              className="px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20"
+              title="Ganti Tampilan Peta (Satelit / Vektor)"
+            >
+              <span>{isSatellite ? 'Mode Vektor' : 'Mode Satelit'}</span>
+            </button>
+
+            {/* Pusatkan Peta Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (externalRecenterRef.current) {
+                  externalRecenterRef.current();
+                }
+              }}
+              className="px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20"
+              title="Pusatkan Kamera Peta ke Seluruh Node"
+            >
+              <span>Pusatkan Peta</span>
+            </button>
           </div>
 
           {/* Search & Type Filter */}
@@ -2178,10 +2189,12 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               setRulerPoints={setRulerPoints}
               targetPin={targetPin}
               isFullscreen={true}
+              isSatellite={isSatellite}
               onToggleFullscreen={() => navigate('/gis-map')}
               onSelectNode={node => setSelectedNode(node)}
               onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
               externalFlyToRef={externalFlyToRef}
+              externalRecenterRef={externalRecenterRef}
             />
           )}
         </div>
@@ -2231,7 +2244,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Import KML / KMZ Button */}
           <button
             onClick={() => setKmlImportModal(true)}
@@ -2239,6 +2252,28 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             title="Import Data Jaringan dari Google Earth (.kml / .kmz)"
           >
             <span>Import KML / KMZ</span>
+          </button>
+
+          {/* Mode Satelit / Mode Vektor Button */}
+          <button
+            onClick={() => setIsSatellite(!isSatellite)}
+            className="px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10"
+            title="Ganti Tampilan Peta (Satelit / Vektor)"
+          >
+            <span>{isSatellite ? 'Mode Vektor' : 'Mode Satelit'}</span>
+          </button>
+
+          {/* Pusatkan Peta Button */}
+          <button
+            onClick={() => {
+              if (externalRecenterRef.current) {
+                externalRecenterRef.current();
+              }
+            }}
+            className="px-3.5 py-2 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/5 text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/10 dark:hover:bg-white/10"
+            title="Pusatkan Kamera Peta ke Seluruh Node"
+          >
+            <span>Pusatkan Peta</span>
           </button>
 
           {/* Target Location / Check Coordinates Button */}
@@ -2526,10 +2561,12 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             setRulerPoints={setRulerPoints}
             targetPin={targetPin}
             isFullscreen={false}
+            isSatellite={isSatellite}
             onToggleFullscreen={() => navigate('/gis-map/fullscreen')}
             onSelectNode={node => setSelectedNode(node)}
             onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
             externalFlyToRef={externalFlyToRef}
+            externalRecenterRef={externalRecenterRef}
           />
         </div>
       ) : (
