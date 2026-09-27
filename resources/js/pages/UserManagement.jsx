@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
 import ConfirmDialog from '../components/ConfirmDialog';
+import LoadingState from '../components/LoadingState';
 
 /* ══════════════════════════════════════════════════════════════════
    ROLE BADGES & RBAC PERMISSION MATRIX DEFINITION (ZERO EMOJI)
@@ -792,33 +793,36 @@ export default function UserManagement() {
             </div>
           </div>
 
-          {/* Desktop Table View */}
-          <div className="hidden md:block bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-black/80 dark:text-white/80">
-                <thead className="bg-black/5 dark:bg-white/5 border-b border-black/20 dark:border-white/20 text-[11px] uppercase font-bold text-black/70 dark:text-white/70 tracking-wider">
-                  <tr>
-                    <th className="px-5 py-3.5">Nama &amp; Email Pegawai</th>
-                    <th className="px-5 py-3.5">Peran (Role RBAC)</th>
-                    <th className="px-5 py-3.5">Divisi &amp; Kontak</th>
-                    <th className="px-5 py-3.5">Status Akun</th>
-                    <th className="px-5 py-3.5 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-black/10 dark:divide-white/10">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={5} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
-                        Memuat data pengguna...
-                      </td>
-                    </tr>
-                  ) : paginatedUsers.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
-                        Tidak ada akun user ditemukan
-                      </td>
-                    </tr>
-                  ) : (
+          {loading ? (
+            <LoadingState
+              type="table"
+              rows={5}
+              title="Memuat Data Pengguna..."
+              description="Mengambil data pegawai, peran RBAC, dan status akun..."
+            />
+          ) : (
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-2xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-black/80 dark:text-white/80">
+                    <thead className="bg-black/5 dark:bg-white/5 border-b border-black/20 dark:border-white/20 text-[11px] uppercase font-bold text-black/70 dark:text-white/70 tracking-wider">
+                      <tr>
+                        <th className="px-5 py-3.5">Nama &amp; Email Pegawai</th>
+                        <th className="px-5 py-3.5">Peran (Role RBAC)</th>
+                        <th className="px-5 py-3.5">Divisi &amp; Kontak</th>
+                        <th className="px-5 py-3.5">Status Akun</th>
+                        <th className="px-5 py-3.5 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black/10 dark:divide-white/10">
+                      {paginatedUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
+                            Tidak ada akun user ditemukan
+                          </td>
+                        </tr>
+                      ) : (
                     paginatedUsers.map(u => (
                       <tr key={u.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                         <td className="px-5 py-3.5">
@@ -999,6 +1003,8 @@ export default function UserManagement() {
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
       )}
 
@@ -1138,8 +1144,8 @@ export default function UserManagement() {
               <tbody className="divide-y divide-black/10 dark:divide-white/10 font-medium">
                 {loadingMatrix ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
-                      Memuat konfigurasi matriks hak akses...
+                    <td colSpan={6} className="p-8 text-center text-xs text-black/40 dark:text-white/40">
+                      <LoadingState type="inline" title="Memuat konfigurasi matriks hak akses..." />
                     </td>
                   </tr>
                 ) : filteredModules.length === 0 ? (

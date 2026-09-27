@@ -12,6 +12,7 @@ import { toPng } from 'html-to-image';
 import KmlImportModal from '../components/KmlImportModal';
 import OdcFilterPopover from '../components/OdcFilterPopover';
 import OdpFilterPopover from '../components/OdpFilterPopover';
+import LoadingState from '../components/LoadingState';
 
 /* ══════════════════════════════════════════════════════════════════
    AUTO CODE GENERATOR HELPERS
@@ -5312,6 +5313,7 @@ export default function NetworkInfrastructure() {
   const [selectedPop, setSelectedPop] = useState(null);
   const [popCables, setPopCables] = useState([]);
   const [loadingCables, setLoadingCables] = useState(false);
+  const [loadingNodes, setLoadingNodes] = useState(true);
 
   // Find active scoped OLT if olt_id is provided in URL
   const activeScopedOlt = useMemo(() => {
@@ -5424,13 +5426,17 @@ export default function NetworkInfrastructure() {
   }, []);
 
   /* Fetch All Nodes */
-  const fetchAllNodes = useCallback(async () => {
+  const fetchAllNodes = useCallback(async (silent = false) => {
+    if (!silent) setLoadingNodes(true);
     try {
       const r = await fetch('/api/network-nodes?per_page=10000');
       const d = await r.json();
       const list = d.data ?? [];
       setAllNodes(list);
     } catch { setAllNodes([]); }
+    finally {
+      if (!silent) setLoadingNodes(false);
+    }
   }, []);
 
   /* Fetch Splitter Types */
@@ -5796,49 +5802,60 @@ export default function NetworkInfrastructure() {
       </div>
 
       {/* TAB CONTENTS */}
-      {activeTab === 'ODP' && (
-        <OdpTabContent
-          odps={odps}
-          onAddNode={t => setModalAddNode({ type: t })}
-          onEditNode={node => setModalAddNode({ type: 'ODP', editNode: node })}
-          onDeleteNode={handleDeleteNode}
-          onDeleteAllNodes={handleDeleteAllNodes}
-          refreshKey={refreshKey}
-          onRefreshGlobal={refreshAll}
-          onOpenKmlModal={isSuperAdmin ? handleOpenKml : null}
+      {loadingNodes ? (
+        <LoadingState
+          type="table"
+          rows={6}
+          title="Memuat Topologi Infrastruktur Jaringan..."
+          description="Mengambil data node POP, ODC, ODP dan konfigurasi splitter/core..."
         />
-      )}
+      ) : (
+        <>
+          {activeTab === 'ODP' && (
+            <OdpTabContent
+              odps={odps}
+              onAddNode={t => setModalAddNode({ type: t })}
+              onEditNode={node => setModalAddNode({ type: 'ODP', editNode: node })}
+              onDeleteNode={handleDeleteNode}
+              onDeleteAllNodes={handleDeleteAllNodes}
+              refreshKey={refreshKey}
+              onRefreshGlobal={refreshAll}
+              onOpenKmlModal={isSuperAdmin ? handleOpenKml : null}
+            />
+          )}
 
-      {activeTab === 'ODC' && (
-        <OdcTabContent
-          onAddNode={t => setModalAddNode({ type: t })}
-          onAddMsNode={() => setModalAddNode({ type: 'ODP', isMsCreation: true })}
-          onEditNode={node => setModalAddNode({ type: node.is_ms_node ? 'ODP' : 'ODC', editNode: node })}
-          onDeleteNode={handleDeleteNode}
-          onDeleteAllNodes={handleDeleteAllNodes}
-          refreshKey={refreshKey}
-          onRefreshGlobal={refreshAll}
-          scopedOltId={scopedOltId}
-          onOpenKmlModal={isSuperAdmin ? handleOpenKml : null}
-        />
-      )}
+          {activeTab === 'ODC' && (
+            <OdcTabContent
+              onAddNode={t => setModalAddNode({ type: t })}
+              onAddMsNode={() => setModalAddNode({ type: 'ODP', isMsCreation: true })}
+              onEditNode={node => setModalAddNode({ type: node.is_ms_node ? 'ODP' : 'ODC', editNode: node })}
+              onDeleteNode={handleDeleteNode}
+              onDeleteAllNodes={handleDeleteAllNodes}
+              refreshKey={refreshKey}
+              onRefreshGlobal={refreshAll}
+              scopedOltId={scopedOltId}
+              onOpenKmlModal={isSuperAdmin ? handleOpenKml : null}
+            />
+          )}
 
-      {activeTab === 'POP' && (
-        <PopTabContent
-          pops={pops}
-          selectedPop={selectedPop}
-          onSelectPop={setSelectedPop}
-          cables={popCables}
-          loadingCables={loadingCables}
-          allNodes={allNodes}
-          onAddCable={() => setShowAddCableModal(true)}
-          onEditCable={cable => { setEditingCable(cable); setCableErr(null); }}
-          onDeleteCable={handleDeleteCable}
-          onRefreshCables={() => fetchPopCables(selectedPop?.id)}
-          onAddNode={t => setModalAddNode({ type: t })}
-          onEditNode={node => setModalAddNode({ type: 'POP', editNode: node })}
-          onDeleteNode={handleDeleteNode}
-        />
+          {activeTab === 'POP' && (
+            <PopTabContent
+              pops={pops}
+              selectedPop={selectedPop}
+              onSelectPop={setSelectedPop}
+              cables={popCables}
+              loadingCables={loadingCables}
+              allNodes={allNodes}
+              onAddCable={() => setShowAddCableModal(true)}
+              onEditCable={cable => { setEditingCable(cable); setCableErr(null); }}
+              onDeleteCable={handleDeleteCable}
+              onRefreshCables={() => fetchPopCables(selectedPop?.id)}
+              onAddNode={t => setModalAddNode({ type: t })}
+              onEditNode={node => setModalAddNode({ type: 'POP', editNode: node })}
+              onDeleteNode={handleDeleteNode}
+            />
+          )}
+        </>
       )}
 
       {/* Modal Add/Edit Node */}

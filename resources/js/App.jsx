@@ -34,14 +34,15 @@ const PublicTicketTracking = lazy(() => import('./pages/PublicTicketTracking.jsx
 const Login = lazy(() => import('./pages/Login.jsx'));
 const NetworkBridgeSetup = lazy(() => import('./pages/NetworkBridgeSetup.jsx'));
 
+import LoadingState from './components/LoadingState.jsx';
+
 function PageLoader() {
   return (
-    <div className="flex items-center justify-center min-h-[50vh] w-full">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-        <span className="text-xs text-slate-400 font-medium">Memuat halaman...</span>
-      </div>
-    </div>
+    <LoadingState
+      type="full"
+      title="Memuat Halaman..."
+      description="Menyiapkan antarmuka dan modul sistem..."
+    />
   );
 }
 

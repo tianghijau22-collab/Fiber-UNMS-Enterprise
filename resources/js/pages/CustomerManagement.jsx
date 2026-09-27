@@ -8,6 +8,7 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
 import CustomerFilterPopover from '../components/CustomerFilterPopover';
 import SobokScraperModal from '../components/SobokScraperModal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 
 // Memoized single row component for ultra-fast, zero-delay typing in Auto-Discovery
 const UnmappedOnuCard = React.memo(function UnmappedOnuCard({
@@ -1412,17 +1413,19 @@ export default function CustomerManagement() {
 
       {/* ─── CUSTOMER DATA CONTENT AREA ─── */}
       {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-20 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-3">
-          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-semibold text-slate-600 dark:text-slate-300">Memuat data pelanggan &amp; telemetri ODP...</p>
-        </div>
+        <LoadingState
+          type="table"
+          rows={6}
+          title="Memuat Data Pelanggan & Telemetri ODP..."
+          description="Mengambil data pelanggan, redaman sinyal optical, dan status ODP..."
+        />
       ) : filtered.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-16 text-center text-slate-400 text-xs space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center mx-auto text-sm font-bold">
-            Data
+        <div className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 py-16 text-center text-black/60 dark:text-white/60 text-xs space-y-2">
+          <div className="w-12 h-12 rounded-lg bg-black/5 dark:bg-white/5 text-black dark:text-white flex items-center justify-center mx-auto text-sm font-bold border border-black/20 dark:border-white/20">
+            DATA
           </div>
-          <p className="font-bold text-sm text-slate-900 dark:text-white">Belum Ada Pelanggan Ditemukan</p>
-          <p className="text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+          <p className="font-bold text-sm text-black dark:text-white">Belum Ada Pelanggan Ditemukan</p>
+          <p className="text-black/60 dark:text-white/60 max-w-sm mx-auto">
             Coba sesuaikan kriteria filter pencarian{canCrud ? ' atau gunakan tombol Registrasi Manual untuk mendaftarkan pelanggan baru.' : '.'}
           </p>
         </div>

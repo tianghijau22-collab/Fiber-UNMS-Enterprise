@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
+import LoadingState from '../components/LoadingState';
 
 /* ── Clean SVG Icons (No Emojis) ── */
 const IconDatabase = () => (
@@ -415,10 +416,12 @@ export default function DatabaseBackup() {
 
       {/* Main Table Content */}
       {loading ? (
-        <div className="bg-white dark:bg-black rounded-2xl border border-slate-200 dark:border-neutral-800 py-16 text-center text-neutral-600 dark:text-neutral-400 text-xs animate-pulse space-y-2">
-          <div className="w-7 h-7 border-2 border-slate-300 dark:border-neutral-700 border-t-black dark:border-t-white rounded-full animate-spin mx-auto" />
-          <p className="font-bold">Memuat daftar cadangan database...</p>
-        </div>
+        <LoadingState
+          type="table"
+          rows={4}
+          title="Memuat Arsip Cadangan Database..."
+          description="Mengambil riwayat snapshot database & file cadangan terenkripsi..."
+        />
       ) : filteredBackups.length === 0 ? (
         <div className="bg-white dark:bg-black rounded-2xl border border-slate-200 dark:border-neutral-800 py-16 text-center text-neutral-600 dark:text-neutral-400 text-xs space-y-2">
           <p className="font-bold text-black dark:text-white text-sm">Belum Ada File Cadangan Database</p>

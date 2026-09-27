@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext';
 import KmlImportModal from '../components/KmlImportModal';
+import LoadingState from '../components/LoadingState';
 
 // TIA-598-A 12 Standard Fiber Colors
 const TIA_COLORS = [
@@ -690,15 +691,16 @@ export default function CableManagement() {
       </div>
 
       {/* Main Table / Card View */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-        {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center text-slate-400 space-y-3">
-            <svg className="w-8 h-8 animate-spin text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <p className="text-sm font-medium">Memuat data infrastruktur kabel...</p>
-          </div>
-        ) : filteredCables.length === 0 ? (
+      {loading ? (
+        <LoadingState
+          type="table"
+          rows={6}
+          title="Memuat Inventaris Kabel Fiber Optik..."
+          description="Mengambil data bentangan kabel, kapasitas core, dan redaman..."
+        />
+      ) : (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+          {filteredCables.length === 0 ? (
           <div className="py-16 text-center space-y-3">
             <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -919,6 +921,7 @@ export default function CableManagement() {
           </div>
         )}
       </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════
          MODAL: TAMBAH KABEL BARU

@@ -5,6 +5,7 @@ import { decimalToDms, parseCoordsInput } from '../utils/coordinateParser.js';
 import { naturalNodeCompare } from '../utils/naturalSort.js';
 import { useAuth } from '../components/AuthContext';
 import KmlImportModal from '../components/KmlImportModal.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 
 /* ══════════════════════════════════════════════════════════════════
    CLEAN & MODERN ENTERPRISE COLOR PALETTE (MATCHING OLT-MANAGEMENT)
@@ -1926,12 +1927,11 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         {/* Fullscreen Map Canvas in Background */}
         <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
           {loading && safeAllNodes.length === 0 ? (
-            <div className="flex items-center justify-center h-full w-full bg-black text-white/60">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <span className="text-xs font-semibold">Memuat peta spasial GIS...</span>
-              </div>
-            </div>
+            <LoadingState
+              type="full"
+              title="Memuat Peta Spasial GIS..."
+              description="Merender layer koordinat POP, ODC, ODP dan jalur kabel..."
+            />
           ) : (
             <LeafletMap
               nodes={nodesWithCoords}
@@ -2737,9 +2737,12 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
       {/* Main Content Area */}
       {loading ? (
-        <div className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 p-12 text-center text-black/60 dark:text-white/60 text-xs animate-pulse">
-          Memuat topologi spasial GIS &amp; data redaman...
-        </div>
+        <LoadingState
+          type="table"
+          rows={6}
+          title="Memuat Topologi Spasial GIS..."
+          description="Mengambil koordinat pemetaan node, bentangan rute kabel, dan telemetri redaman..."
+        />
       ) : activeView === 'map' ? (
         <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xs overflow-hidden relative transition-colors duration-300 min-h-[640px]">
           {/* Node Detail Drawer */}

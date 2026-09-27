@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
+import LoadingState from '../components/LoadingState';
 
 // ─── Professional SVG Icons (No Emojis) ──────────────────────────────────────
 
@@ -823,9 +824,12 @@ export default function PushNotificationBroadcast() {
             </div>
 
             {loadingChannels ? (
-              <div className="p-12 text-center text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
-                <p className="text-sm">Memuat daftar grup Telegram...</p>
-              </div>
+              <LoadingState
+                type="table"
+                rows={4}
+                title="Memuat Kanal & Grup Telegram..."
+                description="Mengambil konfigurasi bot Telegram dan grup tujuan notifikasi..."
+              />
             ) : channels.length === 0 ? (
               <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
                 <div className="text-slate-400 flex justify-center">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { toPng } from 'html-to-image';
+import LoadingState from '../components/LoadingState';
 
 // ─── Inline SVG Icons (Design System Compliant) ──────────────────────────────
 const IconBot = ({ className = "w-4 h-4" }) => (
@@ -690,10 +691,12 @@ export default function SystemAlertChat() {
         className="flex-1 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-3 sm:p-4 overflow-y-auto space-y-3 relative scroll-smooth shadow-xs transition-colors duration-200"
       >
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-full space-y-2.5 py-20 text-black/50 dark:text-white/50">
-            <div className="w-8 h-8 rounded-full border-2 border-black/20 dark:border-white/20 border-t-indigo-600 dark:border-t-indigo-400 animate-spin" />
-            <span className="text-xs font-medium">Memuat log alert realtime...</span>
-          </div>
+          <LoadingState
+            type="card"
+            title="Memuat Log Alert Real-Time..."
+            description="Mengambil data insiden gangguan, broadcast peringatan, dan bot telemetri..."
+            className="my-12 border-0 shadow-none bg-transparent"
+          />
         ) : groupedMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-20 text-black/50 dark:text-white/50 space-y-2.5">
             <div className="w-12 h-12 rounded-lg bg-black/5 dark:bg-white/5 flex items-center justify-center text-black/50 dark:text-white/50 border border-black/20 dark:border-white/20 shadow-2xs">

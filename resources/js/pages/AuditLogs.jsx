@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
+import LoadingState from '../components/LoadingState';
 
 /* ══════════════════════════════════════════════════════════════════
    BADGE HELPERS
@@ -276,63 +277,67 @@ export default function AuditLogs() {
       </div>
 
       {/* Desktop Table Audit Logs */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-            <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              <tr>
-                <th className="p-4">Waktu Kejadian</th>
-                <th className="p-4">Eksekutor / User</th>
-                <th className="p-4">Jenis Aksi</th>
-                <th className="p-4">Modul Terkait</th>
-                <th className="p-4">Deskripsi Aktivitas</th>
-                <th className="p-4">IP Address</th>
-                <th className="p-4 text-right">Metadata</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-              {loading ? (
+      {loading ? (
+        <LoadingState
+          type="table"
+          rows={6}
+          title="Memuat Catatan Aktivitas Audit..."
+          description="Mengambil riwayat log audit, mutasi data, dan sesi pengguna..."
+        />
+      ) : (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
+              <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400 italic">Memuat log aktivitas sistem...</td>
+                  <th className="p-4">Waktu Kejadian</th>
+                  <th className="p-4">Eksekutor / User</th>
+                  <th className="p-4">Jenis Aksi</th>
+                  <th className="p-4">Modul Terkait</th>
+                  <th className="p-4">Deskripsi Aktivitas</th>
+                  <th className="p-4">IP Address</th>
+                  <th className="p-4 text-right">Metadata</th>
                 </tr>
-              ) : logs.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400 italic">Tidak ada log aktivitas ditemukan</td>
-                </tr>
-              ) : (
-                logs.map(log => (
-                  <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="p-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
-                      {new Date(log.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' })}
-                    </td>
-                    <td className="p-4">
-                      <div className="font-bold text-slate-800 dark:text-slate-100">{log.user_name}</div>
-                      <div>{getRoleBadge(log.user_role)}</div>
-                    </td>
-                    <td className="p-4">{getActionBadge(log.action)}</td>
-                    <td className="p-4">
-                      <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded text-[11px]">
-                        {log.module}
-                      </span>
-                    </td>
-                    <td className="p-4 max-w-xs">
-                      <p className="text-slate-800 dark:text-slate-200 leading-snug line-clamp-2">{log.description}</p>
-                    </td>
-                    <td className="p-4 font-mono text-slate-500 text-[11px]">{log.ip_address || '—'}</td>
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => setSelectedLog(log)}
-                        className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg text-xs transition-all"
-                      >
-                        Detail Diff
-                      </button>
-                    </td>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                {logs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-400 italic">Tidak ada log aktivitas ditemukan</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  logs.map(log => (
+                    <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="p-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                        {new Date(log.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' })}
+                      </td>
+                      <td className="p-4">
+                        <div className="font-bold text-slate-800 dark:text-slate-100">{log.user_name}</div>
+                        <div>{getRoleBadge(log.user_role)}</div>
+                      </td>
+                      <td className="p-4">{getActionBadge(log.action)}</td>
+                      <td className="p-4">
+                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded text-[11px]">
+                          {log.module}
+                        </span>
+                      </td>
+                      <td className="p-4 max-w-xs">
+                        <p className="text-slate-800 dark:text-slate-200 leading-snug line-clamp-2">{log.description}</p>
+                      </td>
+                      <td className="p-4 font-mono text-slate-500 text-[11px]">{log.ip_address || '—'}</td>
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => setSelectedLog(log)}
+                          className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg text-xs transition-all"
+                        >
+                          Detail Diff
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
 
         {/* Pagination */}
         {lastPage > 1 && (
@@ -359,6 +364,7 @@ export default function AuditLogs() {
           </div>
         )}
       </div>
+      )}
 
       {/* DETAIL LOG MODAL */}
       {selectedLog && (

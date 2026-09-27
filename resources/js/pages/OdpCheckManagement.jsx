@@ -3,6 +3,7 @@ import { useAuth } from '../components/AuthContext';
 import OdpWatermarkCamera from '../components/OdpWatermarkCamera';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { scanOpmPowerReading } from '../utils/opmOcrScanner';
+import LoadingState from '../components/LoadingState';
 
 /* ── Minimalist Clean SVG Icons ── */
 const IconCamera = () => (
@@ -744,33 +745,35 @@ export default function OdpCheckManagement() {
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-neutral-800">
-            <table className="w-full text-left text-xs text-black dark:text-white">
-              <thead className="bg-slate-50 dark:bg-neutral-950 border-b border-slate-200 dark:border-neutral-800 uppercase tracking-wider text-[11px] font-bold">
-                <tr>
-                  <th className="py-3 px-4">Waktu</th>
-                  <th className="py-3 px-4">Nama / Label ODP</th>
-                  <th className="py-3 px-4">Redaman OPM</th>
-                  <th className="py-3 px-4">Foto Watermark</th>
-                  <th className="py-3 px-4">Teknisi</th>
-                  <th className="py-3 px-4">Telegram</th>
-                  <th className="py-3 px-4 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-neutral-900">
-                {loading ? (
+          {loading ? (
+            <LoadingState
+              type="table"
+              rows={5}
+              title="Memuat Data Pengecekan ODP..."
+              description="Mengambil histori pengukuran redaman OPM dan foto watermark..."
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-neutral-800">
+              <table className="w-full text-left text-xs text-black dark:text-white">
+                <thead className="bg-slate-50 dark:bg-neutral-950 border-b border-slate-200 dark:border-neutral-800 uppercase tracking-wider text-[11px] font-bold">
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-neutral-500 italic">
-                      Memuat data histori pengukuran...
-                    </td>
+                    <th className="py-3 px-4">Waktu</th>
+                    <th className="py-3 px-4">Nama / Label ODP</th>
+                    <th className="py-3 px-4">Redaman OPM</th>
+                    <th className="py-3 px-4">Foto Watermark</th>
+                    <th className="py-3 px-4">Teknisi</th>
+                    <th className="py-3 px-4">Telegram</th>
+                    <th className="py-3 px-4 text-right">Aksi</th>
                   </tr>
-                ) : measurements.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-neutral-500 italic">
-                      Belum ada data pengukuran redaman ODP.
-                    </td>
-                  </tr>
-                ) : (
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-neutral-900">
+                  {measurements.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-neutral-500 italic">
+                        Belum ada data pengukuran redaman ODP.
+                      </td>
+                    </tr>
+                  ) : (
                   measurements.map((m) => (
                     <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-neutral-950/60 transition-colors">
                       <td className="py-3 px-4 font-mono text-[11px] text-neutral-500 whitespace-nowrap">
@@ -867,6 +870,7 @@ export default function OdpCheckManagement() {
               </tbody>
             </table>
           </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (

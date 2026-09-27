@@ -14,6 +14,7 @@ import {
 } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
 import { useTheme } from '../components/ThemeContext.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 
 ChartJS.register(
   CategoryScale,
@@ -570,12 +571,11 @@ export default function ServerMonitoring() {
 
   if (loading && !metrics) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-          Menghubungkan ke daemon telemetri server VPS &amp; VPN Tunnel...
-        </p>
-      </div>
+      <LoadingState
+        type="full"
+        title="Memuat Telemetri Server..."
+        description="Menghubungkan ke daemon server VPS, metrik CPU/RAM, dan status jaringan..."
+      />
     );
   }
 

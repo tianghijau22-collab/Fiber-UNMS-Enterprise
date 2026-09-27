@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
+import LoadingState from '../components/LoadingState';
 
 /* ══════════════════════════════════════════════════════════════════
    BADGES & HELPERS (Clean Enterprise Styling)
@@ -1309,9 +1310,12 @@ export default function TicketManagement() {
 
       {/* Main Content */}
       {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-16 text-center text-slate-400 text-xs animate-pulse">
-          Memuat data tiket...
-        </div>
+        <LoadingState
+          type="table"
+          rows={5}
+          title="Memuat Data Tiket & Insiden..."
+          description="Mengambil daftar tiket penanganan gangguan dan status teknisi lapangan..."
+        />
       ) : tickets.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-16 text-center text-slate-500 text-xs space-y-2">
           <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">Tidak Ada Tiket Ditemukan</p>

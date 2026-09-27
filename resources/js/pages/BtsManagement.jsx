@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import ConfirmDialog from '../components/ConfirmDialog';
+import LoadingState from '../components/LoadingState';
 
 /* ══════════════════════════════════════════════════════════════════
    FIBER OPTIC COLOR STANDARDS (TIA/EIA-598)
@@ -784,9 +785,12 @@ export default function BtsManagement() {
 
       {/* Main Content Area */}
       {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-16 text-center text-slate-400 text-xs animate-pulse">
-          <span>⚡</span> Memuat data site BTS &amp; redaman serat optik...
-        </div>
+        <LoadingState
+          type="table"
+          rows={5}
+          title="Memuat Data Site BTS & Redaman Serat..."
+          description="Mengambil data tower BTS, link radio/fiber optik, dan telemetri sinyal SFP..."
+        />
       ) : filtered.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-16 text-center text-slate-400 text-xs">
           <p className="font-bold text-slate-600 dark:text-slate-300">Belum Ada Site BTS Ditemukan</p>

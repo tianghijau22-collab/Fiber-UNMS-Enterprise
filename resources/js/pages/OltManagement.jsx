@@ -6,6 +6,7 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
 import VpnMikrotikBridgeModal from '../components/VpnMikrotikBridgeModal';
 import FlowingOltTopology from '../components/FlowingOltTopology.jsx';
+import LoadingState from '../components/LoadingState.jsx';
 
 // ─── Icon Components ──────────────────────────────────────────────────────────
 const IconSettings = () => (
@@ -1665,10 +1666,12 @@ export default function OltManagement() {
 
       {/* ── Hardware Telemetry via SNMP ───────────────────────────────────────── */}
       {loading ? (
-        <div className="bg-white dark:bg-black p-12 rounded-lg border border-black/20 dark:border-white/20 shadow-xs text-center text-black/70 dark:text-white/70 flex flex-col items-center space-y-3">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-medium">Melakukan polling SNMP ke telemetri {activeOlt?.name}...</span>
-        </div>
+        <LoadingState
+          type="card"
+          title="Melakukan Polling SNMP Telemetri OLT..."
+          description={`Menghubungkan ke perangkat ${activeOlt?.name || 'OLT'} via SNMP & MIB...`}
+          className="my-4 py-12"
+        />
       ) : oltData && (
         <div className="space-y-6">
 

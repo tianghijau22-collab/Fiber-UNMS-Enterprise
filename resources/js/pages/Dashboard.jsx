@@ -5,6 +5,7 @@ import { useTheme } from '../components/ThemeContext.jsx';
 import { useAuth } from '../components/AuthContext.jsx';
 import RefreshButton from '../components/RefreshButton.jsx';
 import { useAutoRefresh } from '../hooks/useAutoRefresh.js';
+import LoadingState from '../components/LoadingState.jsx';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -352,8 +353,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── SECTION 1: 3 STAT KPI CARDS (PELANGGAN, OLT, TIKET) ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 stagger-enter">
+      {!metrics ? (
+        <LoadingState
+          type="card"
+          title="Memuat Dashboard Monitoring..."
+          description="Mengumpulkan ringkasan metrik jaringan, status perangkat OLT, dan telemetri pelanggan..."
+          className="my-6 py-16"
+        />
+      ) : (
+        <>
+          {/* ── SECTION 1: 3 STAT KPI CARDS (PELANGGAN, OLT, TIKET) ── */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 stagger-enter">
         {/* Card 1: TOTAL PELANGGAN */}
         <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 flex flex-col justify-between shadow-xs">
           <div className="flex items-center justify-between text-black/60 dark:text-white/60">
@@ -765,6 +775,8 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
