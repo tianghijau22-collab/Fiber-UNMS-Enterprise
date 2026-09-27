@@ -52,17 +52,22 @@ export default function LoadingScreen({ message = "Memuat Sistem Fiber-UNMS...",
           <div className="absolute w-24 h-24 rounded-2xl bg-indigo-600/40 animate-ping opacity-50" />
 
           {/* Logo Container */}
-          <div className="relative w-24 h-24 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center shadow-2xl shadow-indigo-500/30">
-            <svg className="w-12 h-12 text-indigo-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
+          <div className="relative w-24 h-24 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center p-3 shadow-2xl shadow-cyan-500/30">
+            <img
+              src="/images/brand/fona_icon_transparent.png"
+              alt="FONA"
+              className="w-full h-full object-contain filter drop-shadow-[0_0_12px_rgba(6,182,212,0.8)] animate-pulse"
+            />
           </div>
         </div>
 
         {/* Brand Text */}
         <div className="space-y-1">
-          <h2 className="text-2xl font-black tracking-tight text-white">Fiber-UNMS</h2>
-          <p className="text-xs text-indigo-400 font-bold uppercase tracking-widest">Enterprise Platform</p>
+          <h2 className="text-2xl font-black tracking-wider text-white flex items-center justify-center gap-1.5">
+            FONA
+            <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">UNMS</span>
+          </h2>
+          <p className="text-xs text-cyan-400 font-bold uppercase tracking-widest">Fiber Optical Network Analysis</p>
         </div>
 
         {/* Status Message */}
@@ -92,8 +97,8 @@ export default function LoadingScreen({ message = "Memuat Sistem Fiber-UNMS...",
       </div>
 
       {/* Footer Info */}
-      <div className="absolute bottom-8 text-[11px] text-slate-600 font-medium">
-        Fiber-UNMS Enterprise v1.0 · Sistem Otentikasi Terenkripsi
+      <div className="absolute bottom-8 text-[11px] text-slate-500 font-medium">
+        FONA Enterprise v1.0 · Sistem Otentikasi Terenkripsi
       </div>
     </div>
   );

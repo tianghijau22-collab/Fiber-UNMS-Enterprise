@@ -430,7 +430,7 @@ export default function NotificationCenter() {
           {/* Footer */}
           <div className="p-2.5 text-center bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800">
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-              Fiber UNMS Real-Time Push Engine
+              FONA Real-Time Push Engine
             </span>
           </div>
         </div>

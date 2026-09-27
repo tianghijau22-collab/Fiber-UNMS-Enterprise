@@ -329,7 +329,7 @@ export default function Dashboard() {
           <div className="flex items-center flex-wrap gap-2 mb-0.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span className="font-bold text-sm text-black dark:text-white uppercase tracking-wider">
-              FIBER-UNMS Monitoring Center
+              FONA Monitoring Center
             </span>
             <span className="text-black/30 dark:text-white/30">|</span>
             {currentDateTime && (

@@ -152,8 +152,8 @@ export default function OdpWatermarkCamera({
 
     // Header Stamp
     ctx.font = `bold ${Math.round(baseFontSize * 1.15)}px sans-serif`;
-    ctx.fillStyle = '#60a5fa'; // Light blue
-    ctx.fillText('FIBER-UNMS FIELD VERIFICATION', 20, height - bannerHeight + 25);
+    ctx.fillStyle = '#38bdf8'; // Electric Cyan
+    ctx.fillText('FONA FIELD VERIFICATION', 20, height - bannerHeight + 25);
 
     // Baris 1: Kode ODP & Port & Redaman
     ctx.font = `bold ${baseFontSize}px monospace`;
@@ -173,7 +173,7 @@ export default function OdpWatermarkCamera({
     ctx.textAlign = 'right';
     ctx.fillText(`${dateStr} ${timeStr}`, width - 20, height - bannerHeight + 52);
     ctx.fillText(`Petugas: ${techName}`, width - 20, height - bannerHeight + 76);
-    ctx.fillText(`Sistem Fiber-UNMS Enterprise`, width - 20, height - bannerHeight + 100);
+    ctx.fillText(`Sistem FONA Enterprise`, width - 20, height - bannerHeight + 100);
 
     return canvas.toDataURL('image/jpeg', 0.88);
   };
@@ -301,7 +301,7 @@ export default function OdpWatermarkCamera({
 
                   {/* Stamp Watermark Live Badge Preview */}
                   <div className="absolute bottom-2 left-2 right-2 bg-black/75 backdrop-blur-xs p-2.5 rounded-xl border border-white/10 text-[10px] text-white space-y-0.5">
-                    <div className="font-bold text-blue-400">FIBER-UNMS WATERMARK ENGINE</div>
+                    <div className="font-bold text-cyan-400">FONA WATERMARK ENGINE</div>
                     <div className="font-mono text-neutral-200">
                       ODP: {metaData.odp_code || 'ODP-AUTO'} | Port: {metaData.port_number || 'Port 1'} | OPM: {metaData.power_measurement_dbm ? `${metaData.power_measurement_dbm} dBm` : '- dBm'}
                     </div>

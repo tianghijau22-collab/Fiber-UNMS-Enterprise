@@ -24,7 +24,7 @@ export default function FiberPortalGate({ onComplete }) {
   const [progress, setProgress]   = useState(0);
   const [wingFlap, setWingFlap]   = useState(false);
   const calledRef                 = useRef(false);
-  const companyName               = 'CINOX MEDIA NETWORK';
+  const companyName               = 'FONA NETWORK';
 
   /* Main timeline */
   useEffect(() => {
@@ -144,31 +144,49 @@ export default function FiberPortalGate({ onComplete }) {
         transition: 'opacity 0.6s ease, transform 0.6s cubic-bezier(0.34,1.56,0.64,1)',
       }}>
 
-        {/* ── BEE LOGO SVG ── */}
+        {/* ── FONA LOGO VISUAL ── */}
         <div style={{
           filter: phase >= 3
-            ? 'drop-shadow(0 0 25px rgba(245,166,35,0.8)) drop-shadow(0 0 50px rgba(245,166,35,0.35))'
+            ? 'drop-shadow(0 0 25px rgba(6,182,212,0.8)) drop-shadow(0 0 50px rgba(2,132,199,0.5))'
             : 'none',
           transition:'filter 0.5s ease',
           animation: phase >= 3 ? 'bee-hover 2.5s ease-in-out infinite' : 'none',
-          marginBottom: 22,
+          marginBottom: 16,
         }}>
-          <BeeLogoSVG wingFlap={wingFlap} />
+          <div style={{
+            width: 130,
+            height: 130,
+            borderRadius: 24,
+            background: 'radial-gradient(circle, rgba(15,23,42,0.9) 0%, rgba(2,6,23,0.95) 100%)',
+            border: '2px solid rgba(6,182,212,0.5)',
+            boxShadow: '0 0 30px rgba(6,182,212,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}>
+            <img
+              src="/images/brand/fona_icon_transparent.png"
+              alt="FONA"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 0 10px rgba(0,245,255,0.7))',
+              }}
+            />
+          </div>
         </div>
 
         {/* ── COMPANY NAME ── */}
         <div style={{
-          fontSize:26, fontWeight:900, letterSpacing:'0.18em',
+          fontSize:28, fontWeight:900, letterSpacing:'0.22em',
           textAlign:'center', minHeight:38,
           fontFamily:"'Segoe UI','Arial',sans-serif",
         }}>
           {companyName.split('').map((ch, i) => {
-            const color = i < 5 ? '#1E3A8A' : i < 11 ? '#DC2626' : '#F5A623';
-            const glow  = i < 5
-              ? '0 0 16px rgba(30,58,138,0.9)'
-              : i < 11
-              ? '0 0 16px rgba(220,38,38,0.9)'
-              : '0 0 16px rgba(245,166,35,0.9)';
+            const color = i < 4 ? '#00f5ff' : '#38bdf8';
+            const glow  = '0 0 16px rgba(6,182,212,0.9)';
             return (
               <span key={i} style={{
                 color, textShadow: glow,
@@ -185,19 +203,19 @@ export default function FiberPortalGate({ onComplete }) {
 
         {/* ── TAGLINE ── */}
         <div style={{
-          fontSize:11, letterSpacing:'0.3em', color:'rgba(255,255,255,0.5)',
+          fontSize:11, letterSpacing:'0.25em', color:'rgba(255,255,255,0.65)',
           fontFamily:'monospace', marginTop:6, textTransform:'uppercase',
           opacity: letterIdx >= companyName.length ? 1 : 0,
           transition:'opacity 0.5s ease 0.2s',
         }}>
-          The &nbsp;<span style={{ color:'#DC2626' }}>Reliable</span>&nbsp; Broadband Access
+          Fiber Optical &nbsp;<span style={{ color:'#00f5ff' }}>Network</span>&nbsp; Analysis
         </div>
 
         {/* ── DIVIDER ── */}
         <div style={{
           width:260, height:2, margin:'16px auto',
-          background:'linear-gradient(to right, transparent, #1E3A8A 20%, #DC2626 50%, #F5A623 80%, transparent)',
-          boxShadow:'0 0 14px rgba(245,166,35,0.5)',
+          background:'linear-gradient(to right, transparent, #0284c7 20%, #00f5ff 50%, #38bdf8 80%, transparent)',
+          boxShadow:'0 0 14px rgba(6,182,212,0.5)',
           opacity: phase >= 4 ? 1 : 0, transition:'opacity 0.5s ease 0.4s',
         }} />
 
@@ -214,8 +232,8 @@ export default function FiberPortalGate({ onComplete }) {
             <div style={{
               height:'100%', borderRadius:3,
               width:`${progress}%`,
-              background:'linear-gradient(90deg, #1E3A8A 0%, #DC2626 50%, #F5A623 100%)',
-              boxShadow:'0 0 14px rgba(245,166,35,0.7)',
+              background:'linear-gradient(90deg, #0284c7 0%, #00f5ff 50%, #38bdf8 100%)',
+              boxShadow:'0 0 14px rgba(6,182,212,0.8)',
               transition:'width 0.04s linear',
             }} />
           </div>

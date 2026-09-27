@@ -65,12 +65,25 @@ export default function Sidebar({ isOpen, onClose }) {
         }`}
       >
         {/* Brand Header */}
-        <div className="h-14 px-5 border-b border-slate-200 dark:border-[#52525b] flex items-center justify-between box-border">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-sm text-slate-900 dark:text-white tracking-wider uppercase font-sans">
-              FIBER-UNMS
-            </span>
-          </div>
+        <div className="h-14 px-4 border-b border-slate-200 dark:border-[#52525b] flex items-center justify-between box-border">
+          <NavLink to="/dashboard" onClick={onClose} className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500/10 to-blue-600/10 dark:from-cyan-500/20 dark:to-blue-600/20 flex items-center justify-center p-1 border border-cyan-500/20 group-hover:scale-105 transition-transform">
+              <img
+                src="/images/brand/fona_icon_transparent.png"
+                alt="FONA Logo"
+                className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]"
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-black text-base text-slate-900 dark:text-white tracking-wider font-sans leading-none flex items-center gap-1">
+                FONA
+                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-semibold uppercase">UNMS</span>
+              </span>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 font-medium tracking-tight mt-0.5 truncate max-w-[120px]">
+                Fiber Optical Network
+              </span>
+            </div>
+          </NavLink>
 
           {/* Close button for mobile drawer */}
           <button
