@@ -387,15 +387,14 @@ export default function Login() {
               ) : (
                 <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   <p>
-                    Sistem <strong className="text-slate-900 dark:text-white">FONA</strong> adalah portal internal operasional jaringan terbatas untuk tim teknis (NOC, Jointer, Teknisi Lapangan, dan CS).
+                    Sistem <strong className="text-slate-900 dark:text-white">FONA</strong> adalah portal internal operasional jaringan terbatas untuk tim teknis.
                   </p>
                   <div className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-[#52525b] rounded-lg space-y-1.5 font-sans">
                     <div className="font-bold text-slate-900 dark:text-white text-[11px]">
                       Prosedur Pembuatan Akun Baru:
                     </div>
                     <ul className="list-disc list-inside space-y-1 text-slate-500 dark:text-slate-400 text-[11px]">
-                      <li>Akun didaftarkan langsung oleh Super Administrator melalui menu <code>/users</code>.</li>
-                      <li>Ajukan permohonan akses akun baru kepada Koordinator NOC atau Manajemen IT.</li>
+                      <li>Akun didaftarkan langsung oleh Super Administrator.</li>
                     </ul>
                   </div>
                 </div>
