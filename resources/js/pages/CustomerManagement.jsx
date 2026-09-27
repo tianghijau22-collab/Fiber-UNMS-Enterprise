@@ -360,7 +360,7 @@ export default function CustomerManagement() {
   }, [odpPortsCache]);
 
   const odpSelectOptions = useMemo(() => {
-    const list = odpNodes.map(odp => {
+    const list = (Array.isArray(odpNodes) ? odpNodes : []).map(odp => {
       const used = odp.used_ports || 0;
       const total = odp.total_ports || 8;
       const free = Math.max(0, total - used);
@@ -471,10 +471,12 @@ export default function CustomerManagement() {
     try {
       const r = await fetch('/api/customers');
       const d = await r.json();
-      if (d.data) {
+      if (Array.isArray(d?.data)) {
         setCustomers(d.data);
+      } else if (Array.isArray(d)) {
+        setCustomers(d);
       }
-      if (d.sync_meta) {
+      if (d?.sync_meta) {
         setSyncMeta(d.sync_meta);
       }
     } catch {
@@ -521,7 +523,8 @@ export default function CustomerManagement() {
     try {
       const r = await fetch('/api/network-nodes?type=ODP&simple=1');
       const d = await r.json();
-      if (d.data) setOdpNodes(d.data);
+      const list = Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : []);
+      setOdpNodes(list);
     } catch {
       // Keep existing data
     }
@@ -532,7 +535,8 @@ export default function CustomerManagement() {
     try {
       const r = await fetch('/api/network-nodes?type=ODC&simple=1');
       const d = await r.json();
-      if (d.data) setOdcNodes(d.data);
+      const list = Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : []);
+      setOdcNodes(list);
     } catch {
       // Keep existing data
     }
@@ -541,9 +545,10 @@ export default function CustomerManagement() {
   // Fetch OLT Devices
   const fetchOlts = useCallback(async () => {
     try {
-      const r = await fetch('/api/olts');
+      const r = await fetch('/api/olt-devices?per_page=100');
       const d = await r.json();
-      if (d.data) setOlts(d.data);
+      const list = Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : []);
+      setOlts(list);
     } catch {
       // Keep existing data
     }
@@ -554,7 +559,8 @@ export default function CustomerManagement() {
     try {
       const r = await fetch('/api/service-packages');
       const d = await r.json();
-      if (d.data) setServicePackages(d.data);
+      const list = Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : []);
+      setServicePackages(list);
     } catch {
       // Keep existing data
     }
@@ -939,9 +945,12 @@ export default function CustomerManagement() {
   // 1. Available Interfaces based on filterOlt
   const availableInterfaces = useMemo(() => {
     const set = new Set();
+    const safeOlts = Array.isArray(olts) ? olts : [];
+    const safeCustomers = Array.isArray(customers) ? customers : [];
+    const safeOdpNodes = Array.isArray(odpNodes) ? odpNodes : [];
     
     // Dari OLT yang dipilih atau semua OLT
-    olts.forEach(o => {
+    safeOlts.forEach(o => {
       const matchOlt = filterOlt === 'all' || String(o.id) === String(filterOlt);
       if (matchOlt && o.pon_ports && Array.isArray(o.pon_ports)) {
         o.pon_ports.forEach(p => {
@@ -952,7 +961,7 @@ export default function CustomerManagement() {
     });
 
     // Dari data pelanggan
-    customers.forEach(c => {
+    safeCustomers.forEach(c => {
       const matchOlt = filterOlt === 'all' || String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt;
       if (matchOlt && c.gpon_interface && c.gpon_interface !== '—' && c.gpon_interface !== 'none') {
         set.add(c.gpon_interface);
@@ -960,7 +969,7 @@ export default function CustomerManagement() {
     });
 
     // Dari ODP
-    odpNodes.forEach(odp => {
+    safeOdpNodes.forEach(odp => {
       const matchOlt = filterOlt === 'all' || String(odp.olt_device_id) === String(filterOlt);
       if (matchOlt && odp.olt_port_ref && odp.olt_port_ref !== '—' && odp.olt_port_ref !== 'none') {
         set.add(odp.olt_port_ref);
@@ -972,24 +981,28 @@ export default function CustomerManagement() {
 
   // 2. Available ODCs based on filterOlt
   const availableOdcs = useMemo(() => {
+    const safeOdcNodes = Array.isArray(odcNodes) ? odcNodes : [];
+    const safeCustomers = Array.isArray(customers) ? customers : [];
+    const safeOdpNodes = Array.isArray(odpNodes) ? odpNodes : [];
+
     if (filterOlt === 'all') {
-      return odcNodes;
+      return safeOdcNodes;
     }
 
-    return odcNodes.filter(odc => {
+    return safeOdcNodes.filter(odc => {
       // Direct OLT link
       if (odc.olt_device_id && String(odc.olt_device_id) === String(filterOlt)) {
         return true;
       }
       // Pelanggan yang berada di ODC ini dan terhubung ke OLT terpilih
-      const hasCustomer = customers.some(c => 
+      const hasCustomer = safeCustomers.some(c => 
         (String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt) &&
         (String(c.odc_id) === String(odc.id) || c.odc_name === odc.name)
       );
       if (hasCustomer) return true;
 
       // ODP turunan ODC yang terhubung ke OLT terpilih
-      const hasOdp = odpNodes.some(odp =>
+      const hasOdp = safeOdpNodes.some(odp =>
         String(odp.olt_device_id) === String(filterOlt) &&
         (String(odp.parent_node_id) === String(odc.id) || String(odp.parent_id) === String(odc.id))
       );
@@ -999,15 +1012,19 @@ export default function CustomerManagement() {
 
   // 3. Available ODPs based on filterOlt, filterOdc, and filterInterface
   const availableOdps = useMemo(() => {
-    return odpNodes.filter(odp => {
+    const safeOdpNodes = Array.isArray(odpNodes) ? odpNodes : [];
+    const safeCustomers = Array.isArray(customers) ? customers : [];
+    const safeAvailableOdcs = Array.isArray(availableOdcs) ? availableOdcs : [];
+
+    return safeOdpNodes.filter(odp => {
       // A. Filter by OLT
       if (filterOlt !== 'all') {
         const directOlt = odp.olt_device_id && String(odp.olt_device_id) === String(filterOlt);
-        const custInOlt = customers.some(c =>
+        const custInOlt = safeCustomers.some(c =>
           (String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt) &&
           (String(c.odp_id) === String(odp.id) || c.odp_name === odp.name)
         );
-        const parentOdcInOlt = availableOdcs.some(odc =>
+        const parentOdcInOlt = safeAvailableOdcs.some(odc =>
           String(odc.id) === String(odp.parent_node_id || odp.parent_id)
         );
         if (!directOlt && !custInOlt && !parentOdcInOlt) return false;
@@ -1016,7 +1033,7 @@ export default function CustomerManagement() {
       // B. Filter by ODC
       if (filterOdc !== 'all') {
         const directOdc = String(odp.parent_node_id || odp.parent_id) === String(filterOdc);
-        const custInOdc = customers.some(c =>
+        const custInOdc = safeCustomers.some(c =>
           (String(c.odc_id) === String(filterOdc) || c.odc_name === filterOdc) &&
           (String(c.odp_id) === String(odp.id) || c.odp_name === odp.name)
         );
@@ -1026,7 +1043,7 @@ export default function CustomerManagement() {
       // C. Filter by Interface
       if (filterInterface !== 'all') {
         const directPort = odp.olt_port_ref === filterInterface;
-        const custInPort = customers.some(c =>
+        const custInPort = safeCustomers.some(c =>
           (c.gpon_interface === filterInterface || (c.gpon_interface && c.gpon_interface.toLowerCase() === filterInterface.toLowerCase())) &&
           (String(c.odp_id) === String(odp.id) || c.odp_name === odp.name)
         );
@@ -1058,27 +1075,28 @@ export default function CustomerManagement() {
   // Dropdown Options formatted with Name Only (No Code)
   const oltOptions = useMemo(() => [
     { value: 'all', label: 'Semua OLT' },
-    ...olts.map(o => ({ value: o.id, label: o.name }))
+    ...(Array.isArray(olts) ? olts : []).map(o => ({ value: o.id, label: o.name }))
   ], [olts]);
 
   const interfaceOptions = useMemo(() => [
     { value: 'all', label: filterOlt !== 'all' ? `Semua Port OLT (${availableInterfaces.length})` : 'Semua Interface' },
-    ...availableInterfaces.map(iface => ({ value: iface, label: iface }))
+    ...(Array.isArray(availableInterfaces) ? availableInterfaces : []).map(iface => ({ value: iface, label: iface }))
   ], [availableInterfaces, filterOlt]);
 
   const odcOptions = useMemo(() => [
     { value: 'all', label: filterOlt !== 'all' ? `Semua ODC OLT (${availableOdcs.length})` : 'Semua ODC' },
-    ...availableOdcs.map(odc => ({ value: odc.id, label: odc.name }))
+    ...(Array.isArray(availableOdcs) ? availableOdcs : []).map(odc => ({ value: odc.id, label: odc.name }))
   ], [availableOdcs, filterOlt]);
 
   const odpOptions = useMemo(() => [
     { value: 'all', label: filterOlt !== 'all' || filterOdc !== 'all' ? `Semua ODP Terpilih (${availableOdps.length})` : 'Semua ODP' },
-    ...availableOdps.map(odp => ({ value: odp.id, label: odp.name }))
+    ...(Array.isArray(availableOdps) ? availableOdps : []).map(odp => ({ value: odp.id, label: odp.name }))
   ], [availableOdps, filterOlt, filterOdc]);
 
   // Complete, naturally sorted list of all ODPs for Sobok Scraper & Manual Assignment
   const allOdpListOptions = useMemo(() => {
-    return [...odpNodes]
+    const safeOdpNodes = Array.isArray(odpNodes) ? odpNodes : [];
+    return [...safeOdpNodes]
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' }))
       .map(odp => {
         const total = parseInt(odp.total_ports) || 0;
@@ -1113,7 +1131,8 @@ export default function CustomerManagement() {
   // Unique service packages list for filtering
   const packageOptions = useMemo(() => {
     const set = new Set();
-    customers.forEach(c => {
+    const safeCustomers = Array.isArray(customers) ? customers : [];
+    safeCustomers.forEach(c => {
       if (c.package_name && c.package_name.trim()) {
         set.add(c.package_name.trim());
       }
@@ -1123,7 +1142,8 @@ export default function CustomerManagement() {
 
   // Filtered customers (Multi-level OLT / Interface / ODC / ODP / Status / Layanan / Paket / Alamat / Search)
   const filtered = useMemo(() => {
-    return customers.filter(c => {
+    const safeCustomers = Array.isArray(customers) ? customers : [];
+    return safeCustomers.filter(c => {
       const q = search.toLowerCase();
       const matchSearch = !q ||
         c.name?.toLowerCase().includes(q) ||
