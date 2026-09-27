@@ -66,15 +66,15 @@ export default function Sidebar({ isOpen, onClose }) {
         }`}
       >
         {/* Brand Header */}
-        <div className="h-16 px-4 border-b border-slate-200 dark:border-[#222222] flex items-center justify-between box-border">
-          <NavLink to="/dashboard" onClick={onClose} className="flex items-center group py-0.5 w-full">
-            <FonaBrandLogo className="w-36 sm:w-40 h-auto" />
+        <div className="h-16 px-4 border-b border-slate-200 dark:border-[#222222] flex items-center justify-between box-border relative">
+          <NavLink to="/dashboard" onClick={onClose} className="flex items-center justify-center group py-0.5 w-full">
+            <FonaBrandLogo className="w-32 sm:w-36 h-auto" />
           </NavLink>
 
           {/* Close button for mobile drawer */}
           <button
             onClick={onClose}
-            className="lg:hidden p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
+            className="lg:hidden absolute right-3 p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
