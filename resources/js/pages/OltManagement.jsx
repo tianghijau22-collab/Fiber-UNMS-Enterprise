@@ -419,11 +419,7 @@ export default function OltManagement() {
 
   const maskIpAddress = (ip) => {
     if (!ip) return '—';
-    if (showSensitiveIp) return ip;
-    const parts = ip.split('.');
-    if (parts.length === 4) {
-      return `${parts[0]}.${parts[1]}.***.***`;
-    }
+    if (isSuperAdmin && showSensitiveIp) return ip;
     return '***.***.***.***';
   };
 
@@ -889,7 +885,7 @@ export default function OltManagement() {
       title: 'Hentikan Koneksi SNMP OLT?',
       message: (
         <span>
-          Apakah Anda yakin ingin memutuskan sinkronisasi live SNMP ke perangkat <strong>{olt.name}</strong> ({olt.ip_address})? Sistem akan kembali ke mode database.
+          Apakah Anda yakin ingin memutuskan sinkronisasi live SNMP ke perangkat <strong>{olt.name}</strong> ({maskIpAddress(olt.ip_address)})? Sistem akan kembali ke mode database.
         </span>
       ),
       confirmText: 'Ya, Hentikan SNMP',
@@ -1473,23 +1469,25 @@ export default function OltManagement() {
                     )}
                   </div>
 
-                  {/* Toggle IP Visibility Button */}
-                  <button
-                    type="button"
-                    onClick={() => setShowSensitiveIp(!showSensitiveIp)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 ${showSensitiveIp
-                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 shadow-xs'
-                      : 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/20 text-black/80 dark:text-white/90 hover:bg-black/5 dark:hover:bg-white/20'
-                      }`}
-                    title="Toggle sensor IP address"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      {showSensitiveIp
-                        ? <><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></>
-                        : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></>}
-                    </svg>
-                    <span>{showSensitiveIp ? 'IP Terlihat' : 'Sensor IP'}</span>
-                  </button>
+                  {/* Toggle IP Visibility Button (Super Administrator Only) */}
+                  {isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSensitiveIp(!showSensitiveIp)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${showSensitiveIp
+                        ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 shadow-xs'
+                        : 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/20 text-black/80 dark:text-white/90 hover:bg-black/5 dark:hover:bg-white/20'
+                        }`}
+                      title="Toggle sensor IP address"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        {showSensitiveIp
+                          ? <><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></>
+                          : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></>}
+                      </svg>
+                      <span>{showSensitiveIp ? 'IP Terlihat' : 'Sensor IP'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -3406,7 +3404,7 @@ export default function OltManagement() {
                           `"${o.status || ''}"`,
                           o.rx_power || '',
                           o.distance_meters || '',
-                          `"${o.ip_address || ''}"`,
+                          `"${maskIpAddress(o.ip_address)}"`,
                         ]);
                         const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
                         const encodedUri = encodeURI(csvContent);
@@ -4286,7 +4284,7 @@ export default function OltManagement() {
                   </div>
                   <div className="flex items-center space-x-2 text-xs text-indigo-600 dark:text-indigo-400">
                     <span className="inline-block w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-                    <span>Target: <span className="font-mono font-bold">{activeOlt?.ip_address}</span></span>
+                    <span>Target: <span className="font-mono font-bold">{maskIpAddress(activeOlt?.ip_address)}</span></span>
                     <span className="text-indigo-300 dark:text-indigo-600">|</span>
                     <span>SNMP: <span className="font-bold">{configForm.snmp_version?.toUpperCase()}</span></span>
                   </div>
@@ -5419,9 +5417,9 @@ function SnmpDiagnosticModal({ activeOlt, onClose }) {
               <h3 className="text-base font-bold flex items-center gap-2">
                 <span>Diagnostic SNMP &amp; MIB OID Explorer</span>
               </h3>
-              <p className="text-xs text-black/60 dark:text-white/70 font-mono mt-0.5">{activeOlt.name} ({activeOlt.ip_address})</p>
+              <p className="text-xs text-black/60 dark:text-white/70 font-mono mt-0.5">{activeOlt.name} ({maskIpAddress(activeOlt.ip_address)})</p>
             </div>
-            <button onClick={onClose} className="text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white p-1 rounded-lg flex items-center justify-center"><IconX /></button>
+            <button onClick={onClose} className="text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white p-1 rounded-lg flex items-center justify-center cursor-pointer"><IconX /></button>
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto flex-1">
@@ -5436,7 +5434,7 @@ function SnmpDiagnosticModal({ activeOlt, onClose }) {
                   key={idx}
                   type="button"
                   onClick={() => { setOid(p.oid); setOperation(p.op); }}
-                  className={`p-2 rounded-lg text-left border text-xs transition-all ${oid === p.oid && operation === p.op
+                  className={`p-2 rounded-lg text-left border text-xs transition-all cursor-pointer ${oid === p.oid && operation === p.op
                     ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 font-bold text-indigo-700 dark:text-indigo-300'
                     : 'bg-black/5 dark:bg-white/10 border-black/20 dark:border-white/20 text-black dark:text-white hover:bg-black/5'
                     }`}
@@ -5478,9 +5476,9 @@ function SnmpDiagnosticModal({ activeOlt, onClose }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
-              {loading ? <><Spinner /><span>Sedang Menjalankan Query SNMP...</span></> : <span>Jalankan Query SNMP ke {activeOlt.ip_address}</span>}
+              {loading ? <><Spinner /><span>Sedang Menjalankan Query SNMP...</span></> : <span>Jalankan Query SNMP ke {maskIpAddress(activeOlt.ip_address)}</span>}
             </button>
           </form>
 
@@ -5775,7 +5773,7 @@ function ProgressiveSyncModal({ activeOlt, ponPorts = [], syncState, onStart, on
                 <span>Sinkronisasi Bertahap Port OLT</span>
               </h3>
               <p className="text-xs text-black/60 dark:text-white/70 font-mono mt-0.5">
-                {activeOlt?.name} ({activeOlt?.ip_address}) — {totalPorts} Port PON Terdeteksi
+                {activeOlt?.name} ({maskIpAddress(activeOlt?.ip_address)}) — {totalPorts} Port PON Terdeteksi
               </p>
             </div>
           </div>
