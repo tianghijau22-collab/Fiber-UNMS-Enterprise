@@ -1665,6 +1665,8 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   // Target Coordinate / Client Benchmark State
   const [targetCoordModal, setTargetCoordModal] = useState(false);
   const [targetPin, setTargetPin] = useState(null);
+  const searchInputRef = useRef(null);
+  const fullscreenSearchInputRef = useRef(null);
   // KML / KMZ Import Modal State
   const [kmlImportModal, setKmlImportModal] = useState(false);
 
@@ -1903,6 +1905,56 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     return filteredNodes.filter(n => n.latitude && n.longitude && parseFloat(n.latitude) !== 0);
   }, [filteredNodes]);
 
+  // Parse coordinates directly from the search query (e.g. decimal, DMS, or Google Maps URL)
+  const parsedSearchCoords = useMemo(() => {
+    if (!searchQuery || searchQuery.trim().length < 3) return null;
+    const res = parseCoordsInput(searchQuery);
+    return res.isValid ? res : null;
+  }, [searchQuery]);
+
+  const handleApplyTargetCoordinate = useCallback((coords) => {
+    if (!coords || !coords.isValid) return;
+    const target = {
+      lat: coords.lat,
+      lng: coords.lng,
+      label: 'Patokan Lokasi',
+      dms: coords.formattedDms,
+    };
+    setTargetPin(target);
+    setIsSearchFocused(false);
+    if (externalFlyToRef.current) {
+      externalFlyToRef.current(coords.lat, coords.lng, 17);
+    }
+  }, []);
+
+  const handleGpsCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      alert('Perangkat/browser Anda tidak mendukung GPS Geolocation.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const dms = decimalToDms(lat, lng);
+        const target = {
+          lat,
+          lng,
+          label: 'Posisi GPS Saya',
+          dms: dms.formattedDms,
+        };
+        setTargetPin(target);
+        if (externalFlyToRef.current) {
+          externalFlyToRef.current(lat, lng, 18);
+        }
+      },
+      (err) => {
+        alert('Gagal mendeteksi lokasi GPS: ' + err.message);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
+
   // Search Auto-Suggestions
   const searchSuggestions = useMemo(() => {
     if (!searchQuery || searchQuery.trim().length === 0) return [];
@@ -1918,6 +1970,16 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     setIsSearchFocused(false);
     if (node.latitude && node.longitude && externalFlyToRef.current) {
       externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
+    }
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      if (parsedSearchCoords) {
+        handleApplyTargetCoordinate(parsedSearchCoords);
+      } else if (searchSuggestions.length > 0) {
+        handleSelectSuggestion(searchSuggestions[0]);
+      }
     }
   };
 
@@ -1956,7 +2018,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         </div>
 
         {/* 1. Top Floating Search & Quick Layer Pill (Google Earth Mobile Header) */}
-        <div className="fixed top-3 sm:top-4 left-3 right-3 sm:left-4 sm:right-auto sm:w-[420px] z-[1100]">
+        <div className="fixed top-3 sm:top-4 left-3 right-3 sm:left-4 sm:right-auto sm:w-[460px] z-[1100]">
           <div className="bg-black/90 backdrop-blur-md border border-white/20 text-white rounded-full shadow-2xl p-1.5 flex items-center gap-1.5 transition-all">
             {/* Back to Standard UNMS Map */}
             <button
@@ -1971,18 +2033,20 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             </button>
 
             {/* Search Box */}
-            <div className="flex-1 flex items-center gap-2 pl-1 pr-1 min-w-0">
+            <div className="flex-1 flex items-center gap-1.5 pl-1 pr-1 min-w-0">
               <svg className="w-4 h-4 text-white/60 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
               <input
+                ref={fullscreenSearchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                placeholder="Cari ODP, ODC, POP..."
+                placeholder="Cari node / ketik koordinat GPS..."
                 className="bg-transparent text-white placeholder-white/50 text-xs font-semibold focus:outline-none w-full min-w-0"
               />
               {searchQuery && (
@@ -1995,6 +2059,22 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                 </button>
               )}
             </div>
+
+            {/* Quick GPS Location Pin Button */}
+            <button
+              type="button"
+              onClick={handleGpsCurrentLocation}
+              className="w-8 h-8 rounded-full bg-fuchsia-500/20 hover:bg-fuchsia-500/40 text-fuchsia-300 border border-fuchsia-500/40 flex items-center justify-center transition-all cursor-pointer shrink-0"
+              title="Tandai lokasi GPS perangkat saat ini (Patokan Titik Rumah)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="7" />
+                <line x1="12" y1="1" x2="12" y2="5" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="1" y1="12" x2="5" y2="12" />
+                <line x1="19" y1="12" x2="23" y2="12" />
+              </svg>
+            </button>
 
             {/* Live Telemetry Stream Dot */}
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Live Telemetry Aktif" />
@@ -2018,14 +2098,53 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             </button>
           </div>
 
-          {/* Smart Search Suggestions Autocomplete Dropdown */}
-          {isSearchFocused && searchSuggestions.length > 0 && (
+          {/* Smart Search & Coordinate Suggestions Dropdown */}
+          {isSearchFocused && (parsedSearchCoords || searchSuggestions.length > 0) && (
             <div className="absolute top-full left-0 right-0 mt-2 bg-black/95 text-white border border-white/20 rounded-2xl shadow-2xl overflow-hidden divide-y divide-white/10 z-[1101] backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+              {/* GPS Coordinate Match Option */}
+              {parsedSearchCoords && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleApplyTargetCoordinate(parsedSearchCoords);
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 bg-fuchsia-950/40 hover:bg-fuchsia-900/60 border-b border-fuchsia-500/30 flex items-center justify-between cursor-pointer text-xs transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-full bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/40 flex items-center justify-center shrink-0">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+                        <circle cx="12" cy="10" r="3" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/40">
+                          TITIK RUMAH
+                        </span>
+                        <span className="font-bold text-white">
+                          Tandai Patokan Titik Rumah
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-fuchsia-200/80 block truncate">
+                        {parsedSearchCoords.lat.toFixed(6)}, {parsedSearchCoords.lng.toFixed(6)} {parsedSearchCoords.formattedDms ? `(${parsedSearchCoords.formattedDms})` : ''}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold text-fuchsia-400 shrink-0 ml-2">Tandai ➔</span>
+                </button>
+              )}
+
+              {/* Node Search Results */}
               {searchSuggestions.map(s => (
                 <button
                   key={s.id}
                   type="button"
-                  onClick={() => handleSelectSuggestion(s)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelectSuggestion(s);
+                  }}
                   className="w-full text-left px-3.5 py-2.5 hover:bg-white/10 flex items-center justify-between cursor-pointer text-xs transition-colors"
                 >
                   <div>
@@ -2212,7 +2331,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                 <button
                   onClick={() => {
                     setFullscreenToolsModal(false);
-                    setTargetCoordModal(true);
+                    setTimeout(() => fullscreenSearchInputRef.current?.focus(), 100);
                   }}
                   className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${
                     targetPin
@@ -2227,12 +2346,12 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                       </svg>
                     </div>
                     <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${targetPin ? 'bg-fuchsia-500/30 text-fuchsia-300' : 'bg-white/10 text-white/60'}`}>
-                      {targetPin ? 'Aktif' : 'GPS'}
+                      {targetPin ? 'Aktif' : 'Search Bar'}
                     </span>
                   </div>
                   <div>
                     <span className="font-bold text-xs block">Cek Titik Rumah</span>
-                    <span className="text-[10px] text-white/60">Tandai koordinat patokan client</span>
+                    <span className="text-[10px] text-white/60">Ketik koordinat di kolom search</span>
                   </div>
                 </button>
 
@@ -2561,13 +2680,13 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
                   <button
                     onClick={() => {
-                      setTargetCoordModal(true);
                       setToolsOpen(false);
+                      setTimeout(() => searchInputRef.current?.focus(), 100);
                     }}
                     className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
                   >
-                    <span>{targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat Rumah'}</span>
-                    <span className="text-[10px] font-mono text-fuchsia-600 dark:text-fuchsia-400">GPS</span>
+                    <span>{targetPin ? 'Patokan Rumah Aktif' : 'Cek Titik Rumah GPS'}</span>
+                    <span className="text-[10px] font-mono text-fuchsia-600 dark:text-fuchsia-400">Search Bar</span>
                   </button>
 
                   <button
@@ -2605,50 +2724,106 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
       {/* Main Controls Filter Bar with Smart Search & Fault Filter */}
       <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 rounded-lg shadow-2xs transition-colors duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
         <div className="flex flex-col sm:flex-row sm:flex-wrap lg:flex-nowrap items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
-          {/* Smart Search Input with Floating Dropdown Suggestions */}
-          <div className="relative w-full sm:w-72">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onFocus={() => setIsSearchFocused(true)}
-              onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-              placeholder="Cari ODP, ODC, POP, OLT, Port..."
-              className="px-3.5 py-2 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
-            />
-            {searchQuery && (
+          {/* Smart Search Input with Floating Dropdown Suggestions & Coordinate Support */}
+          <div className="relative w-full sm:w-80">
+            <div className="flex items-center bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                placeholder="Cari node / ketik koordinat GPS..."
+                className="px-3.5 py-2 bg-transparent text-xs font-semibold text-black dark:text-white focus:outline-none w-full"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-2 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
               <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white text-xs font-bold cursor-pointer"
+                type="button"
+                onClick={handleGpsCurrentLocation}
+                className="px-2.5 py-2 hover:bg-black/10 dark:hover:bg-white/10 text-fuchsia-600 dark:text-fuchsia-400 border-l border-black/10 dark:border-white/10 cursor-pointer"
+                title="Tandai lokasi GPS saat ini (Cek Titik Rumah)"
               >
-                ✕
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="7" />
+                  <line x1="12" y1="1" x2="12" y2="5" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="1" y1="12" x2="5" y2="12" />
+                  <line x1="19" y1="12" x2="23" y2="12" />
+                </svg>
               </button>
-            )}
+            </div>
 
-            {/* Suggestions Dropdown */}
-            {isSearchFocused && searchSuggestions.length > 0 && (
-              <div className="absolute top-full left-0 mt-1.5 w-full bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xl z-[1000] overflow-hidden divide-y divide-black/10 dark:divide-white/10">
-                {searchSuggestions.map(s => {
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => handleSelectSuggestion(s)}
-                      className="w-full text-left px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between cursor-pointer"
-                    >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
-                            {s.node_type}
-                          </span>
-                          <span className="font-bold text-xs text-black dark:text-white">{s.name}</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-black/60 dark:text-white/60 block">{s.code} • {s.olt_port_ref || 'PON'}</span>
+            {/* Suggestions & Coordinate Target Dropdown */}
+            {isSearchFocused && (parsedSearchCoords || searchSuggestions.length > 0) && (
+              <div className="absolute top-full left-0 mt-1.5 w-full bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xl z-[1000] overflow-hidden divide-y divide-black/10 dark:divide-white/10 animate-in fade-in zoom-in-95 duration-150">
+                {/* GPS Coordinate Match */}
+                {parsedSearchCoords && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleApplyTargetCoordinate(parsedSearchCoords);
+                    }}
+                    className="w-full text-left px-3 py-2.5 bg-fuchsia-50 dark:bg-fuchsia-950/40 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-900/50 border-b border-fuchsia-200 dark:border-fuchsia-800 flex items-center justify-between cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-full bg-fuchsia-500/20 text-fuchsia-600 dark:text-fuchsia-400 flex items-center justify-center shrink-0">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+                          <circle cx="12" cy="10" r="3" />
+                        </svg>
                       </div>
-                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">Fly To ➔</span>
-                    </button>
-                  );
-                })}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-fuchsia-500/20 text-fuchsia-700 dark:text-fuchsia-300 border border-fuchsia-500/30">
+                            TITIK RUMAH
+                          </span>
+                          <span className="font-bold text-xs text-fuchsia-700 dark:text-fuchsia-300">
+                            Tandai Patokan GPS
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-black/60 dark:text-white/60 block truncate">
+                          {parsedSearchCoords.lat.toFixed(6)}, {parsedSearchCoords.lng.toFixed(6)} {parsedSearchCoords.formattedDms ? `(${parsedSearchCoords.formattedDms})` : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-fuchsia-600 dark:text-fuchsia-400 shrink-0 ml-2">Tandai ➔</span>
+                  </button>
+                )}
+
+                {/* Node Suggestions */}
+                {searchSuggestions.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSelectSuggestion(s);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between cursor-pointer"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">
+                          {s.node_type}
+                        </span>
+                        <span className="font-bold text-xs text-black dark:text-white">{s.name}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-black/60 dark:text-white/60 block">{s.code} • {s.olt_port_ref || 'PON'}</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">Fly To ➔</span>
+                  </button>
+                ))}
               </div>
             )}
           </div>

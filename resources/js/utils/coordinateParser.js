@@ -83,27 +83,66 @@ export function decimalToDms(lat, lng) {
 }
 
 /**
- * Parses either combined text (e.g. "-0.784989, 100.654408" or "0°47'5.96\"S, 100°39'15.87\"T")
+ * Parses either combined text (e.g. "-0.784989, 100.654408", "-0.784989 100.654408", Google Maps URL, or DMS)
  * or separate lat / lng strings.
  */
 export function parseCoordsInput(latOrCombined, lngInput = '') {
-  let latStr = latOrCombined ?? '';
-  let lngStr = lngInput ?? '';
+  let raw = String(latOrCombined ?? '').trim();
+  let lngStr = String(lngInput ?? '').trim();
 
-  // If passed as single comma-separated combined string
-  if (!lngStr && typeof latStr === 'string' && latStr.includes(',')) {
+  if (!raw && !lngStr) {
+    return { lat: null, lng: null, isValid: false, dmsLat: '', dmsLng: '', formattedDms: '' };
+  }
+
+  // 1. Check if user pasted a Google Maps / Earth URL (e.g. @-0.785123,100.654123 or ?q=-0.785123,100.654123)
+  if (raw.includes('http://') || raw.includes('https://') || raw.includes('maps.google') || raw.includes('earth.google')) {
+    const urlMatch = raw.match(/([+-]?\d+\.\d+)[,\s]+([+-]?\d+\.\d+)/);
+    if (urlMatch) {
+      const lat = parseFloat(urlMatch[1]);
+      const lng = parseFloat(urlMatch[2]);
+      if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return {
+          lat,
+          lng,
+          isValid: true,
+          ...decimalToDms(lat, lng)
+        };
+      }
+    }
+  }
+
+  let latStr = raw;
+
+  // 2. If passed as single comma-separated combined string
+  if (!lngStr && latStr.includes(',')) {
     const parts = latStr.split(',');
     latStr = parts[0];
-    lngStr = parts[1];
+    lngStr = parts.slice(1).join(',');
+  } else if (!lngStr) {
+    // 3. Check for two decimal numbers separated by whitespace e.g. "-0.784989 100.654408"
+    const spaceDecMatch = latStr.match(/^([+-]?\d+(?:\.\d+)?)\s+([+-]?\d+(?:\.\d+)?)$/);
+    if (spaceDecMatch) {
+      latStr = spaceDecMatch[1];
+      lngStr = spaceDecMatch[2];
+    } else {
+      // 4. Check for two DMS parts separated by space (e.g. 0°47'5.96"S 100°39'15.87"T)
+      const dmsPairMatch = latStr.match(/^(.+?[NSEWLSBLUT])\s+(.+?[NSEWLSBLUT])$/i);
+      if (dmsPairMatch) {
+        latStr = dmsPairMatch[1];
+        lngStr = dmsPairMatch[2];
+      }
+    }
   }
 
   const lat = dmsToDecimal(latStr);
   const lng = dmsToDecimal(lngStr);
 
+  const isValid = lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+
   return {
-    lat,
-    lng,
-    isValid: lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng),
-    ...decimalToDms(lat, lng)
+    lat: isValid ? lat : null,
+    lng: isValid ? lng : null,
+    isValid,
+    ...(isValid ? decimalToDms(lat, lng) : { dmsLat: '', dmsLng: '', formattedDms: '' })
   };
 }
