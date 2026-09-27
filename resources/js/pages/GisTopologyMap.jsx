@@ -573,8 +573,8 @@ function TargetCoordModal({ isOpen, onClose, onSetTarget }) {
       >
         <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between border-b border-black/20 dark:border-white/20 shrink-0">
           <div>
-            <h3 className="text-sm font-bold">Cek Koordinat Rumah Client / Patokan</h3>
-            <p className="text-[11px] text-black/70 dark:text-white/70">Masukkan koordinat untuk menandai patokan titik ukur di peta</p>
+            <h3 className="text-sm font-bold">Cek Titik Lokasi / Patokan GPS</h3>
+            <p className="text-[11px] text-black/70 dark:text-white/70">Masukkan koordinat untuk menandai patokan titik lokasi di peta</p>
           </div>
           <button
             onClick={onClose}
@@ -644,31 +644,37 @@ function TargetPinBanner({ targetPin, onFlyToTarget, onClearTarget }) {
   if (!targetPin) return null;
 
   return (
-    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[998] bg-white/95 dark:bg-black/95 text-black dark:text-white backdrop-blur-md border border-fuchsia-500/70 shadow-2xl rounded-lg px-4 py-2.5 flex items-center gap-3 text-xs max-w-[92vw] animate-in fade-in slide-in-from-top-2 duration-200">
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="w-2.5 h-2.5 rounded-full bg-fuchsia-500 animate-ping"></span>
-        <div>
-          <span className="font-bold text-fuchsia-600 dark:text-fuchsia-400 block">Patokan Titik Rumah</span>
-          <span className="text-[10px] font-mono text-black/70 dark:text-white/70">
+    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[998] bg-white/95 dark:bg-black/95 text-black dark:text-white backdrop-blur-md border border-fuchsia-500/70 shadow-2xl rounded-xl px-3.5 py-2.5 flex items-center gap-3 text-xs max-w-[94vw] animate-in fade-in slide-in-from-top-2 duration-200">
+      <div className="flex items-center gap-2.5 shrink-0">
+        <div className="w-7 h-7 rounded-full bg-fuchsia-500/20 text-fuchsia-600 dark:text-fuchsia-400 border border-fuchsia-500/40 flex items-center justify-center shrink-0">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+            <circle cx="12" cy="9" r="2.5" />
+          </svg>
+        </div>
+        <div className="min-w-0">
+          <span className="font-bold text-fuchsia-600 dark:text-fuchsia-400 block text-xs">Patokan Titik Lokasi</span>
+          <span className="text-[10px] font-mono text-black/70 dark:text-white/70 truncate block">
             {targetPin.lat.toFixed(6)}, {targetPin.lng.toFixed(6)} {targetPin.dms ? `(${targetPin.dms})` : ''}
           </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0 ml-auto">
+      <div className="flex items-center gap-1.5 shrink-0 ml-auto">
         <button
           onClick={onFlyToTarget}
-          className="px-2.5 py-1 bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 border border-black/20 dark:border-white/20 rounded-md text-[11px] font-bold text-black dark:text-white transition-colors cursor-pointer flex items-center gap-1"
+          className="px-2.5 py-1 bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 border border-black/20 dark:border-white/20 rounded-lg text-[11px] font-bold text-black dark:text-white transition-colors cursor-pointer flex items-center gap-1"
         >
           Fokus
         </button>
 
         <button
           onClick={onClearTarget}
-          className="w-6 h-6 flex items-center justify-center rounded-md bg-black/10 dark:bg-white/10 hover:bg-rose-600 hover:text-white text-black/60 dark:text-white/60 font-bold text-xs transition-colors cursor-pointer"
-          title="Hapus Patokan"
+          className="px-2.5 py-1 bg-rose-500/15 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/30 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+          title="Hapus Titik Lokasi"
         >
-          ✕
+          <span>✕</span>
+          <span className="hidden sm:inline">Hapus</span>
         </button>
       </div>
     </div>
@@ -687,6 +693,7 @@ function LeafletMap({
   rulerPoints = [],
   setRulerPoints,
   targetPin,
+  onClearTarget,
   isFullscreen,
   isSatellite = true,
   onToggleFullscreen,
@@ -929,7 +936,7 @@ function LeafletMap({
     }
   }, [rulerActive, safeRulerPoints]);
 
-  // 5b. Render Target House Pin & Guide Line to Nearest ODP
+  // 5b. Render Target Location Pin & Guide Line
   useEffect(() => {
     if (!targetPinLayerGroupRef.current || !leafletRef.current || !mapInstanceRef.current) return;
     const Lf = leafletRef.current;
@@ -944,46 +951,86 @@ function LeafletMap({
     const icon = Lf.divIcon({
       className: 'custom-target-client-pin',
       html: `
-        <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
-          <div class="target-house-ping"></div>
+        <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; user-select: none;">
+          <!-- Ground Radar Ping -->
           <div style="
-            background: #d946ef;
-            color: #ffffff;
-            width: 36px;
-            height: 36px;
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
-            border: 3px solid #ffffff;
-            box-shadow: 0 4px 14px rgba(217,70,239,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            z-index: 10;
-          ">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          </div>
+            border: 2.5px solid #d946ef;
+            animation: targetPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+            pointer-events: none;
+          "></div>
+
+          <!-- Crisp Modern Location Drop Pin -->
           <div style="
-            background: #18181b;
-            color: #fdf4ff;
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-size: 11px;
+            position: relative;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+            transition: transform 0.15s ease;
+          ">
+            <svg width="34" height="42" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 0C5.37258 0 0 5.37258 0 12C0 20.25 10.8 29.1 11.28 29.5C11.68 29.83 12.32 29.83 12.72 29.5C13.2 29.1 24 20.25 24 12C24 5.37258 18.6274 0 12 0Z" fill="#d946ef"/>
+              <path d="M12 2C6.47715 2 2 6.47715 2 12C2 19 11 26.5 12 27.3C13 26.5 22 19 22 12C22 6.47715 17.5228 2 12 2Z" fill="#e879f9"/>
+              <circle cx="12" cy="11" r="5" fill="#ffffff"/>
+              <circle cx="12" cy="11" r="2.5" fill="#a21caf"/>
+            </svg>
+          </div>
+
+          <!-- Label Chip -->
+          <div style="
+            background: #09090b;
+            color: #ffffff;
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 10.5px;
             font-weight: 800;
             white-space: nowrap;
-            margin-top: 4px;
-            border: 1.5px solid #d946ef;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            z-index: 10;
+            margin-top: 1px;
+            border: 1px solid #d946ef;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+            font-family: sans-serif;
           ">
-            ${targetPin.label || 'Rumah Pelanggan'}
+            ${targetPin.label || 'Titik Lokasi'}
           </div>
         </div>
       `,
-      iconSize: [160, 75],
-      iconAnchor: [80, 20],
+      iconSize: [160, 68],
+      iconAnchor: [80, 42],
     });
 
     const marker = Lf.marker([lat, lng], { icon }).addTo(layer);
+
+    marker.bindPopup(`
+      <div style="padding: 6px 4px; font-family: sans-serif; text-align: center; min-width: 175px;">
+        <div style="font-weight: 800; font-size: 12px; color: #c026d3; margin-bottom: 2px;">📍 Patokan Titik Lokasi</div>
+        <div style="font-size: 11px; font-family: monospace; color: #475569; margin-bottom: 8px;">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
+        <button id="btn-popup-clear-target" style="
+          background: #e11d48;
+          color: #ffffff;
+          border: none;
+          padding: 6px 12px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: bold;
+          cursor: pointer;
+          width: 100%;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        ">✕ Hapus Titik Lokasi</button>
+      </div>
+    `);
+
+    marker.on('popupopen', () => {
+      const btn = document.getElementById('btn-popup-clear-target');
+      if (btn) {
+        btn.onclick = () => {
+          if (onClearTarget) onClearTarget();
+        };
+      }
+    });
 
     // If ruler is active, clicking target pin adds it as a waypoint
     marker.on('click', (e) => {
@@ -993,7 +1040,7 @@ function LeafletMap({
         setRulerPoints(pts => [...pts, [lat, lng]]);
       }
     });
-  }, [targetPin, setRulerPoints]);
+  }, [targetPin, onClearTarget, setRulerPoints]);
 
   // 6a. Render Physical Network Cables (Canvas Hardware-Accelerated)
   useEffect(() => {
@@ -2006,6 +2053,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               rulerPoints={rulerPoints}
               setRulerPoints={setRulerPoints}
               targetPin={targetPin}
+              onClearTarget={() => setTargetPin(null)}
               isFullscreen={true}
               isSatellite={isSatellite}
               onToggleFullscreen={() => navigate('/gis-map')}
@@ -2060,20 +2108,34 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               )}
             </div>
 
-            {/* Quick GPS Location Pin Button */}
+            {/* Quick GPS Location Pin Button (Click to activate or dismiss) */}
             <button
               type="button"
-              onClick={handleGpsCurrentLocation}
-              className="w-8 h-8 rounded-full bg-fuchsia-500/20 hover:bg-fuchsia-500/40 text-fuchsia-300 border border-fuchsia-500/40 flex items-center justify-center transition-all cursor-pointer shrink-0"
-              title="Tandai lokasi GPS perangkat saat ini (Patokan Titik Rumah)"
+              onClick={() => {
+                if (targetPin) {
+                  setTargetPin(null);
+                } else {
+                  handleGpsCurrentLocation();
+                }
+              }}
+              className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                targetPin
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-400 shadow-md shadow-rose-600/50 animate-pulse'
+                  : 'bg-fuchsia-500/20 hover:bg-fuchsia-500/40 text-fuchsia-300 border-fuchsia-500/40'
+              }`}
+              title={targetPin ? 'Hapus Patokan Titik Lokasi' : 'Tandai lokasi GPS saat ini (Patokan Titik Lokasi)'}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="7" />
-                <line x1="12" y1="1" x2="12" y2="5" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="1" y1="12" x2="5" y2="12" />
-                <line x1="19" y1="12" x2="23" y2="12" />
-              </svg>
+              {targetPin ? (
+                <span className="text-xs font-bold leading-none">✕</span>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="7" />
+                  <line x1="12" y1="1" x2="12" y2="5" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="1" y1="12" x2="5" y2="12" />
+                  <line x1="19" y1="12" x2="23" y2="12" />
+                </svg>
+              )}
             </button>
 
             {/* Live Telemetry Stream Dot */}
@@ -2114,17 +2176,17 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-7 h-7 rounded-full bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/40 flex items-center justify-center shrink-0">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
-                        <circle cx="12" cy="10" r="3" />
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                        <circle cx="12" cy="9" r="2.5" />
                       </svg>
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/40">
-                          TITIK RUMAH
+                          TITIK LOKASI
                         </span>
                         <span className="font-bold text-white">
-                          Tandai Patokan Titik Rumah
+                          Tandai Patokan Titik Lokasi
                         </span>
                       </div>
                       <span className="text-[10px] font-mono text-fuchsia-200/80 block truncate">
@@ -2327,31 +2389,37 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                   </div>
                 </button>
 
-                {/* Cek Koordinat GPS */}
+                {/* Cek / Hapus Titik Lokasi */}
                 <button
                   onClick={() => {
-                    setFullscreenToolsModal(false);
-                    setTimeout(() => fullscreenSearchInputRef.current?.focus(), 100);
+                    if (targetPin) {
+                      setTargetPin(null);
+                      setFullscreenToolsModal(false);
+                    } else {
+                      setFullscreenToolsModal(false);
+                      setTimeout(() => fullscreenSearchInputRef.current?.focus(), 100);
+                    }
                   }}
                   className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${
                     targetPin
-                      ? 'bg-fuchsia-950/40 border-fuchsia-500/60 text-white'
+                      ? 'bg-rose-950/40 border-rose-500/60 text-white'
                       : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="w-7 h-7 rounded-lg bg-fuchsia-500/20 text-fuchsia-400 flex items-center justify-center">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${targetPin ? 'bg-rose-500/20 text-rose-400' : 'bg-fuchsia-500/20 text-fuchsia-400'}`}>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" /><circle cx="12" cy="10" r="3" />
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                        <circle cx="12" cy="9" r="2.5" />
                       </svg>
                     </div>
-                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${targetPin ? 'bg-fuchsia-500/30 text-fuchsia-300' : 'bg-white/10 text-white/60'}`}>
-                      {targetPin ? 'Aktif' : 'Search Bar'}
+                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${targetPin ? 'bg-rose-500/30 text-rose-300' : 'bg-white/10 text-white/60'}`}>
+                      {targetPin ? '✕ Hapus' : 'Search Bar'}
                     </span>
                   </div>
                   <div>
-                    <span className="font-bold text-xs block">Cek Titik Rumah</span>
-                    <span className="text-[10px] text-white/60">Ketik koordinat di kolom search</span>
+                    <span className="font-bold text-xs block">{targetPin ? 'Hapus Titik Lokasi' : 'Cek Titik Lokasi'}</span>
+                    <span className="text-[10px] text-white/60">{targetPin ? 'Hapus pin patokan aktif' : 'Ketik koordinat di kolom search'}</span>
                   </div>
                 </button>
 
@@ -2680,13 +2748,22 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
                   <button
                     onClick={() => {
-                      setToolsOpen(false);
-                      setTimeout(() => searchInputRef.current?.focus(), 100);
+                      if (targetPin) {
+                        setTargetPin(null);
+                        setToolsOpen(false);
+                      } else {
+                        setToolsOpen(false);
+                        setTimeout(() => searchInputRef.current?.focus(), 100);
+                      }
                     }}
-                    className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
+                    className={`w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer ${
+                      targetPin ? 'text-rose-600 dark:text-rose-400' : ''
+                    }`}
                   >
-                    <span>{targetPin ? 'Patokan Rumah Aktif' : 'Cek Titik Rumah GPS'}</span>
-                    <span className="text-[10px] font-mono text-fuchsia-600 dark:text-fuchsia-400">Search Bar</span>
+                    <span>{targetPin ? '✕ Hapus Titik Lokasi' : 'Cek Titik Lokasi GPS'}</span>
+                    <span className={`text-[10px] font-mono ${targetPin ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-fuchsia-600 dark:text-fuchsia-400'}`}>
+                      {targetPin ? 'Clear Pin' : 'Search Bar'}
+                    </span>
                   </button>
 
                   <button
@@ -2749,17 +2826,31 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               )}
               <button
                 type="button"
-                onClick={handleGpsCurrentLocation}
-                className="px-2.5 py-2 hover:bg-black/10 dark:hover:bg-white/10 text-fuchsia-600 dark:text-fuchsia-400 border-l border-black/10 dark:border-white/10 cursor-pointer"
-                title="Tandai lokasi GPS saat ini (Cek Titik Rumah)"
+                onClick={() => {
+                  if (targetPin) {
+                    setTargetPin(null);
+                  } else {
+                    handleGpsCurrentLocation();
+                  }
+                }}
+                className={`px-2.5 py-2 border-l border-black/10 dark:border-white/10 cursor-pointer transition-colors ${
+                  targetPin
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white font-bold animate-pulse'
+                    : 'hover:bg-black/10 dark:hover:bg-white/10 text-fuchsia-600 dark:text-fuchsia-400'
+                }`}
+                title={targetPin ? 'Hapus Patokan Titik Lokasi' : 'Tandai lokasi GPS saat ini (Patokan Titik Lokasi)'}
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="7" />
-                  <line x1="12" y1="1" x2="12" y2="5" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="1" y1="12" x2="5" y2="12" />
-                  <line x1="19" y1="12" x2="23" y2="12" />
-                </svg>
+                {targetPin ? (
+                  <span className="text-xs font-bold leading-none">✕</span>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="7" />
+                    <line x1="12" y1="1" x2="12" y2="5" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="1" y1="12" x2="5" y2="12" />
+                    <line x1="19" y1="12" x2="23" y2="12" />
+                  </svg>
+                )}
               </button>
             </div>
 
@@ -2779,17 +2870,17 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="w-6 h-6 rounded-full bg-fuchsia-500/20 text-fuchsia-600 dark:text-fuchsia-400 flex items-center justify-center shrink-0">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
-                          <circle cx="12" cy="10" r="3" />
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+                          <circle cx="12" cy="9" r="2.5" />
                         </svg>
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-fuchsia-500/20 text-fuchsia-700 dark:text-fuchsia-300 border border-fuchsia-500/30">
-                            TITIK RUMAH
+                            TITIK LOKASI
                           </span>
                           <span className="font-bold text-xs text-fuchsia-700 dark:text-fuchsia-300">
-                            Tandai Patokan GPS
+                            Tandai Patokan Titik Lokasi
                           </span>
                         </div>
                         <span className="text-[10px] font-mono text-black/60 dark:text-white/60 block truncate">
@@ -2990,6 +3081,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             rulerPoints={rulerPoints}
             setRulerPoints={setRulerPoints}
             targetPin={targetPin}
+            onClearTarget={() => setTargetPin(null)}
             isFullscreen={false}
             isSatellite={isSatellite}
             onToggleFullscreen={() => navigate('/gis-map/fullscreen')}
