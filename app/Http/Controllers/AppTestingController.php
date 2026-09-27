@@ -172,6 +172,89 @@ class AppTestingController extends Controller
     }
 
     /**
+     * POST /api/app-testing/trigger-build
+     * Trigger automatic Flutter APK compilation on the VPS server
+     */
+    public function triggerBuild(Request $request)
+    {
+        $scriptPath = '/home/jasenardian/setup_flutter_vps.sh';
+        $logPath = '/home/jasenardian/flutter_build.log';
+
+        if (!File::exists($scriptPath)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Skrip build server tidak ditemukan di VPS.',
+            ], 404);
+        }
+
+        // Check if build is already running
+        $isRunning = false;
+        if (PHP_OS_FAMILY === 'Linux') {
+            $psOutput = shell_exec("ps aux | grep setup_flutter_vps.sh | grep -v grep");
+            if (!empty($psOutput)) {
+                $isRunning = true;
+            }
+        }
+
+        if ($isRunning) {
+            return response()->json([
+                'status'  => 'warning',
+                'message' => 'Proses build APK sedang berjalan di latar belakang.',
+            ]);
+        }
+
+        // Start background compilation
+        shell_exec("nohup bash $scriptPath > $logPath 2>&1 &");
+
+        AuditLog::record(
+            'MOBILE_APP_BUILD_TRIGGERED',
+            'App Testing',
+            "Super Administrator memicu kompilasi otomatis build APK Mobile di VPS.",
+            null,
+            ['triggered_at' => Carbon::now()->toIso8601String()]
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Proses kompilasi APK berhasil dimulai di server. Anda dapat memantau log proses secara real-time.',
+        ]);
+    }
+
+    /**
+     * GET /api/app-testing/build-status
+     * Check if compilation is running and get live build log lines
+     */
+    public function buildStatus(Request $request)
+    {
+        $logPath = '/home/jasenardian/flutter_build.log';
+        $isRunning = false;
+
+        if (PHP_OS_FAMILY === 'Linux') {
+            $psOutput = shell_exec("ps aux | grep -E 'setup_flutter_vps.sh|flutter build' | grep -v grep");
+            if (!empty($psOutput)) {
+                $isRunning = true;
+            }
+        }
+
+        $logContent = '';
+        if (File::exists($logPath)) {
+            // Read last 60 lines
+            if (PHP_OS_FAMILY === 'Linux') {
+                $logContent = shell_exec("tail -n 60 $logPath 2>/dev/null") ?? '';
+            } else {
+                $logContent = File::get($logPath);
+            }
+        }
+
+        return response()->json([
+            'status'       => 'success',
+            'is_running'   => $isRunning,
+            'log_content'  => $logContent,
+            'is_completed' => File::exists($this->getApkPath()),
+        ]);
+    }
+
+    /**
      * Helper to format bytes to human-readable format
      */
     private function formatBytes($bytes, $precision = 2): string
@@ -184,3 +267,4 @@ class AppTestingController extends Controller
         return round($bytes, $precision) . ' ' . $units[$pow];
     }
 }
+

@@ -210,4 +210,6 @@ Route::post('kml-import/execute', [\App\Http\Controllers\KmlImportController::cl
 Route::get('app-testing/info', [\App\Http\Controllers\AppTestingController::class, 'info']);
 Route::post('app-testing/upload-apk', [\App\Http\Controllers\AppTestingController::class, 'uploadApk']);
 Route::post('app-testing/test-api', [\App\Http\Controllers\AppTestingController::class, 'testEndpoints']);
+Route::post('app-testing/trigger-build', [\App\Http\Controllers\AppTestingController::class, 'triggerBuild']);
+Route::get('app-testing/build-status', [\App\Http\Controllers\AppTestingController::class, 'buildStatus']);
 
