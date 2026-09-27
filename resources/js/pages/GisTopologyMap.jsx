@@ -1969,36 +1969,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               )}
             </div>
 
-            {/* Quick GPS Location Pin Button (Click to activate or dismiss) */}
-            <button
-              type="button"
-              onClick={() => {
-                if (targetPin) {
-                  setTargetPin(null);
-                } else {
-                  handleGpsCurrentLocation();
-                }
-              }}
-              className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all cursor-pointer shrink-0 ${
-                targetPin
-                  ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-400 shadow-md shadow-rose-600/50 animate-pulse'
-                  : 'bg-fuchsia-500/20 hover:bg-fuchsia-500/40 text-fuchsia-300 border-fuchsia-500/40'
-              }`}
-              title={targetPin ? 'Hapus Patokan Titik Lokasi' : 'Tandai lokasi GPS saat ini (Patokan Titik Lokasi)'}
-            >
-              {targetPin ? (
-                <span className="text-xs font-bold leading-none">✕</span>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="7" />
-                  <line x1="12" y1="1" x2="12" y2="5" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="1" y1="12" x2="5" y2="12" />
-                  <line x1="19" y1="12" x2="23" y2="12" />
-                </svg>
-              )}
-            </button>
-
             {/* Live Telemetry Stream Dot */}
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Live Telemetry Aktif" />
 
@@ -2158,8 +2128,8 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           </div>
         )}
 
-        {/* 5. Google Earth Mobile Floating Bottom Toolbar */}
-        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-[1100] pointer-events-auto">
+        {/* 5. Google Earth Mobile Floating Bottom Toolbar (Bottom Left Corner) */}
+        <div className="fixed bottom-4 sm:bottom-6 left-3 sm:left-4 z-[1100] pointer-events-auto">
           <div className="bg-black/90 backdrop-blur-md border border-white/20 text-white rounded-full shadow-2xl px-2.5 py-1.5 flex items-center gap-1.5 sm:gap-2 select-none transition-all">
             {/* Google Earth Brand / Recenter Icon */}
             <button
@@ -2269,7 +2239,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
               {/* Type Filter Popover */}
               {fullscreenTypeOpen && (
-                <div className="absolute bottom-full mb-3 right-0 sm:left-1/2 sm:-translate-x-1/2 bg-black/95 text-white border border-white/20 rounded-2xl shadow-2xl p-2 z-[1150] backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 flex items-center gap-1.5 whitespace-nowrap">
+                <div className="absolute bottom-full mb-3 left-0 bg-black/95 text-white border border-white/20 rounded-2xl shadow-2xl p-2 z-[1150] backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 flex items-center gap-1.5 whitespace-nowrap">
                   {['', 'POP', 'ODC', 'ODP'].map(t => (
                     <button
                       key={t}
@@ -2291,6 +2261,38 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               )}
             </div>
           </div>
+        </div>
+
+        {/* 6. Floating GPS My Location Button (Bottom Right Corner) */}
+        <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-4 z-[1100] pointer-events-auto">
+          <button
+            type="button"
+            onClick={() => {
+              if (targetPin) {
+                setTargetPin(null);
+              } else {
+                handleGpsCurrentLocation();
+              }
+            }}
+            className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full border backdrop-blur-md shadow-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 ${
+              targetPin
+                ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-400 shadow-rose-600/50 animate-pulse'
+                : 'bg-black/90 hover:bg-zinc-800 text-fuchsia-300 border-white/20 hover:border-white/40'
+            }`}
+            title={targetPin ? 'Hapus Patokan Titik Lokasi' : 'Deteksi & Tandai Lokasi GPS Saya Saat Ini'}
+          >
+            {targetPin ? (
+              <span className="text-sm font-black leading-none">✕</span>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="7" />
+                <line x1="12" y1="1" x2="12" y2="5" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="1" y1="12" x2="5" y2="12" />
+                <line x1="19" y1="12" x2="23" y2="12" />
+              </svg>
+            )}
+          </button>
         </div>
 
         {/* 6. Node Detail Drawer / Bottom Sheet */}
