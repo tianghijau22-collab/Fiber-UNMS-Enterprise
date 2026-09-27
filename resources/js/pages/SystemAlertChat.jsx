@@ -791,11 +791,11 @@ export default function SystemAlertChat() {
             }
 
             return (
-              <div key={`msg-${msg.id}`} className="flex items-start space-x-2.5 w-full group">
+              <div key={`msg-${msg.id}`} className="flex items-start space-x-2 w-full group">
                 
                 {/* Bot Small Avatar */}
                 <div className="shrink-0 mt-0.5">
-                  <div className={`w-8 h-8 rounded-md flex items-center justify-center border shadow-2xs ${avatarCls}`}>
+                  <div className={`w-7 h-7 rounded-md flex items-center justify-center border shadow-2xs ${avatarCls}`}>
                     {badgeIcon}
                   </div>
                 </div>
@@ -807,22 +807,22 @@ export default function SystemAlertChat() {
                 >
                   
                   {/* Card Header */}
-                  <div className={`px-3.5 py-2 ${headerBg} flex items-center justify-between`}>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-[11px] sm:text-[11.5px] font-bold tracking-wider uppercase font-mono text-black dark:text-white">
+                  <div className={`px-3 py-1.5 ${headerBg} flex items-center justify-between`}>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-[10px] sm:text-[10.5px] font-bold tracking-wider uppercase font-mono text-black dark:text-white">
                         {msg.source_short_badge || 'ALERT MONITORING SISTEM'}
                       </span>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1.5">
                       {/* Timestamp (hidden if hideTime is active) */}
                       {!hideTime && (
-                        <span className="text-xs sm:text-[12px] font-mono font-medium text-black/60 dark:text-white/60 mr-1">
+                        <span className="text-[11px] font-mono font-medium text-black/60 dark:text-white/60 mr-1">
                           {msg.time_seconds || msg.time_human}
                         </span>
                       )}
 
-                      <div className="flex items-center space-x-1 no-screenshot">
+                      <div className="flex items-center space-x-0.5 no-screenshot">
                         {/* Screenshot Card Button */}
                         <button
                           onClick={() => handleScreenshotCard(msg.id)}
@@ -831,9 +831,9 @@ export default function SystemAlertChat() {
                           className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 text-black dark:text-white transition cursor-pointer"
                         >
                           {capturingId === msg.id ? (
-                            <IconRefresh className="w-3.5 h-3.5 animate-spin text-indigo-600 dark:text-indigo-400" />
+                            <IconRefresh className="w-3 h-3 animate-spin text-indigo-600 dark:text-indigo-400" />
                           ) : (
-                            <IconCamera className="w-3.5 h-3.5" />
+                            <IconCamera className="w-3 h-3" />
                           )}
                         </button>
 
@@ -844,11 +844,11 @@ export default function SystemAlertChat() {
                           className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 text-black dark:text-white transition cursor-pointer"
                         >
                           {copiedId === msg.id ? (
-                            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                              <IconCheck className="w-3.5 h-3.5" />
+                            <span className="text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                              <IconCheck className="w-3 h-3" />
                             </span>
                           ) : (
-                            <IconCopy className="w-3.5 h-3.5" />
+                            <IconCopy className="w-3 h-3" />
                           )}
                         </button>
                       </div>
@@ -856,23 +856,23 @@ export default function SystemAlertChat() {
                   </div>
 
                   {/* Card Content */}
-                  <div className="p-3.5 sm:p-4 space-y-2.5">
+                  <div className="p-2.5 sm:p-3 space-y-2">
                     
                     {/* Title */}
                     <div 
-                      className={`text-xs sm:text-sm font-bold tracking-tight flex items-center gap-1.5 ${titleColor}`}
+                      className={`text-xs sm:text-[13px] font-bold tracking-tight flex items-center gap-1.5 ${titleColor}`}
                       dangerouslySetInnerHTML={{ __html: msg.title }}
                     />
 
                     {/* Body Text with Clean Monospace Text */}
                     <div 
-                      className={`text-xs sm:text-[13px] leading-relaxed text-black dark:text-white font-mono whitespace-pre-wrap ${bodyBg} p-3 sm:p-3.5 rounded-md border [&_b]:font-bold [&_b]:text-black dark:[&_b]:text-white [&_code]:font-mono [&_code]:font-medium [&_code]:text-inherit [&_code]:bg-transparent [&_code]:border-0 [&_code]:p-0 [&_i]:italic [&_i]:text-black/70 dark:[&_i]:text-white/70`}
+                      className={`text-[11px] sm:text-xs leading-relaxed text-black dark:text-white font-mono whitespace-pre-wrap ${bodyBg} p-2.5 sm:p-3 rounded-md border [&_b]:font-bold [&_b]:text-black dark:[&_b]:text-white [&_code]:font-mono [&_code]:font-medium [&_code]:text-inherit [&_code]:bg-transparent [&_code]:border-0 [&_code]:p-0 [&_i]:italic [&_i]:text-black/70 dark:[&_i]:text-white/70`}
                       dangerouslySetInnerHTML={{ __html: msg.body }}
                     />
 
                     {/* Footer Info (Hidden if hideTime is active) */}
                     {!hideTime && (
-                      <div className="flex items-center justify-between text-[10.5px] sm:text-[11px] text-black/50 dark:text-white/50 pt-0.5 font-mono">
+                      <div className="flex items-center justify-between text-[10px] sm:text-[10.5px] text-black/50 dark:text-white/50 pt-0 font-mono">
                         <div className="flex items-center space-x-1.5">
                           <IconClock className="w-3 h-3 text-black/40 dark:text-white/40" />
                           <span>Waktu:</span>
