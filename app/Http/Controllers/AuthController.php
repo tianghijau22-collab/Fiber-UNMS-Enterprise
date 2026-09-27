@@ -82,14 +82,21 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         $userId = $request->input('user_id');
+        $reason = $request->input('reason');
         $user = $userId ? User::find($userId) : null;
 
+        $description = $user
+            ? ($reason === 'timeout'
+                ? "Sesi pengguna {$user->name} ({$user->role}) berakhir otomatis karena tidak ada aktivitas selama 3 menit (Session Timeout)."
+                : "Pengguna {$user->name} ({$user->role}) telah logout dari sistem.")
+            : "Sesi pengguna telah diakhiri (Logout).";
+
         AuditLog::record(
-            'LOGOUT',
+            $reason === 'timeout' ? 'SESSION_TIMEOUT' : 'LOGOUT',
             'Authentication',
-            $user ? "Pengguna {$user->name} ({$user->role}) telah logout dari sistem." : "Sesi pengguna telah diakhiri (Logout).",
+            $description,
             null,
-            $user ? ['user_id' => $user->id, 'username' => $user->username] : []
+            $user ? ['user_id' => $user->id, 'username' => $user->username, 'reason' => $reason] : []
         );
 
         return response()->json(['message' => 'Berhasil logout dari sistem.']);

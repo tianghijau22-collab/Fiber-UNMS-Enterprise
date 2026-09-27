@@ -5,14 +5,35 @@ const AuthContext = createContext();
 
 export const DEFAULT_ROUTE_ROLES = getDefaultPermissionsMap();
 
+const INACTIVITY_TIMEOUT_MS = 3 * 60 * 1000; // 3 Menit (180.000 ms) Inactivity Timeout
+
+const recordUserActivity = () => {
+  try {
+    localStorage.setItem('fiber_last_activity', Date.now().toString());
+  } catch {
+    // Ignore storage issues
+  }
+};
+
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const saved = localStorage.getItem('fiber_user');
-      return saved ? JSON.parse(saved) : null;
+      const lastAct = localStorage.getItem('fiber_last_activity');
+      if (saved) {
+        if (lastAct && (Date.now() - parseInt(lastAct, 10) > INACTIVITY_TIMEOUT_MS)) {
+          localStorage.removeItem('fiber_user');
+          localStorage.removeItem('fiber_last_activity');
+          sessionStorage.setItem('fiber_session_expired', '1');
+          return null;
+        }
+        return JSON.parse(saved);
+      }
+      return null;
     } catch (err) {
       console.error('Error loading user session:', err);
       localStorage.removeItem('fiber_user');
+      localStorage.removeItem('fiber_last_activity');
       return null;
     }
   });
@@ -36,6 +57,109 @@ export function AuthProvider({ children }) {
     fetchRoutePermissions();
   }, [fetchRoutePermissions]);
 
+  const logout = useCallback(async (reason = 'manual') => {
+    const savedUser = currentUser;
+    setCurrentUser(null);
+    localStorage.removeItem('fiber_user');
+    localStorage.removeItem('fiber_last_activity');
+
+    if (reason === 'timeout') {
+      sessionStorage.setItem('fiber_session_expired', '1');
+      if (typeof window !== 'undefined' && window.showAppAlert) {
+        window.showAppAlert({
+          type: 'warning',
+          title: 'Sesi Telah Berakhir',
+          message: 'Sesi login Anda telah berakhir karena tidak ada aktivitas selama 3 menit. Silakan login kembali.',
+          duration: 6000,
+        });
+      }
+    } else {
+      sessionStorage.removeItem('fiber_session_expired');
+    }
+
+    if (savedUser) {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+          },
+          body: JSON.stringify({ user_id: savedUser.id, reason })
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }, [currentUser]);
+
+  // ── Inactivity Auto-Logout Tracker (3 Menit Inactivity Timeout) ──
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Record initial activity if not already set
+    if (!localStorage.getItem('fiber_last_activity')) {
+      recordUserActivity();
+    }
+
+    let lastThrottleTime = 0;
+    const handleUserActivity = () => {
+      const now = Date.now();
+      // Throttle localStorage updates to once every 2.5 seconds
+      if (now - lastThrottleTime > 2500) {
+        lastThrottleTime = now;
+        recordUserActivity();
+      }
+    };
+
+    const checkInactivity = () => {
+      if (!currentUser) return;
+      const lastActivityStr = localStorage.getItem('fiber_last_activity');
+      if (!lastActivityStr) {
+        recordUserActivity();
+        return;
+      }
+      const lastActivity = parseInt(lastActivityStr, 10);
+      const elapsed = Date.now() - lastActivity;
+
+      if (elapsed >= INACTIVITY_TIMEOUT_MS) {
+        logout('timeout');
+      }
+    };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click', 'wheel'];
+    events.forEach(evt => window.addEventListener(evt, handleUserActivity, { passive: true }));
+
+    // Periodic check every 4 seconds
+    const interval = setInterval(checkInactivity, 4000);
+
+    // Immediate check on tab focus or visibility change
+    const handleVisibilityOrFocus = () => {
+      if (!document.hidden) {
+        checkInactivity();
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    // Cross-tab storage sync
+    const handleStorage = (e) => {
+      if (e.key === 'fiber_user' && !e.newValue) {
+        setCurrentUser(null);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      events.forEach(evt => window.removeEventListener(evt, handleUserActivity));
+      clearInterval(interval);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [currentUser, logout]);
+
   const login = async (username, password, deferCommit = false) => {
     setLoading(true);
     try {
@@ -55,6 +179,9 @@ export function AuthProvider({ children }) {
       }
 
       localStorage.setItem('fiber_user', JSON.stringify(data.user));
+      recordUserActivity();
+      sessionStorage.removeItem('fiber_session_expired');
+
       if (!deferCommit) {
         setCurrentUser(data.user);
       }
@@ -72,30 +199,13 @@ export function AuthProvider({ children }) {
       const saved = localStorage.getItem('fiber_user');
       if (saved) {
         setCurrentUser(JSON.parse(saved));
+        recordUserActivity();
+        sessionStorage.removeItem('fiber_session_expired');
       }
       fetchRoutePermissions();
     } catch (err) {
       console.error('Error committing login:', err);
     }
-  };
-
-  const logout = async () => {
-    if (currentUser) {
-      try {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
-          },
-          body: JSON.stringify({ user_id: currentUser.id })
-        });
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    setCurrentUser(null);
-    localStorage.removeItem('fiber_user');
   };
 
   /**

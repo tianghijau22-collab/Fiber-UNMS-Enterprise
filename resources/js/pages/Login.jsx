@@ -539,6 +539,21 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState(null);
 
+  // Session Inactivity Timeout Alert Notice
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(() => {
+    try {
+      return sessionStorage.getItem('fiber_session_expired') === '1' || location.state?.sessionExpired === true;
+    } catch {
+      return false;
+    }
+  });
+
+  React.useEffect(() => {
+    if (sessionExpiredNotice) {
+      sessionStorage.removeItem('fiber_session_expired');
+    }
+  }, [sessionExpiredNotice]);
+
   // Mascot Animation State: 'idle' | 'username' | 'password' | 'success' | 'error'
   const [mascotState, setMascotState] = useState('idle');
   const [isUsernameFocused, setIsUsernameFocused] = useState(false);
@@ -680,6 +695,19 @@ export default function Login() {
                 <div className="flex-1 min-w-0">
                   <h4 className="font-bold text-xs">Perubahan Password Berhasil!</h4>
                   <p className="text-[11px] mt-0.5">{location.state.infoMessage}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Inactivity Session Timeout Alert */}
+            {sessionExpiredNotice && !error && (
+              <div className="bg-amber-50 dark:bg-neutral-900 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-300 p-3.5 rounded-lg text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
+                <span className="shrink-0 text-base">⏱️</span>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-xs">Sesi Login Berakhir</h4>
+                  <p className="text-[11px] mt-0.5 text-amber-800 dark:text-amber-400/90 leading-relaxed">
+                    Sesi Anda telah berakhir secara otomatis karena tidak ada aktivitas selama 3 menit. Silakan masukkan kredensial untuk masuk kembali.
+                  </p>
                 </div>
               </div>
             )}
