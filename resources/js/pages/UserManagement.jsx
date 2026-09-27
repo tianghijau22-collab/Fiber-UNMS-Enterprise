@@ -95,41 +95,7 @@ const getStatusBadge = (status) => {
   }
 };
 
-/* ══════════════════════════════════════════════════════════════════
-   SYSTEM PAGES / ROUTES METADATA FOR RBAC SETTINGS
-══════════════════════════════════════════════════════════════════ */
-const SYSTEM_MODULES = [
-  // 1. Beranda & Monitoring
-  { path: '/dashboard', label: 'Dashboard Utama', category: 'Beranda & Monitoring', desc: 'Ringkasan metrik ONU, OLT, tiket & status sistem' },
-  { path: '/server-monitoring', label: 'Monitoring Server & Daemon', category: 'Beranda & Monitoring', desc: 'CPU/RAM host, background worker & SNMP daemon' },
-  { path: '/system-alerts', label: 'Notifikasi Alert Sistem', category: 'Beranda & Monitoring', desc: 'Feed event real-time, alert telemetri & trap log' },
-  { path: '/broadcast-notifications', label: 'Broadcast Notifikasi Massal', category: 'Beranda & Monitoring', desc: 'Kirim broadcast Web Push / Telegram ke teknisi & user' },
-
-  // 2. Infrastruktur Jaringan & OLT
-  { path: '/olt-management', label: 'Manajemen OLT & Telemetri', category: 'Infrastruktur Jaringan & OLT', desc: 'Kontrol OLT, sync PON, otorisasi ONU & cek redaman' },
-  { path: '/network-bridge-setup', label: 'Bridge MikroTik & OLT', category: 'Infrastruktur Jaringan & OLT', desc: 'Setup tunnel API & konfigurasi gateway remote' },
-  { path: '/network', label: 'Wilayah / OLT Region', category: 'Infrastruktur Jaringan & OLT', desc: 'Hierarki node per wilayah POP, ODC, & ODP' },
-  { path: '/bts-management', label: 'Manajemen Redaman BTS', category: 'Infrastruktur Jaringan & OLT', desc: 'Monitoring optic link site BTS & power level' },
-
-  // 3. Lapangan & Kabel FO
-  { path: '/gis-map', label: 'Peta Spasial GIS Topologi', category: 'Lapangan & Kabel FO', desc: 'Peta interaktif Leaflet, rute kabel & cek lokasi ODP' },
-  { path: '/cable-management', label: 'Manajemen Kabel Fiber', category: 'Lapangan & Kabel FO', desc: 'Daftar master kabel, core count & status jalur' },
-  { path: '/cable-routes', label: 'Pemetaan Rute Kabel', category: 'Lapangan & Kabel FO', desc: 'Editor koordinat spasial bentangan kabel FO' },
-  { path: '/otdr-tracing', label: 'Tracing Putus OTDR', category: 'Lapangan & Kabel FO', desc: 'Simulasi titik putus kabel berdasarkan jarak meter' },
-  { path: '/core-matrix', label: 'Matriks Splicing Core FO', category: 'Lapangan & Kabel FO', desc: 'Pemetaan core-to-core & sambungan tray closure' },
-  { path: '/odp-checks', label: 'Pengecekan Redaman ODP & OPM', category: 'Lapangan & Kabel FO', desc: 'Log pengukuran redaman lapangan teknisi' },
-  { path: '/field-tech', label: 'Work Order Teknisi', category: 'Lapangan & Kabel FO', desc: 'Penugasan kerja lapangan, perbaikan & instalasi' },
-
-  // 4. Layanan Pelanggan & Keuangan
-  { path: '/customers', label: 'Manajemen Pelanggan (CRM)', category: 'Layanan Pelanggan & Billing', desc: 'Data pelanggan, paket langganan, ONU & SOBOK sync' },
-  { path: '/tickets', label: 'Tiket & Maintenance', category: 'Layanan Pelanggan & Billing', desc: 'Helpdesk pengaduan gangguan & eskalasi teknisi' },
-  { path: '/inventory', label: 'Inventori & Perangkat', category: 'Layanan Pelanggan & Billing', desc: 'Stok barang, ONT, kabel, closure & perangkat' },
-
-  // 5. Administrasi & Keamanan Sistem
-  { path: '/users', label: 'Manajemen User & Hak Akses', category: 'Administrasi Sistem', desc: 'Kelola akun staf, peran RBAC & izin halaman' },
-  { path: '/audit-logs', label: 'Audit Logs & Keamanan', category: 'Administrasi Sistem', desc: 'Rekaman jejak aktivitas & log audit sistem' },
-  { path: '/database-backup', label: 'Backup & Restore Database', category: 'Administrasi Sistem', desc: 'Pencadangan database MySQL & restore berkas' },
-];
+import { SYSTEM_NAVIGATION_MODULES as SYSTEM_MODULES } from '../config/navigationModules.jsx';
 
 const TARGET_ROLES = [
   { key: 'Operator Jaringan', label: 'Operator Jaringan', color: 'indigo' },
@@ -641,7 +607,10 @@ export default function UserManagement() {
       if (matrixCategoryFilter && mod.category !== matrixCategoryFilter) return false;
       if (matrixSearch) {
         const s = matrixSearch.toLowerCase();
-        return mod.label.toLowerCase().includes(s) || mod.path.toLowerCase().includes(s) || mod.desc.toLowerCase().includes(s);
+        const label = (mod.name || mod.label || '').toLowerCase();
+        const path = (mod.path || '').toLowerCase();
+        const desc = (mod.desc || '').toLowerCase();
+        return label.includes(s) || path.includes(s) || desc.includes(s);
       }
       return true;
     });
@@ -1188,7 +1157,7 @@ export default function UserManagement() {
                         {/* Page Info */}
                         <td className="p-3.5">
                           <div className="font-bold text-black dark:text-white flex items-center gap-2">
-                            <span>{mod.label}</span>
+                            <span>{mod.name || mod.label}</span>
                             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-black/5 dark:bg-white/10 text-black/60 dark:text-white/60">
                               {mod.path}
                             </span>

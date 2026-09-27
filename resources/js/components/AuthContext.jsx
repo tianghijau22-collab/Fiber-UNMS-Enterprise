@@ -1,31 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { getDefaultPermissionsMap, isUserAuthorizedForCrud } from '../config/navigationModules.jsx';
 
 const AuthContext = createContext();
 
-export const DEFAULT_ROUTE_ROLES = {
-  '/dashboard': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Customer Service', 'Finance & Billing'],
-  '/server-monitoring': ['Super Administrator', 'Operator Jaringan'],
-  '/system-alerts': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Customer Service', 'Finance & Billing'],
-  '/olt-management': ['Super Administrator', 'Operator Jaringan'],
-  '/network-bridge-setup': ['Super Administrator'],
-  '/otdr-tracing': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/cable-management': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/cable-routes': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/field-tech': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/odp-checks': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/bts-management': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/network': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/gis-map': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/gis-map/fullscreen': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/core-matrix': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
-  '/customers': ['Super Administrator', 'Operator Jaringan', 'Customer Service', 'Finance & Billing'],
-  '/tickets': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Customer Service'],
-  '/inventory': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Finance & Billing'],
-  '/users': ['Super Administrator'],
-  '/audit-logs': ['Super Administrator', 'Operator Jaringan'],
-  '/database-backup': ['Super Administrator'],
-  '/broadcast-notifications': ['Super Administrator', 'Operator Jaringan'],
-};
+export const DEFAULT_ROUTE_ROLES = getDefaultPermissionsMap();
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -160,6 +138,8 @@ export function AuthProvider({ children }) {
       loading,
       canAccessRoute,
       hasRole,
+      canCrud: isUserAuthorizedForCrud(currentUser),
+      isUserAuthorizedForCrud,
       routePermissions,
       setRoutePermissions,
       fetchRoutePermissions
