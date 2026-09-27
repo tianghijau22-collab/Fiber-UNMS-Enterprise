@@ -1,30 +1,30 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const AuthContext = createContext();
 
-export const ROUTE_ROLES = {
-  '/dashboard': ['*'],
-  '/server-monitoring': ['Super Administrator', 'Operator Jaringan', 'NOC Operator'],
-  '/olt-management': ['Super Administrator', 'Operator Jaringan', 'NOC Operator'],
+export const DEFAULT_ROUTE_ROLES = {
+  '/dashboard': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Customer Service', 'Finance & Billing'],
+  '/server-monitoring': ['Super Administrator', 'Operator Jaringan'],
+  '/system-alerts': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Customer Service', 'Finance & Billing'],
+  '/olt-management': ['Super Administrator', 'Operator Jaringan'],
   '/network-bridge-setup': ['Super Administrator'],
-  '/otdr-tracing': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
-  '/cable-management': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
-  '/cable-routes': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
-  '/field-tech': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
-  '/odp-checks': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
-  '/bts-management': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
-  '/network': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
-  '/gis-map': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
-  '/gis-map/fullscreen': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
-  '/core-matrix': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'],
+  '/otdr-tracing': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+  '/cable-management': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+  '/cable-routes': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+  '/field-tech': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+  '/odp-checks': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+  '/bts-management': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+  '/network': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+  '/gis-map': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+  '/gis-map/fullscreen': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+  '/core-matrix': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
   '/customers': ['Super Administrator', 'Operator Jaringan', 'Customer Service', 'Finance & Billing'],
-  '/tickets': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer', 'Customer Service'],
-  '/inventory': ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer', 'Finance & Billing'],
+  '/tickets': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Customer Service'],
+  '/inventory': ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Finance & Billing'],
   '/users': ['Super Administrator'],
+  '/audit-logs': ['Super Administrator', 'Operator Jaringan'],
   '/database-backup': ['Super Administrator'],
-  '/audit-logs': ['*'],
-  '/broadcast-notifications': ['Super Administrator', 'Operator Jaringan', 'NOC Operator'],
-  '/system-alerts': ['*'],
+  '/broadcast-notifications': ['Super Administrator', 'Operator Jaringan'],
 };
 
 export function AuthProvider({ children }) {
@@ -39,7 +39,24 @@ export function AuthProvider({ children }) {
     }
   });
 
+  const [routePermissions, setRoutePermissions] = useState(DEFAULT_ROUTE_ROLES);
   const [loading, setLoading] = useState(false);
+
+  const fetchRoutePermissions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/rbac/permissions');
+      const json = await res.json();
+      if (json?.data && typeof json.data === 'object') {
+        setRoutePermissions(json.data);
+      }
+    } catch (err) {
+      // Keep default fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRoutePermissions();
+  }, [fetchRoutePermissions]);
 
   const login = async (username, password, deferCommit = false) => {
     setLoading(true);
@@ -63,6 +80,7 @@ export function AuthProvider({ children }) {
       if (!deferCommit) {
         setCurrentUser(data.user);
       }
+      fetchRoutePermissions();
       setLoading(false);
       return data;
     } catch (err) {
@@ -77,6 +95,7 @@ export function AuthProvider({ children }) {
       if (saved) {
         setCurrentUser(JSON.parse(saved));
       }
+      fetchRoutePermissions();
     } catch (err) {
       console.error('Error committing login:', err);
     }
@@ -107,7 +126,11 @@ export function AuthProvider({ children }) {
   const canAccessRoute = (path) => {
     if (!currentUser) return false;
     if (currentUser.role === 'Super Administrator') return true;
-    const allowed = ROUTE_ROLES[path];
+
+    // Normalize path query
+    const cleanPath = path.split('?')[0];
+    const allowed = routePermissions[cleanPath] || DEFAULT_ROUTE_ROLES[cleanPath];
+
     if (!allowed) return true;
     if (allowed.includes('*')) return true;
     return allowed.includes(currentUser.role);
@@ -128,7 +151,19 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, login, commitLogin, updateCurrentUser, logout, loading, canAccessRoute, hasRole }}>
+    <AuthContext.Provider value={{
+      currentUser,
+      login,
+      commitLogin,
+      updateCurrentUser,
+      logout,
+      loading,
+      canAccessRoute,
+      hasRole,
+      routePermissions,
+      setRoutePermissions,
+      fetchRoutePermissions
+    }}>
       {children}
     </AuthContext.Provider>
   );

@@ -149,4 +149,108 @@ class UserController extends Controller
 
         return response()->json(['message' => 'Akun pengguna berhasil dihapus!']);
     }
+
+    public static function getDefaultRoutePermissions(): array
+    {
+        return [
+            '/dashboard' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Customer Service', 'Finance & Billing'],
+            '/server-monitoring' => ['Super Administrator', 'Operator Jaringan'],
+            '/system-alerts' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Customer Service', 'Finance & Billing'],
+            '/olt-management' => ['Super Administrator', 'Operator Jaringan'],
+            '/network-bridge-setup' => ['Super Administrator'],
+            '/otdr-tracing' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/cable-management' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/cable-routes' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/field-tech' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/odp-checks' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/bts-management' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/network' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/gis-map' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/gis-map/fullscreen' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/core-matrix' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'],
+            '/customers' => ['Super Administrator', 'Operator Jaringan', 'Customer Service', 'Finance & Billing'],
+            '/tickets' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Customer Service'],
+            '/inventory' => ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer', 'Finance & Billing'],
+            '/users' => ['Super Administrator'],
+            '/audit-logs' => ['Super Administrator', 'Operator Jaringan'],
+            '/database-backup' => ['Super Administrator'],
+            '/broadcast-notifications' => ['Super Administrator', 'Operator Jaringan'],
+        ];
+    }
+
+    public function getRoutePermissions()
+    {
+        $raw = \App\Models\SystemSetting::get('rbac_route_permissions');
+        $permissions = $raw ? json_decode($raw, true) : self::getDefaultRoutePermissions();
+
+        // Always guarantee Super Administrator is included for all routes
+        foreach ($permissions as $route => &$roles) {
+            if (!is_array($roles)) $roles = [];
+            if (!in_array('Super Administrator', $roles)) {
+                array_unshift($roles, 'Super Administrator');
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $permissions,
+        ]);
+    }
+
+    public function saveRoutePermissions(Request $request)
+    {
+        $this->checkSuperAdmin();
+
+        $validated = $request->validate([
+            'permissions' => 'required|array',
+        ]);
+
+        $permissions = $validated['permissions'];
+
+        // Enforce Super Administrator has access to all routes
+        foreach ($permissions as $route => &$roles) {
+            if (!is_array($roles)) $roles = [];
+            if (!in_array('Super Administrator', $roles)) {
+                array_unshift($roles, 'Super Administrator');
+            }
+        }
+
+        \App\Models\SystemSetting::set('rbac_route_permissions', json_encode($permissions));
+
+        AuditLog::record(
+            'UPDATE',
+            'RBAC Permissions',
+            'Memperbarui konfigurasi hak akses rute halaman sistem per peran (Role)',
+            null,
+            $permissions
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Konfigurasi hak akses halaman berhasil disimpan!',
+            'data'    => $permissions,
+        ]);
+    }
+
+    public function resetRoutePermissions()
+    {
+        $this->checkSuperAdmin();
+
+        $default = self::getDefaultRoutePermissions();
+        \App\Models\SystemSetting::set('rbac_route_permissions', json_encode($default));
+
+        AuditLog::record(
+            'UPDATE',
+            'RBAC Permissions',
+            'Mereset konfigurasi hak akses rute halaman sistem ke pengaturan bawaan (default)',
+            null,
+            $default
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Hak akses rute berhasil direset ke pengaturan bawaan pabrik!',
+            'data'    => $default,
+        ]);
+    }
 }

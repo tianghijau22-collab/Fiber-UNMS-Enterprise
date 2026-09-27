@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -95,14 +95,47 @@ const getStatusBadge = (status) => {
   }
 };
 
-const PERMISSIONS = [
-  { key: 'olt_control', label: 'Akses OLT Telemetry & Provisioning ONU', roles: ['Super Administrator', 'Operator Jaringan', 'NOC Operator'] },
-  { key: 'cable_edit', label: 'Edit Rute Kabel & Matriks Splicing Core', roles: ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'] },
-  { key: 'otdr_trace', label: 'Menjalankan Fitur OTDR Fault Tracing', roles: ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer'] },
-  { key: 'ticketing', label: 'Kelola Tiket Trouble & Work Order', roles: ['Super Administrator', 'Operator Jaringan', 'NOC Operator', 'Teknisi Jointer', 'Customer Service'] },
-  { key: 'crm_customers', label: 'Akses Manajemen Pelanggan & Paket', roles: ['Super Administrator', 'Operator Jaringan', 'Customer Service', 'Finance & Billing'] },
-  { key: 'billing', label: 'Akses Invoicing, Billing, & Tagihan', roles: ['Super Administrator', 'Finance & Billing'] },
-  { key: 'user_rbac', label: 'Manajemen Hak Akses & Akun Pegawai', roles: ['Super Administrator'] },
+/* ══════════════════════════════════════════════════════════════════
+   SYSTEM PAGES / ROUTES METADATA FOR RBAC SETTINGS
+══════════════════════════════════════════════════════════════════ */
+const SYSTEM_MODULES = [
+  // 1. Beranda & Monitoring
+  { path: '/dashboard', label: 'Dashboard Utama', category: 'Beranda & Monitoring', desc: 'Ringkasan metrik ONU, OLT, tiket & status sistem' },
+  { path: '/server-monitoring', label: 'Monitoring Server & Daemon', category: 'Beranda & Monitoring', desc: 'CPU/RAM host, background worker & SNMP daemon' },
+  { path: '/system-alerts', label: 'Notifikasi Alert Sistem', category: 'Beranda & Monitoring', desc: 'Feed event real-time, alert telemetri & trap log' },
+  { path: '/broadcast-notifications', label: 'Broadcast Notifikasi Massal', category: 'Beranda & Monitoring', desc: 'Kirim broadcast Web Push / Telegram ke teknisi & user' },
+
+  // 2. Infrastruktur Jaringan & OLT
+  { path: '/olt-management', label: 'Manajemen OLT & Telemetri', category: 'Infrastruktur Jaringan & OLT', desc: 'Kontrol OLT, sync PON, otorisasi ONU & cek redaman' },
+  { path: '/network-bridge-setup', label: 'Bridge MikroTik & OLT', category: 'Infrastruktur Jaringan & OLT', desc: 'Setup tunnel API & konfigurasi gateway remote' },
+  { path: '/network', label: 'Wilayah / OLT Region', category: 'Infrastruktur Jaringan & OLT', desc: 'Hierarki node per wilayah POP, ODC, & ODP' },
+  { path: '/bts-management', label: 'Manajemen Redaman BTS', category: 'Infrastruktur Jaringan & OLT', desc: 'Monitoring optic link site BTS & power level' },
+
+  // 3. Lapangan & Kabel FO
+  { path: '/gis-map', label: 'Peta Spasial GIS Topologi', category: 'Lapangan & Kabel FO', desc: 'Peta interaktif Leaflet, rute kabel & cek lokasi ODP' },
+  { path: '/cable-management', label: 'Manajemen Kabel Fiber', category: 'Lapangan & Kabel FO', desc: 'Daftar master kabel, core count & status jalur' },
+  { path: '/cable-routes', label: 'Pemetaan Rute Kabel', category: 'Lapangan & Kabel FO', desc: 'Editor koordinat spasial bentangan kabel FO' },
+  { path: '/otdr-tracing', label: 'Tracing Putus OTDR', category: 'Lapangan & Kabel FO', desc: 'Simulasi titik putus kabel berdasarkan jarak meter' },
+  { path: '/core-matrix', label: 'Matriks Splicing Core FO', category: 'Lapangan & Kabel FO', desc: 'Pemetaan core-to-core & sambungan tray closure' },
+  { path: '/odp-checks', label: 'Pengecekan Redaman ODP & OPM', category: 'Lapangan & Kabel FO', desc: 'Log pengukuran redaman lapangan teknisi' },
+  { path: '/field-tech', label: 'Work Order Teknisi', category: 'Lapangan & Kabel FO', desc: 'Penugasan kerja lapangan, perbaikan & instalasi' },
+
+  // 4. Layanan Pelanggan & Keuangan
+  { path: '/customers', label: 'Manajemen Pelanggan (CRM)', category: 'Layanan Pelanggan & Billing', desc: 'Data pelanggan, paket langganan, ONU & SOBOK sync' },
+  { path: '/tickets', label: 'Tiket & Maintenance', category: 'Layanan Pelanggan & Billing', desc: 'Helpdesk pengaduan gangguan & eskalasi teknisi' },
+  { path: '/inventory', label: 'Inventori & Perangkat', category: 'Layanan Pelanggan & Billing', desc: 'Stok barang, ONT, kabel, closure & perangkat' },
+
+  // 5. Administrasi & Keamanan Sistem
+  { path: '/users', label: 'Manajemen User & Hak Akses', category: 'Administrasi Sistem', desc: 'Kelola akun staf, peran RBAC & izin halaman' },
+  { path: '/audit-logs', label: 'Audit Logs & Keamanan', category: 'Administrasi Sistem', desc: 'Rekaman jejak aktivitas & log audit sistem' },
+  { path: '/database-backup', label: 'Backup & Restore Database', category: 'Administrasi Sistem', desc: 'Pencadangan database MySQL & restore berkas' },
+];
+
+const TARGET_ROLES = [
+  { key: 'Operator Jaringan', label: 'Operator Jaringan', color: 'indigo' },
+  { key: 'Teknisi Jointer', label: 'Teknisi Jointer', color: 'amber' },
+  { key: 'Customer Service', label: 'Customer Service', color: 'sky' },
+  { key: 'Finance & Billing', label: 'Finance & Billing', color: 'emerald' },
 ];
 
 /* ══════════════════════════════════════════════════════════════════
@@ -300,8 +333,10 @@ function UserFormModal({ user, onSave, onClose, loading, error }) {
    MAIN USER MANAGEMENT COMPONENT
 ══════════════════════════════════════════════════════════════════ */
 export default function UserManagement() {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, routePermissions, setRoutePermissions, fetchRoutePermissions } = useAuth();
   const navigate = useNavigate();
+
+  const isSuperAdmin = currentUser?.role === 'Super Administrator';
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -321,6 +356,16 @@ export default function UserManagement() {
   // Delete Confirm State
   const [userToDelete, setUserToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  // ── RBAC Permission Settings Matrix State ──
+  const [matrixPermissions, setMatrixPermissions] = useState({});
+  const [loadingMatrix, setLoadingMatrix] = useState(false);
+  const [savingMatrix, setSavingMatrix] = useState(false);
+  const [matrixSearch, setMatrixSearch] = useState('');
+  const [matrixCategoryFilter, setMatrixCategoryFilter] = useState('');
+  const [hasUnsavedMatrixChanges, setHasUnsavedMatrixChanges] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resettingMatrix, setResettingMatrix] = useState(false);
 
   const triggerFeedback = ({ type, message }) => {
     if (typeof window !== 'undefined' && window.showAppAlert) {
@@ -358,6 +403,30 @@ export default function UserManagement() {
 
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchUsers);
 
+  // Fetch Matrix Permissions from Server
+  const loadMatrixPermissions = useCallback(async () => {
+    setLoadingMatrix(true);
+    try {
+      const res = await fetch('/api/rbac/permissions');
+      const json = await res.json();
+      if (json?.data && typeof json.data === 'object') {
+        setMatrixPermissions(json.data);
+        setHasUnsavedMatrixChanges(false);
+      }
+    } catch (err) {
+      console.error('Failed to load RBAC permissions:', err);
+    } finally {
+      setLoadingMatrix(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'matrix') {
+      loadMatrixPermissions();
+    }
+  }, [activeTab, loadMatrixPermissions]);
+
+  // Handle Save User
   const handleSaveUser = (formData) => {
     setSaving(true);
     setModalErr(null);
@@ -431,8 +500,152 @@ export default function UserManagement() {
       });
   };
 
+  // Toggle Single Permission in Matrix
+  const handleTogglePermission = (path, roleKey) => {
+    if (!isSuperAdmin) return;
+    if (roleKey === 'Super Administrator') return; // Locked
+
+    setMatrixPermissions(prev => {
+      const currentList = Array.isArray(prev[path]) ? [...prev[path]] : [];
+      const index = currentList.indexOf(roleKey);
+      let nextList;
+      if (index > -1) {
+        nextList = currentList.filter(r => r !== roleKey);
+      } else {
+        nextList = [...currentList, roleKey];
+      }
+
+      setHasUnsavedMatrixChanges(true);
+      return {
+        ...prev,
+        [path]: nextList
+      };
+    });
+  };
+
+  // Bulk Toggle for a Role across all currently filtered modules
+  const handleBulkToggleRole = (roleKey, enableAll) => {
+    if (!isSuperAdmin) return;
+    setMatrixPermissions(prev => {
+      const next = { ...prev };
+      SYSTEM_MODULES.forEach(mod => {
+        const cur = Array.isArray(next[mod.path]) ? [...next[mod.path]] : [];
+        if (enableAll) {
+          if (!cur.includes(roleKey)) cur.push(roleKey);
+        } else {
+          const idx = cur.indexOf(roleKey);
+          if (idx > -1) cur.splice(idx, 1);
+        }
+        next[mod.path] = cur;
+      });
+      setHasUnsavedMatrixChanges(true);
+      return next;
+    });
+  };
+
+  // Save Matrix Permissions to Backend
+  const handleSaveMatrixPermissions = async () => {
+    if (!isSuperAdmin) return;
+    setSavingMatrix(true);
+    try {
+      const res = await fetch('/api/rbac/permissions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+        },
+        body: JSON.stringify({ permissions: matrixPermissions })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Gagal menyimpan hak akses halaman.');
+      }
+
+      setMatrixPermissions(data.data || matrixPermissions);
+      if (setRoutePermissions) {
+        setRoutePermissions(data.data || matrixPermissions);
+      }
+      if (fetchRoutePermissions) {
+        fetchRoutePermissions();
+      }
+      setHasUnsavedMatrixChanges(false);
+      triggerFeedback({
+        type: 'success',
+        message: 'Pengaturan hak akses halaman berhasil disimpan dan langsung diterapkan ke seluruh pengguna!'
+      });
+    } catch (err) {
+      triggerFeedback({
+        type: 'error',
+        message: err.message || 'Gagal menyimpan pengaturan hak akses.'
+      });
+    } finally {
+      setSavingMatrix(false);
+    }
+  };
+
+  // Reset Matrix Permissions to Factory Default
+  const handleResetMatrixPermissions = async () => {
+    if (!isSuperAdmin) return;
+    setResettingMatrix(true);
+    try {
+      const res = await fetch('/api/rbac/permissions/reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+        }
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Gagal mereset hak akses.');
+      }
+
+      setMatrixPermissions(data.data || {});
+      if (setRoutePermissions) {
+        setRoutePermissions(data.data || {});
+      }
+      if (fetchRoutePermissions) {
+        fetchRoutePermissions();
+      }
+      setShowResetConfirm(false);
+      setHasUnsavedMatrixChanges(false);
+      triggerFeedback({
+        type: 'success',
+        message: 'Hak akses halaman berhasil direset ke pengaturan bawaan pabrik!'
+      });
+    } catch (err) {
+      triggerFeedback({
+        type: 'error',
+        message: err.message || 'Gagal mereset pengaturan hak akses.'
+      });
+    } finally {
+      setResettingMatrix(false);
+    }
+  };
+
   const totalPages = Math.ceil(users.length / perPage) || 1;
   const paginatedUsers = users.slice((currentPage - 1) * perPage, currentPage * perPage);
+
+  // Filtered System Modules for Tab 2
+  const categories = useMemo(() => {
+    const setCat = new Set(SYSTEM_MODULES.map(m => m.category));
+    return Array.from(setCat);
+  }, []);
+
+  const filteredModules = useMemo(() => {
+    return SYSTEM_MODULES.filter(mod => {
+      if (matrixCategoryFilter && mod.category !== matrixCategoryFilter) return false;
+      if (matrixSearch) {
+        const s = matrixSearch.toLowerCase();
+        return mod.label.toLowerCase().includes(s) || mod.path.toLowerCase().includes(s) || mod.desc.toLowerCase().includes(s);
+      }
+      return true;
+    });
+  }, [matrixCategoryFilter, matrixSearch]);
 
   return (
     <div className="space-y-5 stagger-enter">
@@ -440,18 +653,21 @@ export default function UserManagement() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-black p-5 sm:p-6 rounded-lg border border-black/70 dark:border-white/70 shadow-2xs">
         <div>
           <h3 className="text-xl sm:text-2xl font-bold text-black dark:text-white tracking-tight font-sans">
-            Manajemen Pengguna
+            Manajemen Pengguna &amp; Hak Akses Halaman
           </h3>
           <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
-            Kelola hak akses RBAC, akun staf, divisi operasional, dan izin sistem
+            Kelola akun staf, kontrol RBAC dinamis, dan atur izin akses modul halaman per peran
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <RefreshButton
-            isRefreshing={isRefreshing}
-            onRefresh={triggerRefresh}
+            isRefreshing={isRefreshing || loadingMatrix}
+            onRefresh={() => {
+              fetchUsers(true);
+              if (activeTab === 'matrix') loadMatrixPermissions();
+            }}
             lastUpdatedText={timeAgoText}
-            label="Segarkan Akun"
+            label="Segarkan Data"
           />
           <button
             onClick={() => { setEditingUser(null); setModalErr(null); setShowModal(true); }}
@@ -518,27 +734,47 @@ export default function UserManagement() {
       </div>
 
       {/* Main Tabs Navigation */}
-      <div className="flex border-b border-black/20 dark:border-white/20 bg-white dark:bg-black px-4 pt-2 rounded-t-lg">
-        <button
-          onClick={() => setActiveTab('users')}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'users'
-              ? 'border-black dark:border-white text-black dark:text-white bg-black/5 dark:bg-white/5 rounded-t-md'
-              : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
-          }`}
-        >
-          Daftar Akun Pengguna ({users.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('matrix')}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'matrix'
-              ? 'border-black dark:border-white text-black dark:text-white bg-black/5 dark:bg-white/5 rounded-t-md'
-              : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
-          }`}
-        >
-          Matriks Izin Akses RBAC
-        </button>
+      <div className="flex items-center justify-between border-b border-black/20 dark:border-white/20 bg-white dark:bg-black px-4 pt-2 rounded-t-lg">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'users'
+                ? 'border-black dark:border-white text-black dark:text-white bg-black/5 dark:bg-white/5 rounded-t-md'
+                : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
+            }`}
+          >
+            Daftar Akun Pengguna ({users.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('matrix')}
+            className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer relative ${
+              activeTab === 'matrix'
+                ? 'border-black dark:border-white text-black dark:text-white bg-black/5 dark:bg-white/5 rounded-t-md'
+                : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
+            }`}
+          >
+            Pengaturan Hak Akses Halaman (RBAC)
+            {hasUnsavedMatrixChanges && (
+              <span className="ml-1.5 w-2 h-2 rounded-full bg-amber-500 inline-block" title="Perubahan belum disimpan" />
+            )}
+          </button>
+        </div>
+
+        {activeTab === 'matrix' && isSuperAdmin && hasUnsavedMatrixChanges && (
+          <div className="hidden sm:flex items-center gap-2 py-1">
+            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 animate-pulse">
+              Ada perubahan belum disimpan
+            </span>
+            <button
+              onClick={handleSaveMatrixPermissions}
+              disabled={savingMatrix}
+              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+            >
+              {savingMatrix ? 'Menyimpan...' : 'Simpan Izin Akses'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* TAB 1: USER ACCOUNTS LIST */}
@@ -797,44 +1033,261 @@ export default function UserManagement() {
         </div>
       )}
 
-      {/* TAB 2: RBAC PERMISSION MATRIX VISUALIZATION */}
+      {/* TAB 2: INTERACTIVE RBAC PERMISSION MATRIX & DYNAMIC PAGE ACCESS SETTINGS */}
       {activeTab === 'matrix' && (
-        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg overflow-hidden shadow-2xs p-5 sm:p-6 space-y-4">
-          <div>
-            <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">
-              Matriks Izin Akses Sistem (RBAC Permission Matrix)
-            </h3>
-            <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
-              Pemetaan otomatis fitur &amp; hak eksekusi sistem berdasarkan Peran Pegawai
-            </p>
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg overflow-hidden shadow-2xs p-4 sm:p-6 space-y-4">
+          {/* Header Description & Action Buttons */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-black/10 dark:border-white/10 pb-4">
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-black dark:text-white flex items-center gap-2">
+                <span>Pengaturan Hak Akses Halaman (Role-Based Page Access)</span>
+                {isSuperAdmin ? (
+                  <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[10px] font-bold font-mono">
+                    Mode Pengeditan Admin
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-bold font-mono">
+                    Hanya Baca (Read-Only)
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
+                Centang kotak pada peran (Role) yang diizinkan mengakses dan melihat menu halaman terkait. Perubahan akan berlaku seketika di seluruh sistem.
+              </p>
+            </div>
+
+            {isSuperAdmin && (
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirm(true)}
+                  disabled={savingMatrix || resettingMatrix}
+                  className="px-3 py-2 bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  title="Kembalikan semua izin akses ke pengaturan default pabrik"
+                >
+                  Reset ke Default
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveMatrixPermissions}
+                  disabled={savingMatrix || !hasUnsavedMatrixChanges}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>{savingMatrix ? 'Menyimpan...' : 'Simpan Hak Akses'}</span>
+                </button>
+              </div>
+            )}
           </div>
 
+          {/* Filter & Search Toolbar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-black/5 dark:bg-white/5 p-3 rounded-md border border-black/10 dark:border-white/10">
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto flex-1">
+              <div className="relative w-full sm:w-72">
+                <input
+                  type="text"
+                  value={matrixSearch}
+                  onChange={e => setMatrixSearch(e.target.value)}
+                  placeholder="Cari modul / rute halaman..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
+                />
+                <svg className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-black/40 dark:text-white/40 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </div>
+
+              <select
+                value={matrixCategoryFilter}
+                onChange={e => setMatrixCategoryFilter(e.target.value)}
+                className="w-full sm:w-56 px-3 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
+              >
+                <option value="">— Semua Kategori Modul —</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="text-[11px] text-black/60 dark:text-white/60 font-mono">
+              Menampilkan <b>{filteredModules.length}</b> dari {SYSTEM_MODULES.length} halaman
+            </div>
+          </div>
+
+          {/* Quick Role Bulk Actions (Super Admin Only) */}
+          {isSuperAdmin && (
+            <div className="p-3 rounded-md bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="font-bold text-black/70 dark:text-white/70 uppercase">Pintasan Cepat Peran:</span>
+              {TARGET_ROLES.map(role => (
+                <div key={role.key} className="flex items-center gap-1 border-r border-black/15 dark:border-white/15 pr-2 mr-1">
+                  <span className="font-semibold text-black dark:text-white">{role.label}:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkToggleRole(role.key, true)}
+                    className="px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold cursor-pointer"
+                    title={`Beri semua akses halaman ke role ${role.label}`}
+                  >
+                    + Semua
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBulkToggleRole(role.key, false)}
+                    className="px-1.5 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold cursor-pointer"
+                    title={`Cabut semua akses halaman dari role ${role.label}`}
+                  >
+                    - Kosongkan
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Matrix Table */}
           <div className="overflow-x-auto border border-black/20 dark:border-white/20 rounded-md">
             <table className="w-full text-left text-xs">
               <thead className="bg-black/5 dark:bg-white/5 border-b border-black/20 dark:border-white/20 text-black dark:text-white font-bold">
                 <tr>
-                  <th className="p-3.5 w-1/3">Modul &amp; Hak Eksekusi Sistem</th>
-                  <th className="p-3.5 text-center">Super Admin</th>
-                  <th className="p-3.5 text-center">Operator Jaringan</th>
-                  <th className="p-3.5 text-center">Teknisi Jointer</th>
-                  <th className="p-3.5 text-center">Customer Service</th>
-                  <th className="p-3.5 text-center">Finance</th>
+                  <th className="p-3.5 min-w-[240px]">Halaman &amp; Rute Sistem</th>
+                  <th className="p-3.5 text-center min-w-[130px] bg-purple-500/5">
+                    <div className="flex flex-col items-center">
+                      <span className="text-purple-600 dark:text-purple-400 font-bold">Super Admin</span>
+                      <span className="text-[9px] font-mono text-purple-600/70 dark:text-purple-400/70 uppercase">Akses Penuh</span>
+                    </div>
+                  </th>
+                  {TARGET_ROLES.map(role => (
+                    <th key={role.key} className="p-3.5 text-center min-w-[140px]">
+                      <div className="flex flex-col items-center">
+                        <span className="text-black dark:text-white font-bold">{role.label}</span>
+                        <span className="text-[9px] font-mono text-black/50 dark:text-white/50 uppercase">Klik untuk atur</span>
+                      </div>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/10 dark:divide-white/10 font-medium">
-                {PERMISSIONS.map((perm, idx) => (
-                  <tr key={idx} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                    <td className="p-3.5 font-bold text-black dark:text-white">{perm.label}</td>
-                    <td className="p-3.5 text-center">{perm.roles.includes('Super Administrator') ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
-                    <td className="p-3.5 text-center">{(perm.roles.includes('Operator Jaringan') || perm.roles.includes('NOC Operator')) ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
-                    <td className="p-3.5 text-center">{perm.roles.includes('Teknisi Jointer') ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
-                    <td className="p-3.5 text-center">{perm.roles.includes('Customer Service') ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
-                    <td className="p-3.5 text-center">{perm.roles.includes('Finance & Billing') ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
+                {loadingMatrix ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
+                      Memuat konfigurasi matriks hak akses...
+                    </td>
                   </tr>
-                ))}
+                ) : filteredModules.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
+                      Tidak ada halaman modul yang cocok dengan pencarian.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredModules.map((mod, idx) => {
+                    const currentRoles = Array.isArray(matrixPermissions[mod.path]) ? matrixPermissions[mod.path] : [];
+
+                    return (
+                      <tr key={mod.path} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                        {/* Page Info */}
+                        <td className="p-3.5">
+                          <div className="font-bold text-black dark:text-white flex items-center gap-2">
+                            <span>{mod.label}</span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-black/5 dark:bg-white/10 text-black/60 dark:text-white/60">
+                              {mod.path}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-black/50 dark:text-white/50 mt-0.5">
+                            <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 mr-1.5">
+                              [{mod.category}]
+                            </span>
+                            {mod.desc}
+                          </div>
+                        </td>
+
+                        {/* Super Administrator: Locked always enabled */}
+                        <td className="p-3.5 text-center bg-purple-500/5">
+                          <div className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-mono text-[11px] font-bold">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                            <span>Terkunci</span>
+                          </div>
+                        </td>
+
+                        {/* Configurable Roles */}
+                        {TARGET_ROLES.map(role => {
+                          const isAllowed = currentRoles.includes(role.key) || currentRoles.includes('*');
+
+                          return (
+                            <td key={role.key} className="p-3.5 text-center">
+                              {isSuperAdmin ? (
+                                <label className="inline-flex items-center justify-center p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition-colors select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={isAllowed}
+                                    onChange={() => handleTogglePermission(mod.path, role.key)}
+                                    className="w-4 h-4 rounded border-black/30 dark:border-white/30 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                </label>
+                              ) : (
+                                isAllowed ? (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xs inline-flex items-center gap-1">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                    Ya
+                                  </span>
+                                ) : (
+                                  <span className="text-black/30 dark:text-white/30 font-mono">—</span>
+                                )
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* Bottom Floating/Pinned Save Bar if Unsaved */}
+          {isSuperAdmin && (
+            <div className="pt-3 border-t border-black/10 dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-black/60 dark:text-white/60">
+                {hasUnsavedMatrixChanges ? (
+                  <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                    Perubahan konfigurasi belum disimpan ke database
+                  </span>
+                ) : (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                    ✓ Seluruh konfigurasi hak akses tersinkronisasi
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={loadMatrixPermissions}
+                  disabled={!hasUnsavedMatrixChanges || savingMatrix}
+                  className="px-3.5 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-semibold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  Batalkan Perubahan
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveMatrixPermissions}
+                  disabled={!hasUnsavedMatrixChanges || savingMatrix}
+                  className="px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>{savingMatrix ? 'Menyimpan ke Sistem...' : 'Simpan Perubahan Hak Akses'}</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -849,7 +1302,7 @@ export default function UserManagement() {
         />
       )}
 
-      {/* Standard Confirm Dialog for Delete */}
+      {/* Standard Confirm Dialog for Delete User */}
       <ConfirmDialog
         isOpen={!!userToDelete}
         title="Konfirmasi Hapus Akun"
@@ -860,6 +1313,19 @@ export default function UserManagement() {
         loading={deleting}
         onConfirm={confirmExecuteDeleteUser}
         onClose={() => setUserToDelete(null)}
+      />
+
+      {/* Standard Confirm Dialog for Reset RBAC Matrix */}
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        title="Reset Hak Akses ke Bawaan"
+        message="Apakah Anda yakin ingin mereset seluruh konfigurasi izin akses halaman ke pengaturan bawaan pabrik (default)? Seluruh penyesuaian hak akses peran akan ditimpa."
+        confirmText={resettingMatrix ? 'Mereset...' : 'Ya, Reset ke Bawaan'}
+        cancelText="Batal"
+        type="warning"
+        loading={resettingMatrix}
+        onConfirm={handleResetMatrixPermissions}
+        onClose={() => setShowResetConfirm(false)}
       />
     </div>
   );

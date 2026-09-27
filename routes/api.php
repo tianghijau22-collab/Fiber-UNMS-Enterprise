@@ -164,7 +164,10 @@ Route::post('tickets/{id}/add-progress', [TicketController::class, 'addProgress'
 Route::get('public/tickets/{ticketNumber}', [TicketController::class, 'publicTrack']);
 Route::apiResource('tickets', TicketController::class);
 Route::get('inventory', [InventoryController::class, 'index']);
-Route::get('billing/invoices', [BillingController::class, 'index']);
+// User & RBAC Dynamic Page Access Permissions
+Route::get('rbac/permissions', [UserController::class, 'getRoutePermissions']);
+Route::post('rbac/permissions', [UserController::class, 'saveRoutePermissions']);
+Route::post('rbac/permissions/reset', [UserController::class, 'resetRoutePermissions']);
 Route::apiResource('users', UserController::class);
 Route::get('audit-logs', [AuditLogController::class, 'index']);
 
