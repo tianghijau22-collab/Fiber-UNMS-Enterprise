@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { toPng } from 'html-to-image';
 
 // ─── Inline SVG Icons (Design System Compliant) ──────────────────────────────
@@ -23,6 +24,18 @@ const IconTrash = ({ className = "w-3.5 h-3.5" }) => (
 const IconSearch = ({ className = "w-3.5 h-3.5" }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </svg>
+);
+
+const IconFilter = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+  </svg>
+);
+
+const IconSliders = ({ className = "w-3.5 h-3.5" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
   </svg>
 );
 
@@ -181,168 +194,24 @@ export default function SystemAlertChat() {
   const [capturingId, setCapturingId] = useState(null);
   const [isClearing, setIsClearing] = useState(false);
 
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
 
   const chatContainerRef = useRef(null);
-  const filterContainerRef = useRef(null);
+  const toolsMenuRef = useRef(null);
   const audioRef = useRef(null);
   const lastKnownIdRef = useRef(null);
 
-  // Mouse drag-to-scroll refs
-  const isDraggingRef = useRef(false);
-  const startXRef = useRef(0);
-  const scrollLeftRef = useRef(0);
-  const hasMovedRef = useRef(false);
-
-  // Play synthetic beep on new critical alert
-  const playAlertSound = () => {
-    if (!soundEnabled) return;
-    try {
-      if (!audioRef.current) {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.35);
-      }
-    } catch (e) {
-      console.warn('Audio alert could not play:', e);
-    }
-  };
-
-  const fetchAlerts = async (silent = false) => {
-    if (!silent) setRefreshing(true);
-    try {
-      const params = new URLSearchParams();
-      if (filterType !== 'ALL') params.append('type', filterType);
-      if (searchQuery.trim()) params.append('search', searchQuery.trim());
-      params.append('limit', '100');
-
-      const res = await fetch(`/api/system-alerts/feed?${params.toString()}`);
-      if (!res.ok) throw new Error('Gagal mengambil data alert');
-      const data = await res.json();
-
-      if (data.status === 'success') {
-        const newMessages = data.messages || [];
-        
-        // Cek alert baru masuk
-        if (newMessages.length > 0 && lastKnownIdRef.current) {
-          const newest = newMessages[0];
-          if (newest.id !== lastKnownIdRef.current) {
-            if (newest.is_outage) {
-              playAlertSound();
-            }
-          }
-        }
-        if (newMessages.length > 0) {
-          lastKnownIdRef.current = newMessages[0].id;
-        }
-
-        // Urutkan alami dari lama ke baru agar chat mengalir ke bawah
-        setMessages([...newMessages].reverse());
-        if (data.stats) setStats(data.stats);
-      }
-    } catch (err) {
-      console.error('Error fetching alert feed:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  // Initial load & Polling interval tiap 2.5 detik (Real-Time Push/Pull)
+  // Close tools menu on outside click
   useEffect(() => {
-    fetchAlerts();
-    const interval = setInterval(() => {
-      fetchAlerts(true);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [filterType, searchQuery]);
-
-  // Auto scroll saat messages bertambah
-  useEffect(() => {
-    if (autoScroll && chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  }, [messages, autoScroll]);
-
-  // ─── Horizontal Filter Scroll & Drag-to-Scroll Mechanics ──────────────────
-  const checkFilterScroll = () => {
-    const el = filterContainerRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 6);
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 6);
-  };
-
-  const scrollFilters = (dir) => {
-    const el = filterContainerRef.current;
-    if (!el) return;
-    const offset = 260;
-    el.scrollBy({ left: dir === 'left' ? -offset : offset, behavior: 'smooth' });
-    setTimeout(checkFilterScroll, 320);
-  };
-
-  // Convert mouse wheel on filter bar to horizontal scroll
-  useEffect(() => {
-    const el = filterContainerRef.current;
-    if (!el) return;
-
-    const onWheel = (e) => {
-      if (e.deltaY !== 0) {
-        e.preventDefault();
-        el.scrollLeft += e.deltaY;
-        checkFilterScroll();
+    const handleClickOutside = (e) => {
+      if (toolsMenuRef.current && !toolsMenuRef.current.contains(e.target)) {
+        setIsToolsMenuOpen(false);
       }
     };
-
-    el.addEventListener('wheel', onWheel, { passive: false });
-    checkFilterScroll();
-    el.addEventListener('scroll', checkFilterScroll);
-    window.addEventListener('resize', checkFilterScroll);
-
-    return () => {
-      el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('scroll', checkFilterScroll);
-      window.removeEventListener('resize', checkFilterScroll);
-    };
-  }, [stats]);
-
-  // Mouse drag-to-scroll handlers
-  const handleMouseDown = (e) => {
-    const el = filterContainerRef.current;
-    if (!el) return;
-    isDraggingRef.current = true;
-    hasMovedRef.current = false;
-    startXRef.current = e.pageX - el.offsetLeft;
-    scrollLeftRef.current = el.scrollLeft;
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDraggingRef.current) return;
-    const el = filterContainerRef.current;
-    if (!el) return;
-    const x = e.pageX - el.offsetLeft;
-    const walk = (x - startXRef.current) * 1.3;
-    if (Math.abs(walk) > 4) {
-      hasMovedRef.current = true;
-    }
-    el.scrollLeft = scrollLeftRef.current - walk;
-    checkFilterScroll();
-  };
-
-  const handleMouseUpOrLeave = () => {
-    isDraggingRef.current = false;
-  };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleToggleSound = () => {
     const next = !soundEnabled;
@@ -503,158 +372,236 @@ export default function SystemAlertChat() {
     },
   ];
 
-  return (
-    <div className="flex flex-col h-[calc(100vh-5.5rem)] w-full space-y-3 font-sans transition-colors duration-200 text-black dark:text-white">
+  const activeFilterObj = filterButtons.find(b => b.id === filterType) || filterButtons[0];
 
-      {/* ── FILTER, SEARCH & ACTION TOOLBAR (DESIGN SYSTEM COMPLIANT) ── */}
-      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-3 sm:p-3.5 shadow-xs space-y-3 transition-colors duration-200">
-        
-        {/* ROW 1: Search Bar (Left) & Utility Actions (Right) */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-2.5">
-          {/* Search Input */}
-          <div className="relative w-full md:w-80">
-            <IconSearch className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-black/50 dark:text-white/50" />
+  return (
+    <div className="flex flex-col h-[calc(100vh-5.5rem)] w-full space-y-2.5 font-sans transition-colors duration-200 text-black dark:text-white">
+
+      {/* ── UNIFIED COMPACT TOOLBAR (SEARCH, FILTER MODAL TRIGGER & TOOLS POPOVER) ── */}
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-2 sm:p-2.5 shadow-xs transition-colors duration-200">
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full">
+          
+          {/* Search Input (Flexible Width) */}
+          <div className="relative flex-1 min-w-0">
+            <IconSearch className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-black/50 dark:text-white/50" />
             <input
               type="text"
               placeholder="Cari OLT, port, ODP, tiket, nama..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md pl-8.5 pr-7 py-1.5 text-xs font-medium text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white transition-colors"
+              className="w-full bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md pl-8 pr-7 py-1.5 text-xs font-medium text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white transition-colors"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white cursor-pointer p-0.5"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white cursor-pointer p-0.5"
+                title="Hapus pencarian"
               >
                 <IconX className="w-3 h-3" />
               </button>
             )}
           </div>
 
-          {/* Right Controls: Hide Time, Sound, Refresh, Clear */}
-          <div className="flex items-center gap-1.5 w-full md:w-auto justify-end overflow-x-auto pb-0.5 md:pb-0">
-            {/* Hide/Show Time Toggle Button */}
-            <button
-              onClick={handleToggleHideTime}
-              title={hideTime ? 'Tampilkan Waktu Notifikasi' : 'Sembunyikan Waktu Notifikasi'}
-              className={`px-2.5 py-1.5 rounded-md text-xs font-semibold border transition-all duration-150 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                hideTime 
-                  ? 'bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/40' 
-                  : 'bg-white dark:bg-black text-black/70 dark:text-white/70 border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10'
-              }`}
-            >
-              {hideTime ? <IconEyeOff className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> : <IconClock className="w-3.5 h-3.5 text-black/60 dark:text-white/60" />}
-              <span className="text-[11px]">{hideTime ? 'Waktu Tersembunyi' : 'Sembunyikan Waktu'}</span>
-            </button>
+          {/* Unified Filter Button (Opens Top-Centered Filter Modal) */}
+          <button
+            onClick={() => setIsFilterModalOpen(true)}
+            title="Pilih Kategori Filter Alert"
+            className={`px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-semibold border transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              filterType !== 'ALL'
+                ? 'bg-black text-white dark:bg-white dark:text-black border-black dark:border-white shadow-xs'
+                : 'bg-white dark:bg-black text-black/80 dark:text-white/80 border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10'
+            }`}
+          >
+            <IconFilter className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">
+              {filterType === 'ALL' ? 'Filter' : activeFilterObj.label}
+            </span>
+            <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+              filterType !== 'ALL'
+                ? 'bg-white/20 text-white dark:bg-black/20 dark:text-black'
+                : 'bg-black/10 dark:bg-white/10 text-black dark:text-white'
+            }`}>
+              {activeFilterObj.count}
+            </span>
+          </button>
 
-            {/* Sound Toggle Button */}
+          {/* Quick Reset Filter Button (If Filter is not 'ALL') */}
+          {filterType !== 'ALL' && (
             <button
-              onClick={handleToggleSound}
-              title={soundEnabled ? 'Matikan Notifikasi Suara' : 'Aktifkan Notifikasi Suara'}
-              className={`px-2.5 py-1.5 rounded-md text-xs font-semibold border transition-all duration-150 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                soundEnabled 
-                  ? 'bg-black/10 dark:bg-white/10 text-amber-600 dark:text-amber-400 border-amber-500/40' 
-                  : 'bg-white dark:bg-black text-black/70 dark:text-white/70 border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10'
-              }`}
+              onClick={() => setFilterType('ALL')}
+              title="Reset ke Semua Alert"
+              className="p-1.5 rounded-md text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 border border-rose-500/20 shrink-0 cursor-pointer transition-colors"
             >
-              {soundEnabled ? <IconVolume2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> : <IconVolumeX className="w-3.5 h-3.5 text-black/60 dark:text-white/60" />}
-              <span className="text-[11px]">{soundEnabled ? 'Suara Aktif' : 'Suara Mati'}</span>
-            </button>
-
-            {/* Refresh Button */}
-            <button
-              onClick={() => fetchAlerts()}
-              disabled={refreshing}
-              title="Perbarui Feed Notifikasi"
-              className="px-2.5 py-1.5 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-            >
-              <IconRefresh className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} />
-              <span className="text-[11px]">Refresh</span>
-            </button>
-
-            {/* Clear History Button */}
-            <button
-              onClick={handleClearHistory}
-              disabled={isClearing}
-              title="Bersihkan Semua Pesan"
-              className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 dark:border-rose-500/30 rounded-md text-xs font-semibold transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 whitespace-nowrap"
-            >
-              <IconTrash className="w-3.5 h-3.5" />
-              <span className="text-[11px]">Bersihkan</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Separator Line */}
-        <div className="border-t border-black/10 dark:border-white/10" />
-
-        {/* ROW 2: Horizontal Scrollable Category Filter Pills with Navigation Controls */}
-        <div className="relative flex items-center w-full">
-          
-          {/* Scroll Left Chevron Button */}
-          {canScrollLeft && (
-            <button
-              onClick={() => scrollFilters('left')}
-              title="Geser ke kiri"
-              className="absolute -left-1 sm:-left-2 z-10 p-1.5 rounded-md bg-white/95 dark:bg-black/95 text-black dark:text-white shadow-md border border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer flex items-center justify-center backdrop-blur-xs"
-            >
-              <IconChevronLeft className="w-3.5 h-3.5" />
+              <IconX className="w-3.5 h-3.5" />
             </button>
           )}
 
-          {/* Filter Pills Container */}
-          <div
-            ref={filterContainerRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUpOrLeave}
-            onMouseLeave={handleMouseUpOrLeave}
-            className="flex items-center space-x-2 overflow-x-auto w-full py-1 px-1 scroll-smooth select-none cursor-grab active:cursor-grabbing [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-black/5 dark:[&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-black/20 dark:[&::-webkit-scrollbar-thumb]:bg-white/20 hover:[&::-webkit-scrollbar-thumb]:bg-black/40 dark:hover:[&::-webkit-scrollbar-thumb]:bg-white/40"
-            style={{ scrollbarWidth: 'thin' }}
-          >
-            {filterButtons.map(btn => {
-              const isActive = filterType === btn.id;
-              return (
+          {/* Unified Tools Popover Dropdown */}
+          <div ref={toolsMenuRef} className="relative shrink-0">
+            <button
+              onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)}
+              title="Opsi & Utilitas Alert"
+              className={`px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-semibold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                isToolsMenuOpen || hideTime || !soundEnabled
+                  ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white border-black/40 dark:border-white/40'
+                  : 'bg-white dark:bg-black text-black/80 dark:text-white/80 border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10'
+              }`}
+            >
+              <IconSliders className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Tools</span>
+            </button>
+
+            {/* Tools Dropdown Menu */}
+            {isToolsMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 z-50 w-56 sm:w-60 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-xl p-2 space-y-1 text-xs animate-in fade-in duration-100">
+                <div className="px-2 py-1 text-[10px] font-bold text-black/50 dark:text-white/50 uppercase tracking-wider font-mono border-b border-black/10 dark:border-white/10 mb-1">
+                  Opsi &amp; Utilitas Alert
+                </div>
+
+                {/* Toggle Sembunyikan/Tampilkan Waktu */}
                 <button
-                  key={btn.id}
-                  onClick={() => {
-                    if (hasMovedRef.current) return;
-                    setFilterType(btn.id);
-                  }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition-all duration-150 flex items-center gap-2 cursor-pointer shrink-0 border ${
-                    isActive
-                      ? btn.activeCls
-                      : 'bg-white dark:bg-black text-black/80 dark:text-white/80 hover:bg-black/5 dark:hover:bg-white/10 border-black/20 dark:border-white/20'
-                  }`}
+                  onClick={handleToggleHideTime}
+                  className="w-full px-2.5 py-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-left cursor-pointer transition-colors"
                 >
-                  {btn.icon}
-                  <span>{btn.label}</span>
-                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
-                    isActive 
-                      ? 'bg-black/20 text-white dark:bg-white/25 dark:text-black' 
-                      : 'bg-black/10 dark:bg-white/10 text-black dark:text-white'
-                  }`}>
-                    {btn.count}
+                  <div className="flex items-center gap-2">
+                    {hideTime ? <IconEyeOff className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> : <IconClock className="w-3.5 h-3.5 text-black/60 dark:text-white/60" />}
+                    <span>Waktu Alert</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${hideTime ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'bg-black/10 dark:bg-white/10 text-black/70 dark:text-white/70'}`}>
+                    {hideTime ? 'TERSEMBUNYI' : 'TAMPIL'}
                   </span>
                 </button>
-              );
-            })}
+
+                {/* Toggle Suara Notifikasi */}
+                <button
+                  onClick={handleToggleSound}
+                  className="w-full px-2.5 py-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-left cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    {soundEnabled ? <IconVolume2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> : <IconVolumeX className="w-3.5 h-3.5 text-black/60 dark:text-white/60" />}
+                    <span>Suara Notifikasi</span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${soundEnabled ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-black/10 dark:bg-white/10 text-black/70 dark:text-white/70'}`}>
+                    {soundEnabled ? 'AKTIF' : 'MATI'}
+                  </span>
+                </button>
+
+                <div className="border-t border-black/10 dark:border-white/10 my-1"></div>
+
+                {/* Bersihkan Semua Riwayat Pesan */}
+                <button
+                  onClick={() => {
+                    setIsToolsMenuOpen(false);
+                    handleClearHistory();
+                  }}
+                  disabled={isClearing}
+                  className="w-full px-2.5 py-1.5 rounded-md hover:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center gap-2 text-left cursor-pointer transition-colors"
+                >
+                  <IconTrash className="w-3.5 h-3.5" />
+                  <span>Bersihkan Semua Pesan</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Scroll Right Chevron Button */}
-          {canScrollRight && (
-            <button
-              onClick={() => scrollFilters('right')}
-              title="Geser ke kanan"
-              className="absolute -right-1 sm:-right-2 z-10 p-1.5 rounded-md bg-white/95 dark:bg-black/95 text-black dark:text-white shadow-md border border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer flex items-center justify-center backdrop-blur-xs"
-            >
-              <IconChevronRight className="w-3.5 h-3.5" />
-            </button>
-          )}
+          {/* Quick Refresh Feed Button */}
+          <button
+            onClick={() => fetchAlerts()}
+            disabled={refreshing}
+            title="Perbarui Feed Notifikasi"
+            className="p-1.5 sm:px-2.5 sm:py-1.5 bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold transition-colors shadow-2xs flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <IconRefresh className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} />
+            <span className="hidden md:inline text-[11px]">Refresh</span>
+          </button>
 
         </div>
-
       </div>
+
+      {/* ── TOP-CENTERED CATEGORY FILTER MODAL (DIRECT REACT PORTAL) ── */}
+      {isFilterModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-start justify-center pt-14 sm:pt-20 pb-8 px-3 sm:px-4"
+          onClick={() => setIsFilterModalOpen(false)}
+        >
+          <div
+            className="relative bg-white dark:bg-black text-black dark:text-white border border-black/70 dark:border-white/70 rounded-lg shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden text-xs flex flex-col max-h-[82vh] animate-in fade-in zoom-in duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="bg-white dark:bg-black text-black dark:text-white px-4 py-3 flex items-center justify-between shrink-0 border-b border-black/20 dark:border-white/20">
+              <div className="flex items-center gap-2">
+                <IconFilter className="w-4 h-4 text-black dark:text-white" />
+                <h3 className="text-sm font-bold">Filter Kategori Alert</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors"
+                title="Tutup"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Options Body */}
+            <div className="p-3 space-y-1.5 overflow-y-auto flex-1">
+              {filterButtons.map((btn) => {
+                const isSelected = filterType === btn.id;
+                return (
+                  <button
+                    key={btn.id}
+                    onClick={() => {
+                      setFilterType(btn.id);
+                      setIsFilterModalOpen(false);
+                    }}
+                    className={`w-full px-3 py-2.5 rounded-md text-xs font-semibold flex items-center justify-between border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-black text-white dark:bg-white dark:text-black border-black dark:border-white shadow-xs'
+                        : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-black dark:text-white border-black/10 dark:border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {btn.icon || <IconBot className="w-3.5 h-3.5" />}
+                      <span>{btn.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                        isSelected
+                          ? 'bg-white/20 text-white dark:bg-black/20 dark:text-black'
+                          : 'bg-black/10 dark:bg-white/10 text-black dark:text-white'
+                      }`}>
+                        {btn.count}
+                      </span>
+                      {isSelected && <IconCheck className="w-3.5 h-3.5" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-black/10 dark:border-white/10 flex items-center justify-between bg-black/5 dark:bg-white/5">
+              <button
+                onClick={() => {
+                  setFilterType('ALL');
+                  setIsFilterModalOpen(false);
+                }}
+                className="px-3 py-1.5 rounded-md bg-white dark:bg-black border border-black/20 dark:border-white/20 text-xs font-bold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition-colors"
+              >
+                Reset Filter
+              </button>
+              <button
+                onClick={() => setIsFilterModalOpen(false)}
+                className="px-3 py-1.5 rounded-md bg-black text-white dark:bg-white dark:text-black text-xs font-bold cursor-pointer transition-colors"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* ── CHAT BOT STREAM CONTAINER (ENTERPRISE NOC FEED) ── */}
       <div 
