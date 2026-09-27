@@ -538,150 +538,6 @@ function RulerHud({ waypoints, totalMeters, onUndo, onReset, onClose }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   TARGET CLIENT COORDINATE MODAL (MANUAL INPUT ONLY)
-══════════════════════════════════════════════════════════════════ */
-function TargetCoordModal({ isOpen, onClose, onSetTarget }) {
-  const [inputVal, setInputVal] = useState('');
-
-  const parsed = useMemo(() => {
-    return parseCoordsInput(inputVal);
-  }, [inputVal]);
-
-  if (!isOpen) return null;
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!parsed.isValid) return;
-
-    onSetTarget({
-      lat: parsed.lat,
-      lng: parsed.lng,
-      label: 'Patokan Lokasi',
-      dms: parsed.formattedDms,
-    });
-    onClose();
-  };
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen"
-      onClick={onClose}
-    >
-      <div
-        className="relative w-full max-w-md bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between border-b border-black/20 dark:border-white/20 shrink-0">
-          <div>
-            <h3 className="text-sm font-bold">Cek Titik Lokasi / Patokan GPS</h3>
-            <p className="text-[11px] text-black/70 dark:text-white/70">Masukkan koordinat untuk menandai patokan titik lokasi di peta</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold transition-colors cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-black/80 dark:text-white/80 block">
-              Koordinat GPS (Desimal / Google Earth DMS) <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              autoFocus
-              value={inputVal}
-              onChange={e => setInputVal(e.target.value)}
-              placeholder="Contoh: -0.785123, 100.654123 atau 0°47'5.96&quot;S 100°39'15.87&quot;T"
-              className="w-full px-3.5 py-2.5 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md font-mono text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
-            />
-            {inputVal && (
-              <div className="text-[11px] mt-1">
-                {parsed.isValid ? (
-                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-md text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
-                    <span>Valid: <b>{parsed.lat.toFixed(6)}, {parsed.lng.toFixed(6)}</b></span>
-                    <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400">{parsed.formattedDms}</span>
-                  </div>
-                ) : (
-                  <div className="p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-md text-rose-700 dark:text-rose-300">
-                    Format koordinat tidak dikenali. Masukkan contoh: <code>-0.785123, 100.654123</code>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="pt-3 flex items-center justify-end gap-2 border-t border-black/20 dark:border-white/20">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-black dark:text-white rounded-md font-bold text-xs transition-colors cursor-pointer"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              disabled={!parsed.isValid}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-md font-bold text-xs shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>Tampilkan di Peta</span>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════════
-   TARGET PIN FLOATING BANNER
-══════════════════════════════════════════════════════════════════ */
-function TargetPinBanner({ targetPin, onFlyToTarget, onClearTarget }) {
-  if (!targetPin) return null;
-
-  return (
-    <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[998] bg-white/95 dark:bg-black/95 text-black dark:text-white backdrop-blur-md border border-fuchsia-500/70 shadow-2xl rounded-xl px-3.5 py-2.5 flex items-center gap-3 text-xs max-w-[94vw] animate-in fade-in slide-in-from-top-2 duration-200">
-      <div className="flex items-center gap-2.5 shrink-0">
-        <div className="w-7 h-7 rounded-full bg-fuchsia-500/20 text-fuchsia-600 dark:text-fuchsia-400 border border-fuchsia-500/40 flex items-center justify-center shrink-0">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-            <circle cx="12" cy="9" r="2.5" />
-          </svg>
-        </div>
-        <div className="min-w-0">
-          <span className="font-bold text-fuchsia-600 dark:text-fuchsia-400 block text-xs">Patokan Titik Lokasi</span>
-          <span className="text-[10px] font-mono text-black/70 dark:text-white/70 truncate block">
-            {targetPin.lat.toFixed(6)}, {targetPin.lng.toFixed(6)} {targetPin.dms ? `(${targetPin.dms})` : ''}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-        <button
-          onClick={onFlyToTarget}
-          className="px-2.5 py-1 bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 border border-black/20 dark:border-white/20 rounded-lg text-[11px] font-bold text-black dark:text-white transition-colors cursor-pointer flex items-center gap-1"
-        >
-          Fokus
-        </button>
-
-        <button
-          onClick={onClearTarget}
-          className="px-2.5 py-1 bg-rose-500/15 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/30 rounded-lg font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
-          title="Hapus Titik Lokasi"
-        >
-          <span>✕</span>
-          <span className="hidden sm:inline">Hapus</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════════════════════════════
    FAST INTERACTIVE LEAFLET TOPOLOGY MAP
 ══════════════════════════════════════════════════════════════════ */
 function LeafletMap({
@@ -1710,7 +1566,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   const [isSatellite, setIsSatellite] = useState(true);
 
   // Target Coordinate / Client Benchmark State
-  const [targetCoordModal, setTargetCoordModal] = useState(false);
   const [targetPin, setTargetPin] = useState(null);
   const searchInputRef = useRef(null);
   const fullscreenSearchInputRef = useRef(null);
@@ -2381,40 +2236,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                   </div>
                 </button>
 
-                {/* Cek / Hapus Titik Lokasi */}
-                <button
-                  onClick={() => {
-                    if (targetPin) {
-                      setTargetPin(null);
-                      setFullscreenToolsModal(false);
-                    } else {
-                      setFullscreenToolsModal(false);
-                      setTimeout(() => fullscreenSearchInputRef.current?.focus(), 100);
-                    }
-                  }}
-                  className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${
-                    targetPin
-                      ? 'bg-rose-950/40 border-rose-500/60 text-white'
-                      : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${targetPin ? 'bg-rose-500/20 text-rose-400' : 'bg-fuchsia-500/20 text-fuchsia-400'}`}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
-                        <circle cx="12" cy="9" r="2.5" />
-                      </svg>
-                    </div>
-                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${targetPin ? 'bg-rose-500/30 text-rose-300' : 'bg-white/10 text-white/60'}`}>
-                      {targetPin ? '✕ Hapus' : 'Search Bar'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="font-bold text-xs block">{targetPin ? 'Hapus Titik Lokasi' : 'Cek Titik Lokasi'}</span>
-                    <span className="text-[10px] text-white/60">{targetPin ? 'Hapus pin patokan aktif' : 'Ketik koordinat di kolom search'}</span>
-                  </div>
-                </button>
-
                 {/* Ukur Jarak FO */}
                 <button
                   onClick={() => {
@@ -2628,17 +2449,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           />
         )}
 
-        <TargetCoordModal
-          isOpen={targetCoordModal}
-          onClose={() => setTargetCoordModal(false)}
-          onSetTarget={(target) => {
-            setTargetPin(target);
-            if (externalFlyToRef.current) {
-              externalFlyToRef.current(target.lat, target.lng, 17);
-            }
-          }}
-        />
-
         <KmlImportModal
           isOpen={kmlImportModal}
           onClose={() => setKmlImportModal(false)}
@@ -2736,26 +2546,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                   >
                     <span>Pusatkan Peta</span>
                     <span className="text-[10px] text-black/50 dark:text-white/50">Fit Bounds</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (targetPin) {
-                        setTargetPin(null);
-                        setToolsOpen(false);
-                      } else {
-                        setToolsOpen(false);
-                        setTimeout(() => searchInputRef.current?.focus(), 100);
-                      }
-                    }}
-                    className={`w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer ${
-                      targetPin ? 'text-rose-600 dark:text-rose-400' : ''
-                    }`}
-                  >
-                    <span>{targetPin ? '✕ Hapus Titik Lokasi' : 'Cek Titik Lokasi GPS'}</span>
-                    <span className={`text-[10px] font-mono ${targetPin ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-fuchsia-600 dark:text-fuchsia-400'}`}>
-                      {targetPin ? 'Clear Pin' : 'Search Bar'}
-                    </span>
                   </button>
 
                   <button
@@ -3168,18 +2958,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           onClose={() => setStreetViewTarget(null)}
         />
       )}
-
-      {/* Target Client Coordinate Modal */}
-      <TargetCoordModal
-        isOpen={targetCoordModal}
-        onClose={() => setTargetCoordModal(false)}
-        onSetTarget={(target) => {
-          setTargetPin(target);
-          if (externalFlyToRef.current) {
-            externalFlyToRef.current(target.lat, target.lng, 17);
-          }
-        }}
-      />
 
       {/* KML / KMZ Intelligent Importer Modal */}
       <KmlImportModal
