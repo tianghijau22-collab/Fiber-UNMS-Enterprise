@@ -66,20 +66,9 @@ export default function Sidebar({ isOpen, onClose }) {
         }`}
       >
         {/* Brand Header */}
-        <div className="h-14 px-4 border-b border-slate-200 dark:border-[#222222] flex items-center justify-between box-border">
-          <NavLink to="/dashboard" onClick={onClose} className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-lg bg-black/5 dark:bg-white/5 flex items-center justify-center p-1 border border-cyan-500/30 group-hover:border-cyan-500/60 transition-colors shadow-2xs">
-              <FonaBrandLogo variant="icon" className="w-full h-full" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-black text-base text-slate-900 dark:text-white tracking-wider font-sans leading-none flex items-center gap-1.5">
-                FONA
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 font-bold uppercase border border-cyan-500/20">UNMS</span>
-              </span>
-              <span className="text-[9px] text-slate-500 dark:text-slate-400 font-medium tracking-tight mt-0.5 truncate max-w-[130px]">
-                Fiber Optic Network Analysis
-              </span>
-            </div>
+        <div className="h-16 px-4 border-b border-slate-200 dark:border-[#222222] flex items-center justify-between box-border">
+          <NavLink to="/dashboard" onClick={onClose} className="flex items-center group py-1">
+            <FonaBrandLogo className="h-9 w-auto max-w-[170px]" />
           </NavLink>
 
           {/* Close button for mobile drawer */}
