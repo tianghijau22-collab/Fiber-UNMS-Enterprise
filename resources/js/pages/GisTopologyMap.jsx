@@ -2013,26 +2013,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             )}
           </div>
 
-          {/* 2. Sub-Second Real-Time Telemetry Trap Toast */}
-          {recentTrapAlert && (
-            <div className="absolute top-16 left-3 right-3 sm:left-4 sm:w-[420px] z-[998] bg-rose-600/95 text-white backdrop-blur-md border border-rose-400 shadow-2xl rounded-xl p-3 flex items-center justify-between gap-3 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping shrink-0" />
-                <div>
-                  <span className="font-bold block">SNMP Trap: {recentTrapAlert.message || 'Perubahan Redaman'}</span>
-                  <span className="text-[10px] font-mono text-white/80">{recentTrapAlert.timestamp}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => setRecentTrapAlert(null)}
-                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/20 text-white font-bold"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {/* 3. Target House Pin Floating Banner */}
+          {/* 2. Target House Pin Floating Banner */}
           {targetPin && (
             <TargetPinBanner
               targetPin={targetPin}
@@ -2045,7 +2026,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             />
           )}
 
-          {/* 4. Interactive Ruler Distance HUD */}
+          {/* 3. Interactive Ruler Distance HUD */}
           {rulerActive && (
             <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[998] w-full max-w-sm px-3">
               <RulerHud
@@ -2061,7 +2042,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             </div>
           )}
 
-          {/* 5. Floating GIS Spatial Legend Card */}
+          {/* 4. Floating GIS Spatial Legend Card */}
           {fullscreenLegendOpen && (
             <div
               ref={fullscreenLegendRef}
@@ -2118,96 +2099,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               </div>
             </div>
           )}
-
-          {/* 6. Right Floating FAB Action Buttons (Google Earth Mobile Style) */}
-          <div className="absolute bottom-20 sm:bottom-20 right-3 sm:right-4 z-[990] flex flex-col items-center gap-2.5">
-            {/* Street View Pegman FAB */}
-            <button
-              type="button"
-              onClick={() => {
-                if (selectedNode?.latitude && selectedNode?.longitude) {
-                  setStreetViewTarget({
-                    lat: parseFloat(selectedNode.latitude),
-                    lng: parseFloat(selectedNode.longitude),
-                    title: selectedNode.name,
-                  });
-                } else if (targetPin?.lat && targetPin?.lng) {
-                  setStreetViewTarget({
-                    lat: targetPin.lat,
-                    lng: targetPin.lng,
-                    title: targetPin.label || 'Titik Rumah',
-                  });
-                } else {
-                  const first = nodesWithCoords[0];
-                  if (first) {
-                    setStreetViewTarget({
-                      lat: parseFloat(first.latitude),
-                      lng: parseFloat(first.longitude),
-                      title: first.name,
-                    });
-                  }
-                }
-              }}
-              className="w-11 h-11 rounded-full bg-black/80 hover:bg-black active:scale-95 text-white border border-white/20 backdrop-blur-md shadow-xl flex items-center justify-center transition-all cursor-pointer group"
-              title="Google Street View 360°"
-            >
-              <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="5" r="2.5" />
-                <path d="M9 22v-6l-2-2V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v5l-2 2v6" />
-                <line x1="9" y1="13" x2="15" y2="13" />
-              </svg>
-            </button>
-
-            {/* Recenter / Compass FAB */}
-            <button
-              type="button"
-              onClick={() => {
-                if (externalRecenterRef.current) {
-                  externalRecenterRef.current();
-                }
-              }}
-              className="w-11 h-11 rounded-full bg-black/80 hover:bg-black active:scale-95 text-white border border-white/20 backdrop-blur-md shadow-xl flex items-center justify-center transition-all cursor-pointer group"
-              title="Pusatkan Kamera ke Seluruh Titik Node"
-            >
-              <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-              </svg>
-            </button>
-
-            {/* GPS Location / Patokan Rumah FAB */}
-            <button
-              type="button"
-              onClick={() => {
-                if (targetPin && externalFlyToRef.current) {
-                  externalFlyToRef.current(targetPin.lat, targetPin.lng, 17);
-                } else {
-                  setTargetCoordModal(true);
-                }
-              }}
-              className={`w-11 h-11 rounded-full text-white border backdrop-blur-md shadow-xl flex items-center justify-center transition-all cursor-pointer group ${
-                targetPin
-                  ? 'bg-fuchsia-600 border-fuchsia-400'
-                  : 'bg-black/80 hover:bg-black border-white/20'
-              }`}
-              title={targetPin ? 'Fokus ke Patokan Rumah' : 'Cek Koordinat Rumah Client'}
-            >
-              <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
-                <circle cx="12" cy="10" r="3" />
-              </svg>
-            </button>
-
-            {/* 3D / Satelit Perspective Toggle FAB */}
-            <button
-              type="button"
-              onClick={() => setIsSatellite(!isSatellite)}
-              className="w-11 h-11 rounded-full bg-black/80 hover:bg-black active:scale-95 text-white font-mono font-bold text-xs border border-white/20 backdrop-blur-md shadow-xl flex items-center justify-center transition-all cursor-pointer group"
-              title={isSatellite ? 'Ubah ke Tampilan Vektor' : 'Ubah ke Tampilan Satelit'}
-            >
-              <span className="group-hover:scale-110 transition-transform">{isSatellite ? '3D' : '2D'}</span>
-            </button>
-          </div>
 
           {/* 7. Bottom Floating Earth Dock / Toolbar */}
           <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-[990] max-w-[calc(100vw-24px)] overflow-x-auto no-scrollbar">
