@@ -371,14 +371,14 @@ export default function Login() {
               {helpModal === 'forgot_password' ? (
                 <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   <p>
-                    Untuk menjaga integritas dan keamanan sistem telemetri fiber optik <strong className="text-slate-900 dark:text-white">FONA</strong>, proses <strong className="text-slate-900 dark:text-white">reset kata sandi</strong> hanya dapat dilakukan langsung oleh <strong className="text-blue-600 dark:text-blue-400">Super Administrator</strong> atau tim <strong className="text-blue-600 dark:text-blue-400">NOC Central</strong>.
+                    Untuk menjaga integritas dan keamanan sistem telemetri fiber optik <strong className="text-slate-900 dark:text-white">FONA</strong>, proses <strong className="text-slate-900 dark:text-white">reset kata sandi</strong> hanya dapat dilakukan langsung oleh <strong className="text-blue-600 dark:text-blue-400">admin</strong>.
                   </p>
                   <div className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-[#52525b] rounded-lg space-y-1.5 font-sans">
                     <div className="font-bold text-slate-900 dark:text-white text-[11px]">
                       Langkah Pemulihan Akses:
                     </div>
                     <ul className="list-disc list-inside space-y-1 text-slate-500 dark:text-slate-400 text-[11px]">
-                      <li>Hubungi Super Administrator melalui WhatsApp / Telegram internal.</li>
+                      <li>Hubungi admin melalui WhatsApp / Telegram internal.</li>
                       <li>Sebutkan Username atau No. WhatsApp Anda yang terdaftar.</li>
                       <li>Admin akan menerbitkan kata sandi baru melalui panel RBAC.</li>
                     </ul>
@@ -394,7 +394,7 @@ export default function Login() {
                       Prosedur Pembuatan Akun Baru:
                     </div>
                     <ul className="list-disc list-inside space-y-1 text-slate-500 dark:text-slate-400 text-[11px]">
-                      <li>Akun didaftarkan langsung oleh Super Administrator.</li>
+                      <li>Akun didaftarkan langsung oleh admin.</li>
                     </ul>
                   </div>
                 </div>
