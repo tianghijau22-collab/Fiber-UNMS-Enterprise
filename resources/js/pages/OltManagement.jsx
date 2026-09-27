@@ -241,8 +241,9 @@ const DEPLOYMENT_MODES = [
 ];
 
 export default function OltManagement() {
-  const { hasRole } = useAuth();
-  const canCrud = hasRole('Super Administrator', 'Operator Jaringan', 'NOC Operator');
+  const { currentUser, hasRole } = useAuth();
+  const isSuperAdmin = currentUser?.role === 'Super Administrator';
+  const canCrud = isSuperAdmin;
   const [olts, setOlts] = useState([]);
   const [selectedOltId, setSelectedOltId] = useState(null);
   const [loadingOltList, setLoadingOltList] = useState(true);
@@ -602,6 +603,10 @@ export default function OltManagement() {
 
   // ─── Progressive Port-by-Port Batch Sync (Inisialisasi OLT Tanpa Timeout) ──
   const startProgressiveSync = async () => {
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak melakukan sinkronisasi bertahap OLT.', 'error');
+      return;
+    }
     if (!activeOlt || !oltData?.pon_ports?.length) return;
     const ports = oltData.pon_ports.map(p => p.port_id);
     const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
@@ -699,6 +704,10 @@ export default function OltManagement() {
 
   // ─── Test SNMP Connection ────────────────────────────────────────────────────
   const handleTestConnection = () => {
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak menguji koneksi SNMP.', 'error');
+      return;
+    }
     if (!activeOlt) return;
     setTestingConnection(true);
     setTestResult(null);
@@ -741,6 +750,10 @@ export default function OltManagement() {
 
   // ─── Save SNMP Config Only ──────────────────────────────────────────────────
   const handleSaveConfig = () => {
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak mengubah konfigurasi SNMP.', 'error');
+      return;
+    }
     if (!activeOlt) return;
     setSavingConfig(true);
     fetch(`/api/olts/${activeOlt.id}/connection-config`, {
@@ -779,6 +792,10 @@ export default function OltManagement() {
   // ─── Add New OLT ────────────────────────────────────────────────────────────
   const handleAddOlt = (e) => {
     e.preventDefault();
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak menambah perangkat OLT.', 'error');
+      return;
+    }
     setSubmittingOlt(true);
     fetch('/api/olts', {
       method: 'POST',
@@ -806,6 +823,10 @@ export default function OltManagement() {
 
   // ─── Open Edit Modal ─────────────────────────────────────────────────────────
   const handleOpenEditModal = (olt) => {
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak mengedit perangkat OLT.', 'error');
+      return;
+    }
     setEditingOlt(olt);
     setEditOltForm({
       name: olt.name || '',
@@ -826,6 +847,10 @@ export default function OltManagement() {
   // ─── Edit OLT Submit ─────────────────────────────────────────────────────────
   const handleEditOlt = (e) => {
     e.preventDefault();
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak mengedit perangkat OLT.', 'error');
+      return;
+    }
     if (!editingOlt) return;
     setSubmittingEditOlt(true);
     fetch(`/api/olts/${editingOlt.id}`, {
@@ -855,6 +880,10 @@ export default function OltManagement() {
 
   // ─── Disconnect OLT ──────────────────────────────────────────────────────────
   const handleDisconnectOlt = (olt) => {
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak menghentikan koneksi SNMP OLT.', 'error');
+      return;
+    }
     if (!olt) return;
     openConfirm({
       title: 'Hentikan Koneksi SNMP OLT?',
@@ -890,6 +919,10 @@ export default function OltManagement() {
 
   // ─── Delete OLT ─────────────────────────────────────────────────────────────
   const handleDeleteOlt = (olt) => {
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak menghapus perangkat OLT.', 'error');
+      return;
+    }
     const oltId = olt.id;
     openConfirm({
       title: 'Hapus Perangkat OLT?',
@@ -1136,6 +1169,10 @@ export default function OltManagement() {
   }, [filteredOrphanedOnus, orphanedPage, orphanedPerPage]);
 
   const handleDeleteOrphaned = (onu) => {
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak menghapus data ONU terputus.', 'error');
+      return;
+    }
     openConfirm({
       title: 'Pembersihan Data Modem Terputus',
       message: `Apakah Anda yakin ingin menghapus data ONU ${onu.onu_serial || onu.onu_mac} milik "${onu.customer_name}" dari database UNMS? Tindakan ini akan otomatis membebaskan port ${onu.odp_name} (${onu.odp_port}) agar dapat digunakan kembali oleh pelanggan baru.`,
@@ -1176,6 +1213,10 @@ export default function OltManagement() {
   };
 
   const handleBulkDeleteOrphaned = (targetIds = null) => {
+    if (!isSuperAdmin) {
+      showNotif('Hanya Super Administrator yang berhak menghapus data ONU terputus.', 'error');
+      return;
+    }
     const idsToDelete = targetIds || selectedOrphanedIds;
     if (!idsToDelete.length) {
       showNotif('Pilih setidaknya satu data untuk dibersihkan.', 'error');
@@ -1284,7 +1325,7 @@ export default function OltManagement() {
               label="Segarkan OLT"
               className="w-full sm:w-auto"
             />
-            {activeOlt && (
+            {isSuperAdmin && activeOlt && (
               <button
                 onClick={() => setShowProgressiveSyncModal(true)}
                 className="w-full sm:w-auto px-3 py-2 rounded-md border border-emerald-500/30 bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
@@ -1293,7 +1334,7 @@ export default function OltManagement() {
                 <span>Sinkronisasi Bertahap</span>
               </button>
             )}
-            {activeOlt && (
+            {isSuperAdmin && activeOlt && (
               <button
                 onClick={() => setShowSnmpDiagModal(true)}
                 className="w-full sm:w-auto px-3 py-2 rounded-md border border-indigo-500/30 bg-white dark:bg-black text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
@@ -1302,7 +1343,7 @@ export default function OltManagement() {
                 <span>Diagnostic SNMP &amp; MIB</span>
               </button>
             )}
-            {canCrud && (
+            {isSuperAdmin && (
               <button
                 onClick={() => setShowAddOltModal(true)}
                 className="w-full sm:w-auto px-3.5 py-2 rounded-md bg-black text-white dark:bg-white dark:text-black hover:bg-black/80 dark:hover:bg-white/80 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 border border-black dark:border-white shadow-xs cursor-pointer"
@@ -1310,7 +1351,7 @@ export default function OltManagement() {
                 <IconPlus /><span>Tambah OLT</span>
               </button>
             )}
-            {canCrud && (
+            {isSuperAdmin && (
               <button
                 onClick={() => { setTestResult(null); setShowConfigModal(true); }}
                 className="w-full sm:w-auto px-3 py-2 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/30 dark:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
@@ -1318,7 +1359,7 @@ export default function OltManagement() {
                 <IconWifi /><span>Konfigurasi SNMP</span>
               </button>
             )}
-            {activeOlt && activeOlt.connection_mode === 'live' && (
+            {isSuperAdmin && activeOlt && activeOlt.connection_mode === 'live' && (
               <button
                 onClick={() => handleDisconnectOlt(activeOlt)}
                 disabled={disconnectingId === activeOlt.id}
@@ -1557,12 +1598,12 @@ export default function OltManagement() {
 
                           {/* Action Buttons */}
                           <div className="flex items-center gap-1">
-                            {isLive && (
+                            {isSuperAdmin && isLive && (
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); handleDisconnectOlt(o); }}
                                 disabled={disconnectingId === o.id}
-                                className="p-1.5 rounded-lg text-black/40 dark:text-white/40 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                                className="p-1.5 rounded-lg text-black/40 dark:text-white/40 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
                                 title={`Hentikan SNMP ke ${o.name}`}
                               >
                                 {disconnectingId === o.id ? <Spinner /> : (
@@ -1572,12 +1613,12 @@ export default function OltManagement() {
                                 )}
                               </button>
                             )}
-                            {canCrud && (
+                            {isSuperAdmin && (
                               <>
                                 <button
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); handleOpenEditModal(o); }}
-                                  className="p-1.5 rounded-lg text-black/40 dark:text-white/40 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                                  className="p-1.5 rounded-lg text-black/40 dark:text-white/40 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
                                   title="Edit OLT"
                                 >
                                   <IconEdit className="w-3.5 h-3.5" />
@@ -1586,7 +1627,7 @@ export default function OltManagement() {
                                   type="button"
                                   onClick={(e) => { e.stopPropagation(); handleDeleteOlt(o); }}
                                   disabled={deletingId === o.id}
-                                  className="p-1.5 rounded-lg text-black/40 dark:text-white/40 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                                  className="p-1.5 rounded-lg text-black/40 dark:text-white/40 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
                                   title="Hapus OLT"
                                 >
                                   {deletingId === o.id ? <Spinner /> : <IconTrash className="w-3.5 h-3.5" />}
@@ -1613,12 +1654,14 @@ export default function OltManagement() {
           <p className="text-sm text-black/70 dark:text-white/70 max-w-md mx-auto">
             Database OLT saat ini kosong. Silakan tambahkan perangkat OLT aktif Anda (ZTE, Huawei, VSOL, HSGQ, Hioso, Tarmoc, BDCOM, FiberHome) untuk mulai pemantauan telemetri via SNMP.
           </p>
-          <button
-            onClick={() => setShowAddOltModal(true)}
-            className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all inline-flex items-center space-x-2"
-          >
-            <IconPlus /><span>+ Tambah Perangkat OLT Baru</span>
-          </button>
+          {isSuperAdmin && (
+            <button
+              onClick={() => setShowAddOltModal(true)}
+              className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all inline-flex items-center space-x-2 cursor-pointer"
+            >
+              <IconPlus /><span>+ Tambah Perangkat OLT Baru</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -1647,11 +1690,11 @@ export default function OltManagement() {
                       : 'Data Realtime Database UNMS (OLT belum terhubung Live SNMP). Klik "Konfigurasi SNMP" untuk menguji query live.'}
                   </span>
                 </div>
-                {isLive && activeOlt && (
+                {isSuperAdmin && isLive && activeOlt && (
                   <button
                     onClick={() => handleDisconnectOlt(activeOlt)}
                     disabled={disconnectingId === activeOlt.id}
-                    className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-colors flex items-center space-x-1 disabled:opacity-50">
+                    className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-colors flex items-center space-x-1 disabled:opacity-50 cursor-pointer">
                     {disconnectingId === activeOlt.id ? <Spinner /> : <span>Hentikan SNMP</span>}
                   </button>
                 )}
@@ -3699,21 +3742,21 @@ export default function OltManagement() {
 
                   {/* Batch Action Buttons */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {selectedOrphanedIds.length > 0 && (
+                    {isSuperAdmin && selectedOrphanedIds.length > 0 && (
                       <button
                         onClick={() => handleBulkDeleteOrphaned()}
                         disabled={isDeletingOrphaned}
-                        className="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50"
+                        className="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                       >
                         <span>Hapus Terpilih ({selectedOrphanedIds.length})</span>
                       </button>
                     )}
 
-                    {filteredOrphanedOnus.length > 0 && (
+                    {isSuperAdmin && filteredOrphanedOnus.length > 0 && (
                       <button
                         onClick={() => handleBulkDeleteOrphaned(filteredOrphanedOnus.map(o => o.id))}
                         disabled={isDeletingOrphaned}
-                        className="px-3.5 py-2 rounded-lg bg-black dark:bg-white hover:bg-black/80 dark:hover:bg-black/5 text-white dark:text-black font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50"
+                        className="px-3.5 py-2 rounded-lg bg-black dark:bg-white hover:bg-black/80 dark:hover:bg-black/5 text-white dark:text-black font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                       >
                         <span>Bersihkan Semua ({filteredOrphanedOnus.length})</span>
                       </button>
@@ -3844,13 +3887,15 @@ export default function OltManagement() {
                                   Pelanggan
                                 </a>
                               )}
-                              <button
-                                onClick={() => handleDeleteOrphaned(onu)}
-                                className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors shadow-2xs"
-                                title="Hapus data ONU ini dan bebaskan port ODP"
-                              >
-                                Hapus dari UNMS
-                              </button>
+                              {isSuperAdmin && (
+                                <button
+                                  onClick={() => handleDeleteOrphaned(onu)}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors shadow-2xs cursor-pointer"
+                                  title="Hapus data ONU ini dan bebaskan port ODP"
+                                >
+                                  Hapus dari UNMS
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -3939,12 +3984,14 @@ export default function OltManagement() {
                                   Pelanggan
                                 </a>
                               )}
-                              <button
-                                onClick={() => handleDeleteOrphaned(onu)}
-                                className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs"
-                              >
-                                Hapus dari UNMS
-                              </button>
+                              {isSuperAdmin && (
+                                <button
+                                  onClick={() => handleDeleteOrphaned(onu)}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer"
+                                >
+                                  Hapus dari UNMS
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
