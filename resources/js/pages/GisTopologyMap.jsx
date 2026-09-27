@@ -1674,6 +1674,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
   // Fullscreen Google Earth UI States & Refs
   const [fullscreenLegendOpen, setFullscreenLegendOpen] = useState(false);
+  const [fullscreenToolsModal, setFullscreenToolsModal] = useState(false);
   const [fullscreenMoreOpen, setFullscreenMoreOpen] = useState(false);
   const [fullscreenTypeOpen, setFullscreenTypeOpen] = useState(false);
   const fullscreenMoreRef = useRef(null);
@@ -2130,218 +2131,299 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           </div>
         )}
 
-        {/* 5. Bottom Floating Earth Dock / Toolbar (Fixed & Responsive on Mobile) */}
-        <div className="fixed bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 z-[1100] max-w-[calc(100vw-16px)] sm:max-w-max px-1 overflow-x-auto no-scrollbar pointer-events-auto">
-          <div className="bg-black/90 text-white backdrop-blur-md border border-white/20 shadow-2xl rounded-full px-2.5 py-1.5 flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Globe Mode Switcher */}
-            <button
-              type="button"
-              onClick={() => setIsSatellite(!isSatellite)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                isSatellite ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
-              }`}
-              title="Mode Tampilan Satelit / Vektor"
+        {/* 5. Single Compact Floating Tools Button (Google Earth Style) */}
+        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-[1100] pointer-events-auto">
+          <button
+            type="button"
+            onClick={() => setFullscreenToolsModal(true)}
+            className="px-4 py-2.5 bg-black/90 hover:bg-black text-white backdrop-blur-md border border-white/30 rounded-full shadow-2xl flex items-center gap-2.5 text-xs font-bold transition-all active:scale-95 cursor-pointer hover:border-white/50"
+          >
+            <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span>Tools Peta</span>
+            {((rulerActive ? 1 : 0) + (targetPin ? 1 : 0) + (faultOnlyFilter ? 1 : 0) + (typeFilter ? 1 : 0)) > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-black text-[9px] font-black leading-tight">
+                {(rulerActive ? 1 : 0) + (targetPin ? 1 : 0) + (faultOnlyFilter ? 1 : 0) + (typeFilter ? 1 : 0)}
+              </span>
+            )}
+            <span className="text-[10px] text-white/60">▲</span>
+          </button>
+        </div>
+
+        {/* Fullscreen Tools Bottom Sheet Modal */}
+        {fullscreenToolsModal && (
+          <div
+            className="fixed inset-0 z-[1200] bg-black/60 backdrop-blur-xs flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4 animate-in fade-in duration-150 pointer-events-auto"
+            onClick={() => setFullscreenToolsModal(false)}
+          >
+            <div
+              className="w-full sm:max-w-lg bg-black/95 text-white border-t sm:border border-white/20 rounded-t-3xl sm:rounded-2xl shadow-2xl p-4 sm:p-5 max-h-[85vh] overflow-y-auto space-y-4 animate-in slide-in-from-bottom duration-200"
+              onClick={e => e.stopPropagation()}
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-              </svg>
-              <span className="inline">{isSatellite ? 'Satelit' : 'Vektor'}</span>
-            </button>
+              <div className="sm:hidden w-12 h-1.5 rounded-full bg-white/25 mx-auto mb-2" />
+              
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>Tools &amp; Opsi Peta GIS</span>
+                  </h3>
+                  <p className="text-[11px] text-white/60">Pilih alat bantu navigasi dan analisis jaringan fiber optik</p>
+                </div>
+                <button
+                  onClick={() => setFullscreenToolsModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold transition-colors cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
 
-            {/* Target House Pin */}
-            <button
-              type="button"
-              onClick={() => setTargetCoordModal(true)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                targetPin ? 'bg-fuchsia-600 text-white shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
-              }`}
-              title="Cek Titik Koordinat Rumah Client"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
-                <circle cx="12" cy="10" r="3" />
-              </svg>
-              <span className="inline">{targetPin ? 'Patokan' : 'Cek GPS'}</span>
-            </button>
+              {/* Grid of Tools */}
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* Mode Satelit / Vektor */}
+                <button
+                  onClick={() => {
+                    setIsSatellite(!isSatellite);
+                  }}
+                  className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${
+                    isSatellite
+                      ? 'bg-blue-950/40 border-blue-500/60 text-white'
+                      : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                      </svg>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/10">
+                      {isSatellite ? 'Satelit' : 'Vektor'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block">Tampilan Peta</span>
+                    <span className="text-[10px] text-white/60">Ganti layer Satelit / Peta Jalan</span>
+                  </div>
+                </button>
 
-            {/* Ruler Tool */}
-            <button
-              type="button"
-              onClick={() => {
-                const next = !rulerActive;
-                setRulerActive(next);
-                if (!next) setRulerPoints([]);
-              }}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                rulerActive ? 'bg-amber-500 text-black shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
-              }`}
-              title="Ukur Jarak Kabel Fiber Optik"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M21.3 15.3l-6.6 6.6c-.4.4-1 .4-1.4 0l-12-12c-.4-.4-.4-1 0-1.4l6.6-6.6c.4-.4 1-.4 1.4 0l12 12c.4.4.4 1 0 1.4z" />
-                <path d="m7.5 4.5 2 2M10.5 7.5l2 2M13.5 10.5l2 2M16.5 13.5l2 2" />
-              </svg>
-              <span className="inline">{rulerActive ? 'Tutup Ukur' : 'Ukur Jarak'}</span>
-            </button>
+                {/* Cek Koordinat GPS */}
+                <button
+                  onClick={() => {
+                    setFullscreenToolsModal(false);
+                    setTargetCoordModal(true);
+                  }}
+                  className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${
+                    targetPin
+                      ? 'bg-fuchsia-950/40 border-fuchsia-500/60 text-white'
+                      : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-lg bg-fuchsia-500/20 text-fuchsia-400 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" /><circle cx="12" cy="10" r="3" />
+                      </svg>
+                    </div>
+                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${targetPin ? 'bg-fuchsia-500/30 text-fuchsia-300' : 'bg-white/10 text-white/60'}`}>
+                      {targetPin ? 'Aktif' : 'GPS'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block">Cek Titik Rumah</span>
+                    <span className="text-[10px] text-white/60">Tandai koordinat patokan client</span>
+                  </div>
+                </button>
 
-            {/* Fault Gangguan Filter */}
-            <button
-              type="button"
-              onClick={() => setFaultOnlyFilter(!faultOnlyFilter)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                faultOnlyFilter ? 'bg-rose-600 text-white shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
-              }`}
-              title="Filter Hanya Node Gangguan Loss Kritis"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <span className="hidden sm:inline">{faultOnlyFilter ? 'Gangguan Loss' : 'Semua Status'}</span>
-              <span className="sm:hidden">{faultOnlyFilter ? 'Loss' : 'Semua'}</span>
-            </button>
+                {/* Ukur Jarak FO */}
+                <button
+                  onClick={() => {
+                    const next = !rulerActive;
+                    setRulerActive(next);
+                    if (!next) setRulerPoints([]);
+                    setFullscreenToolsModal(false);
+                  }}
+                  className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${
+                    rulerActive
+                      ? 'bg-amber-950/40 border-amber-500/60 text-white'
+                      : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M21.3 15.3l-6.6 6.6c-.4.4-1 .4-1.4 0l-12-12c-.4-.4-.4-1 0-1.4l6.6-6.6c.4-.4 1-.4 1.4 0l12 12c.4.4.4 1 0 1.4z" />
+                        <path d="m7.5 4.5 2 2M10.5 7.5l2 2M13.5 10.5l2 2M16.5 13.5l2 2" />
+                      </svg>
+                    </div>
+                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${rulerActive ? 'bg-amber-500/30 text-amber-300' : 'bg-white/10 text-white/60'}`}>
+                      {rulerActive ? `${rulerPoints.length} Titik` : 'Ruler'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block">Ukur Jarak Kabel</span>
+                    <span className="text-[10px] text-white/60">Hitung meteran bentangan FO</span>
+                  </div>
+                </button>
 
-            {/* Type Filter Dropdown */}
-            <div className="relative shrink-0" ref={fullscreenTypeRef}>
-              <button
-                type="button"
-                onClick={() => setFullscreenTypeOpen(!fullscreenTypeOpen)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                  typeFilter ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
-                }`}
-                title="Filter Tipe Node (POP / ODC / ODP)"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                </svg>
-                <span>{typeFilter || 'Tipe'}</span>
-              </button>
+                {/* Filter Gangguan Loss */}
+                <button
+                  onClick={() => {
+                    setFaultOnlyFilter(!faultOnlyFilter);
+                  }}
+                  className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${
+                    faultOnlyFilter
+                      ? 'bg-rose-950/40 border-rose-500/60 text-white'
+                      : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${faultOnlyFilter ? 'bg-rose-500/30 text-rose-300' : 'bg-white/10 text-white/60'}`}>
+                      {faultOnlyFilter ? 'Loss Only' : 'Semua'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block">Gangguan Loss</span>
+                    <span className="text-[10px] text-white/60">Tampilkan hanya ODP loss kritis</span>
+                  </div>
+                </button>
 
-              {fullscreenTypeOpen && (
-                <div className="absolute bottom-full left-0 mb-2 w-36 bg-black/95 text-white border border-white/20 rounded-xl shadow-2xl py-1 overflow-hidden z-[1150]">
+                {/* Pusatkan Peta */}
+                <button
+                  onClick={() => {
+                    if (externalRecenterRef.current) {
+                      externalRecenterRef.current();
+                    }
+                    setFullscreenToolsModal(false);
+                  }}
+                  className="p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white text-left flex flex-col justify-between gap-2 transition-all cursor-pointer"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" /><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+                      </svg>
+                    </div>
+                    <span className="text-[10px] font-mono text-white/60">Fit All</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block">Pusatkan Peta</span>
+                    <span className="text-[10px] text-white/60">Sesuaikan kamera ke semua node</span>
+                  </div>
+                </button>
+
+                {/* Import KML / KMZ */}
+                <button
+                  onClick={() => {
+                    setFullscreenToolsModal(false);
+                    setKmlImportModal(true);
+                  }}
+                  className="p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white text-left flex flex-col justify-between gap-2 transition-all cursor-pointer"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                    </div>
+                    <span className="text-[10px] font-mono text-cyan-400">Earth</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block">Import KML / KMZ</span>
+                    <span className="text-[10px] text-white/60">Impor jalur Google Earth</span>
+                  </div>
+                </button>
+
+                {/* Legenda Spasial */}
+                <button
+                  onClick={() => {
+                    setFullscreenLegendOpen(!fullscreenLegendOpen);
+                    setFullscreenToolsModal(false);
+                  }}
+                  className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer ${
+                    fullscreenLegendOpen
+                      ? 'bg-purple-950/40 border-purple-500/60 text-white'
+                      : 'bg-white/5 border-white/10 hover:bg-white/10 text-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+                      </svg>
+                    </div>
+                    <span className="text-[10px] font-mono text-white/60">Info</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block">Legenda Spasial</span>
+                    <span className="text-[10px] text-white/60">Panduan warna ODP &amp; dBm</span>
+                  </div>
+                </button>
+
+                {/* Refresh Live Data */}
+                <button
+                  onClick={() => {
+                    fetchNodesAndCables(true);
+                    setFullscreenToolsModal(false);
+                  }}
+                  className="p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white text-left flex flex-col justify-between gap-2 transition-all cursor-pointer"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-400">Live</span>
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block">Refresh Data</span>
+                    <span className="text-[10px] text-white/60">Sinkronisasi status jaringan</span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Filter Tipe Segmented Picker */}
+              <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                <span className="text-[11px] font-bold text-white/70 block uppercase tracking-wider">Filter Tipe Perangkat</span>
+                <div className="grid grid-cols-4 gap-1.5">
                   {['', 'POP', 'ODC', 'ODP'].map(t => (
                     <button
                       key={t}
-                      onClick={() => {
-                        setTypeFilter(t);
-                        setFullscreenTypeOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-white/10 flex items-center justify-between cursor-pointer ${
-                        typeFilter === t ? 'text-indigo-400 font-black' : 'text-white/80'
+                      onClick={() => setTypeFilter(t)}
+                      className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                        typeFilter === t
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-white/5 hover:bg-white/10 text-white/70 hover:text-white'
                       }`}
                     >
-                      <span>{t ? t : 'Semua Tipe'}</span>
-                      {typeFilter === t && <span>✓</span>}
+                      {t || 'Semua'}
                     </button>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* KML Import Button */}
-            <button
-              type="button"
-              onClick={() => setKmlImportModal(true)}
-              className="px-3 py-1.5 rounded-full text-xs font-bold hover:bg-white/10 text-white/80 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-              title="Import Google Earth KML / KMZ"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
-              <span className="inline">KML</span>
-            </button>
-
-            {/* Legend Button */}
-            <button
-              type="button"
-              onClick={() => setFullscreenLegendOpen(!fullscreenLegendOpen)}
-              className={`px-2.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center justify-center cursor-pointer shrink-0 ${
-                fullscreenLegendOpen ? 'bg-white/25 text-white' : 'hover:bg-white/10 text-white/80 hover:text-white'
-              }`}
-              title="Legenda Spasial GIS"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="16" x2="12" y2="12" />
-                <line x1="12" y1="8" x2="12.01" y2="8" />
-              </svg>
-            </button>
-
-            {/* More Menu (`⋮`) */}
-            <div className="relative shrink-0" ref={fullscreenMoreRef}>
-              <button
-                type="button"
-                onClick={() => setFullscreenMoreOpen(!fullscreenMoreOpen)}
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
-                  fullscreenMoreOpen ? 'bg-white/25 text-white' : 'hover:bg-white/10 text-white/80 hover:text-white'
-                }`}
-                title="Opsi Peta Lainnya"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <circle cx="12" cy="5" r="2" />
-                  <circle cx="12" cy="12" r="2" />
-                  <circle cx="12" cy="19" r="2" />
-                </svg>
-              </button>
-
-              {fullscreenMoreOpen && (
-                <div className="absolute bottom-full right-0 mb-2 w-52 bg-black/95 text-white border border-white/20 rounded-xl shadow-2xl py-1 overflow-hidden z-[1150] divide-y divide-white/10">
-                  <div className="px-3 py-1.5 text-[10px] font-bold text-white/50 uppercase tracking-wider">
-                    Kontrol Peta Spasial
-                  </div>
-                  <div className="py-1">
-                    <button
-                      onClick={() => {
-                        fetchNodesAndCables(true);
-                        setFullscreenMoreOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-white/10 flex items-center justify-between cursor-pointer"
-                    >
-                      <span>Refresh Data Spasial</span>
-                      <span className="text-[10px] text-emerald-400 font-mono">Live</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (externalRecenterRef.current) {
-                          externalRecenterRef.current();
-                        }
-                        setFullscreenMoreOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-white/10 flex items-center justify-between cursor-pointer"
-                    >
-                      <span>Pusatkan Peta (Fit All)</span>
-                      <span className="text-[10px] text-blue-400 font-mono">Auto</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setLivePolling(!livePolling);
-                        setFullscreenMoreOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-white/10 flex items-center justify-between cursor-pointer"
-                    >
-                      <span>Auto-Refresh Polling</span>
-                      <span className={`text-[10px] font-mono ${livePolling ? 'text-emerald-400' : 'text-white/40'}`}>
-                        {livePolling ? 'ON' : 'OFF'}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        navigate('/gis-map');
-                        setFullscreenMoreOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-950/40 flex items-center justify-between cursor-pointer"
-                    >
-                      <span>Keluar Layar Penuh</span>
-                      <span className="text-[10px] font-mono text-rose-400">ESC</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* Exit Fullscreen Action */}
+              <div className="pt-1">
+                <button
+                  onClick={() => {
+                    navigate('/gis-map');
+                  }}
+                  className="w-full py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Keluar Layar Penuh (Kembali ke UNMS)</span>
+                  <span className="text-[10px] font-mono opacity-80">ESC</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* 6. Node Detail Drawer / Bottom Sheet */}
         <NodeDetailPanel
