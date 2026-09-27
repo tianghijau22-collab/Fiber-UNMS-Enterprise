@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../components/AuthContext.jsx';
 import RefreshButton from '../components/RefreshButton.jsx';
@@ -12,12 +12,6 @@ export default function MobileAppTesting() {
   const [testResults, setTestResults] = useState(null);
   const [testingApi, setTestingApi] = useState(false);
   const [alertMsg, setAlertMsg] = useState(null);
-
-  // Server Build State
-  const [isBuilding, setIsBuilding] = useState(false);
-  const [buildLogs, setBuildLogs] = useState('');
-  const [triggeringBuild, setTriggeringBuild] = useState(false);
-  const terminalEndRef = useRef(null);
 
   const fetchAppInfo = async () => {
     setLoading(true);
@@ -33,57 +27,16 @@ export default function MobileAppTesting() {
     }
   };
 
-  const checkBuildStatus = async () => {
-    try {
-      const res = await axios.get('/api/app-testing/build-status');
-      if (res.data && res.data.status === 'success') {
-        setIsBuilding(res.data.is_running);
-        setBuildLogs(res.data.log_content || '');
-      }
-    } catch (_) {}
-  };
-
   useEffect(() => {
     fetchAppInfo();
-    checkBuildStatus();
-
-    // Auto-poll build status every 3 seconds if active
-    const interval = setInterval(() => {
-      checkBuildStatus();
-    }, 3000);
-
-    return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [buildLogs]);
-
-  const handleTriggerBuild = async () => {
-    setTriggeringBuild(true);
-    setAlertMsg(null);
-    try {
-      const res = await axios.post('/api/app-testing/trigger-build');
-      if (res.data) {
-        setAlertMsg({ type: res.data.status === 'error' ? 'error' : 'success', text: res.data.message });
-        setIsBuilding(true);
-        checkBuildStatus();
-      }
-    } catch (err) {
-      setAlertMsg({ type: 'error', text: err.response?.data?.message || 'Gagal memulai kompilasi APK di server.' });
-    } finally {
-      setTriggeringBuild(false);
-    }
-  };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     if (!file.name.endsWith('.apk')) {
-      setAlertMsg({ type: 'error', text: 'Format berkas harus .apk' });
+      setAlertMsg({ type: 'error', text: 'Format berkas harus berekstensi .apk' });
       return;
     }
 
@@ -148,8 +101,8 @@ export default function MobileAppTesting() {
               </svg>
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white tracking-wide">Pusat Uji Coba & Generator APK Mobile</h1>
-              <p className="text-sm text-slate-400">Kompilasi build APK otomatis dari server VPS, unduh via scan QR & uji konektivitas API</p>
+              <h1 className="text-xl font-bold text-white tracking-wide">Pusat Uji Coba & Download App Mobile</h1>
+              <p className="text-sm text-slate-400">Distribusi paket APK Android, unduh instan via Scan QR & uji konektivitas API</p>
             </div>
           </div>
         </div>
@@ -159,7 +112,7 @@ export default function MobileAppTesting() {
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
             Khusus Super Administrator
           </span>
-          <RefreshButton onClick={() => { fetchAppInfo(); checkBuildStatus(); }} loading={loading} />
+          <RefreshButton onClick={fetchAppInfo} loading={loading} />
         </div>
       </div>
 
@@ -168,13 +121,11 @@ export default function MobileAppTesting() {
         <div className={`p-4 rounded-xl border flex items-center justify-between ${
           alertMsg.type === 'success' 
             ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
-            : alertMsg.type === 'warning'
-            ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
             : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
         }`}>
           <div className="flex items-center gap-2">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={alertMsg.type === 'success' ? "M5 13l4 4L19 7" : "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"} />
             </svg>
             <span className="text-sm font-medium">{alertMsg.text}</span>
           </div>
@@ -184,21 +135,21 @@ export default function MobileAppTesting() {
 
       {/* Main Grid Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Build Info, Compile Action & Direct Actions */}
+        {/* Left Column: Build Info & Direct Actions */}
         <div className="lg:col-span-2 space-y-6">
           {/* Build Details Card */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <h2 className="text-base font-semibold text-white flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                Status Paket APK Android
+                Informasi Paket APK Rilis
               </h2>
               <span className={`px-2.5 py-1 text-xs font-semibold rounded-lg ${
                 appInfo?.is_apk_available 
                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' 
                   : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
               }`}>
-                {appInfo?.is_apk_available ? 'APK Siap Diunduh' : 'APK Sedang Dikompilasi / Belum Ada'}
+                {appInfo?.is_apk_available ? 'APK Siap Diunduh' : 'APK Belum Diunggah'}
               </span>
             </div>
 
@@ -221,7 +172,7 @@ export default function MobileAppTesting() {
               </div>
             </div>
 
-            {/* Auto-Build Trigger & Download Buttons */}
+            {/* Direct Download & Upload Action Buttons */}
             <div className="pt-2 flex flex-col sm:flex-row gap-3">
               {appInfo?.is_apk_available ? (
                 <a
@@ -239,54 +190,23 @@ export default function MobileAppTesting() {
                   disabled
                   className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-slate-800 text-slate-500 font-semibold rounded-xl cursor-not-allowed"
                 >
-                  Berkas APK Belum Siap
+                  Berkas APK Belum Diunggah
                 </button>
               )}
 
-              <button
-                onClick={handleTriggerBuild}
-                disabled={isBuilding || triggeringBuild}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 text-white font-semibold rounded-xl transition shadow-lg shadow-indigo-950/40"
-              >
-                {isBuilding ? (
-                  <>
-                    <svg className="animate-spin w-5 h-5 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                    </svg>
-                    Sedang Kompilasi di Server...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                    </svg>
-                    Bangun Ulang APK di Server (VPS)
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Live Server Build Terminal Card */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <span className={`w-3 h-3 rounded-full ${isBuilding ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`}></span>
-                <h3 className="text-sm font-semibold text-white">Live Server Build Terminal (VPS Compilation)</h3>
-              </div>
-              <span className="text-[11px] text-slate-400">
-                {isBuilding ? 'Status: Proses Kompilasi Aktif' : 'Status: Siap / Selesai'}
-              </span>
-            </div>
-
-            <div className="bg-black border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-300 h-64 overflow-y-auto space-y-1 select-text">
-              {buildLogs ? (
-                <pre className="whitespace-pre-wrap leading-relaxed">{buildLogs}</pre>
-              ) : (
-                <div className="text-slate-500 py-4 text-center">Menunggu log kompilasi dari server VPS...</div>
-              )}
-              <div ref={terminalEndRef} />
+              <label className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-sky-600 hover:bg-sky-500 text-white font-semibold rounded-xl transition shadow-lg shadow-sky-950/40 cursor-pointer">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                {uploading ? `Mengunggah (${uploadProgress}%)...` : 'Unggah / Update Berkas APK'}
+                <input
+                  type="file"
+                  accept=".apk"
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                  className="hidden"
+                />
+              </label>
             </div>
           </div>
 
@@ -311,7 +231,7 @@ export default function MobileAppTesting() {
               </button>
             </div>
 
-            {testResults && (
+            {testResults ? (
               <div className="space-y-2.5 pt-1">
                 {testResults.results.map((item, idx) => (
                   <div key={idx} className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
@@ -329,6 +249,10 @@ export default function MobileAppTesting() {
                     </span>
                   </div>
                 ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center text-slate-500 text-xs">
+                Klik tombol "Jalankan Tes API" untuk memvalidasi seluruh endpoint mobile.
               </div>
             )}
           </div>
