@@ -213,6 +213,87 @@ export default function SystemAlertChat() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Play synthetic beep on new critical alert
+  const playAlertSound = () => {
+    if (!soundEnabled) return;
+    try {
+      if (!audioRef.current) {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.35);
+      }
+    } catch (e) {
+      console.warn('Audio alert could not play:', e);
+    }
+  };
+
+  const fetchAlerts = async (silent = false) => {
+    if (!silent) setRefreshing(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterType !== 'ALL') params.append('type', filterType);
+      if (searchQuery.trim()) params.append('search', searchQuery.trim());
+      params.append('limit', '100');
+
+      const res = await fetch(`/api/system-alerts/feed?${params.toString()}`);
+      if (!res.ok) throw new Error('Gagal mengambil data alert');
+      const data = await res.json();
+
+      if (data.status === 'success') {
+        const newMessages = data.messages || [];
+        
+        // Cek alert baru masuk
+        if (newMessages.length > 0 && lastKnownIdRef.current) {
+          const newest = newMessages[0];
+          if (newest.id !== lastKnownIdRef.current) {
+            if (newest.is_outage) {
+              playAlertSound();
+            }
+          }
+        }
+        if (newMessages.length > 0) {
+          lastKnownIdRef.current = newMessages[0].id;
+        }
+
+        // Urutkan alami dari lama ke baru agar chat mengalir ke bawah
+        setMessages([...newMessages].reverse());
+        if (data.stats) setStats(data.stats);
+      }
+    } catch (err) {
+      console.error('Error fetching alert feed:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Initial load & Polling interval tiap 2.5 detik (Real-Time Push/Pull)
+  useEffect(() => {
+    fetchAlerts();
+    const interval = setInterval(() => {
+      fetchAlerts(true);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [filterType, searchQuery]);
+
+  // Auto scroll saat messages bertambah
+  useEffect(() => {
+    if (autoScroll && chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  }, [messages, autoScroll]);
+
   const handleToggleSound = () => {
     const next = !soundEnabled;
     setSoundEnabled(next);
