@@ -516,10 +516,10 @@ export default function CustomerManagement() {
     }
   };
 
-  // Fetch ODP Nodes
+  // Fetch ODP Nodes (Lightweight fast options mode)
   const fetchOdpNodes = useCallback(async () => {
     try {
-      const r = await fetch('/api/network-nodes?type=ODP&per_page=10000');
+      const r = await fetch('/api/network-nodes?type=ODP&simple=1');
       const d = await r.json();
       if (d.data) setOdpNodes(d.data);
     } catch {
@@ -527,10 +527,10 @@ export default function CustomerManagement() {
     }
   }, []);
 
-  // Fetch ODC Nodes
+  // Fetch ODC Nodes (Lightweight fast options mode)
   const fetchOdcNodes = useCallback(async () => {
     try {
-      const r = await fetch('/api/network-nodes?type=ODC&per_page=10000');
+      const r = await fetch('/api/network-nodes?type=ODC&simple=1');
       const d = await r.json();
       if (d.data) setOdcNodes(d.data);
     } catch {
@@ -587,7 +587,7 @@ export default function CustomerManagement() {
 
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(silentCustomerPoll, {
     enablePolling: true,
-    intervalMs: 5000,
+    intervalMs: 15000,
     shouldPause: isAnyModalOpen,
   });
 

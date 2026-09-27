@@ -291,6 +291,7 @@ class SobokImportController extends Controller
 
         try {
             $result = $this->scraperService->syncServiceStatuses($username, $password);
+            CustomerController::clearCustomerCache();
 
             return response()->json([
                 'status'  => 'success',

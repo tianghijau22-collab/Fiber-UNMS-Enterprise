@@ -339,6 +339,36 @@ class NetworkNodeController extends Controller
      */
     public function index(Request $request)
     {
+        if ($request->boolean('simple') || $request->input('format') === 'simple') {
+            $type = $request->input('node_type', $request->input('type'));
+            $cacheKey = 'network_nodes_simple_' . ($type ?: 'all');
+
+            $simpleNodes = Cache::remember($cacheKey, 15, function () use ($request, $type) {
+                $query = NetworkNode::query();
+                if ($type && $type !== 'ALL') {
+                    $query->where('node_type', $type);
+                }
+                if ($request->filled('status') && $request->status !== 'ALL') {
+                    $query->where('status', $request->status);
+                }
+                if ($request->filled('parent_id')) {
+                    $query->where('parent_node_id', $request->parent_id);
+                }
+
+                return $query->select([
+                    'id', 'name', 'code', 'node_type', 'status', 'parent_node_id',
+                    'olt_device_id', 'total_ports', 'used_ports', 'olt_port_ref', 'address'
+                ])
+                ->orderByRaw("NULLIF(substring(name from '\d+'), '')::bigint ASC NULLS LAST, name ASC")
+                ->get();
+            });
+
+            return response()->json([
+                'status' => 'success',
+                'data'   => $simpleNodes,
+            ]);
+        }
+
         $query = NetworkNode::with(['splitterType', 'parent.oltDevice', 'oltDevice']);
 
         $type = $request->input('node_type', $request->input('type'));
