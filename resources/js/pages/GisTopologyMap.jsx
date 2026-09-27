@@ -480,50 +480,55 @@ function RulerHud({ waypoints, totalMeters, onUndo, onReset, onClose }) {
   const displayDist = totalMeters >= 1000 ? `${km} km (${m} m)` : `${m} meter`;
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[999] bg-white/95 dark:bg-black/95 text-black dark:text-white backdrop-blur-md border border-amber-500/70 shadow-2xl rounded-lg p-4 w-full max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-200">
-      <div className="flex items-center justify-between pb-2 border-b border-black/20 dark:border-white/20">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping"></span>
-          <span className="font-bold text-xs text-amber-600 dark:text-amber-400">Alat Ukur Jarak Kabel Lapangan</span>
+    <div className="bg-black/90 text-white backdrop-blur-md border border-amber-500/50 shadow-2xl rounded-full px-3.5 py-1.5 sm:py-2 flex items-center justify-between gap-3 text-xs animate-in fade-in zoom-in-95 duration-150">
+      {/* Distance & Waypoints Info */}
+      <div className="flex items-center gap-2 min-w-0">
+        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M21.3 15.3l-6.6 6.6c-.4.4-1 .4-1.4 0l-12-12c-.4-.4-.4-1 0-1.4l6.6-6.6c.4-.4 1-.4 1.4 0l12 12c.4.4.4 1 0 1.4z" />
+          </svg>
         </div>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-emerald-400 font-mono font-bold text-xs sm:text-sm tracking-tight truncate">
+            {displayDist}
+          </span>
+          <span className="text-[10px] text-amber-300 font-mono px-1.5 py-0.2 rounded-full bg-amber-500/15 border border-amber-500/30 shrink-0">
+            {waypoints.length} titik
+          </span>
+        </div>
+      </div>
+
+      {/* Action Controls */}
+      <div className="flex items-center gap-1 shrink-0 pl-1 border-l border-white/15">
         <button
-          onClick={onClose}
-          className="text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white text-xs font-bold px-1 cursor-pointer"
+          type="button"
+          onClick={onUndo}
+          disabled={waypoints.length === 0}
+          className="px-2 py-1 bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed rounded-full text-[10px] font-bold text-white transition-all cursor-pointer flex items-center gap-1"
+          title="Hapus titik terakhir (Undo)"
         >
-          ✕ Selesai
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <path d="M3 10h10a5 5 0 0 1 5 5v2M3 10l6-6M3 10l6 6" />
+          </svg>
+          <span className="hidden sm:inline">Undo</span>
         </button>
-      </div>
-
-      <div className="mt-3 bg-black/5 dark:bg-white/5 rounded-lg p-3 border border-black/20 dark:border-white/20 flex items-center justify-between">
-        <div>
-          <span className="text-[10px] font-bold uppercase text-black/70 dark:text-white/70 block">Total Jarak Kabel</span>
-          <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 leading-tight">{displayDist}</span>
-        </div>
-        <div className="text-right">
-          <span className="text-[10px] font-bold uppercase text-black/70 dark:text-white/70 block">Titik Waypoint</span>
-          <span className="text-base font-bold font-mono text-amber-600 dark:text-amber-400 leading-tight">{waypoints.length} Titik</span>
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between text-[11px] text-black/70 dark:text-white/70 pt-1 border-t border-black/10 dark:border-white/10">
-        <span className="text-[10px]">Klik titik peta / marker node</span>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={onUndo}
-            disabled={waypoints.length === 0}
-            className="px-2.5 py-1 bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 disabled:opacity-35 disabled:cursor-not-allowed text-black dark:text-white border border-black/20 dark:border-white/20 rounded-md text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
-            title="Hapus titik waypoint terakhir"
-          >
-            Undo
-          </button>
-          <button
-            onClick={onReset}
-            disabled={waypoints.length === 0}
-            className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/30 disabled:opacity-35 disabled:cursor-not-allowed text-rose-600 dark:text-rose-400 border border-rose-500/30 rounded-md text-[10px] font-bold transition-colors cursor-pointer"
-          >
-            Reset
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={waypoints.length === 0}
+          className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/30 disabled:opacity-30 disabled:cursor-not-allowed text-rose-300 border border-rose-500/30 rounded-full text-[10px] font-bold transition-all cursor-pointer"
+          title="Reset pengukuran"
+        >
+          Reset
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-6 h-6 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center text-xs font-bold transition-all cursor-pointer ml-0.5"
+          title="Selesai ukur jarak"
+        >
+          ✕
+        </button>
       </div>
     </div>
   );
@@ -2747,16 +2752,18 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
           {/* Interactive Ruler Distance HUD with Undo */}
           {rulerActive && (
-            <RulerHud
-              waypoints={rulerPoints}
-              totalMeters={rulerTotalMeters}
-              onUndo={() => setRulerPoints(pts => pts.slice(0, -1))}
-              onReset={() => setRulerPoints([])}
-              onClose={() => {
-                setRulerActive(false);
-                setRulerPoints([]);
-              }}
-            />
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[999] max-w-sm px-3 pointer-events-auto">
+              <RulerHud
+                waypoints={rulerPoints}
+                totalMeters={rulerTotalMeters}
+                onUndo={() => setRulerPoints(pts => pts.slice(0, -1))}
+                onReset={() => setRulerPoints([])}
+                onClose={() => {
+                  setRulerActive(false);
+                  setRulerPoints([]);
+                }}
+              />
+            </div>
           )}
 
           {/* Leaflet Map Component */}
