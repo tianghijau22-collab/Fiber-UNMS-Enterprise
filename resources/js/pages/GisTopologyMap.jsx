@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { decimalToDms, parseCoordsInput } from '../utils/coordinateParser.js';
 import { naturalNodeCompare } from '../utils/naturalSort.js';
+import { useAuth } from '../components/AuthContext';
 import KmlImportModal from '../components/KmlImportModal.jsx';
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1562,6 +1563,8 @@ function GisStatCards({ nodes = [] }) {
    MAIN GIS PAGE CONTROLLER
 ══════════════════════════════════════════════════════════════════ */
 export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
+  const { currentUser } = useAuth();
+  const isSuperAdmin = currentUser?.role === 'Super Administrator';
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -2225,19 +2228,21 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                   )}
                 </button>
 
-                {/* 3. Import KML / KMZ */}
-                <button
-                  type="button"
-                  onClick={() => setKmlImportModal(true)}
-                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center hover:bg-white/15 text-white/80 hover:text-white transition-all cursor-pointer shrink-0"
-                  title="Import Jalur KML / KMZ Google Earth"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                </button>
+                {/* 3. Import KML / KMZ (Super Administrator Only) */}
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setKmlImportModal(true)}
+                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center hover:bg-white/15 text-white/80 hover:text-white transition-all cursor-pointer shrink-0"
+                    title="Import Jalur KML / KMZ Google Earth"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                  </button>
+                )}
 
                 {/* 4. Filter Tipe Perangkat */}
                 <div className="relative" ref={fullscreenTypeRef}>
@@ -2433,16 +2438,18 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                 </div>
 
                 <div className="py-1">
-                  <button
-                    onClick={() => {
-                      setKmlImportModal(true);
-                      setToolsOpen(false);
-                    }}
-                    className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
-                  >
-                    <span>Import KML / KMZ</span>
-                    <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400">Google Earth</span>
-                  </button>
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => {
+                        setKmlImportModal(true);
+                        setToolsOpen(false);
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between text-xs font-semibold cursor-pointer"
+                    >
+                      <span>Import KML / KMZ</span>
+                      <span className="text-[10px] font-mono text-blue-600 dark:text-blue-400">Google Earth</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => {

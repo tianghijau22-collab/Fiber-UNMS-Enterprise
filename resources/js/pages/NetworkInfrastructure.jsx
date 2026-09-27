@@ -5297,7 +5297,8 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
    MAIN PAGE CONTROLLER
 ══════════════════════════════════════════════════════════════════ */
 export default function NetworkInfrastructure() {
-  const { hasRole } = useAuth();
+  const { currentUser, hasRole } = useAuth();
+  const isSuperAdmin = currentUser?.role === 'Super Administrator';
   const canCrud = hasRole('Super Administrator', 'Operator Jaringan');
   const [searchParams] = useSearchParams();
   const scopedOltId = searchParams.get('olt_id');
@@ -5737,7 +5738,7 @@ export default function NetworkInfrastructure() {
           </h1>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
-          {canCrud && (
+          {isSuperAdmin && (
             <button
               type="button"
               onClick={() => handleOpenKml('all')}
@@ -5804,7 +5805,7 @@ export default function NetworkInfrastructure() {
           onDeleteAllNodes={handleDeleteAllNodes}
           refreshKey={refreshKey}
           onRefreshGlobal={refreshAll}
-          onOpenKmlModal={handleOpenKml}
+          onOpenKmlModal={isSuperAdmin ? handleOpenKml : null}
         />
       )}
 
@@ -5818,7 +5819,7 @@ export default function NetworkInfrastructure() {
           refreshKey={refreshKey}
           onRefreshGlobal={refreshAll}
           scopedOltId={scopedOltId}
-          onOpenKmlModal={handleOpenKml}
+          onOpenKmlModal={isSuperAdmin ? handleOpenKml : null}
         />
       )}
 

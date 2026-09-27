@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useAuth } from './AuthContext';
 
 export default function KmlImportModal({
   isOpen,
@@ -10,6 +11,9 @@ export default function KmlImportModal({
   scopedOltName = null,
   lockOlt = false,
 }) {
+  const { currentUser } = useAuth();
+  const isSuperAdmin = currentUser?.role === 'Super Administrator';
+
   const [step, setStep] = useState(1); // 1: Upload & Target, 2: Preview, 3: Processing, 4: Done
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -39,7 +43,7 @@ export default function KmlImportModal({
     }
   }, [isOpen, initialTarget, scopedOltId]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !isSuperAdmin) return null;
 
   const handleFileChange = (e) => {
     const f = e.target.files?.[0];
