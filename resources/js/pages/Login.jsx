@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext.jsx';
 import { useTheme } from '../components/ThemeContext.jsx';
 import InteractiveFonaCat from '../components/InteractiveFonaCat.jsx';
+import FonaBrandLogo from '../components/FonaBrandLogo.jsx';
 
 /* ───────────────────────────────────────────────────────────────────
    Modern Clean Monochrome Login Page
@@ -153,18 +154,14 @@ export default function Login() {
           <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#52525b] p-6 sm:p-8 pt-7 rounded-xl shadow-2xl space-y-5 relative">
 
             {/* Header Title */}
-            <div className="text-center space-y-2 pt-1">
+            <div className="text-center space-y-2.5 pt-1">
               <div className="flex justify-center mb-1">
-                <img
-                  src="/images/brand/fona_logo_transparent.png"
-                  alt="FONA — Fiber Optical Network Analysis"
-                  className="h-11 object-contain dark:brightness-110 drop-shadow-xs"
-                />
+                <FonaBrandLogo className="h-16 w-auto" />
               </div>
 
-              <div className="inline-flex items-center gap-1.5 bg-cyan-50 dark:bg-neutral-900 border border-cyan-200 dark:border-cyan-800/60 px-3 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-800 dark:text-cyan-300">
+              <div className="inline-flex items-center gap-2 bg-cyan-500/10 dark:bg-neutral-900 border border-cyan-500/30 dark:border-cyan-800/60 px-3.5 py-1 rounded-full text-[11px] font-mono font-bold tracking-wider text-cyan-800 dark:text-cyan-300 shadow-2xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
-                <span>FONA ENTERPRISE UNMS</span>
+                <span>Fiber Optic Network Analysis</span>
               </div>
 
               <p className="text-xs text-slate-500 dark:text-slate-400">
