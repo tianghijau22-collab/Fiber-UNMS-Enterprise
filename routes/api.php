@@ -206,3 +206,8 @@ Route::apiResource('odp-checks', \App\Http\Controllers\OdpMeasurementController:
 Route::post('kml-import/preview', [\App\Http\Controllers\KmlImportController::class, 'preview']);
 Route::post('kml-import/execute', [\App\Http\Controllers\KmlImportController::class, 'execute']);
 
+// Mobile App Testing Hub & APK Distribution (Super Admin)
+Route::get('app-testing/info', [\App\Http\Controllers\AppTestingController::class, 'info']);
+Route::post('app-testing/upload-apk', [\App\Http\Controllers\AppTestingController::class, 'uploadApk']);
+Route::post('app-testing/test-api', [\App\Http\Controllers\AppTestingController::class, 'testEndpoints']);
+

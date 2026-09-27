@@ -33,6 +33,7 @@ const OdpCheckManagement = lazy(() => import('./pages/OdpCheckManagement.jsx'));
 const PublicTicketTracking = lazy(() => import('./pages/PublicTicketTracking.jsx'));
 const Login = lazy(() => import('./pages/Login.jsx'));
 const NetworkBridgeSetup = lazy(() => import('./pages/NetworkBridgeSetup.jsx'));
+const MobileAppTesting = lazy(() => import('./pages/MobileAppTesting.jsx'));
 
 import LoadingState from './components/LoadingState.jsx';
 
@@ -136,6 +137,7 @@ function AppContent() {
                 <Route path="/audit-logs"     element={<PrivateRoute><AuditLogs /></PrivateRoute>} />
                 <Route path="/database-backup" element={<PrivateRoute><DatabaseBackup /></PrivateRoute>} />
                 <Route path="/broadcast-notifications" element={<PrivateRoute><PushNotificationBroadcast /></PrivateRoute>} />
+                <Route path="/mobile-app-testing" element={<PrivateRoute><MobileAppTesting /></PrivateRoute>} />
                 <Route path="*"               element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Suspense>
