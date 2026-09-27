@@ -309,7 +309,7 @@ export default function DatabaseBackup() {
             <span>Manajemen Cadangan &amp; Pemulihan Database</span>
           </h3>
           <p className="text-xs text-neutral-600 dark:text-neutral-300 mt-1">
-            Pencadangan snapshot seluruh 52 tabel sistem PostgreSQL Fiber-UNMS Enterprise untuk keamanan &amp; pemulihan data.
+            Pencadangan snapshot seluruh 52 tabel sistem PostgreSQL FONA untuk keamanan &amp; pemulihan data.
           </p>
         </div>
 

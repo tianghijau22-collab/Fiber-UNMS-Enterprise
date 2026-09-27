@@ -163,10 +163,6 @@ export default function Login() {
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
                 <span>Fiber Optic Network Analysis</span>
               </div>
-
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Masuk untuk mengelola dan memonitor jaringan fiber optik
-              </p>
             </div>
 
             {/* Info Alert (Perubahan Password Berhasil) */}
@@ -207,7 +203,7 @@ export default function Login() {
               {/* Username Field */}
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Username atau Nomor WhatsApp
+                  Username
                 </label>
                 <div className="relative group">
                   <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors">
@@ -226,7 +222,7 @@ export default function Login() {
                     }}
                     onFocus={handleUsernameFocus}
                     onBlur={handleUsernameBlur}
-                    placeholder="Masukkan username atau no. WhatsApp"
+                    placeholder="Masukkan username"
                     autoComplete="username"
                     disabled={mascotState === 'success'}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-[#52525b] rounded-lg text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 transition-all disabled:opacity-50"
@@ -331,7 +327,7 @@ export default function Login() {
                 </button>
               </p>
               <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                © 2026 Fiber-UNMS Enterprise. All rights reserved.
+                © 2026 FONA. All rights reserved.
               </p>
             </div>
 
@@ -354,7 +350,7 @@ export default function Login() {
                       {helpModal === 'forgot_password' ? 'Lupa Kata Sandi Akun' : 'Pendaftaran Akun Baru'}
                     </h3>
                     <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 uppercase">
-                      FIBER-UNMS SECURITY GATEWAY
+                      FONA SECURITY GATEWAY
                     </span>
                   </div>
                 </div>
@@ -375,7 +371,7 @@ export default function Login() {
               {helpModal === 'forgot_password' ? (
                 <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   <p>
-                    Untuk menjaga integritas dan keamanan sistem telemetri fiber optik <strong className="text-slate-900 dark:text-white">Fiber-UNMS</strong>, proses <strong className="text-slate-900 dark:text-white">reset kata sandi</strong> hanya dapat dilakukan langsung oleh <strong className="text-blue-600 dark:text-blue-400">Super Administrator</strong> atau tim <strong className="text-blue-600 dark:text-blue-400">NOC Central</strong>.
+                    Untuk menjaga integritas dan keamanan sistem telemetri fiber optik <strong className="text-slate-900 dark:text-white">FONA</strong>, proses <strong className="text-slate-900 dark:text-white">reset kata sandi</strong> hanya dapat dilakukan langsung oleh <strong className="text-blue-600 dark:text-blue-400">Super Administrator</strong> atau tim <strong className="text-blue-600 dark:text-blue-400">NOC Central</strong>.
                   </p>
                   <div className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-[#52525b] rounded-lg space-y-1.5 font-sans">
                     <div className="font-bold text-slate-900 dark:text-white text-[11px]">
@@ -391,7 +387,7 @@ export default function Login() {
               ) : (
                 <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                   <p>
-                    Sistem <strong className="text-slate-900 dark:text-white">Fiber-UNMS Enterprise</strong> adalah portal internal operasional jaringan terbatas untuk tim teknis (NOC, Jointer, Teknisi Lapangan, dan CS).
+                    Sistem <strong className="text-slate-900 dark:text-white">FONA</strong> adalah portal internal operasional jaringan terbatas untuk tim teknis (NOC, Jointer, Teknisi Lapangan, dan CS).
                   </p>
                   <div className="p-3 bg-slate-50 dark:bg-neutral-950 border border-slate-200 dark:border-[#52525b] rounded-lg space-y-1.5 font-sans">
                     <div className="font-bold text-slate-900 dark:text-white text-[11px]">

@@ -597,7 +597,7 @@ export default function PublicTicketTracking() {
 
       {/* Clean Footer */}
       <footer className="bg-white dark:bg-black border-t border-slate-200 dark:border-neutral-800 py-6 px-4 text-center text-xs text-black dark:text-white font-medium">
-        <p>© 2026 Fiber-UNMS Enterprise — Sistem Manajemen Jaringan Fiber Optik &amp; Tiket Lapangan</p>
+        <p>© 2026 FONA — Sistem Manajemen Jaringan Fiber Optik &amp; Tiket Lapangan</p>
       </footer>
     </div>
   );
