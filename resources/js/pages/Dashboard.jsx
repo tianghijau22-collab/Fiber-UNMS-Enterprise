@@ -500,93 +500,95 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── SECTION 3: KESEHATAN PERANGKAT OLT (CPU, RAM & SUHU) ─────────────────────────── */}
-      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-black/10 dark:border-white/10">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">
-                Kesehatan Perangkat OLT (CPU, RAM &amp; Suhu)
-              </h3>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400">
-                {oltHardwareList.length} Perangkat
-              </span>
-            </div>
-            <p className="text-xs text-black/70 dark:text-white/70 mt-0.5">
-              Telemetri hardware real-time via SNMP Driver
-            </p>
-          </div>
-          <Link
-            to="/olt-management"
-            className="px-3 py-1.5 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/30 dark:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 font-bold text-xs transition-colors shrink-0 cursor-pointer"
-          >
-            Kelola OLT →
-          </Link>
-        </div>
-
-        {oltHardwareList.length === 0 ? (
-          <div className="text-center py-8 text-xs text-black/50 dark:text-white/50 italic">
-            Belum ada perangkat OLT yang terhubung.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-            {oltHardwareList.map(olt => (
-              <div
-                key={olt.id}
-                className="p-3.5 sm:p-4 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 space-y-3 shadow-2xs hover:border-black/50 dark:hover:border-white/50 transition-all flex flex-col justify-between"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-bold text-sm text-black dark:text-white truncate">{olt.name}</h4>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400 shrink-0">
-                        {olt.vendor} - {olt.model}
-                      </span>
-                    </div>
-                    <p className="text-[11px] font-mono text-black/60 dark:text-white/60 mt-0.5 truncate">
-                      IP: {olt.ip_address} · Uptime: {olt.uptime}
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-md text-xs font-bold font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
-                    {olt.temperature}°C SFP
-                  </span>
-                </div>
-
-                {/* Hardware Metrics Gauges */}
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-black/10 dark:border-white/10">
-                  {/* CPU Usage */}
-                  <div>
-                    <div className="flex justify-between text-xs mb-1 font-mono">
-                      <span className="text-black/70 dark:text-white/70 font-semibold font-sans">CPU</span>
-                      <span className="font-bold text-black dark:text-white">{olt.cpu_usage}%</span>
-                    </div>
-                    <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-2 rounded-full ${olt.cpu_usage > 80 ? 'bg-rose-500' : olt.cpu_usage > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                        style={{ width: `${Math.max(4, olt.cpu_usage)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Memory Usage */}
-                  <div>
-                    <div className="flex justify-between text-xs mb-1 font-mono">
-                      <span className="text-black/70 dark:text-white/70 font-semibold font-sans">Memory</span>
-                      <span className="font-bold text-black dark:text-white">{olt.memory_usage}%</span>
-                    </div>
-                    <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-2 rounded-full ${olt.memory_usage > 80 ? 'bg-rose-500' : 'bg-indigo-500'}`}
-                        style={{ width: `${Math.max(4, olt.memory_usage)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                </div>
+      {/* ── SECTION 3: KESEHATAN PERANGKAT OLT (CPU, RAM & SUHU) (KHUSUS SUPER ADMINISTRATOR) ── */}
+      {isSuperAdmin && (
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-black/10 dark:border-white/10">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">
+                  Kesehatan Perangkat OLT (CPU, RAM &amp; Suhu)
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400">
+                  {oltHardwareList.length} Perangkat
+                </span>
               </div>
-            ))}
+              <p className="text-xs text-black/70 dark:text-white/70 mt-0.5">
+                Telemetri hardware real-time via SNMP Driver
+              </p>
+            </div>
+            <Link
+              to="/olt-management"
+              className="px-3 py-1.5 rounded-md bg-white dark:bg-black text-black dark:text-white border border-black/30 dark:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 font-bold text-xs transition-colors shrink-0 cursor-pointer"
+            >
+              Kelola OLT →
+            </Link>
           </div>
-        )}
-      </div>
+
+          {oltHardwareList.length === 0 ? (
+            <div className="text-center py-8 text-xs text-black/50 dark:text-white/50 italic">
+              Belum ada perangkat OLT yang terhubung.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              {oltHardwareList.map(olt => (
+                <div
+                  key={olt.id}
+                  className="p-3.5 sm:p-4 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 space-y-3 shadow-2xs hover:border-black/50 dark:hover:border-white/50 transition-all flex flex-col justify-between"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-bold text-sm text-black dark:text-white truncate">{olt.name}</h4>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-black/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+                          {olt.vendor} - {olt.model}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-mono text-black/60 dark:text-white/60 mt-0.5 truncate">
+                        IP: {olt.ip_address} · Uptime: {olt.uptime}
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-md text-xs font-bold font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                      {olt.temperature}°C SFP
+                    </span>
+                  </div>
+
+                  {/* Hardware Metrics Gauges */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-black/10 dark:border-white/10">
+                    {/* CPU Usage */}
+                    <div>
+                      <div className="flex justify-between text-xs mb-1 font-mono">
+                        <span className="text-black/70 dark:text-white/70 font-semibold font-sans">CPU</span>
+                        <span className="font-bold text-black dark:text-white">{olt.cpu_usage}%</span>
+                      </div>
+                      <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-2 rounded-full ${olt.cpu_usage > 80 ? 'bg-rose-500' : olt.cpu_usage > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                          style={{ width: `${Math.max(4, olt.cpu_usage)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Memory Usage */}
+                    <div>
+                      <div className="flex justify-between text-xs mb-1 font-mono">
+                        <span className="text-black/70 dark:text-white/70 font-semibold font-sans">Memory</span>
+                        <span className="font-bold text-black dark:text-white">{olt.memory_usage}%</span>
+                      </div>
+                      <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-2 rounded-full ${olt.memory_usage > 80 ? 'bg-rose-500' : 'bg-indigo-500'}`}
+                          style={{ width: `${Math.max(4, olt.memory_usage)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── SECTION 4: SERVER HEALTH & MONITORING QUICK SHORTCUT (KHUSUS SUPER ADMINISTRATOR) ── */}
       {isSuperAdmin && (
