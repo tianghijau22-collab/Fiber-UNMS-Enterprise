@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import FonaBrandLogo from './FonaBrandLogo.jsx';
 
 export default function LoadingScreen({ message = "Memuat Sistem Fiber-UNMS...", onComplete }) {
   const [progress, setProgress] = useState(0);
@@ -53,11 +54,7 @@ export default function LoadingScreen({ message = "Memuat Sistem Fiber-UNMS...",
 
           {/* Logo Container */}
           <div className="relative w-24 h-24 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center p-3 shadow-2xl shadow-cyan-500/30">
-            <img
-              src="/images/brand/fona_icon_transparent.png"
-              alt="FONA"
-              className="w-full h-full object-contain filter drop-shadow-[0_0_12px_rgba(6,182,212,0.8)] animate-pulse"
-            />
+            <FonaBrandLogo variant="icon" className="w-full h-full animate-pulse" />
           </div>
         </div>
 
@@ -67,7 +64,7 @@ export default function LoadingScreen({ message = "Memuat Sistem Fiber-UNMS...",
             FONA
             <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">UNMS</span>
           </h2>
-          <p className="text-xs text-cyan-400 font-bold uppercase tracking-widest">Fiber Optical Network Analysis</p>
+          <p className="text-xs text-cyan-400 font-bold uppercase tracking-widest">Fiber Optic Network Analysis</p>
         </div>
 
         {/* Status Message */}

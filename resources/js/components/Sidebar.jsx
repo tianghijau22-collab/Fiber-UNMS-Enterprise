@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext.jsx';
 import { SYSTEM_NAVIGATION_MODULES } from '../config/navigationModules.jsx';
+import FonaBrandLogo from './FonaBrandLogo.jsx';
 
 export default function Sidebar({ isOpen, onClose }) {
   const { canAccessRoute, currentUser, logout } = useAuth();
@@ -65,22 +66,18 @@ export default function Sidebar({ isOpen, onClose }) {
         }`}
       >
         {/* Brand Header */}
-        <div className="h-14 px-4 border-b border-slate-200 dark:border-[#52525b] flex items-center justify-between box-border">
+        <div className="h-14 px-4 border-b border-slate-200 dark:border-[#222222] flex items-center justify-between box-border">
           <NavLink to="/dashboard" onClick={onClose} className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-500/10 to-blue-600/10 dark:from-cyan-500/20 dark:to-blue-600/20 flex items-center justify-center p-1 border border-cyan-500/20 group-hover:scale-105 transition-transform">
-              <img
-                src="/images/brand/fona_icon_transparent.png"
-                alt="FONA Logo"
-                className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]"
-              />
+            <div className="w-8 h-8 rounded-lg bg-black/5 dark:bg-white/5 flex items-center justify-center p-1 border border-cyan-500/30 group-hover:border-cyan-500/60 transition-colors shadow-2xs">
+              <FonaBrandLogo variant="icon" className="w-full h-full" />
             </div>
             <div className="flex flex-col">
-              <span className="font-black text-base text-slate-900 dark:text-white tracking-wider font-sans leading-none flex items-center gap-1">
+              <span className="font-black text-base text-slate-900 dark:text-white tracking-wider font-sans leading-none flex items-center gap-1.5">
                 FONA
-                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-semibold uppercase">UNMS</span>
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 font-bold uppercase border border-cyan-500/20">UNMS</span>
               </span>
-              <span className="text-[9px] text-slate-400 dark:text-slate-500 font-medium tracking-tight mt-0.5 truncate max-w-[120px]">
-                Fiber Optical Network
+              <span className="text-[9px] text-slate-500 dark:text-slate-400 font-medium tracking-tight mt-0.5 truncate max-w-[130px]">
+                Fiber Optic Network Analysis
               </span>
             </div>
           </NavLink>
