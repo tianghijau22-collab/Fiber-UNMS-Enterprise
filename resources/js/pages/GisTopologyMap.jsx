@@ -308,7 +308,7 @@ function StreetViewModal({ lat, lng, title, onClose }) {
 /* ══════════════════════════════════════════════════════════════════
    NODE DETAIL DRAWER / POPUP MODAL
 ══════════════════════════════════════════════════════════════════ */
-function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
+function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath, isFullscreen = false }) {
   if (!node) return null;
 
   const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
@@ -337,8 +337,8 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath }) {
   };
 
   return (
-    <div className="fixed sm:absolute bottom-0 sm:bottom-auto sm:top-4 left-0 sm:left-4 right-0 sm:right-auto z-[999] w-full sm:w-96 bg-white/95 dark:bg-black/95 backdrop-blur-md rounded-t-xl sm:rounded-lg shadow-2xl border-t sm:border border-black/70 dark:border-white/70 p-4 sm:p-5 transition-all text-black dark:text-white max-h-[75vh] sm:max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom sm:slide-in-from-left duration-200">
-      <div className="sm:hidden w-10 h-1 rounded-full bg-black/20 dark:bg-white/20 mx-auto mb-3" />
+    <div className={`fixed sm:absolute bottom-0 sm:bottom-auto ${isFullscreen ? 'sm:top-16' : 'sm:top-4'} left-0 sm:left-4 right-0 sm:right-auto z-[1050] w-full sm:w-96 bg-white/95 dark:bg-black/95 backdrop-blur-md rounded-t-2xl sm:rounded-lg shadow-2xl border-t sm:border border-black/70 dark:border-white/70 p-4 sm:p-5 transition-all text-black dark:text-white max-h-[75vh] sm:max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom sm:slide-in-from-left duration-200`}>
+      <div className="sm:hidden w-12 h-1.5 rounded-full bg-black/20 dark:bg-white/30 mx-auto mb-3" />
       <div className="flex items-start justify-between pb-3 border-b border-black/20 dark:border-white/20">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -765,8 +765,10 @@ function LeafletMap({
         // Initialize dedicated Canvas Renderer with generous padding for 60 FPS mobile panning
         canvasRendererRef.current = Lf.canvas({ padding: 0.75, tolerance: 10 });
 
-        // Zoom control at bottom right
-        Lf.control.zoom({ position: 'bottomright' }).addTo(map);
+        // Zoom control at bottom right (only in standard mode; fullscreen uses touch pinch & Earth FAB stack)
+        if (!isFullscreen) {
+          Lf.control.zoom({ position: 'bottomright' }).addTo(map);
+        }
 
         const satUrl = isSatellite
           ? 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
@@ -1670,17 +1672,34 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsDropdownRef = useRef(null);
 
+  // Fullscreen Google Earth UI States & Refs
+  const [fullscreenLegendOpen, setFullscreenLegendOpen] = useState(false);
+  const [fullscreenMoreOpen, setFullscreenMoreOpen] = useState(false);
+  const [fullscreenTypeOpen, setFullscreenTypeOpen] = useState(false);
+  const fullscreenMoreRef = useRef(null);
+  const fullscreenTypeRef = useRef(null);
+  const fullscreenLegendRef = useRef(null);
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (toolsDropdownRef.current && !toolsDropdownRef.current.contains(e.target)) {
         setToolsOpen(false);
       }
+      if (fullscreenMoreRef.current && !fullscreenMoreRef.current.contains(e.target)) {
+        setFullscreenMoreOpen(false);
+      }
+      if (fullscreenTypeRef.current && !fullscreenTypeRef.current.contains(e.target)) {
+        setFullscreenTypeOpen(false);
+      }
+      if (fullscreenLegendRef.current && !fullscreenLegendRef.current.contains(e.target)) {
+        setFullscreenLegendOpen(false);
+      }
     };
-    if (toolsOpen) {
+    if (toolsOpen || fullscreenMoreOpen || fullscreenTypeOpen || fullscreenLegendOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [toolsOpen]);
+  }, [toolsOpen, fullscreenMoreOpen, fullscreenTypeOpen, fullscreenLegendOpen]);
 
   // Esc key listener to exit fullscreen
   useEffect(() => {
@@ -1901,185 +1920,119 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     }
   };
 
-  // Dedicated Clean Fullscreen View (No sidebar, no layout overlap, pure 100vw x 100vh)
+  // Dedicated Google Earth Mobile-Inspired Fullscreen View (100vw x 100vh)
   if (isFullscreenPage) {
     return (
-      <div className="fixed inset-0 w-screen h-screen z-[99999] bg-white dark:bg-black text-black dark:text-white flex flex-col overflow-hidden select-none font-sans">
-        {/* Top Control Bar for Fullscreen */}
-        <div className="bg-white/95 dark:bg-black/95 backdrop-blur-md border-b border-black/20 dark:border-white/20 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 text-black dark:text-white z-[1000] shrink-0 shadow-lg">
-          <div className="flex items-center gap-2.5">
-            {/* Back to Standard GIS Map */}
-            <button
-              type="button"
-              onClick={() => navigate('/gis-map')}
-              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-md text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
-              title="Kembali ke tampilan standar UNMS (Esc)"
-            >
-              <span>Kembali</span>
-              <span className="text-[10px] opacity-80 font-mono px-1.5 py-0.2 rounded bg-black/30 dark:bg-white/20">ESC</span>
-            </button>
-
-            <div className="hidden sm:flex items-center gap-2 border-l border-black/20 dark:border-white/20 pl-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="font-bold text-xs text-black dark:text-white tracking-tight">Peta Monitoring (Layar Penuh)</span>
-            </div>
-          </div>
-
-          {/* Action Tools: Cek Koordinat & Ukur Jarak */}
-          <div className="flex items-center gap-2">
-            {/* Target Coordinate Button */}
-            <button
-              type="button"
-              onClick={() => setTargetCoordModal(true)}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
-                targetPin
-                  ? 'bg-fuchsia-600 text-white border-fuchsia-500 shadow-sm'
-                  : 'bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20'
-              }`}
-              title="Cek titik koordinat rumah client di peta"
-            >
-              <span>{targetPin ? 'Patokan Rumah Aktif' : 'Cek Koordinat'}</span>
-            </button>
-
-            {/* Ruler Tool Button */}
-            <button
-              type="button"
-              onClick={() => {
-                const next = !rulerActive;
-                setRulerActive(next);
-                if (!next) setRulerPoints([]);
-              }}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
-                rulerActive
-                  ? 'bg-amber-500 text-black border-amber-400 shadow-sm'
-                  : 'bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20'
-              }`}
-              title="Ukur total jarak bentangan kabel FO"
-            >
-              <span>{rulerActive ? 'Tutup Penggaris' : 'Ukur Jarak FO'}</span>
-            </button>
-
-            {/* Fault Filter Button */}
-            <button
-              type="button"
-              onClick={() => setFaultOnlyFilter(!faultOnlyFilter)}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
-                faultOnlyFilter
-                  ? 'bg-rose-600 text-white border-rose-500 shadow-sm'
-                  : 'bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20'
-              }`}
-            >
-              <span>{faultOnlyFilter ? 'Filter: Gangguan' : 'Hanya Gangguan'}</span>
-            </button>
-
-            {/* Import KML / KMZ Button */}
-            <button
-              onClick={() => setKmlImportModal(true)}
-              className="px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-sm"
-              title="Import Data Jaringan Google Earth (.kml / .kmz)"
-            >
-              <span>Import KML</span>
-            </button>
-
-            {/* Mode Satelit / Vektor Button */}
-            <button
-              type="button"
-              onClick={() => setIsSatellite(!isSatellite)}
-              className="px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20"
-              title="Ganti Tampilan Peta (Satelit / Vektor)"
-            >
-              <span>{isSatellite ? 'Mode Vektor' : 'Mode Satelit'}</span>
-            </button>
-
-            {/* Pusatkan Peta Button */}
-            <button
-              type="button"
-              onClick={() => {
-                if (externalRecenterRef.current) {
-                  externalRecenterRef.current();
-                }
-              }}
-              className="px-3 py-1.5 rounded-md text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border-black/20 dark:border-white/20"
-              title="Pusatkan Kamera Peta ke Seluruh Node"
-            >
-              <span>Pusatkan Peta</span>
-            </button>
-          </div>
-
-          {/* Search & Type Filter */}
-          <div className="flex items-center gap-2">
-            {/* Smart Search */}
-            <div className="relative w-44 sm:w-60">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                placeholder="Cari ODP, ODC, POP..."
-                className="w-full px-3 py-1.5 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white text-xs font-bold cursor-pointer"
-                >
-                  ✕
-                </button>
-              )}
-              {isSearchFocused && searchSuggestions.length > 0 && (
-                <div className="absolute top-full right-0 mt-1.5 w-72 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-2xl z-[1000] overflow-hidden divide-y divide-black/10 dark:divide-white/10">
-                  {searchSuggestions.map(s => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => handleSelectSuggestion(s)}
-                      className="w-full text-left px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-between cursor-pointer text-xs"
-                    >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 text-black dark:text-white border border-black/20 dark:border-white/20">{s.node_type}</span>
-                          <span className="font-bold text-black dark:text-white">{s.name}</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-black/60 dark:text-white/60 block">{s.code}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Filter Node Type */}
-            <select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-              className="px-2.5 py-1.5 bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none cursor-pointer"
-            >
-              <option value="">Semua Tipe</option>
-              <option value="POP">POP</option>
-              <option value="ODC">ODC</option>
-              <option value="ODP">ODP</option>
-            </select>
-          </div>
-        </div>
-
+      <div className="fixed inset-0 w-screen h-screen z-[99999] bg-black text-white flex flex-col overflow-hidden select-none font-sans">
         {/* Fullscreen Map Canvas */}
-        <div className="flex-1 w-full relative overflow-hidden">
-          {/* Node Detail Drawer */}
-          <NodeDetailPanel
-            node={selectedNode}
-            onClose={() => setSelectedNode(null)}
-            onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
-            onTracePath={node => {
-              setSelectedNode(node);
-              if (node.latitude && node.longitude && externalFlyToRef.current) {
-                externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
-              }
-            }}
-          />
+        <div className="flex-1 w-full h-full relative overflow-hidden">
+          {/* 1. Top Floating Search & Quick Layer Pill (Google Earth Mobile Header) */}
+          <div className="absolute top-3 sm:top-4 left-3 right-3 sm:left-4 sm:right-auto sm:w-[420px] z-[1000]">
+            <div className="bg-black/85 dark:bg-black/90 backdrop-blur-md border border-white/20 text-white rounded-full shadow-2xl p-1.5 flex items-center gap-1.5 transition-all">
+              {/* Back to Standard UNMS Map */}
+              <button
+                type="button"
+                onClick={() => navigate('/gis-map')}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-rose-600 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shrink-0"
+                title="Kembali ke tampilan standar UNMS (Esc)"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </button>
 
-          {/* Target House Pin Floating Banner */}
+              {/* Search Box */}
+              <div className="flex-1 flex items-center gap-2 pl-1 pr-1 min-w-0">
+                <svg className="w-4 h-4 text-white/60 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                  placeholder="Cari ODP, ODC, POP..."
+                  className="bg-transparent text-white placeholder-white/50 text-xs font-semibold focus:outline-none w-full min-w-0"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="w-5 h-5 rounded-full hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white text-xs font-bold cursor-pointer shrink-0"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Live Telemetry Stream Dot */}
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Live Telemetry Aktif" />
+
+              {/* Quick Layer Switcher Thumbnail (Google Earth Mobile Signature Preview) */}
+              <button
+                type="button"
+                onClick={() => setIsSatellite(!isSatellite)}
+                className="w-8 h-8 rounded-full overflow-hidden border border-white/40 shadow-sm relative shrink-0 cursor-pointer hover:scale-105 active:scale-95 transition-transform flex items-center justify-center bg-zinc-800"
+                title={isSatellite ? 'Ubah ke Mode Vektor' : 'Ubah ke Mode Satelit'}
+              >
+                {isSatellite ? (
+                  <div className="w-full h-full bg-linear-to-br from-emerald-600 via-blue-700 to-indigo-900 flex items-center justify-center text-[8px] font-black text-white tracking-tighter">
+                    SAT
+                  </div>
+                ) : (
+                  <div className="w-full h-full bg-linear-to-br from-zinc-200 via-slate-300 to-slate-400 flex items-center justify-center text-[8px] font-black text-black tracking-tighter">
+                    MAP
+                  </div>
+                )}
+              </button>
+            </div>
+
+            {/* Smart Search Suggestions Autocomplete Dropdown */}
+            {isSearchFocused && searchSuggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-black/95 text-white border border-white/20 rounded-2xl shadow-2xl overflow-hidden divide-y divide-white/10 z-[1001] backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+                {searchSuggestions.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => handleSelectSuggestion(s)}
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-white/10 flex items-center justify-between cursor-pointer text-xs transition-colors"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-white/10 text-white border border-white/20">{s.node_type}</span>
+                        <span className="font-bold text-white">{s.name}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-white/60 block">{s.code}</span>
+                    </div>
+                    <span className="text-[10px] text-blue-400 font-mono">Fokus ↗</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 2. Sub-Second Real-Time Telemetry Trap Toast */}
+          {recentTrapAlert && (
+            <div className="absolute top-16 left-3 right-3 sm:left-4 sm:w-[420px] z-[998] bg-rose-600/95 text-white backdrop-blur-md border border-rose-400 shadow-2xl rounded-xl p-3 flex items-center justify-between gap-3 text-xs animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping shrink-0" />
+                <div>
+                  <span className="font-bold block">SNMP Trap: {recentTrapAlert.message || 'Perubahan Redaman'}</span>
+                  <span className="text-[10px] font-mono text-white/80">{recentTrapAlert.timestamp}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setRecentTrapAlert(null)}
+                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/20 text-white font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* 3. Target House Pin Floating Banner */}
           {targetPin && (
             <TargetPinBanner
               targetPin={targetPin}
@@ -2092,25 +2045,389 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             />
           )}
 
-          {/* Interactive Ruler Distance HUD with Undo */}
+          {/* 4. Interactive Ruler Distance HUD */}
           {rulerActive && (
-            <RulerHud
-              waypoints={rulerPoints}
-              totalMeters={rulerTotalMeters}
-              onUndo={() => setRulerPoints(pts => pts.slice(0, -1))}
-              onReset={() => setRulerPoints([])}
-              onClose={() => {
-                setRulerActive(false);
-                setRulerPoints([]);
-              }}
-            />
+            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[998] w-full max-w-sm px-3">
+              <RulerHud
+                waypoints={rulerPoints}
+                totalMeters={rulerTotalMeters}
+                onUndo={() => setRulerPoints(pts => pts.slice(0, -1))}
+                onReset={() => setRulerPoints([])}
+                onClose={() => {
+                  setRulerActive(false);
+                  setRulerPoints([]);
+                }}
+              />
+            </div>
           )}
 
-          {/* Leaflet Map Component */}
+          {/* 5. Floating GIS Spatial Legend Card */}
+          {fullscreenLegendOpen && (
+            <div
+              ref={fullscreenLegendRef}
+              className="absolute bottom-20 left-3 sm:left-4 z-[1000] w-72 bg-black/90 text-white border border-white/20 rounded-2xl p-3.5 shadow-2xl backdrop-blur-md text-xs space-y-3 animate-in fade-in zoom-in-95 duration-150"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                <span className="font-bold text-white text-xs">Legenda Peta Spasial GIS</span>
+                <button
+                  onClick={() => setFullscreenLegendOpen(false)}
+                  className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-white/10 text-white/60 hover:text-white font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold uppercase text-white/50">Tipe Node Perangkat</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 mx-auto mb-1"></div>
+                    <span className="font-bold text-[10px] text-indigo-400">POP</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mx-auto mb-1"></div>
+                    <span className="font-bold text-[10px] text-blue-400">ODC</span>
+                  </div>
+                  <div className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 mx-auto mb-1"></div>
+                    <span className="font-bold text-[10px] text-emerald-400">ODP</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-1 border-t border-white/10">
+                <div className="text-[10px] font-bold uppercase text-white/50">Status Redaman Optik (ODP)</div>
+                <div className="grid grid-cols-2 gap-1 text-[10px]">
+                  <div className="flex items-center gap-1.5 text-emerald-400">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>Prima (&ge; -24 dBm)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-blue-400">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <span>Optimal (&ge; -26 dBm)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-amber-400">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span>Waspada (&ge; -27.5 dBm)</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-rose-400">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                    <span>Loss / Kritis</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 6. Right Floating FAB Action Buttons (Google Earth Mobile Style) */}
+          <div className="absolute bottom-20 sm:bottom-20 right-3 sm:right-4 z-[990] flex flex-col items-center gap-2.5">
+            {/* Street View Pegman FAB */}
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedNode?.latitude && selectedNode?.longitude) {
+                  setStreetViewTarget({
+                    lat: parseFloat(selectedNode.latitude),
+                    lng: parseFloat(selectedNode.longitude),
+                    title: selectedNode.name,
+                  });
+                } else if (targetPin?.lat && targetPin?.lng) {
+                  setStreetViewTarget({
+                    lat: targetPin.lat,
+                    lng: targetPin.lng,
+                    title: targetPin.label || 'Titik Rumah',
+                  });
+                } else {
+                  const first = nodesWithCoords[0];
+                  if (first) {
+                    setStreetViewTarget({
+                      lat: parseFloat(first.latitude),
+                      lng: parseFloat(first.longitude),
+                      title: first.name,
+                    });
+                  }
+                }
+              }}
+              className="w-11 h-11 rounded-full bg-black/80 hover:bg-black active:scale-95 text-white border border-white/20 backdrop-blur-md shadow-xl flex items-center justify-center transition-all cursor-pointer group"
+              title="Google Street View 360°"
+            >
+              <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="5" r="2.5" />
+                <path d="M9 22v-6l-2-2V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v5l-2 2v6" />
+                <line x1="9" y1="13" x2="15" y2="13" />
+              </svg>
+            </button>
+
+            {/* Recenter / Compass FAB */}
+            <button
+              type="button"
+              onClick={() => {
+                if (externalRecenterRef.current) {
+                  externalRecenterRef.current();
+                }
+              }}
+              className="w-11 h-11 rounded-full bg-black/80 hover:bg-black active:scale-95 text-white border border-white/20 backdrop-blur-md shadow-xl flex items-center justify-center transition-all cursor-pointer group"
+              title="Pusatkan Kamera ke Seluruh Titik Node"
+            >
+              <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+              </svg>
+            </button>
+
+            {/* GPS Location / Patokan Rumah FAB */}
+            <button
+              type="button"
+              onClick={() => {
+                if (targetPin && externalFlyToRef.current) {
+                  externalFlyToRef.current(targetPin.lat, targetPin.lng, 17);
+                } else {
+                  setTargetCoordModal(true);
+                }
+              }}
+              className={`w-11 h-11 rounded-full text-white border backdrop-blur-md shadow-xl flex items-center justify-center transition-all cursor-pointer group ${
+                targetPin
+                  ? 'bg-fuchsia-600 border-fuchsia-400'
+                  : 'bg-black/80 hover:bg-black border-white/20'
+              }`}
+              title={targetPin ? 'Fokus ke Patokan Rumah' : 'Cek Koordinat Rumah Client'}
+            >
+              <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+            </button>
+
+            {/* 3D / Satelit Perspective Toggle FAB */}
+            <button
+              type="button"
+              onClick={() => setIsSatellite(!isSatellite)}
+              className="w-11 h-11 rounded-full bg-black/80 hover:bg-black active:scale-95 text-white font-mono font-bold text-xs border border-white/20 backdrop-blur-md shadow-xl flex items-center justify-center transition-all cursor-pointer group"
+              title={isSatellite ? 'Ubah ke Tampilan Vektor' : 'Ubah ke Tampilan Satelit'}
+            >
+              <span className="group-hover:scale-110 transition-transform">{isSatellite ? '3D' : '2D'}</span>
+            </button>
+          </div>
+
+          {/* 7. Bottom Floating Earth Dock / Toolbar */}
+          <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-[990] max-w-[calc(100vw-24px)] overflow-x-auto no-scrollbar">
+            <div className="bg-black/85 text-white backdrop-blur-md border border-white/20 shadow-2xl rounded-full px-2.5 py-1.5 flex items-center gap-1.5 sm:gap-2">
+              {/* Globe Mode Switcher */}
+              <button
+                type="button"
+                onClick={() => setIsSatellite(!isSatellite)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isSatellite ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
+                }`}
+                title="Mode Tampilan Satelit / Vektor"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                </svg>
+                <span className="hidden md:inline">{isSatellite ? 'Satelit' : 'Vektor'}</span>
+              </button>
+
+              {/* Target House Pin */}
+              <button
+                type="button"
+                onClick={() => setTargetCoordModal(true)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  targetPin ? 'bg-fuchsia-600 text-white shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
+                }`}
+                title="Cek Titik Koordinat Rumah Client"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+                  <circle cx="12" cy="10" r="3" />
+                </svg>
+                <span className="hidden md:inline">{targetPin ? 'Patokan Aktif' : 'Cek GPS'}</span>
+              </button>
+
+              {/* Ruler Tool */}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !rulerActive;
+                  setRulerActive(next);
+                  if (!next) setRulerPoints([]);
+                }}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  rulerActive ? 'bg-amber-500 text-black shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
+                }`}
+                title="Ukur Jarak Kabel Fiber Optik"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M21.3 15.3l-6.6 6.6c-.4.4-1 .4-1.4 0l-12-12c-.4-.4-.4-1 0-1.4l6.6-6.6c.4-.4 1-.4 1.4 0l12 12c.4.4.4 1 0 1.4z" />
+                  <path d="m7.5 4.5 2 2M10.5 7.5l2 2M13.5 10.5l2 2M16.5 13.5l2 2" />
+                </svg>
+                <span className="hidden md:inline">{rulerActive ? 'Tutup Ukur' : 'Ukur Jarak'}</span>
+              </button>
+
+              {/* Fault Gangguan Filter */}
+              <button
+                type="button"
+                onClick={() => setFaultOnlyFilter(!faultOnlyFilter)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  faultOnlyFilter ? 'bg-rose-600 text-white shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
+                }`}
+                title="Filter Hanya Node Gangguan Loss Kritis"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="hidden md:inline">{faultOnlyFilter ? 'Gangguan Loss' : 'Semua Status'}</span>
+              </button>
+
+              {/* Type Filter Dropdown */}
+              <div className="relative" ref={fullscreenTypeRef}>
+                <button
+                  type="button"
+                  onClick={() => setFullscreenTypeOpen(!fullscreenTypeOpen)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    typeFilter ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-white/10 text-white/80 hover:text-white'
+                  }`}
+                  title="Filter Tipe Node (POP / ODC / ODP)"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                  </svg>
+                  <span>{typeFilter || 'Tipe'}</span>
+                </button>
+
+                {fullscreenTypeOpen && (
+                  <div className="absolute bottom-full left-0 mb-2 w-36 bg-black/95 text-white border border-white/20 rounded-xl shadow-2xl py-1 overflow-hidden z-[1050]">
+                    {['', 'POP', 'ODC', 'ODP'].map(t => (
+                      <button
+                        key={t}
+                        onClick={() => {
+                          setTypeFilter(t);
+                          setFullscreenTypeOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-white/10 flex items-center justify-between cursor-pointer ${
+                          typeFilter === t ? 'text-indigo-400 font-black' : 'text-white/80'
+                        }`}
+                      >
+                        <span>{t ? t : 'Semua Tipe'}</span>
+                        {typeFilter === t && <span>✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* KML Import Button */}
+              <button
+                type="button"
+                onClick={() => setKmlImportModal(true)}
+                className="px-3 py-1.5 rounded-full text-xs font-bold hover:bg-white/10 text-white/80 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Import Google Earth KML / KMZ"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span className="hidden md:inline">KML</span>
+              </button>
+
+              {/* Legend Button */}
+              <button
+                type="button"
+                onClick={() => setFullscreenLegendOpen(!fullscreenLegendOpen)}
+                className={`px-2.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
+                  fullscreenLegendOpen ? 'bg-white/25 text-white' : 'hover:bg-white/10 text-white/80 hover:text-white'
+                }`}
+                title="Legenda Spasial GIS"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </button>
+
+              {/* More Menu (`⋮`) */}
+              <div className="relative" ref={fullscreenMoreRef}>
+                <button
+                  type="button"
+                  onClick={() => setFullscreenMoreOpen(!fullscreenMoreOpen)}
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
+                    fullscreenMoreOpen ? 'bg-white/25 text-white' : 'hover:bg-white/10 text-white/80 hover:text-white'
+                  }`}
+                  title="Opsi Peta Lainnya"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="5" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <circle cx="12" cy="19" r="2" />
+                  </svg>
+                </button>
+
+                {fullscreenMoreOpen && (
+                  <div className="absolute bottom-full right-0 mb-2 w-52 bg-black/95 text-white border border-white/20 rounded-xl shadow-2xl py-1 overflow-hidden z-[1050] divide-y divide-white/10">
+                    <div className="px-3 py-1.5 text-[10px] font-bold text-white/50 uppercase tracking-wider">
+                      Kontrol Peta Spasial
+                    </div>
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          fetchNodesAndCables(true);
+                          setFullscreenMoreOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-white/10 flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Refresh Data Spasial</span>
+                        <span className="text-[10px] text-emerald-400 font-mono">Live</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setLivePolling(!livePolling);
+                          setFullscreenMoreOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-white/10 flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Auto-Refresh Polling</span>
+                        <span className={`text-[10px] font-mono ${livePolling ? 'text-emerald-400' : 'text-white/40'}`}>
+                          {livePolling ? 'ON' : 'OFF'}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigate('/gis-map');
+                          setFullscreenMoreOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-950/40 flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Keluar Layar Penuh</span>
+                        <span className="text-[10px] font-mono text-rose-400">ESC</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 8. Node Detail Drawer / Bottom Sheet */}
+          <NodeDetailPanel
+            node={selectedNode}
+            isFullscreen={true}
+            onClose={() => setSelectedNode(null)}
+            onOpenStreetView={(lat, lng, title) => setStreetViewTarget({ lat, lng, title })}
+            onTracePath={node => {
+              setSelectedNode(node);
+              if (node.latitude && node.longitude && externalFlyToRef.current) {
+                externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
+              }
+            }}
+          />
+
+          {/* 9. Leaflet Map Component */}
           {loading && safeAllNodes.length === 0 ? (
-            <div className="flex items-center justify-center h-full w-full bg-white dark:bg-black text-black/60 dark:text-white/60">
+            <div className="flex items-center justify-center h-full w-full bg-black text-white/60">
               <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 <span className="text-xs font-semibold">Memuat peta spasial GIS...</span>
               </div>
             </div>
@@ -2135,7 +2452,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           )}
         </div>
 
-        {/* Street View Modal */}
+        {/* 10. Street View Modal */}
         {streetViewTarget && (
           <StreetViewModal
             lat={streetViewTarget.lat}
@@ -2145,7 +2462,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           />
         )}
 
-        {/* Target Client Coordinate Modal */}
+        {/* 11. Target Client Coordinate Modal */}
         <TargetCoordModal
           isOpen={targetCoordModal}
           onClose={() => setTargetCoordModal(false)}
@@ -2157,7 +2474,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           }}
         />
 
-        {/* KML / KMZ Import Modal in Fullscreen */}
+        {/* 12. KML / KMZ Import Modal in Fullscreen */}
         <KmlImportModal
           isOpen={kmlImportModal}
           onClose={() => setKmlImportModal(false)}
