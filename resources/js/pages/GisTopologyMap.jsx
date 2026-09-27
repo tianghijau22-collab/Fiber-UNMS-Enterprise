@@ -861,25 +861,53 @@ function LeafletMap({
     const marker = Lf.marker([lat, lng], { icon }).addTo(layer);
 
     marker.bindPopup(`
-      <div style="padding: 6px 4px; font-family: sans-serif; text-align: center; min-width: 175px;">
-        <div style="font-weight: 800; font-size: 12px; color: #c026d3; margin-bottom: 2px;">📍 Patokan Titik Lokasi</div>
+      <div style="padding: 6px 4px; font-family: sans-serif; text-align: center; min-width: 185px;">
+        <div style="font-weight: 800; font-size: 12px; color: #dc2626; margin-bottom: 2px;">📍 Patokan Titik Lokasi</div>
         <div style="font-size: 11px; font-family: monospace; color: #475569; margin-bottom: 8px;">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
-        <button id="btn-popup-clear-target" style="
-          background: #e11d48;
-          color: #ffffff;
-          border: none;
-          padding: 6px 12px;
-          border-radius: 6px;
-          font-size: 11px;
-          font-weight: bold;
-          cursor: pointer;
-          width: 100%;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        ">✕ Hapus Titik Lokasi</button>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <button id="btn-popup-streetview-target" style="
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            color: #ffffff;
+            border: none;
+            padding: 7px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          ">
+            <span>🌐 Buka Street View 360°</span>
+          </button>
+          <button id="btn-popup-clear-target" style="
+            background: #e11d48;
+            color: #ffffff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+          ">✕ Hapus Titik Lokasi</button>
+        </div>
       </div>
     `);
 
     marker.on('popupopen', () => {
+      const btnSv = document.getElementById('btn-popup-streetview-target');
+      if (btnSv) {
+        btnSv.onclick = () => {
+          if (onOpenStreetView) {
+            onOpenStreetView(lat, lng, targetPin.label || 'Titik Lokasi');
+          }
+        };
+      }
       const btn = document.getElementById('btn-popup-clear-target');
       if (btn) {
         btn.onclick = () => {
@@ -896,7 +924,7 @@ function LeafletMap({
         setRulerPoints(pts => [...pts, [lat, lng]]);
       }
     });
-  }, [targetPin, onClearTarget, setRulerPoints]);
+  }, [targetPin, onClearTarget, onOpenStreetView, setRulerPoints]);
 
   // 6a. Render Physical Network Cables (Canvas Hardware-Accelerated)
   useEffect(() => {
@@ -2263,8 +2291,30 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           </div>
         </div>
 
-        {/* 6. Floating GPS My Location Button (Bottom Right Corner) */}
-        <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-4 z-[1100] pointer-events-auto">
+        {/* 6. Floating Action Buttons (Bottom Right Corner): Street View (if target pin active) & GPS My Location */}
+        <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-4 z-[1100] pointer-events-auto flex flex-col items-center gap-2">
+          {/* Quick Street View 360 for Target Pin */}
+          {targetPin && (
+            <button
+              type="button"
+              onClick={() => {
+                setStreetViewTarget({
+                  lat: targetPin.lat,
+                  lng: targetPin.lng,
+                  title: targetPin.label || 'Titik Lokasi'
+                });
+              }}
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-linear-to-br from-blue-600 via-indigo-600 to-sky-500 text-white shadow-xl shadow-blue-500/40 border border-blue-400/60 flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 animate-in zoom-in-90 duration-150"
+              title="Buka Street View 360° Titik Lokasi"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+            </button>
+          )}
+
+          {/* GPS My Location Button */}
           <button
             type="button"
             onClick={() => {
