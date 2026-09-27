@@ -198,17 +198,6 @@ export default function Sidebar({ isOpen, onClose }) {
             </button>
           </div>
         </nav>
-
-        {/* Footer / System Status */}
-        <div className="p-3 border-t border-slate-200 dark:border-[#222222]">
-          <div className="bg-slate-50 dark:bg-neutral-900 rounded-lg p-2.5 flex items-center gap-2.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <div>
-              <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300">System Status</p>
-              <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">100% Operational</p>
-            </div>
-          </div>
-        </div>
       </aside>
     </>
   );
