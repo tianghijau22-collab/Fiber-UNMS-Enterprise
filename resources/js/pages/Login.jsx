@@ -118,7 +118,7 @@ export default function Login() {
             {/* Header Brand Section */}
             <div className="text-center space-y-2.5 pt-1">
               <div className="flex justify-center mb-1">
-                <FonaBrandLogo className="h-16 w-auto" />
+                <FonaBrandLogo className="w-36 sm:w-44 h-auto" />
               </div>
 
               <div className="inline-flex items-center gap-2 bg-cyan-500/10 dark:bg-white/5 border border-cyan-500/30 dark:border-white/20 px-3.5 py-1 rounded-md text-[11px] font-mono font-bold tracking-wider text-cyan-800 dark:text-cyan-300">
