@@ -1,0 +1,48 @@
+name: fiber_unms_mobile
+description: "Fiber-UNMS Enterprise Mobile Application for Field Technicians and Network Operators"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management & DI
+  provider: ^6.1.2
+
+  # Networking & API
+  dio: ^5.4.3+1
+  http_parser: ^4.0.2
+
+  # Secure Storage & Cache
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.2.3
+
+  # Hardware Features (Camera, Scanner, GPS)
+  mobile_scanner: ^5.1.1
+  image_picker: ^1.1.2
+  geolocator: ^12.0.0
+
+  # UI Utilities & Icons
+  intl: ^0.19.0
+  flutter_spinkit: ^5.2.1
+  cached_network_image: ^3.3.1
+  url_launcher: ^6.3.0
+  flutter_svg: ^2.0.10+1
+
+  # Local Notification
+  flutter_local_notifications: ^17.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
