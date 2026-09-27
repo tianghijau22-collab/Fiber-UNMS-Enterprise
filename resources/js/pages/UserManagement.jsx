@@ -4,36 +4,94 @@ import { useAuth } from '../components/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 /* ══════════════════════════════════════════════════════════════════
-   ROLE BADGES & RBAC PERMISSION MATRIX DEFINITION
+   ROLE BADGES & RBAC PERMISSION MATRIX DEFINITION (ZERO EMOJI)
 ══════════════════════════════════════════════════════════════════ */
 const getRoleBadge = (role) => {
   switch (role) {
     case 'Super Administrator':
-      return <span className="px-2.5 py-1 bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-lg text-xs font-bold flex items-center gap-1 w-fit">👑 {role}</span>;
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          </svg>
+          {role}
+        </span>
+      );
     case 'NOC Operator':
     case 'Operator Jaringan':
-      return <span className="px-2.5 py-1 bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-bold flex items-center gap-1 w-fit">🖥️ {role}</span>;
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+          {role}
+        </span>
+      );
     case 'Teknisi Jointer':
-      return <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-lg text-xs font-bold flex items-center gap-1 w-fit">🧰 {role}</span>;
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+          </svg>
+          {role}
+        </span>
+      );
     case 'Customer Service':
-      return <span className="px-2.5 py-1 bg-sky-100 dark:bg-sky-950/70 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 rounded-lg text-xs font-bold flex items-center gap-1 w-fit">🎧 {role}</span>;
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+          {role}
+        </span>
+      );
     case 'Finance & Billing':
-      return <span className="px-2.5 py-1 bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs font-bold flex items-center gap-1 w-fit">💰 {role}</span>;
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+            <line x1="1" y1="10" x2="23" y2="10" />
+          </svg>
+          {role}
+        </span>
+      );
     default:
-      return <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold w-fit">{role}</span>;
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-black/5 dark:bg-white/10 text-black/80 dark:text-white/80 border border-black/15 dark:border-white/15">
+          {role}
+        </span>
+      );
   }
 };
 
 const getStatusBadge = (status) => {
   switch (status) {
     case 'Active':
-      return <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">Active</span>;
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          Active
+        </span>
+      );
     case 'Inactive':
-      return <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">Inactive</span>;
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400">
+          <span className="w-2 h-2 rounded-full bg-amber-500" />
+          Inactive
+        </span>
+      );
     default:
-      return <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">Suspended</span>;
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400">
+          <span className="w-2 h-2 rounded-full bg-rose-500" />
+          Suspended
+        </span>
+      );
   }
 };
 
@@ -48,7 +106,7 @@ const PERMISSIONS = [
 ];
 
 /* ══════════════════════════════════════════════════════════════════
-   MODAL FORM USER
+   MODAL FORM USER (PORTAL & DESIGN SYSTEM HARMONIZED)
 ══════════════════════════════════════════════════════════════════ */
 function UserFormModal({ user, onSave, onClose, loading, error }) {
   const [form, setForm] = useState({
@@ -79,85 +137,156 @@ function UserFormModal({ user, onSave, onClose, loading, error }) {
     onSave(form);
   };
 
-  const fc = 'w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-medium';
-  const lc = 'block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1';
+  const fc = 'w-full px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs sm:text-sm text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-all font-medium';
+  const lc = 'block text-[11px] font-bold text-black/70 dark:text-white/70 uppercase tracking-wide mb-1';
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto min-h-screen">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 dark:border-slate-700 max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 my-auto">
-        <div className="bg-slate-900 dark:bg-slate-950 text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-800">
+    <div
+      className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Pinned Header */}
+        <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between shrink-0 border-b border-black/20 dark:border-white/20">
           <div>
-            <h3 className="text-base font-bold">{user ? `Edit User — ${user.name}` : 'Tambah Akun Pengguna Baru'}</h3>
-            <p className="text-xs text-slate-300">Pengaturan Hak Akses RBAC &amp; Data Pegawai Enterprise</p>
+            <h3 className="text-sm sm:text-base font-bold">
+              {user ? `Edit Pengguna — ${user.name}` : 'Tambah Akun Pengguna Baru'}
+            </h3>
+            <p className="text-[11px] text-black/60 dark:text-white/60">
+              Pengaturan Hak Akses RBAC &amp; Data Pegawai Enterprise
+            </p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white font-bold cursor-pointer">✕</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold cursor-pointer transition-colors"
+            title="Tutup Modal"
+          >
+            ✕
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
-          {error && (
-            <div className="bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 rounded-xl p-3 text-xs text-red-700 dark:text-red-300">
-              {typeof error === 'object' ? Object.values(error).flat().join(' · ') : error}
-            </div>
-          )}
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden text-xs">
+          <div className="p-5 space-y-4 overflow-y-auto flex-1">
+            {error && (
+              <div className="bg-rose-500/10 border border-rose-500/30 rounded-md p-3 text-xs text-rose-600 dark:text-rose-400 font-medium">
+                {typeof error === 'object' ? Object.values(error).flat().join(' · ') : error}
+              </div>
+            )}
 
-          <div>
-            <label className={lc}>Nama Lengkap Pegawai *</label>
-            <input required value={form.name} onChange={e => set('name', e.target.value)} placeholder="misal: Rian Hidayat" className={fc} />
+            <div>
+              <label className={lc}>Nama Lengkap Pegawai *</label>
+              <input
+                required
+                value={form.name}
+                onChange={e => set('name', e.target.value)}
+                placeholder="misal: Rian Hidayat"
+                className={fc}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={lc}>Username Login *</label>
+                <input
+                  required
+                  value={form.username}
+                  onChange={e => set('username', e.target.value.toLowerCase().trim())}
+                  placeholder="misal: rian2026"
+                  className={fc}
+                />
+              </div>
+
+              <div>
+                <label className={lc}>Alamat Email *</label>
+                <input
+                  required
+                  type="email"
+                  value={form.email}
+                  onChange={e => handleEmailChange(e.target.value)}
+                  placeholder="name@fiber-unms.id"
+                  className={fc}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className={lc}>
+                {user ? 'Password Baru (Kosongkan jika tidak diubah)' : 'Password Login *'}
+              </label>
+              <input
+                type="password"
+                required={!user}
+                value={form.password}
+                onChange={e => set('password', e.target.value)}
+                placeholder="••••••••"
+                className={fc}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={lc}>Peran Sistem (Role RBAC) *</label>
+                <select value={form.role} onChange={e => set('role', e.target.value)} className={fc}>
+                  <option value="Super Administrator">Super Administrator</option>
+                  <option value="Operator Jaringan">Operator Jaringan</option>
+                  <option value="Teknisi Jointer">Teknisi Jointer</option>
+                  <option value="Customer Service">Customer Service</option>
+                  <option value="Finance & Billing">Finance &amp; Billing</option>
+                </select>
+              </div>
+              <div>
+                <label className={lc}>Divisi / Departemen *</label>
+                <input
+                  required
+                  value={form.division}
+                  onChange={e => set('division', e.target.value)}
+                  placeholder="misal: Field Operations"
+                  className={fc}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={lc}>No. Telepon / WhatsApp</label>
+                <input
+                  value={form.phone}
+                  onChange={e => set('phone', e.target.value)}
+                  placeholder="0812xxxxxxxx"
+                  className={fc}
+                />
+              </div>
+              <div>
+                <label className={lc}>Status Akun *</label>
+                <select value={form.status} onChange={e => set('status', e.target.value)} className={fc}>
+                  <option value="Active">Aktif (Active)</option>
+                  <option value="Inactive">Non-Aktif (Inactive)</option>
+                  <option value="Suspended">Ditangguhkan (Suspended)</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>Username Login *</label>
-              <input required value={form.username} onChange={e => set('username', e.target.value.toLowerCase().trim())} placeholder="misal: rian2026" className={fc} />
-            </div>
-
-            <div>
-              <label className={lc}>Alamat Email *</label>
-              <input required type="email" value={form.email} onChange={e => handleEmailChange(e.target.value)} placeholder="name@fiber-unms.id" className={fc} />
-            </div>
-          </div>
-
-          <div>
-            <label className={lc}>{user ? 'Password Baru (Kosongkan jika tidak diubah)' : 'Password Login *'}</label>
-            <input type="password" required={!user} value={form.password} onChange={e => set('password', e.target.value)} placeholder="••••••••" className={fc} />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>Peran Sistem (Role RBAC) *</label>
-              <select value={form.role} onChange={e => set('role', e.target.value)} className={fc}>
-                <option value="Super Administrator">👑 Super Administrator</option>
-                <option value="Operator Jaringan">🖥️ Operator Jaringan</option>
-                <option value="Teknisi Jointer">🧰 Teknisi Jointer</option>
-                <option value="Customer Service">🎧 Customer Service</option>
-                <option value="Finance & Billing">💰 Finance &amp; Billing</option>
-              </select>
-            </div>
-            <div>
-              <label className={lc}>Divisi / Departemen *</label>
-              <input required value={form.division} onChange={e => set('division', e.target.value)} placeholder="misal: Field Operations" className={fc} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={lc}>No. Telepon / WhatsApp</label>
-              <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="0812xxxxxxxx" className={fc} />
-            </div>
-            <div>
-              <label className={lc}>Status Akun *</label>
-              <select value={form.status} onChange={e => set('status', e.target.value)} className={fc}>
-                <option value="Active">🟢 Aktif (Active)</option>
-                <option value="Inactive">🟡 Non-Aktif (Inactive)</option>
-                <option value="Suspended">🔴 Ditangguhkan (Suspended)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="pt-3 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 shrink-0">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer">Batal</button>
-            <button type="submit" disabled={loading} className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all disabled:opacity-50 cursor-pointer">
-              {loading ? 'Menyimpan...' : (user ? 'Simpan Perubahan' : 'Buat Akun User')}
+          {/* Pinned Footer */}
+          <div className="px-5 py-3.5 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex items-center justify-end gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-semibold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+            >
+              {loading ? 'Menyimpan...' : (user ? 'Simpan Perubahan' : 'Buat Akun Pengguna')}
             </button>
           </div>
         </form>
@@ -189,10 +318,10 @@ export default function UserManagement() {
   const [saving, setSaving] = useState(false);
   const [modalErr, setModalErr] = useState(null);
 
-  // Custom UI Modals & Feedback (No Browser Alerts)
+  // Delete Confirm State
   const [userToDelete, setUserToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  
+
   const triggerFeedback = ({ type, message }) => {
     if (typeof window !== 'undefined' && window.showAppAlert) {
       window.showAppAlert({
@@ -266,17 +395,13 @@ export default function UserManagement() {
         }
 
         setEditingUser(null);
-        triggerFeedback({ type: 'success', message: isEdit ? 'Data akun user berhasil diperbarui.' : 'Akun user baru berhasil dibuat.' });
+        triggerFeedback({ type: 'success', message: isEdit ? 'Data akun pengguna berhasil diperbarui.' : 'Akun pengguna baru berhasil dibuat.' });
         fetchUsers();
       })
       .catch(err => {
         setSaving(false);
         setModalErr(err.errors || err.message || 'Gagal menyimpan akun user');
       });
-  };
-
-  const handleDeleteUser = (user) => {
-    setUserToDelete(user);
   };
 
   const confirmExecuteDeleteUser = () => {
@@ -310,14 +435,16 @@ export default function UserManagement() {
   const paginatedUsers = users.slice((currentPage - 1) * perPage, currentPage * perPage);
 
   return (
-    <div className="space-y-6 stagger-enter">
+    <div className="space-y-5 stagger-enter">
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-black p-5 sm:p-6 rounded-lg border border-black/70 dark:border-white/70 shadow-2xs">
         <div>
-          <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight font-sans">
+          <h3 className="text-xl sm:text-2xl font-bold text-black dark:text-white tracking-tight font-sans">
             Manajemen Pengguna
           </h3>
-
+          <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
+            Kelola hak akses RBAC, akun staf, divisi operasional, dan izin sistem
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <RefreshButton
@@ -328,53 +455,89 @@ export default function UserManagement() {
           />
           <button
             onClick={() => { setEditingUser(null); setModalErr(null); setShowModal(true); }}
-            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2"
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-md text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <span>+</span> Tambah Akun User
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Tambah Akun Pengguna
           </button>
         </div>
       </div>
 
       {/* Stats Summary Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl space-y-1 shadow-xs">
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Total Akun Terdaftar</div>
-          <div className="text-3xl font-black text-slate-800 dark:text-slate-100 font-mono">{users.length}</div>
-          <div className="text-xs text-slate-500 font-medium">Pegawai aktif &amp; admin</div>
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg space-y-1 shadow-2xs">
+          <div className="text-[11px] text-black/60 dark:text-white/60 font-bold uppercase tracking-wider">
+            Total Akun Terdaftar
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-black dark:text-white font-mono">
+            {users.length}
+          </div>
+          <div className="text-[11px] text-black/50 dark:text-white/50 font-medium">
+            Pegawai aktif &amp; staf admin
+          </div>
         </div>
 
-        <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/60 p-5 rounded-2xl space-y-1 shadow-xs">
-          <div className="text-xs text-purple-700 dark:text-purple-400 font-bold uppercase tracking-wider">Super Administrator</div>
-          <div className="text-3xl font-black text-purple-800 dark:text-purple-300 font-mono">{users.filter(u => u.role === 'Super Administrator').length}</div>
-          <div className="text-xs text-purple-600 dark:text-purple-400 font-medium">Akses penuh sistem root</div>
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg space-y-1 shadow-2xs">
+          <div className="text-[11px] text-purple-600 dark:text-purple-400 font-bold uppercase tracking-wider">
+            Super Administrator
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-purple-600 dark:text-purple-400 font-mono">
+            {users.filter(u => u.role === 'Super Administrator').length}
+          </div>
+          <div className="text-[11px] text-black/50 dark:text-white/50 font-medium">
+            Akses penuh kontrol root
+          </div>
         </div>
 
-        <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 p-5 rounded-2xl space-y-1 shadow-xs">
-          <div className="text-xs text-indigo-700 dark:text-indigo-400 font-bold uppercase tracking-wider">Operator &amp; Field Jointer</div>
-          <div className="text-3xl font-black text-indigo-800 dark:text-indigo-300 font-mono">{users.filter(u => u.role === 'Operator Jaringan' || u.role === 'NOC Operator' || u.role === 'Teknisi Jointer').length}</div>
-          <div className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">Operator teknis &amp; splicer</div>
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg space-y-1 shadow-2xs">
+          <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider">
+            Operator &amp; Field Jointer
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
+            {users.filter(u => u.role === 'Operator Jaringan' || u.role === 'NOC Operator' || u.role === 'Teknisi Jointer').length}
+          </div>
+          <div className="text-[11px] text-black/50 dark:text-white/50 font-medium">
+            Operator teknis &amp; splicer
+          </div>
         </div>
 
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 p-5 rounded-2xl space-y-1 shadow-xs">
-          <div className="text-xs text-emerald-700 dark:text-emerald-400 font-bold uppercase tracking-wider">Customer Service &amp; Finance</div>
-          <div className="text-3xl font-black text-emerald-800 dark:text-emerald-300 font-mono">{users.filter(u => u.role === 'Customer Service' || u.role === 'Finance & Billing').length}</div>
-          <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Layanan helpdesk &amp; billing</div>
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg space-y-1 shadow-2xs">
+          <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
+            Customer Service &amp; Finance
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+            {users.filter(u => u.role === 'Customer Service' || u.role === 'Finance & Billing').length}
+          </div>
+          <div className="text-[11px] text-black/50 dark:text-white/50 font-medium">
+            Layanan helpdesk &amp; billing
+          </div>
         </div>
       </div>
 
       {/* Main Tabs Navigation */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pt-2 rounded-t-2xl">
+      <div className="flex border-b border-black/20 dark:border-white/20 bg-white dark:bg-black px-4 pt-2 rounded-t-lg">
         <button
           onClick={() => setActiveTab('users')}
-          className={`px-5 py-3 text-xs font-bold border-b-2 transition-all ${activeTab === 'users' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-slate-50 dark:bg-slate-800/60 rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'users'
+              ? 'border-black dark:border-white text-black dark:text-white bg-black/5 dark:bg-white/5 rounded-t-md'
+              : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
+          }`}
         >
-          Daftar Akun &amp; Hak Akses ({users.length})
+          Daftar Akun Pengguna ({users.length})
         </button>
         <button
           onClick={() => setActiveTab('matrix')}
-          className={`px-5 py-3 text-xs font-bold border-b-2 transition-all ${activeTab === 'matrix' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-slate-50 dark:bg-slate-800/60 rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'matrix'
+              ? 'border-black dark:border-white text-black dark:text-white bg-black/5 dark:bg-white/5 rounded-t-md'
+              : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
+          }`}
         >
-          🛡️ Matriks Izin Akses RBAC
+          Matriks Izin Akses RBAC
         </button>
       </div>
 
@@ -382,20 +545,26 @@ export default function UserManagement() {
       {activeTab === 'users' && (
         <div className="space-y-4">
           {/* Search & Filter Toolbar */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto flex-1">
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Cari nama pegawai, email, divisi, HP..."
-                className="w-full sm:w-72 px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
+          <div className="bg-white dark:bg-black p-3.5 sm:p-4 rounded-lg border border-black/70 dark:border-white/70 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto flex-1">
+              <div className="relative w-full sm:w-80">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Cari nama pegawai, email, username, no. HP..."
+                  className="w-full pl-9 pr-3.5 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white transition-all font-medium"
+                />
+                <svg className="w-4 h-4 absolute left-3 top-2.5 text-black/40 dark:text-white/40 pointer-events-none" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </div>
 
               <select
                 value={roleFilter}
                 onChange={e => setRoleFilter(e.target.value)}
-                className="w-full sm:w-48 px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300"
+                className="w-full sm:w-48 px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
               >
                 <option value="">— Semua Peran Role —</option>
                 <option value="Super Administrator">Super Administrator</option>
@@ -408,7 +577,7 @@ export default function UserManagement() {
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
-                className="w-full sm:w-36 px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300"
+                className="w-full sm:w-36 px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs font-semibold text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
               >
                 <option value="">— Semua Status —</option>
                 <option value="Active">Active</option>
@@ -419,72 +588,80 @@ export default function UserManagement() {
           </div>
 
           {/* Desktop Table View */}
-          <div className="hidden md:block bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+          <div className="hidden md:block bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-xs uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
+              <table className="w-full text-left text-xs text-black/80 dark:text-white/80">
+                <thead className="bg-black/5 dark:bg-white/5 border-b border-black/20 dark:border-white/20 text-[11px] uppercase font-bold text-black/70 dark:text-white/70 tracking-wider">
                   <tr>
-                    <th className="px-6 py-4">Nama &amp; Email Pegawai</th>
-                    <th className="px-6 py-4">Peran (Role RBAC)</th>
-                    <th className="px-6 py-4">Divisi &amp; Kontak</th>
-                    <th className="px-6 py-4">Status Akun</th>
-                    <th className="px-6 py-4 text-right">Aksi</th>
+                    <th className="px-5 py-3.5">Nama &amp; Email Pegawai</th>
+                    <th className="px-5 py-3.5">Peran (Role RBAC)</th>
+                    <th className="px-5 py-3.5">Divisi &amp; Kontak</th>
+                    <th className="px-5 py-3.5">Status Akun</th>
+                    <th className="px-5 py-3.5 text-right">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-black/10 dark:divide-white/10">
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-xs text-slate-400 italic">Memuat data pengguna...</td>
+                      <td colSpan={5} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
+                        Memuat data pengguna...
+                      </td>
                     </tr>
                   ) : paginatedUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-xs text-slate-400 italic">Tidak ada akun user ditemukan</td>
+                      <td colSpan={5} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
+                        Tidak ada akun user ditemukan
+                      </td>
                     </tr>
                   ) : (
                     paginatedUsers.map(u => (
-                      <tr key={u.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                        <td className="px-6 py-4">
+                      <tr key={u.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                        <td className="px-5 py-3.5">
                           <div className="flex items-center gap-2">
-                            <p className="font-bold text-slate-800 dark:text-slate-100">{u.name}</p>
+                            <p className="font-bold text-black dark:text-white">{u.name}</p>
                             {u.username && (
-                              <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold rounded-md font-mono">
+                              <span className="px-1.5 py-0.2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-[10px] font-bold rounded font-mono">
                                 @{u.username}
                               </span>
                             )}
                           </div>
-                          <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5">{u.email}</p>
+                          <p className="text-[11px] font-mono text-black/60 dark:text-white/60 mt-0.5">{u.email}</p>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-3.5">
                           {getRoleBadge(u.role)}
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="font-medium text-slate-700 dark:text-slate-300">{u.division}</div>
-                          {u.phone && <div className="text-xs font-mono text-slate-400">{u.phone}</div>}
+                        <td className="px-5 py-3.5">
+                          <div className="font-medium text-black dark:text-white">{u.division}</div>
+                          {u.phone && <div className="text-[11px] font-mono text-black/60 dark:text-white/60">{u.phone}</div>}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-3.5">
                           {getStatusBadge(u.status)}
                         </td>
-                        <td className="px-6 py-4 text-right space-x-2">
-                          <button
-                            onClick={() => window.dispatchEvent(new CustomEvent('fiber:call-user', { detail: { user: u } }))}
-                            className="px-2.5 py-1.5 bg-emerald-50 dark:bg-neutral-900 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/60 hover:bg-emerald-100 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1"
-                            title="Panggil Pengguna Ini"
-                          >
-                            <span>📞</span>
-                            <span>Panggil</span>
-                          </button>
-                          <button
-                            onClick={() => { setEditingUser(u); setModalErr(null); setShowModal(true); }}
-                            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-all"
-                          >
-                            Edit Hak Akses
-                          </button>
-                          <button
-                            onClick={() => handleDeleteUser(u)}
-                            className="px-2.5 py-1.5 bg-red-50 dark:bg-red-950/60 text-red-600 hover:bg-red-100 rounded-lg text-xs font-bold transition-all"
-                          >
-                            Hapus
-                          </button>
+                        <td className="px-5 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => window.dispatchEvent(new CustomEvent('fiber:call-user', { detail: { user: u } }))}
+                              className="px-2.5 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 rounded-md text-xs font-semibold transition-all inline-flex items-center gap-1 cursor-pointer"
+                              title="Panggil Pengguna Ini"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                              </svg>
+                              <span>Panggil</span>
+                            </button>
+                            <button
+                              onClick={() => { setEditingUser(u); setModalErr(null); setShowModal(true); }}
+                              className="px-2.5 py-1 bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border border-black/20 dark:border-white/20 rounded-md text-xs font-semibold transition-colors cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setUserToDelete(u)}
+                              className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 rounded-md text-xs font-semibold transition-colors cursor-pointer"
+                            >
+                              Hapus
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -495,29 +672,125 @@ export default function UserManagement() {
 
             {/* Desktop Pagination */}
             {totalPages > 1 && (
-              <div className="p-4 bg-slate-50/70 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span className="text-slate-500 font-medium">
-                  Menampilkan <span className="font-bold text-slate-800 dark:text-slate-200">{(currentPage - 1) * perPage + 1}</span> - <span className="font-bold text-slate-800 dark:text-slate-200">{Math.min(currentPage * perPage, users.length)}</span> dari <span className="font-bold text-indigo-600 dark:text-indigo-400">{users.length}</span> user
+              <div className="p-3.5 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex items-center justify-between text-xs">
+                <span className="text-black/60 dark:text-white/60 font-medium">
+                  Menampilkan <span className="font-bold text-black dark:text-white">{(currentPage - 1) * perPage + 1}</span> - <span className="font-bold text-black dark:text-white">{Math.min(currentPage * perPage, users.length)}</span> dari <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">{users.length}</span> pengguna
                 </span>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
-                    className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40"
+                    className="px-3 py-1 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-40 cursor-pointer"
                   >
                     ← Sebelumnya
                   </button>
-                  <span className="px-2 font-bold text-slate-700 dark:text-slate-200">
+                  <span className="px-2 font-bold text-black dark:text-white">
                     Halaman {currentPage} dari {totalPages}
                   </span>
                   <button
                     onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
-                    className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold disabled:opacity-40"
+                    className="px-3 py-1 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-40 cursor-pointer"
                   >
                     Berikutnya →
                   </button>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Card List View (md:hidden) */}
+          <div className="block md:hidden space-y-3">
+            {loading ? (
+              <div className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 p-6 text-center text-xs text-black/40 dark:text-white/40 italic">
+                Memuat data pengguna...
+              </div>
+            ) : paginatedUsers.length === 0 ? (
+              <div className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 p-6 text-center text-xs text-black/40 dark:text-white/40 italic">
+                Tidak ada akun pengguna ditemukan
+              </div>
+            ) : (
+              paginatedUsers.map(u => (
+                <div
+                  key={u.id}
+                  className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 p-4 space-y-3 shadow-2xs"
+                >
+                  <div className="flex items-start justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2.5">
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-sm text-black dark:text-white">{u.name}</span>
+                        {u.username && (
+                          <span className="px-1.5 py-0.2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-[10px] font-bold rounded font-mono">
+                            @{u.username}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-mono text-black/60 dark:text-white/60 mt-0.5">{u.email}</p>
+                    </div>
+                    <div>
+                      {getStatusBadge(u.status)}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[10px] text-black/60 dark:text-white/60 uppercase font-bold block">Peran RBAC</span>
+                      <div className="mt-1">{getRoleBadge(u.role)}</div>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-black/60 dark:text-white/60 uppercase font-bold block">Divisi &amp; Kontak</span>
+                      <p className="font-medium text-black dark:text-white mt-0.5">{u.division}</p>
+                      {u.phone && <p className="text-[11px] font-mono text-black/60 dark:text-white/60">{u.phone}</p>}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-black/10 dark:border-white/10 flex items-center gap-2">
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent('fiber:call-user', { detail: { user: u } }))}
+                      className="flex-1 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                      </svg>
+                      Panggil
+                    </button>
+                    <button
+                      onClick={() => { setEditingUser(u); setModalErr(null); setShowModal(true); }}
+                      className="flex-1 py-1.5 bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-black dark:text-white border border-black/20 dark:border-white/20 rounded-md text-xs font-bold transition-colors cursor-pointer text-center"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setUserToDelete(u)}
+                      className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 rounded-md text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+
+            {/* Mobile Pagination */}
+            {totalPages > 1 && (
+              <div className="p-3 bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 flex items-center justify-between text-xs">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-40 cursor-pointer"
+                >
+                  ← Prev
+                </button>
+                <span className="font-bold text-black dark:text-white">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 rounded-md border border-black/30 dark:border-white/30 bg-white dark:bg-black text-black dark:text-white font-semibold disabled:opacity-40 cursor-pointer"
+                >
+                  Next →
+                </button>
               </div>
             )}
           </div>
@@ -526,33 +799,37 @@ export default function UserManagement() {
 
       {/* TAB 2: RBAC PERMISSION MATRIX VISUALIZATION */}
       {activeTab === 'matrix' && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs p-6 space-y-4">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg overflow-hidden shadow-2xs p-5 sm:p-6 space-y-4">
           <div>
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">🛡️ Matriks Matriks Izin Akses Sistem (RBAC Permission Matrix)</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Pemetaan otomatis fitur &amp; hak eksekusi sistem berdasarkan Peran Pegawai</p>
+            <h3 className="text-sm sm:text-base font-bold text-black dark:text-white">
+              Matriks Izin Akses Sistem (RBAC Permission Matrix)
+            </h3>
+            <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
+              Pemetaan otomatis fitur &amp; hak eksekusi sistem berdasarkan Peran Pegawai
+            </p>
           </div>
 
-          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+          <div className="overflow-x-auto border border-black/20 dark:border-white/20 rounded-md">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-900 dark:bg-slate-950 text-white font-bold">
+              <thead className="bg-black/5 dark:bg-white/5 border-b border-black/20 dark:border-white/20 text-black dark:text-white font-bold">
                 <tr>
-                  <th className="p-4 w-1/3">Modul &amp; Hak Eksekusi Sistem</th>
-                  <th className="p-4 text-center">Super Admin</th>
-                  <th className="p-4 text-center">Operator Jaringan</th>
-                  <th className="p-4 text-center">Teknisi Jointer</th>
-                  <th className="p-4 text-center">Customer Service</th>
-                  <th className="p-4 text-center">Finance</th>
+                  <th className="p-3.5 w-1/3">Modul &amp; Hak Eksekusi Sistem</th>
+                  <th className="p-3.5 text-center">Super Admin</th>
+                  <th className="p-3.5 text-center">Operator Jaringan</th>
+                  <th className="p-3.5 text-center">Teknisi Jointer</th>
+                  <th className="p-3.5 text-center">Customer Service</th>
+                  <th className="p-3.5 text-center">Finance</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+              <tbody className="divide-y divide-black/10 dark:divide-white/10 font-medium">
                 {PERMISSIONS.map((perm, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                    <td className="p-4 font-bold text-slate-800 dark:text-slate-200">{perm.label}</td>
-                    <td className="p-4 text-center">{perm.roles.includes('Super Administrator') ? <span className="text-emerald-600 font-black text-sm">✓ Ya</span> : <span className="text-slate-300">✕</span>}</td>
-                    <td className="p-4 text-center">{(perm.roles.includes('Operator Jaringan') || perm.roles.includes('NOC Operator')) ? <span className="text-emerald-600 font-black text-sm">✓ Ya</span> : <span className="text-slate-300">✕</span>}</td>
-                    <td className="p-4 text-center">{perm.roles.includes('Teknisi Jointer') ? <span className="text-emerald-600 font-black text-sm">✓ Ya</span> : <span className="text-slate-300">✕</span>}</td>
-                    <td className="p-4 text-center">{perm.roles.includes('Customer Service') ? <span className="text-emerald-600 font-black text-sm">✓ Ya</span> : <span className="text-slate-300">✕</span>}</td>
-                    <td className="p-4 text-center">{perm.roles.includes('Finance & Billing') ? <span className="text-emerald-600 font-black text-sm">✓ Ya</span> : <span className="text-slate-300">✕</span>}</td>
+                  <tr key={idx} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                    <td className="p-3.5 font-bold text-black dark:text-white">{perm.label}</td>
+                    <td className="p-3.5 text-center">{perm.roles.includes('Super Administrator') ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
+                    <td className="p-3.5 text-center">{(perm.roles.includes('Operator Jaringan') || perm.roles.includes('NOC Operator')) ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
+                    <td className="p-3.5 text-center">{perm.roles.includes('Teknisi Jointer') ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
+                    <td className="p-3.5 text-center">{perm.roles.includes('Customer Service') ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
+                    <td className="p-3.5 text-center">{perm.roles.includes('Finance & Billing') ? <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">✓ Ya</span> : <span className="text-black/30 dark:text-white/30">—</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -572,51 +849,18 @@ export default function UserManagement() {
         />
       )}
 
-      {/* ── Custom Modal Konfirmasi Hapus User (Pengganti window.confirm) ── */}
-      {userToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-black border border-slate-200 dark:border-[#52525b] rounded-xl shadow-2xl max-w-sm w-full p-5 space-y-4 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-rose-50 dark:bg-neutral-900 border border-rose-200 dark:border-rose-900/60 flex items-center justify-center text-xl shrink-0 text-rose-600 dark:text-rose-400">
-                🗑️
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Konfirmasi Hapus Akun
-                </h3>
-                <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 uppercase">
-                  TINDAKAN PERMANEN
-                </span>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Apakah Anda yakin ingin menghapus akun pegawai <strong className="text-slate-900 dark:text-white">"{userToDelete.name}"</strong> (Role: {userToDelete.role})? Tindakan ini tidak dapat dibatalkan.
-            </p>
-
-            <div className="pt-2 border-t border-slate-100 dark:border-[#1f1f1f] flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setUserToDelete(null)}
-                disabled={deleting}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#52525b] text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-neutral-900 transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={confirmExecuteDeleteUser}
-                disabled={deleting}
-                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
-              >
-                {deleting ? 'Menghapus...' : 'Ya, Hapus Akun'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-
+      {/* Standard Confirm Dialog for Delete */}
+      <ConfirmDialog
+        isOpen={!!userToDelete}
+        title="Konfirmasi Hapus Akun"
+        message={`Apakah Anda yakin ingin menghapus akun pegawai "${userToDelete?.name}" (Role: ${userToDelete?.role})? Tindakan ini bersifat permanen dan tidak dapat dibatalkan.`}
+        confirmText={deleting ? 'Menghapus...' : 'Ya, Hapus Akun'}
+        cancelText="Batal"
+        type="danger"
+        loading={deleting}
+        onConfirm={confirmExecuteDeleteUser}
+        onClose={() => setUserToDelete(null)}
+      />
     </div>
   );
 }
