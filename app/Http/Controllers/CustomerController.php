@@ -47,18 +47,11 @@ class CustomerController extends Controller
                 }
             }
 
-            $customers = Customer::select(['id', 'customer_number', 'name', 'phone', 'email', 'address', 'created_at'])
-            ->with([
-                'services:id,customer_id,service_number,service_package_id,ip_address,onu_serial,sobok_service_status,sobok_profile,sobok_sync_at',
-                'services.servicePackage:id,name,speed_mbps',
-                'services.networkPort:id,customer_service_id,node_id,port_number',
-                'services.networkPort.node:id,name,code,parent_node_id,olt_device_id,olt_port_ref',
-                'services.networkPort.node.parent:id,name,code,parent_node_id,olt_device_id,olt_port_ref',
-                'services.networkPort.node.parent.parent:id,name,code,parent_node_id,olt_device_id,olt_port_ref',
-                'services.networkPort.node.oltDevice:id,name,code',
-                'services.ontRegistration:id,customer_service_id,onu_serial,onu_mac,onu_type,status,rx_power,tx_power,distance_meters,olt_port_id',
-                'services.ontRegistration.oltPort:id,node_id',
-                'services.ontRegistration.oltPort.node:id,name,code,olt_port_ref',
+            $customers = Customer::with([
+                'services.servicePackage',
+                'services.networkPort.node.parent.parent',
+                'services.networkPort.node.oltDevice',
+                'services.ontRegistration.oltPort.node',
             ])
             ->orderBy('id', 'desc')
             ->get();
