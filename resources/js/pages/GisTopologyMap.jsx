@@ -955,28 +955,28 @@ function LeafletMap({
           <!-- Ground Radar Ping -->
           <div style="
             position: absolute;
-            top: 40px;
+            top: 30px;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 32px;
-            height: 32px;
+            width: 26px;
+            height: 26px;
             border-radius: 50%;
-            border: 2.5px solid #d946ef;
+            border: 2px solid #ef4444;
             animation: targetPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
             pointer-events: none;
           "></div>
 
-          <!-- Crisp Modern Location Drop Pin -->
+          <!-- Crisp Modern Location Drop Pin (Red & Compact) -->
           <div style="
             position: relative;
-            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+            filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
             transition: transform 0.15s ease;
           ">
-            <svg width="34" height="42" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 0C5.37258 0 0 5.37258 0 12C0 20.25 10.8 29.1 11.28 29.5C11.68 29.83 12.32 29.83 12.72 29.5C13.2 29.1 24 20.25 24 12C24 5.37258 18.6274 0 12 0Z" fill="#d946ef"/>
-              <path d="M12 2C6.47715 2 2 6.47715 2 12C2 19 11 26.5 12 27.3C13 26.5 22 19 22 12C22 6.47715 17.5228 2 12 2Z" fill="#e879f9"/>
-              <circle cx="12" cy="11" r="5" fill="#ffffff"/>
-              <circle cx="12" cy="11" r="2.5" fill="#a21caf"/>
+            <svg width="24" height="30" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 0C5.37258 0 0 5.37258 0 12C0 20.25 10.8 29.1 11.28 29.5C11.68 29.83 12.32 29.83 12.72 29.5C13.2 29.1 24 20.25 24 12C24 5.37258 18.6274 0 12 0Z" fill="#dc2626"/>
+              <path d="M12 2C6.47715 2 2 6.47715 2 12C2 19 11 26.5 12 27.3C13 26.5 22 19 22 12C22 6.47715 17.5228 2 12 2Z" fill="#ef4444"/>
+              <circle cx="12" cy="11" r="4.5" fill="#ffffff"/>
+              <circle cx="12" cy="11" r="2.2" fill="#991b1b"/>
             </svg>
           </div>
 
@@ -984,22 +984,22 @@ function LeafletMap({
           <div style="
             background: #09090b;
             color: #ffffff;
-            padding: 2px 7px;
-            border-radius: 5px;
-            font-size: 10.5px;
+            padding: 1.5px 6px;
+            border-radius: 4px;
+            font-size: 9.5px;
             font-weight: 800;
             white-space: nowrap;
             margin-top: 1px;
-            border: 1px solid #d946ef;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+            border: 1px solid #ef4444;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
             font-family: sans-serif;
           ">
             ${targetPin.label || 'Titik Lokasi'}
           </div>
         </div>
       `,
-      iconSize: [160, 68],
-      iconAnchor: [80, 42],
+      iconSize: [120, 56],
+      iconAnchor: [60, 30],
     });
 
     const marker = Lf.marker([lat, lng], { icon }).addTo(layer);
@@ -1940,9 +1940,14 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         if (!eff.isLoss) return false;
       }
       if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const match = n.name?.toLowerCase().includes(q) || n.code?.toLowerCase().includes(q) || n.address?.toLowerCase().includes(q) || n.olt_port_ref?.toLowerCase().includes(q);
-        if (!match) return false;
+        // If searchQuery is a GPS coordinate string, DO NOT filter out nodes on the map!
+        // This ensures all ODP/ODC/POP nodes and cables remain fully visible around the location pin.
+        const isCoords = parseCoordsInput(searchQuery).isValid;
+        if (!isCoords) {
+          const q = searchQuery.toLowerCase();
+          const match = n.name?.toLowerCase().includes(q) || n.code?.toLowerCase().includes(q) || n.address?.toLowerCase().includes(q) || n.olt_port_ref?.toLowerCase().includes(q);
+          if (!match) return false;
+        }
       }
       return true;
     }).sort(naturalNodeCompare);
@@ -1964,10 +1969,11 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     const target = {
       lat: coords.lat,
       lng: coords.lng,
-      label: 'Patokan Lokasi',
+      label: 'Titik Lokasi',
       dms: coords.formattedDms,
     };
     setTargetPin(target);
+    setSearchQuery(''); // Reset search input so all map nodes stay visible!
     setIsSearchFocused(false);
     if (externalFlyToRef.current) {
       externalFlyToRef.current(coords.lat, coords.lng, 17);
@@ -1991,6 +1997,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           dms: dms.formattedDms,
         };
         setTargetPin(target);
+        setSearchQuery(''); // Reset search input so all map nodes stay visible!
         if (externalFlyToRef.current) {
           externalFlyToRef.current(lat, lng, 18);
         }
@@ -2013,7 +2020,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
   const handleSelectSuggestion = (node) => {
     setSelectedNode(node);
-    setSearchQuery(node.name);
+    setSearchQuery(''); // Reset search input so all surrounding map nodes stay visible!
     setIsSearchFocused(false);
     if (node.latitude && node.longitude && externalFlyToRef.current) {
       externalFlyToRef.current(parseFloat(node.latitude), parseFloat(node.longitude), 17);
@@ -2171,10 +2178,10 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                     e.preventDefault();
                     handleApplyTargetCoordinate(parsedSearchCoords);
                   }}
-                  className="w-full text-left px-3.5 py-2.5 bg-fuchsia-950/40 hover:bg-fuchsia-900/60 border-b border-fuchsia-500/30 flex items-center justify-between cursor-pointer text-xs transition-colors"
+                  className="w-full text-left px-3.5 py-2.5 bg-rose-950/50 hover:bg-rose-900/70 border-b border-rose-500/30 flex items-center justify-between cursor-pointer text-xs transition-colors"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/40 flex items-center justify-center shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center shrink-0">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
                         <circle cx="12" cy="9" r="2.5" />
@@ -2182,19 +2189,19 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/40">
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/30 text-rose-300 border border-rose-500/40">
                           TITIK LOKASI
                         </span>
                         <span className="font-bold text-white">
                           Tandai Patokan Titik Lokasi
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono text-fuchsia-200/80 block truncate">
+                      <span className="text-[10px] font-mono text-rose-200/80 block truncate">
                         {parsedSearchCoords.lat.toFixed(6)}, {parsedSearchCoords.lng.toFixed(6)} {parsedSearchCoords.formattedDms ? `(${parsedSearchCoords.formattedDms})` : ''}
                       </span>
                     </div>
                   </div>
-                  <span className="text-[10px] font-bold text-fuchsia-400 shrink-0 ml-2">Tandai ➔</span>
+                  <span className="text-[10px] font-bold text-rose-400 shrink-0 ml-2">Tandai ➔</span>
                 </button>
               )}
 
@@ -2222,21 +2229,6 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             </div>
           )}
         </div>
-
-        {/* 2. Target House Pin Floating Banner */}
-        {targetPin && (
-          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[1080]">
-            <TargetPinBanner
-              targetPin={targetPin}
-              onFlyToTarget={() => {
-                if (externalFlyToRef.current) {
-                  externalFlyToRef.current(targetPin.lat, targetPin.lng, 17);
-                }
-              }}
-              onClearTarget={() => setTargetPin(null)}
-            />
-          </div>
-        )}
 
         {/* 3. Interactive Ruler Distance HUD */}
         {rulerActive && (
@@ -2865,10 +2857,10 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                       e.preventDefault();
                       handleApplyTargetCoordinate(parsedSearchCoords);
                     }}
-                    className="w-full text-left px-3 py-2.5 bg-fuchsia-50 dark:bg-fuchsia-950/40 hover:bg-fuchsia-100 dark:hover:bg-fuchsia-900/50 border-b border-fuchsia-200 dark:border-fuchsia-800 flex items-center justify-between cursor-pointer transition-colors"
+                    className="w-full text-left px-3 py-2.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 border-b border-rose-200 dark:border-rose-800 flex items-center justify-between cursor-pointer transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-6 h-6 rounded-full bg-fuchsia-500/20 text-fuchsia-600 dark:text-fuchsia-400 flex items-center justify-center shrink-0">
+                      <div className="w-6 h-6 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
                           <circle cx="12" cy="9" r="2.5" />
@@ -2876,10 +2868,10 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-fuchsia-500/20 text-fuchsia-700 dark:text-fuchsia-300 border border-fuchsia-500/30">
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30">
                             TITIK LOKASI
                           </span>
-                          <span className="font-bold text-xs text-fuchsia-700 dark:text-fuchsia-300">
+                          <span className="font-bold text-xs text-rose-700 dark:text-rose-300">
                             Tandai Patokan Titik Lokasi
                           </span>
                         </div>
@@ -2888,7 +2880,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                         </span>
                       </div>
                     </div>
-                    <span className="text-[10px] font-bold text-fuchsia-600 dark:text-fuchsia-400 shrink-0 ml-2">Tandai ➔</span>
+                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 shrink-0 ml-2">Tandai ➔</span>
                   </button>
                 )}
 
@@ -3044,18 +3036,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             }}
           />
 
-          {/* Target House Pin Floating Banner */}
-          {targetPin && (
-            <TargetPinBanner
-              targetPin={targetPin}
-              onFlyToTarget={() => {
-                if (externalFlyToRef.current) {
-                  externalFlyToRef.current(targetPin.lat, targetPin.lng, 17);
-                }
-              }}
-              onClearTarget={() => setTargetPin(null)}
-            />
-          )}
+
 
           {/* Interactive Ruler Distance HUD with Undo */}
           {rulerActive && (
