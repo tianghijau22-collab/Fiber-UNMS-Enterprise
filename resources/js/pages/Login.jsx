@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext.jsx';
 import { useTheme } from '../components/ThemeContext.jsx';
-import InteractiveFonaCat from '../components/InteractiveFonaCat.jsx';
 import FonaBrandLogo from '../components/FonaBrandLogo.jsx';
 
 /* ───────────────────────────────────────────────────────────────────
@@ -26,6 +25,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState(null);
+  const [loginSuccess, setLoginSuccess] = useState(false);
 
   // Session Inactivity Timeout Alert Notice
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState(() => {
@@ -41,11 +41,6 @@ export default function Login() {
       sessionStorage.removeItem('fiber_session_expired');
     }
   }, [sessionExpiredNotice]);
-
-  // Mascot Animation State: 'idle' | 'username' | 'password' | 'success' | 'error'
-  const [mascotState, setMascotState] = useState('idle');
-  const [isUsernameFocused, setIsUsernameFocused] = useState(false);
-  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
   // Custom Modal for Forgot Password & Register Notice
   const [helpModal, setHelpModal] = useState(null);
@@ -63,59 +58,20 @@ export default function Login() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [helpModal]);
 
-  // Handle focus changes smoothly
-  const handleUsernameFocus = () => {
-    setIsUsernameFocused(true);
-    if (mascotState !== 'success') {
-      setMascotState('username');
-    }
-  };
-
-  const handleUsernameBlur = () => {
-    setIsUsernameFocused(false);
-    if (mascotState === 'username') {
-      setMascotState('idle');
-    }
-  };
-
-  const handlePasswordFocus = () => {
-    setIsPasswordFocused(true);
-    if (mascotState !== 'success') {
-      setMascotState('password');
-    }
-  };
-
-  const handlePasswordBlur = () => {
-    setIsPasswordFocused(false);
-    if (mascotState === 'password') {
-      setMascotState('idle');
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
-    setMascotState('idle');
 
     try {
       await login(username.trim(), password, true);
-
-      // SUCCESS: Trigger Celebratory Leap Animation
-      setMascotState('success');
-
+      setLoginSuccess(true);
       setTimeout(() => {
         commitLogin();
         navigate(from, { replace: true });
-      }, 1900);
+      }, 400);
     } catch (err) {
-      // ERROR: Trigger Sassy Denial Head-shake
       const msg = err.message || 'Username atau kata sandi yang Anda masukkan salah.';
       setError(msg);
-      setMascotState('error');
-
-      setTimeout(() => {
-        setMascotState(prevState => (prevState === 'error' ? 'idle' : prevState));
-      }, 2400);
     }
   };
 
@@ -156,17 +112,8 @@ export default function Login() {
         {/* Main Container */}
         <div className="w-full max-w-md relative z-10 my-auto">
 
-          {/* Interactive Mascot */}
-          <InteractiveFonaCat
-            usernameLength={username.length}
-            isUsernameFocused={isUsernameFocused}
-            isPasswordFocused={isPasswordFocused}
-            showPassword={showPassword}
-            mascotState={mascotState}
-          />
-
           {/* Clean Monochrome Card Container */}
-          <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-6 sm:p-8 pt-7 rounded-lg sm:rounded-xl shadow-2xl space-y-5 relative">
+          <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-6 sm:p-8 rounded-lg sm:rounded-xl shadow-2xl space-y-5 relative">
 
             {/* Header Brand Section */}
             <div className="text-center space-y-2.5 pt-1">
@@ -239,13 +186,10 @@ export default function Login() {
                     onChange={e => {
                       setUsername(e.target.value);
                       setError(null);
-                      if (mascotState === 'error') setMascotState('username');
                     }}
-                    onFocus={handleUsernameFocus}
-                    onBlur={handleUsernameBlur}
                     placeholder="Masukkan username"
                     autoComplete="username"
-                    disabled={mascotState === 'success'}
+                    disabled={loginSuccess}
                     className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white placeholder-slate-400 dark:placeholder-neutral-500 focus:outline-none focus:border-cyan-500 dark:focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/20 transition-all disabled:opacity-50"
                   />
                 </div>
@@ -269,13 +213,10 @@ export default function Login() {
                     onChange={e => {
                       setPassword(e.target.value);
                       setError(null);
-                      if (mascotState === 'error') setMascotState('password');
                     }}
-                    onFocus={handlePasswordFocus}
-                    onBlur={handlePasswordBlur}
                     placeholder="Masukkan kata sandi"
                     autoComplete="current-password"
-                    disabled={mascotState === 'success'}
+                    disabled={loginSuccess}
                     className="w-full pl-10 pr-20 py-2.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white placeholder-slate-400 dark:placeholder-neutral-500 focus:outline-none focus:border-cyan-500 dark:focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/20 transition-all disabled:opacity-50"
                   />
                   <button
@@ -327,10 +268,10 @@ export default function Login() {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={loading || mascotState === 'success'}
+                disabled={loading || loginSuccess}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-md text-xs shadow-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2 cursor-pointer"
               >
-                {loading && mascotState !== 'success' ? (
+                {loading && !loginSuccess ? (
                   <>
                     <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -338,7 +279,7 @@ export default function Login() {
                     </svg>
                     <span>Mengotentikasi...</span>
                   </>
-                ) : mascotState === 'success' ? (
+                ) : loginSuccess ? (
                   <>
                     <svg className="w-4 h-4 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
