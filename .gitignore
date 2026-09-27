@@ -24,5 +24,7 @@
 _ide_helper.php
 Homestead.json
 Homestead.yaml
-Thumbs.db
 /scratch/
+/public/downloads/*.apk
+mobile_app/build/
+mobile_app/.dart_tool/
