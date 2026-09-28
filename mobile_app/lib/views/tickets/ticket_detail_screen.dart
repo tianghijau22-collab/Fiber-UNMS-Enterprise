@@ -152,13 +152,13 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                           return;
                         }
 
+                        final provider = Provider.of<TicketProvider>(context, listen: false);
                         String? base64Img;
                         if (selectedImage != null) {
                           final bytes = await selectedImage!.readAsBytes();
                           base64Img = 'data:image/jpeg;base64,${base64Encode(bytes)}';
                         }
 
-                        final provider = Provider.of<TicketProvider>(context, listen: false);
                         final ok = await provider.addProgress(
                           ticketId: widget.ticket.id,
                           progressNotes: noteController.text.trim(),

@@ -112,8 +112,10 @@ class _LoginScreenState extends State<LoginScreen> {
               final newUrl = urlController.text.trim();
               await storage.setServerUrl(newUrl);
               DioClient().updateBaseUrl(newUrl);
-              if (mounted) {
+              if (ctx.mounted) {
                 Navigator.pop(ctx);
+              }
+              if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Server URL diubah: ${DioClient().dio.options.baseUrl}'),
@@ -203,8 +205,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       children: [
                         Container(
-                          width: 68,
-                          height: 68,
+                          width: 80,
+                          height: 80,
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             shape: BoxShape.circle,
@@ -216,17 +219,24 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ],
                           ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.hub_rounded,
-                              size: 36,
-                              color: AppColors.primary,
+                          child: ClipOval(
+                            child: Image.asset(
+                              'assets/images/fona_logo.png',
+                              fit: BoxFit.contain,
+                              errorBuilder: (ctx, err, stack) => const Center(
+                                child: Icon(
+                                  Icons.hub_rounded,
+                                  size: 36,
+                                  color: AppColors.primary,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 14),
                         const Text(
-                          'FONA Enterprise System',
+                          'FONA - Fiber Optic Network Analysis',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
                             color: AppColors.textPrimary,
                             fontWeight: FontWeight.bold,
@@ -235,7 +245,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          'Fiber Optic Network & Telemetry Management',
+                          'Enterprise Field Management & Telemetry',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: AppColors.textSecondary,

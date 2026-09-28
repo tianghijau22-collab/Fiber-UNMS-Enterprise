@@ -49,20 +49,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
     // OLT Metrics
     final totalOlts = overview['total_olts'] ?? regionalInfra.length;
-    int oltOnline = 0;
-    int oltOffline = 0;
-    if (regionalInfra.isNotEmpty) {
-      for (final r in regionalInfra) {
-        final st = (r['status'] ?? '').toString().toLowerCase();
-        if (st == 'online' || st == 'active') {
-          oltOnline++;
-        } else {
-          oltOffline++;
-        }
-      }
-    } else {
-      oltOnline = totalOlts;
-    }
 
     // Tickets Metrics
     final activeTickets = overview['active_tickets'] ?? 0;
@@ -79,39 +65,76 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.secondary],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.hub_rounded, color: Colors.white, size: 16),
-                  SizedBox(width: 6),
-                  Text(
-                    'FONA',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                      letterSpacing: 1.0,
-                    ),
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.surfaceBorder),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              'Mobile',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/images/fona_logo.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (ctx, err, stack) => const Icon(
+                    Icons.hub_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                ),
               ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'FONA',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'MOBILE',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const Text(
+                  'Fiber Optic Network Analysis',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -357,96 +380,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ),
               const SizedBox(height: 18),
 
-              // ── 2. PERANGKAT OLT ──
-              _buildSectionHeader(
-                title: 'Perangkat OLT',
-                actionLabel: 'Lihat Semua',
-                onAction: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OltListScreen())),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.surfaceBorder),
-                  boxShadow: AppColors.cardShadow,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.successLight,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.success.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.router_rounded, color: AppColors.success, size: 20),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '$oltOnline',
-                                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w900, fontSize: 22),
-                                ),
-                                const Text('Online', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.dangerLight,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.danger.withValues(alpha: 0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.router_outlined, color: AppColors.danger, size: 20),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '$oltOffline',
-                                  style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w900, fontSize: 22),
-                                ),
-                                const Text('Offline', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-
-              // ── 3. TICKETS & GANGGUAN ──
+              // ── 2. TICKETS & GANGGUAN ──
               _buildSectionHeader(
                 title: 'Tickets & Gangguan',
                 actionLabel: 'Kelola Tiket',

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../core/constants/app_colors.dart';
 import 'dashboard/home_dashboard_screen.dart';
 import 'alerts/system_alert_screen.dart';
-import 'olt/olt_list_screen.dart';
 import 'infrastructure/nodes_list_screen.dart';
 import 'customers/customer_list_screen.dart';
+import 'profile/profile_screen.dart';
 
 class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({super.key});
@@ -19,9 +19,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   final List<Widget> _screens = const [
     HomeDashboardScreen(),
     SystemAlertScreen(),
-    OltListScreen(),
     NodesListScreen(),
     CustomerListScreen(),
+    ProfileScreen(),
   ];
 
   @override
@@ -50,18 +50,13 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.dashboard_outlined),
-              activeIcon: Icon(Icons.dashboard),
+              activeIcon: Icon(Icons.dashboard_rounded),
               label: 'Beranda',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.notifications_active_outlined),
-              activeIcon: Icon(Icons.notifications_active),
+              activeIcon: Icon(Icons.notifications_active_rounded),
               label: 'Alert',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.router_outlined),
-              activeIcon: Icon(Icons.router_rounded),
-              label: 'OLT',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.account_tree_outlined),
@@ -73,9 +68,15 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               activeIcon: Icon(Icons.people_alt_rounded),
               label: 'Pelanggan',
             ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline_rounded),
+              activeIcon: Icon(Icons.person_rounded),
+              label: 'Profil',
+            ),
           ],
         ),
       ),
     );
   }
 }
+
