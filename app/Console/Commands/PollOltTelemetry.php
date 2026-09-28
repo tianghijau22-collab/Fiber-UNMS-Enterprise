@@ -62,7 +62,7 @@ class PollOltTelemetry extends Command
     }
 
     /**
-     * Master Dispatcher: Menjalankan polling 1 Port PON per OLT secara SIMULTAN & PARALEL
+     * Master Dispatcher: Menjalankan polling 1 Port PON per OLT secara IN-PROCESS (Direct Memory Execution Tanpa Re-boot Laravel CLI)
      */
     protected function dispatchSinglePortParallel(OltController $oltCtrl): int
     {
@@ -74,96 +74,70 @@ class PollOltTelemetry extends Command
             return 0;
         }
 
-        $processes = [];
-        $phpBinary = PHP_BINARY ?: 'php';
-        $artisanPath = base_path('artisan');
-
-        // 1. Spawn sub-process untuk setiap OLT (masing-masing menembak 1 Port PON gilirannya)
-        foreach ($devices as $device) {
-            $cmd = [$phpBinary, $artisanPath, 'olt:poll-telemetry', "--device={$device->id}", '--force'];
-            $process = new Process($cmd);
-            $process->setTimeout(90); // 90 detik max — ruang aman 6x lipat agar tidak pernah timeout
-            $process->start();
-
-            $processes[$device->id] = [
-                'process' => $process,
-                'device'  => $device,
-                'start'   => microtime(true),
-            ];
-        }
-
-        // 2. Tunggu semua worker port selesai secara non-blocking
         $deviceReports = [];
         $totalPortsPolled = 0;
         $totalOnusPolled = 0;
         $totalUncfgPolled = 0;
 
-        $maxProcessTimeoutSec = 90; // Maksimal 90 detik per sub-process OLT
+        // Eksekusi IN-PROCESS secara berurutan untuk setiap OLT aktif
+        foreach ($devices as $device) {
+            $devStart = microtime(true);
+            try {
+                // Eksekusi langsung di memori tanpa spawn CLI Process baru
+                $this->pollSinglePortOnDevice((int)$device->id, $oltCtrl);
+                $durationMs = round((microtime(true) - $devStart) * 1000, 1);
 
-        while (count($processes) > 0) {
-            foreach ($processes as $id => $item) {
-                /** @var Process $proc */
-                $proc = $item['process'];
-                /** @var OltDevice $dev */
-                $dev = $item['device'];
+                // Ambil snapshot data yang baru saja diperbarui
+                $freshDev = OltDevice::find($device->id);
+                $snapshot = $freshDev?->last_telemetry_snapshot ?? [];
+                $ponPorts = $snapshot['pon_ports'] ?? [];
+                $allOnus  = $snapshot['onu_list'] ?? [];
+                $uncfg    = $snapshot['unconfigured_onus'] ?? [];
 
-                $elapsedSec = microtime(true) - $item['start'];
+                $activePorts = count(array_filter($ponPorts, fn($p) => ($p['status'] ?? '') === 'Up' || ($p['registered_onus'] ?? 0) > 0));
+                $onusCount   = count($allOnus);
+                $uncfgCount  = count($uncfg);
+                $onlineCount = count(array_filter($allOnus, fn($o) => ($o['status'] ?? '') === 'Online' || ($o['status'] ?? '') === 'active'));
 
-                // Paksa stop proses jika melebihi batas waktu (anti-hang mutlak)
-                if ($elapsedSec > $maxProcessTimeoutSec && $proc->isRunning()) {
-                    $proc->stop(1);
-                }
+                $activeQuery = Cache::get("olt_active_querying_port_{$device->id}");
 
-                if (!$proc->isRunning()) {
-                    $durationMs = round($elapsedSec * 1000, 1);
-                    $output = trim($proc->getOutput());
-                    $errorOutput = trim($proc->getErrorOutput());
+                $totalPortsPolled += $activePorts;
+                $totalOnusPolled += $onusCount;
+                $totalUncfgPolled += $uncfgCount;
 
-                    // Ambil snapshot data yang baru saja diperbarui
-                    $freshDev = OltDevice::find($id);
-                    $snapshot = $freshDev?->last_telemetry_snapshot ?? [];
-                    $ponPorts = $snapshot['pon_ports'] ?? [];
-                    $allOnus  = $snapshot['onu_list'] ?? [];
-                    $uncfg    = $snapshot['unconfigured_onus'] ?? [];
+                $deviceReports[] = [
+                    'device_id'             => $device->id,
+                    'device_name'           => $device->name,
+                    'ip'                    => $device->ip_address,
+                    'vendor'                => $device->vendor,
+                    'total_ports'           => count($ponPorts),
+                    'active_ports'          => $activePorts,
+                    'db_registered_total'   => $onusCount,
+                    'db_registered_online'  => $onlineCount,
+                    'db_unregistered_total' => $uncfgCount,
+                    'last_port_polled'      => $activeQuery['port'] ?? null,
+                    'last_port_onu_count'   => $activeQuery['onu_count'] ?? 0,
+                    'onus_found'            => $onusCount,
+                    'uncfg_found'           => $uncfgCount,
+                    'duration_ms'           => $durationMs,
+                    'status'                => 'SUCCESS',
+                    'timestamp'             => now()->format('H:i:s'),
+                ];
+            } catch (\Throwable $e) {
+                $durationMs = round((microtime(true) - $devStart) * 1000, 1);
+                $this->error("Error in-process polling device {$device->name}: " . $e->getMessage());
+                self::appendWorkerLog($device->name, 'ALL', 'ERROR', "In-process error: " . $e->getMessage());
 
-                    $activePorts = count(array_filter($ponPorts, fn($p) => ($p['status'] ?? '') === 'Up' || ($p['registered_onus'] ?? 0) > 0));
-                    $onusCount   = count($allOnus);
-                    $uncfgCount  = count($uncfg);
-                    $onlineCount = count(array_filter($allOnus, fn($o) => ($o['status'] ?? '') === 'Online' || ($o['status'] ?? '') === 'active'));
-
-                    $activeQuery = Cache::get("olt_active_querying_port_{$dev->id}");
-
-                    $isSuccess = $proc->isSuccessful();
-                    $statusStr = $isSuccess ? 'SUCCESS' : ('FAILED: ' . ($errorOutput ?: 'Process timed out or error'));
-
-                    $totalPortsPolled += $activePorts;
-                    $totalOnusPolled += $onusCount;
-                    $totalUncfgPolled += $uncfgCount;
-
-                    $deviceReports[] = [
-                        'device_id'             => $dev->id,
-                        'device_name'           => $dev->name,
-                        'ip'                    => $dev->ip_address,
-                        'vendor'                => $dev->vendor,
-                        'total_ports'           => count($ponPorts),
-                        'active_ports'          => $activePorts,
-                        'db_registered_total'   => $onusCount,
-                        'db_registered_online'  => $onlineCount,
-                        'db_unregistered_total' => $uncfgCount,
-                        'last_port_polled'      => $activeQuery['port'] ?? null,
-                        'last_port_onu_count'   => $activeQuery['onu_count'] ?? 0,
-                        'onus_found'            => $onusCount,
-                        'uncfg_found'           => $uncfgCount,
-                        'duration_ms'           => $durationMs,
-                        'status'                => $statusStr,
-                        'timestamp'             => now()->format('H:i:s'),
-                    ];
-
-                    unset($processes[$id]);
-                }
+                $deviceReports[] = [
+                    'device_id'    => $device->id,
+                    'device_name'  => $device->name,
+                    'ip'           => $device->ip_address,
+                    'vendor'       => $device->vendor,
+                    'duration_ms'  => $durationMs,
+                    'status'       => 'FAILED: ' . $e->getMessage(),
+                    'timestamp'    => now()->format('H:i:s'),
+                ];
             }
-
-            usleep(150000); // 150ms non-blocking check (low CPU overhead)
         }
 
         $totalCycleDurationMs = round((microtime(true) - $cycleStart) * 1000, 1);
@@ -171,13 +145,13 @@ class PollOltTelemetry extends Command
 
         // Record backend worker telemetry metadata to Cache for live monitoring
         $workerStats = [
-            'status'               => 'ACTIVE (24/7 CONTINUOUS LOOP)',
+            'status'               => 'ACTIVE (24/7 IN-PROCESS LOOP)',
             'last_run_at'          => now()->toIso8601String(),
             'last_run_human'       => now()->format('d M Y, H:i:s'),
             'cycle_duration_ms'    => $totalCycleDurationMs,
             'cycle_duration_human' => ($totalCycleDurationMs < 1000) ? "{$totalCycleDurationMs} ms" : round($totalCycleDurationMs / 1000, 2) . " s",
-            'throttling_delay_ms'  => 150,
-            'mode'                 => 'Continuous Port-by-Port Loop',
+            'throttling_delay_ms'  => 0,
+            'mode'                 => 'In-Process Direct Memory Loop',
             'total_devices'        => count($devices),
             'total_ports_polled'   => $totalPortsPolled > 0 ? $totalPortsPolled : ($prevStats['total_ports_polled'] ?? 8),
             'total_onus_polled'    => $totalOnusPolled > 0 ? $totalOnusPolled : ($prevStats['total_onus_polled'] ?? \App\Models\OntRegistration::count()),
@@ -210,7 +184,7 @@ class PollOltTelemetry extends Command
             try {
                 \App\Services\OpticalFaultLocalizationService::detectMassClientDown(2, 100.0);
             } catch (\Throwable $e) {
-                // Ignore error agar tidak menghambat worker loop
+                // Ignore error
             }
         }
 
@@ -222,8 +196,13 @@ class PollOltTelemetry extends Command
             try {
                 $this->executeHardwareSfpLinkPulse();
             } catch (\Throwable $e) {
-                // Ignore error agar tidak menghambat worker loop
+                // Ignore error
             }
+        }
+
+        // Garbage collection untuk menjaga konsumsi RAM daemon selalu bersih & konstan
+        if (function_exists('gc_collect_cycles')) {
+            gc_collect_cycles();
         }
 
         return 0;
