@@ -7,7 +7,16 @@ import '../../core/constants/app_colors.dart';
 import '../../providers/odp_provider.dart';
 
 class OdpFormScreen extends StatefulWidget {
-  const OdpFormScreen({super.key});
+  final String? prefilledOdpCode;
+  final String? prefilledOdpName;
+  final int? prefilledOdpNodeId;
+
+  const OdpFormScreen({
+    super.key,
+    this.prefilledOdpCode,
+    this.prefilledOdpName,
+    this.prefilledOdpNodeId,
+  });
 
   @override
   State<OdpFormScreen> createState() => _OdpFormScreenState();
@@ -15,7 +24,7 @@ class OdpFormScreen extends StatefulWidget {
 
 class _OdpFormScreenState extends State<OdpFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _odpCodeController = TextEditingController();
+  late final TextEditingController _odpCodeController;
   final _portController = TextEditingController(text: '1');
   final _powerController = TextEditingController();
   final _addressController = TextEditingController();
@@ -32,6 +41,7 @@ class _OdpFormScreenState extends State<OdpFormScreen> {
   @override
   void initState() {
     super.initState();
+    _odpCodeController = TextEditingController(text: widget.prefilledOdpCode ?? '');
     _fetchCurrentGpsLocation();
   }
 

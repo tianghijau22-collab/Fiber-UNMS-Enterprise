@@ -40,6 +40,7 @@ class ApiConstants {
   static String endpointOntOpticalPower(String sn) => '/olt/optical-power/$sn';
   static const String endpointOrphanedOnus = '/olt/orphaned-onus';
 
-  // GIS
+  // GIS & Infrastructure Nodes
   static const String endpointGisMapData = '/gis/map-data';
+  static const String endpointNetworkNodes = '/network-nodes';
 }

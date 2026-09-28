@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../core/constants/app_colors.dart';
 import 'dashboard/home_dashboard_screen.dart';
-import 'tickets/ticket_list_screen.dart';
-import 'odp/odp_check_screen.dart';
+import 'alerts/system_alert_screen.dart';
+import 'olt/olt_list_screen.dart';
+import 'infrastructure/nodes_list_screen.dart';
 import 'customers/customer_list_screen.dart';
-import 'profile/profile_screen.dart';
 
 class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({super.key});
@@ -18,10 +18,10 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
   final List<Widget> _screens = const [
     HomeDashboardScreen(),
-    TicketListScreen(),
-    OdpCheckScreen(),
+    SystemAlertScreen(),
+    OltListScreen(),
+    NodesListScreen(),
     CustomerListScreen(),
-    ProfileScreen(),
   ];
 
   @override
@@ -54,24 +54,24 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               label: 'Beranda',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.confirmation_number_outlined),
-              activeIcon: Icon(Icons.confirmation_number),
-              label: 'Tiket',
+              icon: Icon(Icons.notifications_active_outlined),
+              activeIcon: Icon(Icons.notifications_active),
+              label: 'Alert',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.speed_outlined),
-              activeIcon: Icon(Icons.speed),
-              label: 'ODP',
+              icon: Icon(Icons.router_outlined),
+              activeIcon: Icon(Icons.router_rounded),
+              label: 'OLT',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.account_tree_outlined),
+              activeIcon: Icon(Icons.account_tree_rounded),
+              label: 'Node FTTH',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.people_outline),
-              activeIcon: Icon(Icons.people),
+              activeIcon: Icon(Icons.people_alt_rounded),
               label: 'Pelanggan',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
-              activeIcon: Icon(Icons.person),
-              label: 'Profil',
             ),
           ],
         ),

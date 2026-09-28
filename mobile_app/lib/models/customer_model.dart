@@ -11,6 +11,8 @@ class CustomerModel {
   final String? onuSn;
   final String? onuMac;
   final double? rxPowerDbm;
+  final String? odpName;
+  final String? odpPort;
 
   CustomerModel({
     required this.id,
@@ -25,12 +27,14 @@ class CustomerModel {
     this.onuSn,
     this.onuMac,
     this.rxPowerDbm,
+    this.odpName,
+    this.odpPort,
   });
 
   factory CustomerModel.fromJson(Map<String, dynamic> json) {
     return CustomerModel(
       id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
-      customerNumber: json['customer_number'] ?? '',
+      customerNumber: json['customer_number'] ?? json['customer_id'] ?? '',
       name: json['name'] ?? '',
       phone: json['phone'],
       email: json['email'],
@@ -38,12 +42,19 @@ class CustomerModel {
       latitude: json['latitude'] != null ? double.tryParse(json['latitude'].toString()) : null,
       longitude: json['longitude'] != null ? double.tryParse(json['longitude'].toString()) : null,
       status: json['status'] is Map ? json['status']['value'] ?? 'active' : json['status']?.toString() ?? 'active',
-      onuSn: json['onu_sn'] ?? json['sn'],
-      onuMac: json['onu_mac'] ?? json['mac'],
-      rxPowerDbm: json['rx_power_dbm'] != null ? double.tryParse(json['rx_power_dbm'].toString()) : null,
+      onuSn: json['onu_sn'] ?? json['sn'] ?? json['serial_number'],
+      onuMac: json['onu_mac'] ?? json['mac'] ?? json['mac_address'],
+      rxPowerDbm: json['rx_power_dbm'] != null
+          ? double.tryParse(json['rx_power_dbm'].toString())
+          : (json['rx_power'] != null ? double.tryParse(json['rx_power'].toString()) : null),
+      odpName: json['odp_name'] ?? json['node_name'],
+      odpPort: json['odp_port']?.toString() ?? json['port_number']?.toString(),
     );
   }
 
-  bool get isActive => status.toLowerCase() == 'active';
+  bool get isOnline => status.toLowerCase() == 'active' || status.toLowerCase() == 'online';
+  bool get isActive => isOnline;
   bool get isIsolated => status.toLowerCase() == 'isolated' || status.toLowerCase() == 'suspend';
+  double? get rxPower => rxPowerDbm;
+  String? get onuSerial => onuSn;
 }
