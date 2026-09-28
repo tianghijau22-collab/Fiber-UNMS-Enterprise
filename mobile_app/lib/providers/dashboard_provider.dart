@@ -26,11 +26,24 @@ class DashboardProvider extends ChangeNotifier {
       ]);
 
       if (futures[0].data != null) {
-        _metrics = futures[0].data is Map<String, dynamic> ? futures[0].data : futures[0].data['data'];
+        final res = futures[0].data;
+        if (res is Map<String, dynamic>) {
+          _metrics = res['data'] is Map<String, dynamic> ? res['data'] : res;
+        }
       }
 
       if (futures[1].data != null) {
-        _systemAlerts = futures[1].data is List ? futures[1].data : (futures[1].data['data'] ?? []);
+        final alertRes = futures[1].data;
+        if (alertRes is List) {
+          _systemAlerts = alertRes;
+        } else if (alertRes is Map<String, dynamic>) {
+          _systemAlerts = alertRes['data'] is List ? alertRes['data'] : (alertRes['alerts'] ?? []);
+        }
+      }
+
+      // Fallback to recent_alerts from dashboard metrics if system alerts endpoint is empty
+      if (_systemAlerts.isEmpty && _metrics != null && _metrics!['recent_alerts'] is List) {
+        _systemAlerts = List<dynamic>.from(_metrics!['recent_alerts']);
       }
     } on DioException catch (e) {
       _errorMessage = e.response?.data?['message'] ?? 'Gagal memuat ringkasan dashboard.';

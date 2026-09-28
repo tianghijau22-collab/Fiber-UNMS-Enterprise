@@ -166,52 +166,69 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   ),
                 )
               else ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildMetricTile(
-                        title: 'Tiket Aktif',
-                        value: '${dashboard.metrics?['active_tickets'] ?? dashboard.metrics?['tickets']?['active'] ?? 0}',
-                        subtitle: 'Gangguan / Pasang',
-                        icon: Icons.confirmation_number_outlined,
-                        color: AppColors.warning,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildMetricTile(
-                        title: 'Total OLT',
-                        value: '${dashboard.metrics?['total_olts'] ?? dashboard.metrics?['olts']?['total'] ?? 0}',
-                        subtitle: 'Node Hardware',
-                        icon: Icons.router_outlined,
-                        color: AppColors.secondary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildMetricTile(
-                        title: 'Pelanggan Online',
-                        value: '${dashboard.metrics?['active_customers'] ?? dashboard.metrics?['customers']?['online'] ?? 0}',
-                        subtitle: 'ONT Terkoneksi',
-                        icon: Icons.people_outline,
-                        color: AppColors.success,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildMetricTile(
-                        title: 'Titik ODP',
-                        value: '${dashboard.metrics?['total_odp'] ?? dashboard.metrics?['nodes']?['odp'] ?? 0}',
-                        subtitle: 'Distribution Point',
-                        icon: Icons.alt_route,
-                        color: AppColors.accent,
-                      ),
-                    ),
-                  ],
+                Builder(
+                  builder: (context) {
+                    final overview = (dashboard.metrics?['overview'] is Map) ? dashboard.metrics!['overview'] as Map : {};
+                    final customerStats = (dashboard.metrics?['customer_stats'] is Map) ? dashboard.metrics!['customer_stats'] as Map : {};
+                    final onuHealth = (dashboard.metrics?['onu_health'] is Map) ? dashboard.metrics!['onu_health'] as Map : {};
+
+                    final activeTickets = overview['active_tickets'] ?? dashboard.metrics?['active_tickets'] ?? 0;
+                    final totalOlts = overview['total_olts'] ?? dashboard.metrics?['total_olts'] ?? 0;
+                    final onlineCustomers = customerStats['active_customers'] ?? onuHealth['online_count'] ?? customerStats['total_customers'] ?? 0;
+                    final totalOdp = overview['total_odp'] ?? dashboard.metrics?['total_odp'] ?? 0;
+
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildMetricTile(
+                                title: 'Tiket Aktif',
+                                value: '$activeTickets',
+                                subtitle: 'Gangguan / Pasang',
+                                icon: Icons.confirmation_number_outlined,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildMetricTile(
+                                title: 'Total OLT',
+                                value: '$totalOlts',
+                                subtitle: 'Node Hardware',
+                                icon: Icons.router_outlined,
+                                color: AppColors.secondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildMetricTile(
+                                title: 'Pelanggan Online',
+                                value: '$onlineCustomers',
+                                subtitle: 'ONT Terkoneksi',
+                                icon: Icons.people_outline,
+                                color: AppColors.success,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildMetricTile(
+                                title: 'Titik ODP',
+                                value: '$totalOdp',
+                                subtitle: 'Distribution Point',
+                                icon: Icons.alt_route,
+                                color: AppColors.accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
               const SizedBox(height: 24),
@@ -254,6 +271,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   itemCount: dashboard.systemAlerts.take(5).length,
                   itemBuilder: (ctx, i) {
                     final alert = dashboard.systemAlerts[i];
+                    final sev = alert['severity']?.toString().toUpperCase() ?? '';
+                    final isCritical = sev == 'CRITICAL' || sev == 'HIGH' || sev == 'DANGER';
+                    final title = alert['title'] ?? alert['message'] ?? alert['description'] ?? 'Alert Jaringan';
+                    final time = alert['time'] ?? alert['created_at'] ?? '';
+
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.all(12),
@@ -261,7 +283,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: (alert['severity'] == 'CRITICAL' || alert['severity'] == 'HIGH')
+                          color: isCritical
                               ? AppColors.danger.withValues(alpha: 0.5)
                               : AppColors.surfaceBorder,
                         ),
@@ -269,8 +291,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       child: Row(
                         children: [
                           Icon(
-                            Icons.warning_amber_rounded,
-                            color: (alert['severity'] == 'CRITICAL') ? AppColors.danger : AppColors.warning,
+                            isCritical ? Icons.error_outline : Icons.warning_amber_rounded,
+                            color: isCritical ? AppColors.danger : AppColors.warning,
                             size: 20,
                           ),
                           const SizedBox(width: 10),
@@ -279,12 +301,12 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  alert['title'] ?? alert['message'] ?? 'Alert Jaringan',
+                                  title,
                                   style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
                                 ),
-                                if (alert['created_at'] != null)
+                                if (time.isNotEmpty)
                                   Text(
-                                    alert['created_at'],
+                                    time,
                                     style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
                                   ),
                               ],
