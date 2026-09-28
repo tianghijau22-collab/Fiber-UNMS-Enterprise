@@ -1,7 +1,6 @@
 class ApiConstants {
-  // Default base URL for local development or LAN testing
-  // Can be dynamically changed in-app via App Settings
-  static const String defaultBaseUrl = 'http://10.0.2.2:8000/api'; 
+  // Default base URL for production server
+  static const String defaultBaseUrl = 'http://103.89.6.125/api'; 
   
   // Storage Keys
   static const String keyServerUrl = 'server_base_url';

@@ -76,9 +76,13 @@ class AuthProvider extends ChangeNotifier {
     } on DioException catch (e) {
       _isLoading = false;
       if (e.response != null && e.response?.data != null) {
-        _errorMessage = e.response?.data['message'] ?? 'Username atau password salah.';
+        if (e.response?.data is Map && e.response?.data['message'] != null) {
+          _errorMessage = e.response?.data['message'];
+        } else {
+          _errorMessage = 'Login gagal (${e.response?.statusCode}). Periksa kredensial Anda.';
+        }
       } else {
-        _errorMessage = 'Tidak dapat terhubung ke server. Periksa koneksi atau URL server.';
+        _errorMessage = 'Tidak dapat terhubung ke server (${e.type.name}). Periksa koneksi internet atau Server URL di tombol pengaturan kanan atas.';
       }
       notifyListeners();
       return false;

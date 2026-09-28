@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/network/dio_client.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../providers/auth_provider.dart';
 import '../main_navigation_shell.dart';
@@ -69,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
               controller: urlController,
               style: const TextStyle(color: AppColors.textPrimary),
               decoration: InputDecoration(
-                hintText: 'http://192.168.1.10:8000/api',
+                hintText: 'http://103.89.6.125/api',
                 hintStyle: const TextStyle(color: AppColors.textMuted),
                 filled: true,
                 fillColor: AppColors.surfaceLight,
@@ -86,11 +87,16 @@ class _LoginScreenState extends State<LoginScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
             onPressed: () async {
-              await storage.setServerUrl(urlController.text);
+              final newUrl = urlController.text.trim();
+              await storage.setServerUrl(newUrl);
+              DioClient().updateBaseUrl(newUrl);
               if (mounted) {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Server URL berhasil disimpan!')),
+                  SnackBar(
+                    content: Text('Server URL diubah: ${DioClient().dio.options.baseUrl}'),
+                    backgroundColor: AppColors.success,
+                  ),
                 );
               }
             },
