@@ -160,28 +160,36 @@ class SobokScraperService
                         $crmStatus = $isBlocked ? 'isolated' : 'active';
 
                         if ($primaryService) {
-                            $serviceUpdates[] = [
-                                'id'                   => $primaryService->id,
-                                'sobok_service_status' => $canonicalServiceStatus,
-                                'sobok_profile'        => $match['profile'] ?: $primaryService->sobok_profile,
-                                'sobok_sync_at'        => $now,
-                                'status'               => $crmStatus,
-                            ];
+                            $hasServiceChanged = ($primaryService->sobok_service_status !== $canonicalServiceStatus)
+                                || ($primaryService->status !== $crmStatus)
+                                || (!empty($match['profile']) && $primaryService->sobok_profile !== $match['profile']);
+
+                            if ($hasServiceChanged) {
+                                $serviceUpdates[] = [
+                                    'id'                   => $primaryService->id,
+                                    'sobok_service_status' => $canonicalServiceStatus,
+                                    'sobok_profile'        => $match['profile'] ?: $primaryService->sobok_profile,
+                                    'sobok_sync_at'        => $now,
+                                    'status'               => $crmStatus,
+                                ];
+                            }
                         }
 
-                        $customerStatusUpdates[] = [
-                            'id'     => $c->id,
-                            'status' => $crmStatus,
-                        ];
+                        if ($c->status !== $crmStatus) {
+                            $customerStatusUpdates[] = [
+                                'id'     => $c->id,
+                                'status' => $crmStatus,
+                            ];
+                        }
                     } else {
                         $unmatchedCount++;
                     }
                 }
 
-                // 6. Jalankan Bulk Update dalam Database Transaction
-                DB::transaction(function () use ($serviceUpdates, $customerStatusUpdates) {
-                    foreach (array_chunk($serviceUpdates, 200) as $chunk) {
-                        foreach ($chunk as $up) {
+                // 6. Jalankan Bulk Update HANYA jika ada data yang berubah (Ultra-Lightweight)
+                if (!empty($serviceUpdates) || !empty($customerStatusUpdates)) {
+                    DB::transaction(function () use ($serviceUpdates, $customerStatusUpdates) {
+                        foreach ($serviceUpdates as $up) {
                             CustomerService::where('id', $up['id'])->update([
                                 'sobok_service_status' => $up['sobok_service_status'],
                                 'sobok_profile'        => $up['sobok_profile'],
@@ -189,16 +197,14 @@ class SobokScraperService
                                 'status'               => $up['status'],
                             ]);
                         }
-                    }
 
-                    foreach (array_chunk($customerStatusUpdates, 200) as $chunk) {
-                        foreach ($chunk as $up) {
+                        foreach ($customerStatusUpdates as $up) {
                             Customer::where('id', $up['id'])->update([
                                 'status' => $up['status'],
                             ]);
                         }
-                    }
-                });
+                    });
+                }
 
                 $summary = [
                     'status'             => 'success',
