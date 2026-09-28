@@ -45,6 +45,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     final totalCustomers = customerStats['total_customers'] ?? onuHealth['total_registered'] ?? 0;
     final onlineCustomers = customerStats['active_customers'] ?? onuHealth['online_count'] ?? 0;
     final offlineCustomers = customerStats['offline_customers'] ?? onuHealth['offline_count'] ?? (totalCustomers - onlineCustomers);
+    final customerOnlinePct = totalCustomers > 0 ? ((onlineCustomers / totalCustomers) * 100) : 100.0;
 
     // OLT Metrics
     final totalOlts = overview['total_olts'] ?? regionalInfra.length;
@@ -74,21 +75,73 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
+        titleSpacing: 16,
         title: Row(
           children: [
-            const Icon(Icons.fiber_pin_rounded, color: AppColors.primary, size: 28),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.primary, AppColors.secondary],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.hub_rounded, color: Colors.white, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'FONA',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(width: 8),
             const Text(
-              'Fiber-UNMS',
-              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+              'Mobile',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: AppColors.textSecondary),
+            icon: Stack(
+              children: [
+                const Icon(Icons.notifications_outlined, color: AppColors.textPrimary, size: 24),
+                if (dashboard.systemAlerts.isNotEmpty)
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: AppColors.danger,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                    ),
+                  ),
+              ],
+            ),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemAlertScreen())),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.textSecondary, size: 22),
             onPressed: () => dashboard.fetchDashboardData(),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
@@ -101,53 +154,73 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // User Greeting Banner
+              // ── HERO GREETING BANNER (PLN Mobile Style) ──
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                    colors: [Color(0xFF00A3C4), Color(0xFF0284C7)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.surfaceBorder),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: AppColors.elevatedShadow,
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
-                      radius: 24,
-                      backgroundColor: AppColors.primary.withValues(alpha: 0.2),
+                      radius: 26,
+                      backgroundColor: Colors.white,
                       child: Text(
                         (user?.name.isNotEmpty ?? false) ? user!.name[0].toUpperCase() : 'U',
-                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 18),
+                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 20),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            user?.name ?? 'Pengguna',
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                'Hai, ${user?.name ?? 'Sobat FONA'}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Text('👋', style: TextStyle(fontSize: 14)),
+                            ],
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 4),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.15),
+                              color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              '${user?.role ?? 'User'} • ${user?.division ?? 'Fiber Operations'}',
-                              style: const TextStyle(color: AppColors.primaryLight, fontSize: 11, fontWeight: FontWeight.w600),
+                              '${user?.role ?? 'Teknisi'} • ${user?.division ?? 'Operasional Fiber'}',
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          CircleAvatar(radius: 3.5, backgroundColor: Color(0xFF4ADE80)),
+                          SizedBox(width: 5),
+                          Text('Online', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -156,7 +229,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ── 1. STATUS PELANGGAN (Online / Offline) ──
+              // ── 1. STATUS PELANGGAN ──
               _buildSectionHeader(
                 title: 'Pelanggan',
                 actionLabel: 'Lihat Semua',
@@ -167,8 +240,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.surfaceBorder),
+                  boxShadow: AppColors.cardShadow,
                 ),
                 child: Column(
                   children: [
@@ -180,20 +254,23 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                               context,
                               MaterialPageRoute(builder: (_) => const CustomerListScreen(initialFilter: 'ONLINE')),
                             ),
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                             child: Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: AppColors.success.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                                color: AppColors.successLight,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
                               ),
                               child: Row(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 18,
-                                    backgroundColor: AppColors.success.withValues(alpha: 0.2),
-                                    child: const Icon(Icons.wifi, color: AppColors.success, size: 18),
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.success.withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.wifi_rounded, color: AppColors.success, size: 20),
                                   ),
                                   const SizedBox(width: 10),
                                   Column(
@@ -201,9 +278,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                                     children: [
                                       Text(
                                         '$onlineCustomers',
-                                        style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold, fontSize: 20),
+                                        style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w900, fontSize: 22),
                                       ),
-                                      const Text('Online', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                      const Text('Online', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500)),
                                     ],
                                   ),
                                 ],
@@ -218,20 +295,23 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                               context,
                               MaterialPageRoute(builder: (_) => const CustomerListScreen(initialFilter: 'OFFLINE')),
                             ),
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                             child: Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: AppColors.danger.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+                                color: AppColors.dangerLight,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
                               ),
                               child: Row(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 18,
-                                    backgroundColor: AppColors.danger.withValues(alpha: 0.2),
-                                    child: const Icon(Icons.wifi_off, color: AppColors.danger, size: 18),
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.danger.withValues(alpha: 0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.wifi_off_rounded, color: AppColors.danger, size: 20),
                                   ),
                                   const SizedBox(width: 10),
                                   Column(
@@ -239,9 +319,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                                     children: [
                                       Text(
                                         '$offlineCustomers',
-                                        style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 20),
+                                        style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w900, fontSize: 22),
                                       ),
-                                      const Text('Offline', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                      const Text('Offline', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500)),
                                     ],
                                   ),
                                 ],
@@ -251,14 +331,24 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 14),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: totalCustomers > 0 ? (onlineCustomers / totalCustomers) : 1.0,
+                        backgroundColor: AppColors.danger.withValues(alpha: 0.2),
+                        color: AppColors.success,
+                        minHeight: 6,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Total Pelanggan Terdaftar: $totalCustomers', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                        Text('Total: $totalCustomers Pelanggan', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                         Text(
-                          totalCustomers > 0 ? '${((onlineCustomers / totalCustomers) * 100).toStringAsFixed(1)}% Online' : '100% Online',
-                          style: const TextStyle(color: AppColors.primaryLight, fontSize: 12, fontWeight: FontWeight.w600),
+                          '${customerOnlinePct.toStringAsFixed(1)}% Terhubung',
+                          style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -267,7 +357,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ),
               const SizedBox(height: 18),
 
-              // ── 2. STATUS PERANGKAT OLT (Online / Offline) ──
+              // ── 2. PERANGKAT OLT ──
               _buildSectionHeader(
                 title: 'Perangkat OLT',
                 actionLabel: 'Lihat Semua',
@@ -278,8 +368,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.surfaceBorder),
+                  boxShadow: AppColors.cardShadow,
                 ),
                 child: Row(
                   children: [
@@ -287,16 +378,19 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceLight,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                          color: AppColors.successLight,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.success.withValues(alpha: 0.2)),
                         ),
                         child: Row(
                           children: [
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor: AppColors.success.withValues(alpha: 0.2),
-                              child: const Icon(Icons.router_rounded, color: AppColors.success, size: 18),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.success.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.router_rounded, color: AppColors.success, size: 20),
                             ),
                             const SizedBox(width: 10),
                             Column(
@@ -304,9 +398,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                               children: [
                                 Text(
                                   '$oltOnline',
-                                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold, fontSize: 20),
+                                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w900, fontSize: 22),
                                 ),
-                                const Text('Online', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                const Text('Online', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ],
@@ -318,16 +412,19 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceLight,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+                          color: AppColors.dangerLight,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
                         ),
                         child: Row(
                           children: [
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor: AppColors.danger.withValues(alpha: 0.2),
-                              child: const Icon(Icons.router_outlined, color: AppColors.danger, size: 18),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.danger.withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.router_outlined, color: AppColors.danger, size: 20),
                             ),
                             const SizedBox(width: 10),
                             Column(
@@ -335,9 +432,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                               children: [
                                 Text(
                                   '$oltOffline',
-                                  style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 20),
+                                  style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w900, fontSize: 22),
                                 ),
-                                const Text('Offline', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                const Text('Offline', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ],
@@ -357,43 +454,44 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ),
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.surfaceBorder),
+                  boxShadow: AppColors.cardShadow,
                 ),
                 child: Row(
                   children: [
                     Expanded(
-                      child: _buildTicketStatItem(
+                      child: _buildTicketStatPill(
                         title: 'Aktif',
                         value: '$activeTickets',
                         color: AppColors.warning,
                         icon: Icons.confirmation_number_outlined,
                       ),
                     ),
-                    Container(height: 36, width: 1, color: AppColors.surfaceBorder),
+                    Container(height: 32, width: 1, color: AppColors.surfaceBorder),
                     Expanded(
-                      child: _buildTicketStatItem(
+                      child: _buildTicketStatPill(
                         title: 'Kritis',
                         value: '$criticalTickets',
                         color: AppColors.danger,
                         icon: Icons.warning_amber_rounded,
                       ),
                     ),
-                    Container(height: 36, width: 1, color: AppColors.surfaceBorder),
+                    Container(height: 32, width: 1, color: AppColors.surfaceBorder),
                     Expanded(
-                      child: _buildTicketStatItem(
+                      child: _buildTicketStatPill(
                         title: 'In Progress',
                         value: '$inProgressTickets',
                         color: AppColors.secondary,
-                        icon: Icons.pending_actions,
+                        icon: Icons.pending_actions_rounded,
                       ),
                     ),
-                    Container(height: 36, width: 1, color: AppColors.surfaceBorder),
+                    Container(height: 32, width: 1, color: AppColors.surfaceBorder),
                     Expanded(
-                      child: _buildTicketStatItem(
+                      child: _buildTicketStatPill(
                         title: 'Total',
                         value: '$totalTickets',
                         color: AppColors.primary,
@@ -403,78 +501,90 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 24),
 
-              // ── 4. PILIHAN MENU (Grid Navigasi Fitur) ──
+              // ── 4. PILIHAN MENU (Grid Fitur Populer ala PLN Mobile) ──
               const Text(
-                'Pilihan Menu',
-                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                'Pilihan Menu Fitur',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
               const SizedBox(height: 12),
               GridView.count(
-                crossAxisCount: 3,
+                crossAxisCount: 4,
                 crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-                childAspectRatio: 0.95,
+                mainAxisSpacing: 14,
+                childAspectRatio: 0.85,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _buildMenuCard(
-                    icon: Icons.notifications_active_outlined,
+                  _buildPlnMenuItem(
+                    icon: Icons.notifications_active_rounded,
                     label: 'Alert Sistem',
                     badge: dashboard.systemAlerts.isNotEmpty ? '${dashboard.systemAlerts.length}' : null,
                     badgeColor: AppColors.danger,
-                    color: AppColors.danger,
+                    iconColor: AppColors.danger,
+                    bgColor: AppColors.dangerLight,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemAlertScreen())),
                   ),
-                  _buildMenuCard(
+                  _buildPlnMenuItem(
                     icon: Icons.router_rounded,
                     label: 'OLT',
                     badge: '$totalOlts',
                     badgeColor: AppColors.secondary,
-                    color: AppColors.secondary,
+                    iconColor: AppColors.secondary,
+                    bgColor: AppColors.secondaryLight,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OltListScreen())),
                   ),
-                  _buildMenuCard(
+                  _buildPlnMenuItem(
                     icon: Icons.account_tree_rounded,
-                    label: 'Data ODP, ODC, POP',
+                    label: 'ODP, ODC, POP',
                     badge: '${overview['total_odp'] ?? 0}',
                     badgeColor: AppColors.warning,
-                    color: AppColors.warning,
+                    iconColor: AppColors.warning,
+                    bgColor: AppColors.warningLight,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NodesListScreen())),
                   ),
-                  _buildMenuCard(
+                  _buildPlnMenuItem(
                     icon: Icons.map_rounded,
                     label: 'Peta Sebaran',
-                    color: AppColors.accent,
+                    iconColor: AppColors.primary,
+                    bgColor: AppColors.primaryLight,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GisMapScreen())),
                   ),
-                  _buildMenuCard(
+                  _buildPlnMenuItem(
                     icon: Icons.people_alt_rounded,
                     label: 'Pelanggan',
                     badge: '$totalCustomers',
                     badgeColor: AppColors.primary,
-                    color: AppColors.primary,
+                    iconColor: AppColors.primary,
+                    bgColor: AppColors.primaryLight,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen())),
                   ),
-                  _buildMenuCard(
+                  _buildPlnMenuItem(
                     icon: Icons.confirmation_number_rounded,
                     label: 'Tickets',
                     badge: activeTickets > 0 ? '$activeTickets' : null,
                     badgeColor: AppColors.warning,
-                    color: AppColors.warning,
+                    iconColor: AppColors.warning,
+                    bgColor: AppColors.warningLight,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TicketListScreen())),
                   ),
-                  _buildMenuCard(
+                  _buildPlnMenuItem(
                     icon: Icons.speed_rounded,
                     label: 'Ukur ODP',
-                    color: AppColors.primary,
+                    iconColor: AppColors.secondary,
+                    bgColor: AppColors.secondaryLight,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OdpFormScreen())),
                   ),
-                  _buildMenuCard(
+                  _buildPlnMenuItem(
                     icon: Icons.qr_code_scanner_rounded,
                     label: 'Scan ONU',
-                    color: AppColors.secondary,
+                    iconColor: AppColors.accent,
+                    bgColor: AppColors.accentLight,
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OntScanScreen())),
                   ),
                 ],
@@ -483,8 +593,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
               // ── 5. ALERT JARINGAN TERKINI ──
               _buildSectionHeader(
-                title: 'Alert Jaringan Terkini',
-                actionLabel: 'Semua (${dashboard.systemAlerts.length})',
+                title: 'Alert & Info Terkini',
+                actionLabel: 'Lihat Semua (${dashboard.systemAlerts.length})',
                 onAction: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemAlertScreen())),
               ),
               const SizedBox(height: 10),
@@ -494,8 +604,9 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: AppColors.surfaceBorder),
+                    boxShadow: AppColors.cardShadow,
                   ),
                   child: const Center(
                     child: Text(
@@ -521,19 +632,27 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isCritical
-                              ? AppColors.danger.withValues(alpha: 0.5)
+                              ? AppColors.danger.withValues(alpha: 0.3)
                               : AppColors.surfaceBorder,
                         ),
+                        boxShadow: AppColors.cardShadow,
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            isCritical ? Icons.error_outline : Icons.warning_amber_rounded,
-                            color: isCritical ? AppColors.danger : AppColors.warning,
-                            size: 20,
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: isCritical ? AppColors.dangerLight : AppColors.warningLight,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isCritical ? Icons.error_outline : Icons.warning_amber_rounded,
+                              color: isCritical ? AppColors.danger : AppColors.warning,
+                              size: 18,
+                            ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -587,14 +706,14 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           onPressed: onAction,
           child: Text(
             actionLabel,
-            style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildTicketStatItem({
+  Widget _buildTicketStatPill({
     required String title,
     required String value,
     required Color color,
@@ -606,81 +725,85 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         const SizedBox(height: 4),
         Text(
           value,
-          style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 17),
+          style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 17),
         ),
         Text(
           title,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w500),
         ),
       ],
     );
   }
 
-  Widget _buildMenuCard({
+  Widget _buildPlnMenuItem({
     required IconData icon,
     required String label,
-    required Color color,
+    required Color iconColor,
+    required Color bgColor,
     String? badge,
     Color? badgeColor,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.surfaceBorder),
-        ),
-        child: Stack(
-          children: [
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: iconColor.withValues(alpha: 0.12),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
                     ),
-                    child: Icon(icon, color: color, size: 24),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            if (badge != null)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: badgeColor ?? color,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    badge,
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                  ),
+                  ],
+                ),
+                child: Center(
+                  child: Icon(icon, color: iconColor, size: 26),
                 ),
               ),
-          ],
-        ),
+              if (badge != null)
+                Positioned(
+                  top: -4,
+                  right: -4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: badgeColor ?? iconColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    child: Text(
+                      badge,
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              height: 1.2,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

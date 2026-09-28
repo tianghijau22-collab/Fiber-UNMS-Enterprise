@@ -3,6 +3,6 @@ import 'package:fiber_unms_mobile/main.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const FiberUnmsApp());
+    await tester.pumpWidget(const FonaMobileApp());
   });
 }

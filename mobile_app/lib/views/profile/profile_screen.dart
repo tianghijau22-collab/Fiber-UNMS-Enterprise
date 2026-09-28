@@ -35,7 +35,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: AppColors.surface,
         title: const Text('Konfirmasi Logout', style: TextStyle(color: AppColors.textPrimary)),
         content: const Text(
-          'Apakah Anda yakin ingin keluar dari akun sistem Fiber-UNMS?',
+          'Apakah Anda yakin ingin keluar dari akun FONA Mobile?',
           style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [

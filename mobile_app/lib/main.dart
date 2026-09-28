@@ -13,24 +13,25 @@ import 'views/main_navigation_shell.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Set Status Bar color to Dark Theme
+  // Set Status Bar color to Modern Clean Professional Style (PLN Mobile look)
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
       systemNavigationBarColor: AppColors.surface,
-      systemNavigationBarIconBrightness: Brightness.light,
+      systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
 
   // Initialize Network Client
   await DioClient().init();
 
-  runApp(const FiberUnmsApp());
+  runApp(const FonaMobileApp());
 }
 
-class FiberUnmsApp extends StatelessWidget {
-  const FiberUnmsApp({super.key});
+class FonaMobileApp extends StatelessWidget {
+  const FonaMobileApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -42,14 +43,14 @@ class FiberUnmsApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => OdpProvider()),
       ],
       child: MaterialApp(
-        title: 'Fiber-UNMS Mobile',
+        title: 'FONA Mobile',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
-          brightness: Brightness.dark,
+          brightness: Brightness.light,
           scaffoldBackgroundColor: AppColors.background,
           primaryColor: AppColors.primary,
-          colorScheme: const ColorScheme.dark(
+          colorScheme: const ColorScheme.light(
             primary: AppColors.primary,
             secondary: AppColors.secondary,
             surface: AppColors.surface,
@@ -63,6 +64,14 @@ class FiberUnmsApp extends StatelessWidget {
               color: AppColors.textPrimary,
               fontSize: 18,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+          cardTheme: CardTheme(
+            color: AppColors.surface,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: AppColors.surfaceBorder),
             ),
           ),
         ),

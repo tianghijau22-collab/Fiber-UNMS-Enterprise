@@ -52,8 +52,8 @@ class AppTestingController extends Controller
         return response()->json([
             'status' => 'success',
             'data' => [
-                'app_name'          => 'Fiber-UNMS Mobile Enterprise',
-                'app_version'       => '1.0.0+1 (Beta Testing)',
+                'app_name'          => 'Fona Mobile Enterprise',
+                'app_version'       => '1.0.0+1 (Fona Edition)',
                 'package_name'      => 'com.fiberunms.mobile',
                 'framework'         => 'Flutter (Dart) Cross-Platform',
                 'is_apk_available'  => $exists,
