@@ -42,7 +42,7 @@ export default function ServerMonitoring() {
 
   // Polling settings
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState(3000); // 3 detik default
+  const [refreshInterval, setRefreshInterval] = useState(5000); // 5 detik default (Hemat CPU)
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Trigger worker state
@@ -351,6 +351,7 @@ export default function ServerMonitoring() {
   useEffect(() => {
     if (!autoRefresh) return;
     const timer = setInterval(() => {
+      if (document.hidden) return; // Jangan request jika tab sedang tidak dilihat user
       fetchMetrics();
     }, refreshInterval);
     return () => clearInterval(timer);

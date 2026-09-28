@@ -348,52 +348,57 @@ class ServerMonitoringController extends Controller
         $rootUsed = max(0, $rootTotal - $rootFree);
         $rootUsedPct = $rootTotal > 0 ? round(($rootUsed / $rootTotal) * 100, 1) : 0;
 
-        // DB Size query (PostgreSQL / SQLite fallback)
-        $dbSizeMb = 15.0;
-        try {
-            $dbDriver = config('database.default', 'pgsql');
-            if ($dbDriver === 'pgsql') {
-                $dbName = config('database.connections.pgsql.database', 'fiber_unms_enterprise');
-                $sizeQuery = DB::selectOne("SELECT pg_database_size(?) AS size", [$dbName]);
-                if ($sizeQuery && isset($sizeQuery->size)) {
-                    $dbSizeMb = round((int)$sizeQuery->size / 1024 / 1024, 2);
+        // DB Size query (PostgreSQL / SQLite fallback) - Cached for 60 seconds
+        $dbSizeMb = Cache::remember('server_mon_dbsize', 60, function () {
+            try {
+                $dbDriver = config('database.default', 'pgsql');
+                if ($dbDriver === 'pgsql') {
+                    $dbName = config('database.connections.pgsql.database', 'fiber_unms_enterprise');
+                    $sizeQuery = DB::selectOne("SELECT pg_database_size(?) AS size", [$dbName]);
+                    if ($sizeQuery && isset($sizeQuery->size)) {
+                        return round((int)$sizeQuery->size / 1024 / 1024, 2);
+                    }
+                }
+            } catch (\Throwable $e) {
+                // fallback
+            }
+            return 15.0;
+        });
+
+        // Partisi sistem (df) - Cached for 30 seconds
+        $partitions = Cache::remember('server_mon_partitions', 30, function () use ($rootTotal, $rootUsed, $rootFree, $rootUsedPct) {
+            $partsList = [];
+            $dfOutput = @shell_exec('df -h -x tmpfs -x devtmpfs -x squashfs 2>/dev/null');
+            if ($dfOutput) {
+                $lines = explode("\n", trim($dfOutput));
+                array_shift($lines); // header
+                foreach ($lines as $line) {
+                    $parts = preg_split('/\s+/', $line);
+                    if (count($parts) >= 6) {
+                        $partsList[] = [
+                            'filesystem' => $parts[0],
+                            'size'       => $parts[1],
+                            'used'       => $parts[2],
+                            'avail'      => $parts[3],
+                            'use_pct'    => (int)str_replace('%', '', $parts[4]),
+                            'mount'      => $parts[5],
+                        ];
+                    }
                 }
             }
-        } catch (\Throwable $e) {
-            // fallback
-        }
 
-        // Partisi sistem (df)
-        $partitions = [];
-        $dfOutput = @shell_exec('df -h -x tmpfs -x devtmpfs -x squashfs 2>/dev/null');
-        if ($dfOutput) {
-            $lines = explode("\n", trim($dfOutput));
-            array_shift($lines); // header
-            foreach ($lines as $line) {
-                $parts = preg_split('/\s+/', $line);
-                if (count($parts) >= 6) {
-                    $partitions[] = [
-                        'filesystem' => $parts[0],
-                        'size'       => $parts[1],
-                        'used'       => $parts[2],
-                        'avail'      => $parts[3],
-                        'use_pct'    => (int)str_replace('%', '', $parts[4]),
-                        'mount'      => $parts[5],
-                    ];
-                }
+            if (empty($partsList)) {
+                $partsList[] = [
+                    'filesystem' => '/dev/vda1',
+                    'size'       => round($rootTotal / 1024 / 1024 / 1024, 1) . 'G',
+                    'used'       => round($rootUsed / 1024 / 1024 / 1024, 1) . 'G',
+                    'avail'      => round($rootFree / 1024 / 1024 / 1024, 1) . 'G',
+                    'use_pct'    => (int)$rootUsedPct,
+                    'mount'      => '/',
+                ];
             }
-        }
-
-        if (empty($partitions)) {
-            $partitions[] = [
-                'filesystem' => '/dev/vda1',
-                'size'       => round($rootTotal / 1024 / 1024 / 1024, 1) . 'G',
-                'used'       => round($rootUsed / 1024 / 1024 / 1024, 1) . 'G',
-                'avail'      => round($rootFree / 1024 / 1024 / 1024, 1) . 'G',
-                'use_pct'    => (int)$rootUsedPct,
-                'mount'      => '/',
-            ];
-        }
+            return $partsList;
+        });
 
         return [
             'total_gb'    => round($rootTotal / 1024 / 1024 / 1024, 2),
@@ -479,120 +484,123 @@ class ServerMonitoringController extends Controller
 
     /**
      * Membaca status, gateway, latensi, dan performa VPN Tunnel (PPTP/L2TP/WireGuard)
+     * Di-cache selama 12 detik agar tidak men-spawn ping berulang-ulang setiap request.
      */
     protected function getVpnTunnelMetrics(): array
     {
-        $ipAddr = @shell_exec("ip -o addr show 2>/dev/null") ?: '';
-        $vpnInterfaces = [];
-        $primaryTunnel = null;
+        return Cache::remember('server_mon_vpn_metrics', 12, function () {
+            $ipAddr = @shell_exec("ip -o addr show 2>/dev/null") ?: '';
+            $vpnInterfaces = [];
+            $primaryTunnel = null;
 
-        foreach (explode("\n", trim($ipAddr)) as $line) {
-            if (preg_match('/\d+:\s+(ppp\d+|wg\d+|tun\d+)\s+inet\s+([\d\.]+)\s+peer\s+([\d\.]+)/', $line, $m)) {
-                $ifName  = $m[1];
-                $localIp = $m[2];
-                $peerIp  = $m[3];
+            foreach (explode("\n", trim($ipAddr)) as $line) {
+                if (preg_match('/\d+:\s+(ppp\d+|wg\d+|tun\d+)\s+inet\s+([\d\.]+)\s+peer\s+([\d\.]+)/', $line, $m)) {
+                    $ifName  = $m[1];
+                    $localIp = $m[2];
+                    $peerIp  = $m[3];
 
-                $vpnInterfaces[] = [
-                    'name'     => $ifName,
-                    'type'     => str_starts_with($ifName, 'ppp') ? 'Point-to-Point (PPTP/L2TP)' : (str_starts_with($ifName, 'wg') ? 'WireGuard' : 'OpenVPN / Tunnel'),
-                    'local_ip' => $localIp,
-                    'peer_ip'  => $peerIp,
-                ];
-
-                if (!$primaryTunnel) {
-                    $primaryTunnel = [
+                    $vpnInterfaces[] = [
                         'name'     => $ifName,
+                        'type'     => str_starts_with($ifName, 'ppp') ? 'Point-to-Point (PPTP/L2TP)' : (str_starts_with($ifName, 'wg') ? 'WireGuard' : 'OpenVPN / Tunnel'),
                         'local_ip' => $localIp,
                         'peer_ip'  => $peerIp,
                     ];
+
+                    if (!$primaryTunnel) {
+                        $primaryTunnel = [
+                            'name'     => $ifName,
+                            'local_ip' => $localIp,
+                            'peer_ip'  => $peerIp,
+                        ];
+                    }
                 }
             }
-        }
 
-        $peerIp = $primaryTunnel['peer_ip'] ?? '10.254.0.2';
-        $peerLatency = null;
-        $packetLoss = 0;
-        $jitter = 0;
-        $status = 'DISCONNECTED';
-        $quality = 'DOWN';
-        $qualityText = 'Tunnel Tidak Terhubung / Timeout';
-        $qualityColor = 'rose';
+            $peerIp = $primaryTunnel['peer_ip'] ?? '10.254.0.2';
+            $peerLatency = null;
+            $packetLoss = 0;
+            $jitter = 0;
+            $status = 'DISCONNECTED';
+            $quality = 'DOWN';
+            $qualityText = 'Tunnel Tidak Terhubung / Timeout';
+            $qualityColor = 'rose';
 
-        // 2. Fast Ping Test to VPN Peer Gateway (2 packets with 0.2s interval, total ~200ms)
-        $pingOut = @shell_exec("ping -c 2 -i 0.2 -W 1 {$peerIp} 2>&1") ?: '';
-        if (preg_match('/rtt min\/avg\/max\/mdev = ([\d\.]+)\/([\d\.]+)\/([\d\.]+)\/([\d\.]+)/', $pingOut, $m)) {
-            $peerLatency = round((float)$m[2], 1);
-            $jitter      = round((float)$m[4], 2);
-            $status      = 'CONNECTED';
-        } elseif (preg_match('/time=([\d\.]+)\s*ms/', $pingOut, $m)) {
-            $peerLatency = round((float)$m[1], 1);
-            $status      = 'CONNECTED';
-        }
-
-        if (preg_match('/(\d+)%\s+packet loss/', $pingOut, $m)) {
-            $packetLoss = (int)$m[1];
-        }
-
-        // Tentukan Kualitas Latensi VPN
-        if ($status === 'CONNECTED' && $peerLatency !== null) {
-            if ($peerLatency < 30.0 && $packetLoss === 0) {
-                $quality = 'OPTIMAL'; // Sangat Bagus (< 30ms)
-                $qualityText = 'Sangat Bagus (Optimal)';
-                $qualityColor = 'emerald';
-            } elseif ($peerLatency <= 60.0 && $packetLoss <= 5) {
-                $quality = 'GOOD'; // Normal (30 - 60ms)
-                $qualityText = 'Normal (Baik)';
-                $qualityColor = 'emerald';
-            } elseif ($peerLatency <= 120.0) {
-                $quality = 'MODERATE'; // Sedang / Waspada (60 - 120ms)
-                $qualityText = 'Latensi Meningkat (Sedang)';
-                $qualityColor = 'amber';
-            } else {
-                $quality = 'DEGRADED'; // Tinggi (> 120ms atau packet loss)
-                $qualityText = 'Latensi Tinggi / Degradasi';
-                $qualityColor = 'rose';
+            // 2. Fast Ping Test to VPN Peer Gateway (2 packets with 0.2s interval)
+            $pingOut = @shell_exec("ping -c 2 -i 0.2 -W 1 {$peerIp} 2>&1") ?: '';
+            if (preg_match('/rtt min\/avg\/max\/mdev = ([\d\.]+)\/([\d\.]+)\/([\d\.]+)\/([\d\.]+)/', $pingOut, $m)) {
+                $peerLatency = round((float)$m[2], 1);
+                $jitter      = round((float)$m[4], 2);
+                $status      = 'CONNECTED';
+            } elseif (preg_match('/time=([\d\.]+)\s*ms/', $pingOut, $m)) {
+                $peerLatency = round((float)$m[1], 1);
+                $status      = 'CONNECTED';
             }
-        }
 
-        // 3. Ping ke OLT Terdaftar di Database untuk verifikasi end-to-end OLT reachability
-        $oltTargets = [];
-        try {
-            $olts = \App\Models\OltDevice::where('status', 'active')->get();
-            foreach ($olts as $olt) {
-                $oltIp = $olt->ip_address;
-                $oltPing = @shell_exec("ping -c 1 -W 1 {$oltIp} 2>&1") ?: '';
-                $oltLat = null;
-                if (preg_match('/time=([\d\.]+)\s*ms/', $oltPing, $m)) {
-                    $oltLat = round((float)$m[1], 1);
+            if (preg_match('/(\d+)%\s+packet loss/', $pingOut, $m)) {
+                $packetLoss = (int)$m[1];
+            }
+
+            // Tentukan Kualitas Latensi VPN
+            if ($status === 'CONNECTED' && $peerLatency !== null) {
+                if ($peerLatency < 30.0 && $packetLoss === 0) {
+                    $quality = 'OPTIMAL'; // Sangat Bagus (< 30ms)
+                    $qualityText = 'Sangat Bagus (Optimal)';
+                    $qualityColor = 'emerald';
+                } elseif ($peerLatency <= 60.0 && $packetLoss <= 5) {
+                    $quality = 'GOOD'; // Normal (30 - 60ms)
+                    $qualityText = 'Normal (Baik)';
+                    $qualityColor = 'emerald';
+                } elseif ($peerLatency <= 120.0) {
+                    $quality = 'MODERATE'; // Sedang / Waspada (60 - 120ms)
+                    $qualityText = 'Latensi Meningkat (Sedang)';
+                    $qualityColor = 'amber';
+                } else {
+                    $quality = 'DEGRADED'; // Tinggi (> 120ms atau packet loss)
+                    $qualityText = 'Latensi Tinggi / Degradasi';
+                    $qualityColor = 'rose';
                 }
-                $oltTargets[] = [
-                    'id'         => $olt->id,
-                    'name'       => $olt->name,
-                    'ip'         => $oltIp,
-                    'vendor'     => $olt->vendor,
-                    'latency_ms' => $oltLat,
-                    'status'     => $oltLat !== null ? 'REACHABLE' : 'UNREACHABLE',
-                ];
             }
-        } catch (\Throwable $e) {
-            // fallback
-        }
 
-        return [
-            'status'           => $status,
-            'interface'        => $primaryTunnel['name'] ?? 'ppp0',
-            'local_ip'         => $primaryTunnel['local_ip'] ?? '10.254.0.1',
-            'peer_ip'          => $peerIp,
-            'peer_latency_ms'  => $peerLatency,
-            'packet_loss_pct'  => $packetLoss,
-            'jitter_ms'        => $jitter,
-            'quality'          => $quality,
-            'quality_text'     => $qualityText,
-            'quality_color'    => $qualityColor,
-            'routes'           => ['10.11.0.0/16', '192.168.100.0/24'],
-            'olt_targets'      => $oltTargets,
-            'all_interfaces'   => $vpnInterfaces,
-        ];
+            // 3. Ping ke OLT Terdaftar di Database
+            $oltTargets = [];
+            try {
+                $olts = \App\Models\OltDevice::where('status', 'active')->get();
+                foreach ($olts as $olt) {
+                    $oltIp = $olt->ip_address;
+                    $oltPing = @shell_exec("ping -c 1 -W 1 {$oltIp} 2>&1") ?: '';
+                    $oltLat = null;
+                    if (preg_match('/time=([\d\.]+)\s*ms/', $oltPing, $m)) {
+                        $oltLat = round((float)$m[1], 1);
+                    }
+                    $oltTargets[] = [
+                        'id'         => $olt->id,
+                        'name'       => $olt->name,
+                        'ip'         => $oltIp,
+                        'vendor'     => $olt->vendor,
+                        'latency_ms' => $oltLat,
+                        'status'     => $oltLat !== null ? 'REACHABLE' : 'UNREACHABLE',
+                    ];
+                }
+            } catch (\Throwable $e) {
+                // fallback
+            }
+
+            return [
+                'status'           => $status,
+                'interface'        => $primaryTunnel['name'] ?? 'ppp0',
+                'local_ip'         => $primaryTunnel['local_ip'] ?? '10.254.0.1',
+                'peer_ip'          => $peerIp,
+                'peer_latency_ms'  => $peerLatency,
+                'packet_loss_pct'  => $packetLoss,
+                'jitter_ms'        => $jitter,
+                'quality'          => $quality,
+                'quality_text'     => $qualityText,
+                'quality_color'    => $qualityColor,
+                'routes'           => ['10.11.0.0/16', '192.168.100.0/24'],
+                'olt_targets'      => $oltTargets,
+                'all_interfaces'   => $vpnInterfaces,
+            ];
+        });
     }
 
     /**
@@ -829,43 +837,45 @@ class ServerMonitoringController extends Controller
     }
 
     /**
-     * Membaca 5 proses teratas yang mengonsumsi CPU & RAM tertinggi
+     * Membaca 5 proses teratas yang mengonsumsi CPU & RAM tertinggi (Cached 6s)
      */
     protected function getTopProcesses(): array
     {
-        $processes = [];
-        $output = @shell_exec('ps aux --sort=-%cpu | head -n 6 2>/dev/null');
+        return Cache::remember('server_mon_top_processes', 6, function () {
+            $processes = [];
+            $output = @shell_exec('ps aux --sort=-%cpu | head -n 6 2>/dev/null');
 
-        if ($output) {
-            $lines = explode("\n", trim($output));
-            array_shift($lines); // header
+            if ($output) {
+                $lines = explode("\n", trim($output));
+                array_shift($lines); // header
 
-            foreach ($lines as $line) {
-                $parts = preg_split('/\s+/', $line, 11);
-                if (count($parts) >= 11) {
-                    $processes[] = [
-                        'user'    => $parts[0],
-                        'pid'     => $parts[1],
-                        'cpu_pct' => (float)$parts[2],
-                        'mem_pct' => (float)$parts[3],
-                        'time'    => $parts[9],
-                        'command' => basename($parts[10]),
-                        'full_cmd'=> $parts[10],
-                    ];
+                foreach ($lines as $line) {
+                    $parts = preg_split('/\s+/', $line, 11);
+                    if (count($parts) >= 11) {
+                        $processes[] = [
+                            'user'    => $parts[0],
+                            'pid'     => $parts[1],
+                            'cpu_pct' => (float)$parts[2],
+                            'mem_pct' => (float)$parts[3],
+                            'time'    => $parts[9],
+                            'command' => basename($parts[10]),
+                            'full_cmd'=> $parts[10],
+                        ];
+                    }
                 }
             }
-        }
 
-        if (empty($processes)) {
-            $processes = [
-                ['user' => 'www-data', 'pid' => '1204', 'cpu_pct' => 1.8, 'mem_pct' => 2.4, 'time' => '00:15', 'command' => 'php-fpm8.3', 'full_cmd' => 'php-fpm: pool www'],
-                ['user' => 'postgres', 'pid' => '842',  'cpu_pct' => 0.9, 'mem_pct' => 3.1, 'time' => '01:02', 'command' => 'postgres',   'full_cmd' => '/usr/lib/postgresql/16/bin/postgres'],
-                ['user' => 'root',     'pid' => '1102', 'cpu_pct' => 0.4, 'mem_pct' => 1.2, 'time' => '00:08', 'command' => 'nginx',      'full_cmd' => 'nginx: worker process'],
-                ['user' => 'root',     'pid' => '512',  'cpu_pct' => 0.2, 'mem_pct' => 0.8, 'time' => '00:02', 'command' => 'sshd',       'full_cmd' => 'sshd: /usr/sbin/sshd'],
-            ];
-        }
+            if (empty($processes)) {
+                $processes = [
+                    ['user' => 'www-data', 'pid' => '1204', 'cpu_pct' => 1.8, 'mem_pct' => 2.4, 'time' => '00:15', 'command' => 'php-fpm8.3', 'full_cmd' => 'php-fpm: pool www'],
+                    ['user' => 'postgres', 'pid' => '842',  'cpu_pct' => 0.9, 'mem_pct' => 3.1, 'time' => '01:02', 'command' => 'postgres',   'full_cmd' => '/usr/lib/postgresql/16/bin/postgres'],
+                    ['user' => 'root',     'pid' => '1102', 'cpu_pct' => 0.4, 'mem_pct' => 1.2, 'time' => '00:08', 'command' => 'nginx',      'full_cmd' => 'nginx: worker process'],
+                    ['user' => 'root',     'pid' => '512',  'cpu_pct' => 0.2, 'mem_pct' => 0.8, 'time' => '00:02', 'command' => 'sshd',       'full_cmd' => 'sshd: /usr/sbin/sshd'],
+                ];
+            }
 
-        return $processes;
+            return $processes;
+        });
     }
 
     /**
@@ -912,20 +922,19 @@ class ServerMonitoringController extends Controller
      */
     protected function getSnmpTrapMetrics(): array
     {
-        // 1. Status Service Systemd (fiber-event-listener.service)
-        $systemdStatus = 'INACTIVE';
-        $systemdOutput = [];
-        $exitCode = 0;
-        @exec('systemctl is-active fiber-event-listener 2>/dev/null', $systemdOutput, $exitCode);
-        $rawStatus = trim($systemdOutput[0] ?? '');
-        if ($rawStatus === 'active') {
-            $systemdStatus = 'ACTIVE';
-        }
-
-        // 2. Heartbeat check (Daemon menulis timestamp setiap 5 detik)
+        // 1. Heartbeat check (Daemon menulis timestamp setiap 5 detik)
         $lastHeartbeat = (int)Cache::get('snmp_trap_listener_heartbeat', 0);
-        $isHeartbeatAlive = (time() - $lastHeartbeat) <= 15;
-        $listenerStatus = Cache::get('snmp_trap_listener_status', []);
+        $isHeartbeatAlive = (time() - $lastHeartbeat) <= 20;
+
+        // 2. Status Service Systemd - Cached 15s jika heartbeat tidak aktif
+        $systemdStatus = Cache::remember('server_mon_trap_svc_status', 15, function () use ($isHeartbeatAlive) {
+            if ($isHeartbeatAlive) return 'ACTIVE';
+            $systemdOutput = [];
+            $exitCode = 0;
+            @exec('systemctl is-active fiber-event-listener 2>/dev/null', $systemdOutput, $exitCode);
+            $rawStatus = trim($systemdOutput[0] ?? '');
+            return ($rawStatus === 'active') ? 'ACTIVE' : 'INACTIVE';
+        });
 
         $isActive = ($systemdStatus === 'ACTIVE') || $isHeartbeatAlive;
 
