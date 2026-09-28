@@ -63,6 +63,58 @@ class FastOpticalProbeService
     }
 
     /**
+     * Eksekusi SNMP Bulk Walk berkecepatan tinggi menggunakan CLI snmpbulkwalk (dengan fallback ke PHP SNMP session)
+     */
+    public static function executeSnmpBulkWalk(OltDevice $olt, string $oid, int $maxRepetitions = 30, int $timeoutSec = 10): array
+    {
+        $ip = $olt->ip_address;
+        $community = $olt->getEffectiveCommunity() ?: 'public';
+        $port = $olt->snmp_port ?: 161;
+
+        // Cek apakah snmpbulkwalk CLI tersedia di server Linux
+        static $hasBulkWalk = null;
+        if ($hasBulkWalk === null) {
+            $hasBulkWalk = (PHP_OS_FAMILY !== 'Windows' && !empty(shell_exec('which snmpbulkwalk 2>/dev/null')));
+        }
+
+        if ($hasBulkWalk) {
+            $cmd = "snmpbulkwalk -v2c -c " . escapeshellarg($community) . " -t {$timeoutSec} -r 1 -Cr{$maxRepetitions} -On " . escapeshellarg("{$ip}:{$port}") . " " . escapeshellarg($oid) . " 2>/dev/null";
+            $output = @shell_exec($cmd);
+            if ($output) {
+                $lines = explode("\n", trim($output));
+                $results = [];
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if (!$line || str_contains($line, 'No Such Object') || str_contains($line, 'No Such Instance')) {
+                        continue;
+                    }
+                    $parts = explode('=', $line, 2);
+                    if (count($parts) === 2) {
+                        $resOid = ltrim(trim($parts[0]), '.');
+                        $resVal = trim($parts[1]);
+                        $results[$resOid] = $resVal;
+                    }
+                }
+                if (!empty($results)) {
+                    return $results;
+                }
+            }
+        }
+
+        // Fallback ke PHP SNMP extension
+        $session = self::getSnmpSession($olt, $timeoutSec * 1000);
+        if ($session) {
+            try {
+                return @$session->walk($oid) ?: [];
+            } catch (\Throwable $e) {
+                return [];
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * Parse raw SNMP serial number string from ZTE OLT to clean format (e.g. ZTEGC123456)
      */
     public static function parseZteSerialNumber(string $raw): string
