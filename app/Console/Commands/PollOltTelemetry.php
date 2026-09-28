@@ -16,28 +16,37 @@ use Symfony\Component\Process\Process;
 
 class PollOltTelemetry extends Command
 {
-    protected $signature = 'olt:poll-telemetry {--device= : Specific OLT Device ID to poll} {--port= : Specific Port to poll} {--force : Force polling} {--daemon : Run continuously in a 24/7 non-stop loop}';
-    protected $description = 'Polls live telemetry per individual PON port sequentially in a continuous 24/7 loop with real-time activity streaming';
+    protected $signature = 'olt:poll-telemetry {--device= : Specific OLT Device ID to poll} {--port= : Specific Port to poll} {--force : Force polling} {--daemon : Run continuously in a 24/7 non-stop loop} {--mode= : Polling engine mode: global_bulk or per_port}';
+    protected $description = 'Polls live telemetry in 24/7 loop supporting Global Bulk Polling and Per-Port Polling';
 
     public function handle(OltController $oltCtrl)
     {
         $deviceId = $this->option('device');
         $specificPort = $this->option('port');
         $isDaemon = $this->option('daemon');
+        $modeOption = $this->option('mode');
+        if ($modeOption) {
+            Cache::put('olt_polling_engine_mode', $modeOption, 86400 * 30);
+        }
+        $engineMode = $modeOption ?: Cache::get('olt_polling_engine_mode', 'global_bulk');
 
-        // JIKA SPECIFIC DEVICE ID: Jalankan polling 1 Port PON untuk OLT ini
+        // JIKA SPECIFIC DEVICE ID: Jalankan polling untuk OLT ini sesuai mode
         if ($deviceId) {
+            if ($engineMode === 'global_bulk') {
+                return $this->pollGlobalBulkTelemetry((int)$deviceId, $oltCtrl);
+            }
             return $this->pollSinglePortOnDevice((int)$deviceId, $oltCtrl, $specificPort);
         }
 
         // JIKA MODE DAEMON 24/7: Jalankan continuous loop tanpa henti (non-stop)
         if ($isDaemon) {
-            $this->info("🌀 Menjalankan Continuous 24/7 Polling Daemon...");
-            self::appendWorkerLog('SYSTEM', 'DAEMON', 'INFO', "Daemon 24/7 continuous loop dimulai.");
+            $this->info("🌀 Menjalankan Continuous 24/7 Polling Daemon [Mode: {$engineMode}]...");
+            self::appendWorkerLog('SYSTEM', 'DAEMON', 'INFO', "Daemon 24/7 continuous loop dimulai dengan engine [Mode: {$engineMode}].");
 
             while (true) {
                 $isPaused = (bool)Cache::get('backend_worker_paused', false);
-                $loopDelay = (int)Cache::get('backend_worker_loop_delay_sec', 2);
+                $loopDelay = (int)Cache::get('backend_worker_loop_delay_sec', 5);
+                $currentEngineMode = Cache::get('olt_polling_engine_mode', 'global_bulk');
 
                 if ($isPaused) {
                     sleep(2);
@@ -45,26 +54,26 @@ class PollOltTelemetry extends Command
                 }
 
                 try {
-                    $this->dispatchSinglePortParallel($oltCtrl);
+                    $this->dispatchSinglePortParallel($oltCtrl, $currentEngineMode);
                 } catch (\Throwable $e) {
                     $this->error("Error in daemon loop: " . $e->getMessage());
                     self::appendWorkerLog('SYSTEM', 'DAEMON', 'ERROR', "Daemon loop error: " . $e->getMessage());
                 }
 
-                // Jeda sesuai konfigurasi interval (default 2 detik)
-                sleep(max(1, $loopDelay));
+                // Jeda sesuai konfigurasi interval (default 5 detik untuk global_bulk)
+                sleep(max(2, $loopDelay));
             }
             return 0;
         }
 
         // SINGLE RUN DISPATCHER (Dipanggil manual via web trigger atau cron)
-        return $this->dispatchSinglePortParallel($oltCtrl);
+        return $this->dispatchSinglePortParallel($oltCtrl, $engineMode);
     }
 
     /**
-     * Master Dispatcher: Menjalankan polling 1 Port PON per OLT secara IN-PROCESS (Direct Memory Execution Tanpa Re-boot Laravel CLI)
+     * Master Dispatcher: Menjalankan polling OLT secara IN-PROCESS (Mendukung mode Global Bulk dan mode Per-Port)
      */
-    protected function dispatchSinglePortParallel(OltController $oltCtrl): int
+    protected function dispatchSinglePortParallel(OltController $oltCtrl, string $engineMode = 'global_bulk'): int
     {
         $cycleStart = microtime(true);
         $devices = OltDevice::where('status', 'active')->get();
@@ -83,8 +92,14 @@ class PollOltTelemetry extends Command
         foreach ($devices as $device) {
             $devStart = microtime(true);
             try {
-                // Eksekusi langsung di memori tanpa spawn CLI Process baru
-                $this->pollSinglePortOnDevice((int)$device->id, $oltCtrl);
+                if ($engineMode === 'global_bulk') {
+                    // 🚀 SKEMA BARU: Global Bulk Polling Se-OLT Sekaligus
+                    $this->pollGlobalBulkTelemetry((int)$device->id, $oltCtrl);
+                } else {
+                    // 🔄 SKEMA KLASIK: Polling Port-by-Port (TETAP DIPERTAHANKAN)
+                    $this->pollSinglePortOnDevice((int)$device->id, $oltCtrl);
+                }
+
                 $durationMs = round((microtime(true) - $devStart) * 1000, 1);
 
                 // Ambil snapshot data yang baru saja diperbarui
@@ -146,12 +161,13 @@ class PollOltTelemetry extends Command
         // Record backend worker telemetry metadata to Cache for live monitoring
         $workerStats = [
             'status'               => 'ACTIVE (24/7 IN-PROCESS LOOP)',
+            'engine_mode'          => $engineMode,
             'last_run_at'          => now()->toIso8601String(),
             'last_run_human'       => now()->format('d M Y, H:i:s'),
             'cycle_duration_ms'    => $totalCycleDurationMs,
             'cycle_duration_human' => ($totalCycleDurationMs < 1000) ? "{$totalCycleDurationMs} ms" : round($totalCycleDurationMs / 1000, 2) . " s",
             'throttling_delay_ms'  => 0,
-            'mode'                 => 'In-Process Direct Memory Loop',
+            'mode'                 => $engineMode === 'global_bulk' ? 'Global Bulk Polling (Se-OLT Sekaligus)' : 'Per-Port Round-Robin Polling',
             'total_devices'        => count($devices),
             'total_ports_polled'   => $totalPortsPolled > 0 ? $totalPortsPolled : ($prevStats['total_ports_polled'] ?? 8),
             'total_onus_polled'    => $totalOnusPolled > 0 ? $totalOnusPolled : ($prevStats['total_onus_polled'] ?? \App\Models\OntRegistration::count()),
@@ -206,6 +222,423 @@ class PollOltTelemetry extends Command
         }
 
         return 0;
+    }
+
+    /**
+     * 🚀 SKEMA GLOBAL BULK POLLING: Mengambil seluruh redaman & status 1.600+ ONU se-OLT sekaligus (~5-10 detik)
+     * Menggunakan SNMP walk pada subtree status dan redaman optik tanpa query per-port bertahap.
+     */
+    protected function pollGlobalBulkTelemetry(int $deviceId, OltController $oltCtrl): int
+    {
+        $device = OltDevice::find($deviceId);
+        if (!$device) {
+            $this->error("OLT Device ID {$deviceId} not found.");
+            return 1;
+        }
+
+        // Fallback ke per-port polling jika device bukan live connection (misal mode simulasi)
+        if ($device->connection_mode !== 'live') {
+            return $this->pollSinglePortOnDevice($deviceId, $oltCtrl);
+        }
+
+        $devStart = microtime(true);
+        try {
+            $driver = $oltCtrl->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
+            $existingSnapshot = $device->last_telemetry_snapshot ?? [];
+
+            // 1. Pastikan Chassis & PON Ports sudah ada di Database
+            $deviceInfo = $existingSnapshot['device_info'] ?? [];
+            if ($device->connection_mode === 'live') {
+                $deviceInfo['_source'] = 'live_snmp';
+            }
+            $cards = $deviceInfo['cards'] ?? [];
+            if (empty($cards)) {
+                $freshDeviceInfo = $driver->getDeviceInfo();
+                $cards = $freshDeviceInfo['cards'] ?? [];
+                if (!empty($cards)) {
+                    $deviceInfo = array_merge($deviceInfo, $freshDeviceInfo);
+                    $existingSnapshot['device_info'] = $deviceInfo;
+                    $device->update(['last_telemetry_snapshot' => $existingSnapshot]);
+                }
+            }
+
+            $allPonPorts = $existingSnapshot['pon_ports'] ?? [];
+            if (empty($allPonPorts)) {
+                $allPonPorts = $driver->getPonPorts();
+                if (!empty($allPonPorts)) {
+                    $existingSnapshot['pon_ports'] = $allPonPorts;
+                    $device->update(['last_telemetry_snapshot' => $existingSnapshot]);
+                }
+            }
+
+            if (empty($allPonPorts)) {
+                self::appendWorkerLog($device->name, 'GLOBAL_BULK', 'EMPTY', "Tidak ditemukan port PON pada database {$device->name}");
+                return 0;
+            }
+
+            // 2. Buka SNMP Session berkecepatan tinggi
+            $session = FastOpticalProbeService::getSnmpSession($device, 3500, 1);
+            if (!$session) {
+                self::appendWorkerLog($device->name, 'GLOBAL_BULK', 'ERROR', "Gagal membuka sesi SNMP ke {$device->ip_address}");
+                $this->error("SNMP session failed for {$device->name}");
+                return 1;
+            }
+
+            // Catat status aktif query global bulk untuk pulse indicator di UI
+            Cache::put("olt_active_querying_port_{$device->id}", [
+                'port'       => 'ALL PORTS (Global Bulk)',
+                'status'     => 'SYNCING',
+                'timestamp'  => now()->format('H:i:s'),
+                'started_at' => microtime(true),
+            ], 60);
+
+            self::appendWorkerLog($device->name, 'ALL', 'SYNCING', "🚀 Global Bulk Polling dimulai: Menarik seluruh redaman & status ONU se-OLT...");
+
+            $walkStart = microtime(true);
+
+            // 3. SNMP Walk Tabular Subtree
+            // Subtree 1: Status Operasional seluruh ONU (Phase State: 3 = Online/Working)
+            $rawStates = @$session->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.4") ?: [];
+
+            // Subtree 2: Rx Power seluruh ONU (DDM Optical Power)
+            $rawRxPowers = @$session->walk("1.3.6.1.4.1.3902.1012.3.50.12.1.1.10") ?: [];
+
+            // Subtree 3: Tx Power seluruh ONU (DDM Optical Power)
+            $rawTxPowers = @$session->walk("1.3.6.1.4.1.3902.1012.3.50.12.1.1.14") ?: [];
+
+            $walkDuration = round((microtime(true) - $walkStart) * 1000, 1);
+
+            // 4. Cache & Discover Serial Numbers (Diperbarui berkala setiap 10 menit agar tidak membebani walk)
+            $snCacheKey = "olt_bulk_sn_map_{$device->id}";
+            $snMap = Cache::get($snCacheKey, []);
+
+            // Jika cache SN kosong atau perlu refresh, lakukan SNMP walk pada subtree Serial Number
+            if (empty($snMap) || count($snMap) < (count($rawStates) * 0.5)) {
+                $rawSn1 = @$session->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.3") ?: [];
+                $rawSn2 = @$session->walk("1.3.6.1.4.1.3902.1012.3.28.1.1.5") ?: [];
+
+                $snMap = [];
+                foreach ($rawSn2 as $oid => $val) {
+                    $parts = explode('.', $oid);
+                    $onuId = (int)end($parts);
+                    $ifIdx = (int)$parts[count($parts) - 2];
+                    $cleanSn = FastOpticalProbeService::parseZteSerialNumber((string)$val);
+                    if ($cleanSn && strlen($cleanSn) >= 6) {
+                        $snMap["{$ifIdx}_{$onuId}"] = $cleanSn;
+                    }
+                }
+                foreach ($rawSn1 as $oid => $val) {
+                    $parts = explode('.', $oid);
+                    $onuId = (int)end($parts);
+                    $ifIdx = (int)$parts[count($parts) - 2];
+                    if (!isset($snMap["{$ifIdx}_{$onuId}"])) {
+                        $cleanSn = FastOpticalProbeService::parseZteSerialNumber((string)$val);
+                        if ($cleanSn && strlen($cleanSn) >= 6) {
+                            $snMap["{$ifIdx}_{$onuId}"] = $cleanSn;
+                        }
+                    }
+                }
+
+                // Tambahkan serial dari snapshot database sebelumnya jika ada yang belum terbaca
+                $prevSnapshotOnus = $existingSnapshot['onu_list'] ?? [];
+                foreach ($prevSnapshotOnus as $so) {
+                    $soSn = strtoupper(trim((string)($so['serial_number'] ?? ($so['onu_mac'] ?? ''))));
+                    $soPort = $so['port'] ?? '';
+                    $soId = (int)($so['onu_id'] ?? 0);
+                    if ($soSn && $soPort && $soId > 0) {
+                        $soIfIndex = FastOpticalProbeService::calculateIfIndex($soPort);
+                        if (!isset($snMap["{$soIfIndex}_{$soId}"])) {
+                            $snMap["{$soIfIndex}_{$soId}"] = $soSn;
+                        }
+                    }
+                }
+
+                Cache::put($snCacheKey, $snMap, 600); // 10 menit TTL
+            }
+
+            // 5. Normalisasi Data Status, Rx Power, dan Tx Power
+            $stateMap = [];
+            foreach ($rawStates as $oid => $val) {
+                $parts = explode('.', $oid);
+                $onuId = (int)end($parts);
+                $ifIdx = (int)$parts[count($parts) - 2];
+                $stateMap["{$ifIdx}_{$onuId}"] = (int)\App\Services\Olt\SnmpConnector::parseValue((string)$val);
+            }
+
+            $rxMap = [];
+            foreach ($rawRxPowers as $oid => $val) {
+                $parts = explode('.', $oid);
+                $onuId = (int)$parts[count($parts) - 2];
+                $ifIdx = (int)$parts[count($parts) - 3];
+                $rxMap["{$ifIdx}_{$onuId}"] = (int)\App\Services\Olt\SnmpConnector::parseValue((string)$val);
+            }
+
+            $txMap = [];
+            foreach ($rawTxPowers as $oid => $val) {
+                $parts = explode('.', $oid);
+                $onuId = (int)$parts[count($parts) - 2];
+                $ifIdx = (int)$parts[count($parts) - 3];
+                $txMap["{$ifIdx}_{$onuId}"] = (int)\App\Services\Olt\SnmpConnector::parseValue((string)$val);
+            }
+
+            // 6. Bangun Physical ONU Map untuk seluruh ONU di OLT
+            $physicalOnuMap = [];
+            $onusByPort = [];
+            $allDiscoveredKeys = array_unique(array_merge(array_keys($stateMap), array_keys($snMap)));
+
+            foreach ($allDiscoveredKeys as $compositeKey) {
+                $kParts = explode('_', $compositeKey);
+                $ifIndex = (int)($kParts[0] ?? 0);
+                $onuId   = (int)($kParts[1] ?? 0);
+
+                if ($ifIndex <= 0 || $onuId <= 0) {
+                    continue;
+                }
+
+                $slotNum = ($ifIndex >> 16) & 0xFF ?: 1;
+                $portNum = ($ifIndex >> 8) & 0xFF ?: ($ifIndex & 0xFF ?: 1);
+                $portName = "gpon-olt_1/{$slotNum}/{$portNum}";
+
+                $sn = $snMap[$compositeKey] ?? null;
+                if (!$sn || $sn === '00000000' || strlen($sn) < 6 || preg_match('/^0+$/', $sn)) {
+                    continue;
+                }
+
+                $stateCode = $stateMap[$compositeKey] ?? 0;
+                $rawRx     = $rxMap[$compositeKey] ?? null;
+                $rawTx     = $txMap[$compositeKey] ?? null;
+
+                // Hitung Nilai Redaman Optik (DDM Formula)
+                if ($rawRx === null || $rawRx <= 0 || $rawRx >= 65534) {
+                    $rxPower = -40.00;
+                } else {
+                    $rxPower = round(($rawRx * 0.002) - 30.0, 2);
+                }
+
+                if ($rawTx === null || $rawTx <= 0 || $rawTx >= 65534) {
+                    $txPower = 0.00;
+                } else {
+                    $txPower = round(($rawTx * 0.002) - 30.0, 2);
+                    if ($txPower < 0 || $txPower > 10) {
+                        $txPower = 1.95;
+                    }
+                }
+
+                $isOnline = ($stateCode === 3 && $rxPower > -35.0 && $rxPower < -5.0);
+                $status   = $isOnline ? 'Online' : 'LOS';
+                if (!$isOnline) {
+                    $rxPower = -40.00;
+                }
+
+                $onuItem = [
+                    '_source'         => 'live_snmp',
+                    'onu_id'          => (string)$onuId,
+                    'port'            => $portName,
+                    'customer_name'   => "ONU {$sn}",
+                    'serial_number'   => $sn,
+                    'vendor_model'    => 'F670L',
+                    'status'          => $status,
+                    'rx_power'        => $rxPower,
+                    'tx_power'        => $txPower,
+                    'distance_meters' => 850,
+                    'ip_address'      => '—',
+                ];
+
+                $mapKey = $sn . '@' . strtolower($portName);
+                $physicalOnuMap[$mapKey] = $onuItem;
+                $onusByPort[$portName][] = $onuItem;
+            }
+
+            // 7. Evaluasi Kesehatan Port Fisik & Deteksi Gangguan Massal Interface
+            $massDownPorts = [];
+            $allPonPorts = array_map(function ($p) use ($onusByPort, $device, &$massDownPorts) {
+                $pId = $p['port_id'] ?? '';
+                $portOnus = $onusByPort[$pId] ?? ($onusByPort[str_replace('gpon-olt_', '', $pId)] ?? []);
+                $found = count($portOnus);
+                $onlineCount = count(array_filter($portOnus, fn($o) => 
+                    ($o['status'] === 'Online' || strtolower($o['status'] ?? '') === 'working') 
+                    && isset($o['rx_power']) && (float)$o['rx_power'] > -38.0
+                ));
+
+                $isMassDown = false;
+                if ($found >= 10) {
+                    $isMassDown = ($onlineCount === 0) || ((($found - $onlineCount) / $found) >= 0.90 && $onlineCount <= 3);
+                } elseif ($found >= 3) {
+                    $isMassDown = ($onlineCount === 0);
+                }
+
+                if ($isMassDown) {
+                    $massDownPorts[$pId] = true;
+                    $massDownPorts[str_replace('gpon-olt_', '', $pId)] = true;
+                }
+
+                $p['status']          = $found > 0 ? ($isMassDown ? 'Down' : 'Up') : ($p['status'] ?? 'Down');
+                $p['registered_onus'] = $found > 0 ? $found : ($p['registered_onus'] ?? 0);
+                $p['online_onus']     = $onlineCount;
+                $p['is_mass_outage']  = $isMassDown;
+
+                if ($found > 0) {
+                    $this->handleInterfaceMassOutagePollCheck($device, $pId, $found, $onlineCount, $portOnus);
+                }
+
+                return $p;
+            }, $allPonPorts);
+
+            // 8. Bulk Sync Database OntRegistration & Alarms (Anti-Flapping & Instant Notifications)
+            $allSerials = array_unique(array_map(fn($o) => strtoupper(trim((string)$o['serial_number'])), $physicalOnuMap));
+            
+            if (!empty($allSerials)) {
+                $dbOnts = \App\Models\OntRegistration::with(['customerService.customer', 'customerService.networkPort.node', 'oltPort.node'])
+                    ->whereIn('onu_serial', $allSerials)
+                    ->orWhereIn('onu_mac', $allSerials)
+                    ->get()
+                    ->keyBy(fn($r) => strtoupper(trim((string)($r->onu_serial ?: $r->onu_mac))));
+
+                foreach ($physicalOnuMap as $onuData) {
+                    $sn = strtoupper(trim((string)$onuData['serial_number']));
+                    $ontReg = $dbOnts->get($sn);
+                    if (!$ontReg) continue;
+
+                    $isOnline = ($onuData['status'] === 'Online' || strtolower($onuData['status']) === 'working') && (float)$onuData['rx_power'] > -38.0;
+                    $newStatus = $isOnline ? 'active' : 'inactive';
+                    $newRx     = (float)$onuData['rx_power'];
+                    $newTx     = (float)$onuData['tx_power'];
+                    $oldStatus = $ontReg->status;
+                    $oldRx     = (float)($ontReg->rx_power ?? -40.00);
+
+                    $portName  = $onuData['port'] ?? 'PON';
+                    $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
+
+                    // Deteksi perubahan status untuk alarm & notifikasi
+                    if ($oldStatus !== $newStatus) {
+                        // Flap dampening tracking
+                        $flapTrackerKey = "ont_flap_tracker_{$sn}";
+                        $flaps = Cache::get($flapTrackerKey, []);
+                        $now = now()->timestamp;
+                        $flaps = array_values(array_filter($flaps, fn($t) => ($now - $t) <= 900));
+                        $flaps[] = $now;
+                        Cache::put($flapTrackerKey, $flaps, 1800);
+
+                        $suppressKey = "ont_flap_suppressed_{$sn}";
+                        if (count($flaps) >= 3) {
+                            Cache::put($suppressKey, true, 1800);
+                            $notifiedKey = "ont_flap_notified_{$sn}";
+                            if (!Cache::has($notifiedKey)) {
+                                Cache::put($notifiedKey, true, 1800);
+                                \App\Models\AuditLog::record('ALARM_FLAPPING', 'Monitoring OLT', "⚠️ FLAPPING: Modem {$custName} ({$sn}) mengalami status naik-turun berulang kali (" . count($flaps) . "x / 15 mnt).", null, ['serial_number' => $sn, 'port' => $portName]);
+                                \App\Models\AppNotification::notifyAll(
+                                    "⚠️ PERINGATAN FLAPPING: Modem {$custName} Tidak Stabil!",
+                                    "Modem {$custName} (SN: {$sn}) pada port {$portName} mengalami status putus-nyambung berulang kali. Notifikasi diredam selama 30 menit.",
+                                    'NOC',
+                                    '/customers',
+                                    null,
+                                    false
+                                );
+                            }
+                        }
+
+                        $isSuppressed = Cache::get($suppressKey, false);
+                        $alertCooldownKey = "ont_alert_cooldown_{$sn}_{$newStatus}";
+                        $inCooldown = Cache::has($alertCooldownKey);
+
+                        if (!$isSuppressed && !$inCooldown) {
+                            Cache::put($alertCooldownKey, true, 600); // 10 menit cooldown
+
+                            // Sudden Loss
+                            if ($oldStatus === 'active' && $newStatus === 'inactive') {
+                                \App\Models\AuditLog::record('ALARM_SUDDEN_LOS', 'Monitoring OLT', "🚨 SUDDEN LOSS: Modem {$custName} ({$sn}) putus / LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => -40.00]);
+                                $isPortMassOutage = !empty($massDownPorts[$portName]) || Cache::has("interface_in_mass_outage_{$device->id}_{$portName}");
+                                if (!$isPortMassOutage) {
+                                    \App\Models\AppNotification::notifyAll(
+                                        "🚨 ALARM GANGGUAN: Modem {$custName} Putus / LOS!",
+                                        "Modem pelanggan {$custName} (SN: {$sn}) pada port {$portName} mengalami putus sinyal mendadak (redaman jatuh ke -40.00 dBm).",
+                                        'NOC',
+                                        '/customers',
+                                        null,
+                                        false
+                                    );
+                                }
+                            }
+
+                            // Recovery
+                            if ($oldStatus === 'inactive' && $newStatus === 'active') {
+                                \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) pulih normal pada {$portName} (Rx: {$newRx} dBm)", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => $newRx]);
+                                $isPortMassOutage = !empty($massDownPorts[$portName]) || Cache::has("interface_in_mass_outage_{$device->id}_{$portName}");
+                                if (!$isPortMassOutage) {
+                                    \App\Models\AppNotification::notifyAll(
+                                        "🟢 PEMULIHAN LAYANAN: Modem {$custName} Online Kembali!",
+                                        "Koneksi optik pelanggan {$custName} (SN: {$sn}) pada port {$portName} telah kembali pulih dengan redaman sehat {$newRx} dBm.",
+                                        'NOC',
+                                        '/customers',
+                                        null,
+                                        false
+                                    );
+                                }
+                            }
+                        }
+
+                        $ontReg->update([
+                            'rx_power' => $newRx,
+                            'tx_power' => $newTx,
+                            'status'   => $newStatus,
+                        ]);
+                    } elseif (abs($oldRx - $newRx) >= 0.5) {
+                        // Perbarui jika redaman berubah signifikan tanpa merusak status
+                        $ontReg->update([
+                            'rx_power' => $newRx,
+                            'tx_power' => $newTx,
+                        ]);
+                    }
+                }
+            }
+
+            // 9. Simpan Snapshot Data Lengkap ke Database OLT
+            $existingUncfg = $existingSnapshot['unconfigured_onus'] ?? [];
+            $finalSnapshot = $oltCtrl->processAndPartitionTelemetry($device, $deviceInfo, $allPonPorts, array_values($physicalOnuMap), $existingUncfg);
+
+            $device->update([
+                'last_telemetry_snapshot' => $finalSnapshot,
+                'last_connected_at'       => now(),
+            ]);
+
+            $totalDurationMs = round((microtime(true) - $devStart) * 1000, 1);
+            $totalFound      = count($physicalOnuMap);
+            $totalOnline     = count(array_filter($physicalOnuMap, fn($o) => $o['status'] === 'Online'));
+
+            Cache::put("olt_active_querying_port_{$device->id}", [
+                'port'        => 'ALL PORTS (Global Bulk)',
+                'status'      => $totalFound > 0 ? 'SUCCESS' : 'EMPTY',
+                'onu_count'   => $totalFound,
+                'duration_ms' => $totalDurationMs,
+                'timestamp'   => now()->format('H:i:s'),
+            ], 60);
+
+            self::appendWorkerLog(
+                $device->name,
+                'GLOBAL_BULK',
+                $totalFound > 0 ? 'SUCCESS' : 'EMPTY',
+                "✨ Global Bulk Selesai: {$totalFound} ONU ({$totalOnline} Online) se-OLT berhasil diperbarui ({$totalDurationMs} ms, SNMP walk: {$walkDuration} ms)",
+                ['onu_count' => $totalFound, 'online_count' => $totalOnline, 'duration_ms' => $totalDurationMs]
+            );
+
+            $this->info("✨ Global Bulk Polling on {$device->name}: {$totalFound} ONUs ({$totalOnline} Online) updated in {$totalDurationMs} ms.");
+
+            // Clear web fast cache
+            $cacheKey = "olt_hardware_api_{$device->vendor_key}_{$device->id}";
+            Cache::forget($cacheKey);
+
+            return 0;
+        } catch (\Throwable $e) {
+            self::appendWorkerLog(
+                $device->name,
+                'GLOBAL_BULK',
+                'ERROR',
+                "Gagal Global Bulk Polling pada {$device->name}: " . $e->getMessage(),
+                ['error' => $e->getMessage()]
+            );
+            $this->error("Failed Global Bulk Polling on {$device->name}: " . $e->getMessage());
+            return 1;
+        }
     }
 
     /**

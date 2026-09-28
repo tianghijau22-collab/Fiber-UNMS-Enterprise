@@ -96,6 +96,7 @@ Route::post('/server-monitoring/trigger-polling', [ServerMonitoringController::c
 Route::post('/server-monitoring/worker/restart', [ServerMonitoringController::class, 'restartDaemon']);
 Route::post('/server-monitoring/worker/pause-resume', [ServerMonitoringController::class, 'togglePauseWorker']);
 Route::post('/server-monitoring/worker/set-interval', [ServerMonitoringController::class, 'setLoopDelay']);
+Route::post('/server-monitoring/worker/set-mode', [ServerMonitoringController::class, 'setPollingMode']);
 Route::post('/server-monitoring/worker/clear-logs', [ServerMonitoringController::class, 'clearLogs']);
 Route::post('/server-monitoring/snmp-trap/restart', [ServerMonitoringController::class, 'restartTrapListener']);
 Route::post('/server-monitoring/snmp-trap/clear-logs', [ServerMonitoringController::class, 'clearTrapLogs']);

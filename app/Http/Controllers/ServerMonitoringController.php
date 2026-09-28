@@ -188,6 +188,38 @@ class ServerMonitoringController extends Controller
     }
 
     /**
+     * Mengubah mode mesin polling OLT: global_bulk (Se-OLT Sekaligus) atau per_port (Round-Robin Port-by-Port)
+     */
+    public function setPollingMode(Request $request)
+    {
+        $mode = $request->input('mode') ?? $request->json('mode') ?? 'global_bulk';
+        if (!in_array($mode, ['global_bulk', 'per_port'])) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Mode polling tidak valid. Pilih "global_bulk" atau "per_port".',
+            ], 422);
+        }
+
+        Cache::put('olt_polling_engine_mode', $mode, 86400 * 30);
+
+        $modeLabel = $mode === 'global_bulk' ? 'Global Bulk Polling (Se-OLT Sekaligus)' : 'Per-Port Round-Robin Polling';
+
+        \App\Console\Commands\PollOltTelemetry::appendWorkerLog(
+            'SYSTEM',
+            'CONFIG',
+            'INFO',
+            "Engine mode polling OLT diubah menjadi: {$modeLabel}"
+        );
+
+        return response()->json([
+            'status'      => 'success',
+            'engine_mode' => $mode,
+            'mode_label'  => $modeLabel,
+            'message'     => "Engine polling OLT berhasil diubah ke {$modeLabel}.",
+        ]);
+    }
+
+    /**
      * Membersihkan riwayat live activity logs di Cache
      */
     public function clearLogs()
@@ -694,8 +726,13 @@ class ServerMonitoringController extends Controller
         }
         unset($report);
 
+        $engineMode = Cache::get('olt_polling_engine_mode', 'global_bulk');
+        $modeLabel = $engineMode === 'global_bulk' ? 'Global Bulk Polling (Se-OLT Sekaligus)' : 'Per-Port Round-Robin Polling';
+
         return [
             'status'               => $isPaused ? 'PAUSED' : ($stats['status'] ?? 'ACTIVE'),
+            'engine_mode'          => $engineMode,
+            'mode_label'           => $modeLabel,
             'is_paused'            => $isPaused,
             'loop_delay_sec'       => $loopDelaySec,
             'last_run_at'          => $stats['last_run_at'] ?? now()->toIso8601String(),

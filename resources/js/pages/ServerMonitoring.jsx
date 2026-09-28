@@ -221,6 +221,32 @@ export default function ServerMonitoring() {
     }
   };
 
+  const handleChangeEngineMode = async (newMode) => {
+    setDaemonActionMessage(null);
+    try {
+      const res = await fetch('/api/server-monitoring/worker/set-mode', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        },
+        body: JSON.stringify({ mode: newMode }),
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setDaemonActionMessage(`✅ ${json.message}`);
+        fetchMetrics(true);
+      } else {
+        setDaemonActionMessage(`❌ ${json.message || 'Gagal mengubah mode engine'}`);
+      }
+    } catch (err) {
+      setDaemonActionMessage(`❌ Error: ${err.message}`);
+    } finally {
+      setTimeout(() => setDaemonActionMessage(null), 6000);
+    }
+  };
+
   const handleClearLogs = async () => {
     if (!window.confirm('Bersihkan seluruh riwayat Live Request Stream & Activity Log?')) return;
     setIsClearingLogs(true);
@@ -1064,6 +1090,19 @@ export default function ServerMonitoring() {
               </svg>
               <span>{isRestartingDaemon ? 'Restarting...' : 'Restart Daemon'}</span>
             </button>
+
+            {/* Engine Mode Selector: Global Bulk vs Per-Port */}
+            <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl px-2.5 py-1 text-xs border border-indigo-200 dark:border-indigo-800">
+              <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">Mode:</span>
+              <select
+                value={worker.engine_mode ?? 'global_bulk'}
+                onChange={(e) => handleChangeEngineMode(e.target.value)}
+                className="bg-transparent font-bold text-indigo-900 dark:text-indigo-200 text-xs focus:outline-none cursor-pointer"
+              >
+                <option value="global_bulk">⚡ Global Bulk (Se-OLT ~5-8s)</option>
+                <option value="per_port">🔄 Per-Port (Round-Robin 2-Port)</option>
+              </select>
+            </div>
 
             {/* Interval Jeda per Siklus */}
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-xl px-2.5 py-1 text-xs border border-slate-200 dark:border-slate-700">
