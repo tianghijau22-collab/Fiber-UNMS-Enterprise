@@ -399,16 +399,14 @@ class DashboardController extends Controller
             ];
         }
 
-        // C. Alarm Logs from AuditLog
+        // C. Alarm Logs from AuditLog (Indexed query)
         $auditAlarms = AuditLog::where(function($q) {
-            $q->where('action', 'ilike', '%ALARM%')
-              ->orWhere('action', 'ilike', '%LOS%')
-              ->orWhere('action', 'ilike', '%ALERT%')
-              ->orWhere('description', 'ilike', '%LOS%')
-              ->orWhere('description', 'ilike', '%ALERT%')
-              ->orWhere('description', 'ilike', '%RECOVERY%');
+            $q->where('action', 'like', 'ALARM_%')
+              ->orWhere('action', 'MASS_OUTAGE')
+              ->orWhere('action', 'MASS_RECOVERY')
+              ->orWhere('module', 'POLL_TELEMETRY');
         })
-        ->latest()
+        ->latest('created_at')
         ->take(10)
         ->get();
 
@@ -430,7 +428,7 @@ class DashboardController extends Controller
         }
 
         // ── 8. Recent Activities Feed from AuditLog ──
-        $auditLogs = AuditLog::latest()->take(8)->get();
+        $auditLogs = AuditLog::latest('created_at')->take(8)->get();
         $recentActivities = $auditLogs->map(function ($log) {
             return [
                 'id'     => $log->id,
@@ -443,7 +441,7 @@ class DashboardController extends Controller
 
         // ── 9. Distribusi Node per Wilayah / OLT Region ──
         $allNodes = NetworkNode::with(['parent.parent'])->get();
-        $allOlts = OltDevice::all();
+        $allOlts = OltDevice::select(['id', 'name', 'code', 'status', 'ip_address'])->get();
         $regionalInfra = [];
 
         foreach ($allOlts as $olt) {
