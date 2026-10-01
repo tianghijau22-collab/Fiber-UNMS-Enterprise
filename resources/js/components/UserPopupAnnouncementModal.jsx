@@ -3,9 +3,8 @@ import { createPortal } from 'react-dom';
 import { useAuth } from './AuthContext.jsx';
 
 /**
- * UserPopupAnnouncementModal — Pop-up Alert & Pengumuman Interaktif untuk Seluruh Pengguna.
- * Menampilkan pengumuman resmi yang disetel oleh Super Administrator.
- * Dilengkapi fitur multi-alert pager, tombol aksi eksternal/internal, dan opsi "Jangan tampilkan lagi".
+ * UserPopupAnnouncementModal — Pop-up Pengumuman Bersih, Minimalis & Profesional.
+ * Fokus pada tipografi elegan, keterbacaan tinggi, tanpa kotak bertumpuk yang berlebihan.
  */
 export default function UserPopupAnnouncementModal() {
   const { currentUser } = useAuth();
@@ -13,6 +12,7 @@ export default function UserPopupAnnouncementModal() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
+  const [imageLightbox, setImageLightbox] = useState(false);
 
   // Fetch active alerts when logged in
   const fetchActiveAlerts = useCallback(async () => {
@@ -31,11 +31,9 @@ export default function UserPopupAnnouncementModal() {
       const json = await res.json();
 
       if (res.ok && json.status === 'success' && Array.isArray(json.data)) {
-        // Filter out alerts that user already dismissed if show_once_per_user is enabled or user marked it
         const unreadAlerts = json.data.filter((alert) => {
           const dismissedKey = `fiber_popup_dismissed_${alert.id}`;
-          const isDismissed = localStorage.getItem(dismissedKey);
-          return !isDismissed;
+          return !localStorage.getItem(dismissedKey);
         });
 
         if (unreadAlerts.length > 0) {
@@ -61,23 +59,21 @@ export default function UserPopupAnnouncementModal() {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        handleClose();
+        if (imageLightbox) {
+          setImageLightbox(false);
+        } else {
+          handleClose();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+  }, [isOpen, imageLightbox]);
 
   const currentAlert = activeAlerts[currentIndex];
 
   const handleClose = () => {
-    if (currentAlert && dontShowAgain) {
-      try {
-        localStorage.setItem(`fiber_popup_dismissed_${currentAlert.id}`, '1');
-      } catch (e) {
-        // Ignore storage error
-      }
-    } else if (currentAlert && currentAlert.show_once_per_user) {
+    if (currentAlert && (dontShowAgain || currentAlert.show_once_per_user)) {
       try {
         localStorage.setItem(`fiber_popup_dismissed_${currentAlert.id}`, '1');
       } catch (e) {
@@ -85,7 +81,6 @@ export default function UserPopupAnnouncementModal() {
       }
     }
 
-    // If there are more alerts in queue, show next
     if (currentIndex < activeAlerts.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setDontShowAgain(false);
@@ -96,185 +91,197 @@ export default function UserPopupAnnouncementModal() {
 
   if (!isOpen || !currentAlert) return null;
 
-  // Type configuration (Color, Badge & Icon)
-  const getTypeConfig = (type) => {
+  // Type configuration (Badge styling)
+  const getTypeBadge = (type) => {
     switch (type) {
       case 'maintenance':
         return {
-          badge: currentAlert.badge_text || 'Pemeliharaan Jaringan',
-          badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-700/60',
-          iconBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-          icon: (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          ),
+          label: currentAlert.badge_text || 'Pemeliharaan Jaringan',
+          badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40',
+          dotClass: 'bg-amber-500',
+          buttonClass: 'bg-amber-600 hover:bg-amber-700 text-white',
         };
       case 'warning':
         return {
-          badge: currentAlert.badge_text || 'Peringatan Operasional',
-          badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-700/60',
-          iconBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-          icon: (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          ),
+          label: currentAlert.badge_text || 'Peringatan Operasional',
+          badgeClass: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800/40',
+          dotClass: 'bg-orange-500',
+          buttonClass: 'bg-orange-600 hover:bg-orange-700 text-white',
         };
       case 'critical':
         return {
-          badge: currentAlert.badge_text || 'Pemberitahuan Darurat',
-          badgeClass: 'bg-rose-100 text-rose-900 border-rose-300 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-700/60',
-          iconBg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
-          icon: (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          ),
+          label: currentAlert.badge_text || 'Pemberitahuan Darurat',
+          badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800/40',
+          dotClass: 'bg-rose-500',
+          buttonClass: 'bg-rose-600 hover:bg-rose-700 text-white',
         };
       case 'update':
         return {
-          badge: currentAlert.badge_text || 'Pembaruan Sistem',
-          badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-700/60',
-          iconBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-          icon: (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          ),
+          label: currentAlert.badge_text || 'Pembaruan Sistem',
+          badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40',
+          dotClass: 'bg-emerald-500',
+          buttonClass: 'bg-emerald-600 hover:bg-emerald-700 text-white',
         };
       case 'info':
       default:
         return {
-          badge: currentAlert.badge_text || 'Pengumuman Resmi',
-          badgeClass: 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-700/60',
-          iconBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
-          icon: (
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          ),
+          label: currentAlert.badge_text || 'Pengumuman Resmi',
+          badgeClass: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40',
+          dotClass: 'bg-blue-500',
+          buttonClass: 'bg-blue-600 hover:bg-blue-700 text-white',
         };
     }
   };
 
-  const typeConfig = getTypeConfig(currentAlert.type);
+  const badgeInfo = getTypeBadge(currentAlert.type);
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[99999] overflow-y-auto bg-black/70 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen animate-in fade-in duration-200"
+      className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-4 flex items-center justify-center min-h-screen animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div className="relative w-full max-w-lg bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 text-black dark:text-white my-auto">
+      <div className="relative w-full max-w-lg bg-white dark:bg-[#111317] border border-neutral-200 dark:border-neutral-800 rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-150 text-neutral-900 dark:text-neutral-100 my-auto flex flex-col">
 
-        {/* Top Header Accent */}
-        <div className="p-5 sm:p-6 border-b border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02]">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3.5">
-              <div className={`p-2.5 rounded-lg border shrink-0 ${typeConfig.iconBg}`}>
-                {typeConfig.icon}
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase border ${typeConfig.badgeClass}`}>
-                    {typeConfig.badge}
-                  </span>
-                  {activeAlerts.length > 1 && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-black/5 dark:bg-white/10 text-black dark:text-white border border-black/10 dark:border-white/10">
-                      {currentIndex + 1} dari {activeAlerts.length}
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-base sm:text-lg font-bold text-black dark:text-white leading-tight">
-                  {currentAlert.title}
-                </h3>
-              </div>
-            </div>
-
-            {/* Close 'X' Button */}
+        {/* ── 1. Hero Image (Clean, no dark gradient covering it) ── */}
+        {currentAlert.image_url ? (
+          <div className="relative w-full bg-neutral-100 dark:bg-neutral-900 overflow-hidden border-b border-neutral-100 dark:border-neutral-800">
+            <img
+              src={currentAlert.image_url}
+              alt={currentAlert.title}
+              onClick={() => setImageLightbox(true)}
+              className="w-full h-auto max-h-64 object-cover object-center cursor-pointer transition-transform duration-200 hover:scale-[1.01]"
+              onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+            />
+            {/* Minimal Close Button */}
             <button
               type="button"
               onClick={handleClose}
-              title="Tutup Modal (Esc)"
-              className="text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+              title="Tutup (Esc)"
+              className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/50 hover:bg-black/75 text-white flex items-center justify-center backdrop-blur-xs transition-all shadow-xs cursor-pointer z-10"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
+        ) : null}
+
+        {/* ── 2. Header (Clean & Refined) ── */}
+        <div className="pt-6 px-6 pb-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${badgeInfo.badgeClass}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${badgeInfo.dotClass}`}></span>
+                  <span>{badgeInfo.label}</span>
+                </span>
+                {activeAlerts.length > 1 && (
+                  <span className="text-[11px] font-medium text-neutral-400">
+                    ({currentIndex + 1} dari {activeAlerts.length})
+                  </span>
+                )}
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-neutral-900 dark:text-neutral-50 tracking-tight leading-snug">
+                {currentAlert.title}
+              </h3>
+            </div>
+
+            {/* Close button jika tanpa gambar */}
+            {!currentAlert.image_url && (
+              <button
+                type="button"
+                onClick={handleClose}
+                title="Tutup (Esc)"
+                className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 p-1 rounded-md transition-colors shrink-0 cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Modal Body / Message Content */}
-        <div className="p-5 sm:p-6 max-h-[65vh] overflow-y-auto space-y-4 text-xs sm:text-sm text-neutral-800 dark:text-neutral-200 leading-relaxed font-normal">
-          
-          {/* Banner Image (if available) */}
-          {currentAlert.image_url && (
-            <div className="relative rounded-lg overflow-hidden border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 shadow-2xs">
-              <img
-                src={currentAlert.image_url}
-                alt={currentAlert.title}
-                className="w-full h-auto max-h-72 object-contain mx-auto bg-black/5 dark:bg-white/5"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            </div>
-          )}
-
-          <div className="whitespace-pre-line bg-black/[0.02] dark:bg-white/[0.02] p-4 rounded-lg border border-black/10 dark:border-white/10 font-sans">
+        {/* ── 3. Message Content (Spacious, clean typography, NO nested border box) ── */}
+        <div className="px-6 py-4 max-h-[50vh] overflow-y-auto space-y-4">
+          <div className="whitespace-pre-line text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed font-sans font-normal">
             {currentAlert.message}
           </div>
 
-          {/* Action Button Link if specified */}
+          {/* Action Link Button if set */}
           {currentAlert.action_button_url && (
-            <div className="pt-1">
+            <div className="pt-2">
               <a
                 href={currentAlert.action_button_url}
                 target={currentAlert.action_button_url.startsWith('http') ? '_blank' : '_self'}
                 rel="noopener noreferrer"
                 onClick={handleClose}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-colors shadow-2xs cursor-pointer"
+                className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg ${badgeInfo.buttonClass} font-medium text-xs sm:text-sm transition-colors shadow-xs cursor-pointer`}
               >
-                <span>{currentAlert.action_button_text || 'Buka Tautan Terkait'}</span>
+                <span>{currentAlert.action_button_text || 'Lihat Informasi Terkait'}</span>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
               </a>
             </div>
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="p-4 sm:p-5 border-t border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] flex flex-col sm:flex-row items-center justify-between gap-3">
-          {/* Don't show again checkbox */}
-          <label className="flex items-center gap-2 text-[11px] text-neutral-600 dark:text-neutral-400 cursor-pointer select-none order-2 sm:order-1">
+        {/* ── 4. Clean Footer ── */}
+        <div className="px-6 py-4 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/60 dark:bg-neutral-900/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400 cursor-pointer select-none order-2 sm:order-1 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors">
             <input
               type="checkbox"
               checked={dontShowAgain}
               onChange={(e) => setDontShowAgain(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-0 cursor-pointer"
+              className="w-4 h-4 rounded border-neutral-300 dark:border-neutral-700 text-neutral-900 focus:ring-0 cursor-pointer"
             />
             <span>Jangan tampilkan pesan ini lagi</span>
           </label>
 
-          {/* Action Close / Next Button */}
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end order-1 sm:order-2">
             <button
               type="button"
               onClick={handleClose}
-              className="w-full sm:w-auto px-5 py-2 rounded-md bg-black text-white dark:bg-white dark:text-black font-bold text-xs hover:bg-black/90 dark:hover:bg-white/90 transition-all shadow-2xs cursor-pointer flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto px-5 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100 font-medium text-xs shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
             >
-              <span>{currentIndex < activeAlerts.length - 1 ? 'Lanjut ke Pemberitahuan Berikutnya' : 'Saya Mengerti'}</span>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-              </svg>
+              <span>{currentIndex < activeAlerts.length - 1 ? 'Pemberitahuan Berikutnya' : 'Saya Mengerti'}</span>
+              {currentIndex >= activeAlerts.length - 1 && (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
             </button>
           </div>
         </div>
 
       </div>
+
+      {/* Lightbox Zoom */}
+      {imageLightbox && currentAlert.image_url && createPortal(
+        <div
+          className="fixed inset-0 z-[100000] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setImageLightbox(false)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
+            <img
+              src={currentAlert.image_url}
+              alt="Banner Fullscreen"
+              className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
+            />
+            <button
+              type="button"
+              onClick={() => setImageLightbox(false)}
+              className="mt-4 px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white text-xs font-medium backdrop-blur-xs transition-colors cursor-pointer"
+            >
+              ✕ Tutup (Esc)
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>,
     document.body
   );

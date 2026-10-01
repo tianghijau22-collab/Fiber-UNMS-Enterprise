@@ -68,7 +68,7 @@ export default function Sidebar({ isOpen, onClose }) {
         {/* Brand Header */}
         <div className="h-16 px-4 border-b border-slate-200 dark:border-[#222222] flex items-center justify-between box-border relative">
           <NavLink to="/dashboard" onClick={onClose} className="flex items-center justify-center group py-0.5 w-full">
-            <FonaBrandLogo className="w-32 sm:w-36 h-auto" />
+            <FonaBrandLogo variant="horizontal" className="w-40 sm:w-44 h-auto" />
           </NavLink>
 
           {/* Close button for mobile drawer */}
