@@ -7,8 +7,7 @@ import 'providers/auth_provider.dart';
 import 'providers/dashboard_provider.dart';
 import 'providers/odp_provider.dart';
 import 'providers/ticket_provider.dart';
-import 'views/auth/login_screen.dart';
-import 'views/main_navigation_shell.dart';
+import 'views/splash/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,32 +74,9 @@ class FonaMobileApp extends StatelessWidget {
             ),
           ),
         ),
-        home: const AppRootRouter(),
+        home: const SplashScreen(),
       ),
     );
   }
 }
 
-class AppRootRouter extends StatelessWidget {
-  const AppRootRouter({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
-
-    if (auth.isLoading && auth.currentUser == null) {
-      return const Scaffold(
-        backgroundColor: AppColors.background,
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
-        ),
-      );
-    }
-
-    if (auth.isAuthenticated) {
-      return const MainNavigationShell();
-    }
-
-    return const LoginScreen();
-  }
-}

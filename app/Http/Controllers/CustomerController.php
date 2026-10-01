@@ -1135,5 +1135,284 @@ class CustomerController extends Controller
         $olt->update(['last_telemetry_snapshot' => $snapshot]);
         \Illuminate\Support\Facades\Cache::forget('gis_map_data_payload_v1');
     }
+
+    /**
+     * POST /api/customers/probe-interface-optical
+     * Pengecekan redaman & status optik real-time per interface langsung dari OLT via SNMP
+     */
+    public function probeInterfaceOptical(Request $request)
+    {
+        $tStart = microtime(true);
+
+        $oltId     = $request->input('olt_id');
+        $interface = trim((string)$request->input('interface', ''));
+        $syncDb    = (bool)$request->input('sync_db', true);
+
+        if (empty($interface) || $interface === 'all' || $interface === '—') {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Harap pilih interface / port PON OLT yang valid terlebih dahulu.',
+            ], 422);
+        }
+
+        // Standardize interface name (e.g. "1/2/1" -> "gpon-olt_1/2/1")
+        $cleanPort = str_replace(['gpon_olt_', 'gpon_'], 'gpon-olt_', strtolower($interface));
+        if (preg_match('/^(\d+\/\d+\/\d+)$/', $cleanPort, $m)) {
+            $cleanPort = 'gpon-olt_' . $m[1];
+        }
+
+        // 1. Dapatkan OLT Device target
+        $olt = null;
+        if ($oltId && $oltId !== 'all') {
+            $olt = OltDevice::find($oltId);
+        }
+        if (!$olt) {
+            $olt = OltDevice::where('status', 'active')->first() ?: OltDevice::first();
+        }
+
+        if (!$olt) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Tidak ada perangkat OLT yang terdaftar atau aktif dalam sistem.',
+            ], 404);
+        }
+
+        // 2. Eksekusi Live Fast SNMP Probe langsung ke Hardware OLT
+        $probeResult = \App\Services\Olt\FastOpticalProbeService::probePortOnusQuickState($olt, $cleanPort);
+        $liveOnuStates = $probeResult['onu_states'] ?? [];
+
+        // 3. Ambil seluruh data pelanggan di database yang terkait dengan interface ini atau OLT ini
+        $customers = Customer::with([
+            'services.servicePackage',
+            'services.networkPort.node.parent.parent',
+            'services.networkPort.node.oltDevice',
+            'services.ontRegistration.oltPort.node',
+        ])
+        ->get();
+
+        // Siapkan map pencocokan pelanggan
+        $matchedCustomersBySn = [];
+        $matchedCustomersByPort = [];
+
+        foreach ($customers as $c) {
+            $primaryService = $c->services->first();
+            $port = $primaryService?->networkPort;
+            $odpNode = $port?->node;
+            $odcNode = $odpNode?->parent;
+            $ont = $primaryService?->ontRegistration;
+
+            $snKey = strtoupper(trim((string)($ont?->onu_serial ?: ($primaryService?->onu_serial ?: ''))));
+            $macKey = strtoupper(trim((string)($ont?->onu_mac ?: '')));
+
+            // Ekstrak slot dan port secara presisi angka untuk pencocokan interface otentik
+            $extractSlotPort = function ($p) {
+                if (!$p) return '';
+                $p = strtolower(trim((string)$p));
+                $p = explode(':', $p)[0];
+                $p = explode(',', $p)[0];
+                if (preg_match('/(\d+)\/(\d+)\/(\d+)/', $p, $m)) {
+                    return "{$m[1]}/{$m[2]}/{$m[3]}";
+                }
+                if (preg_match('/(\d+)\/(\d+)/', $p, $m)) {
+                    return "{$m[1]}/{$m[2]}";
+                }
+                return str_replace(['gpon-olt_', 'gpon_olt_', 'gpon_', 'epon-olt_', 'epon_olt_', 'epon_'], '', $p);
+            };
+
+            $rawPortRef = $odpNode?->olt_port_ref ?: ($odcNode?->olt_port_ref ?: ($ont?->oltPort?->node?->olt_port_ref ?: ''));
+            $custSlotPort = $extractSlotPort($rawPortRef);
+            $targetSlotPort = $extractSlotPort($cleanPort);
+
+            // Cek pencocokan eksak slot & port (menghindari port 1/2/14 terbawa ke 1/2/1)
+            $isInterfaceMatch = !empty($targetSlotPort) && ($custSlotPort === $targetSlotPort);
+
+            $custData = [
+                'customer_id'         => $c->id,
+                'customer_number'     => $c->customer_number ?: "CMN " . sprintf('%04d', $c->id),
+                'name'                => $c->name,
+                'phone'               => $c->phone ?: '-',
+                'address'             => $c->address ?: 'Solok, Sumatera Barat',
+                'package_name'        => $primaryService?->servicePackage?->name ?: 'Standard Internet',
+                'service_status'      => strtoupper($c->service_status ?: 'OPEN'),
+                'odp_name'            => $odpNode?->name ?: 'ODP Non-GIS',
+                'odp_code'            => $odpNode?->code ?: '-',
+                'odp_id'              => $odpNode?->id,
+                'odp_port_number'     => $port?->port_number ?: '-',
+                'ont_registration_id' => $ont?->id,
+            ];
+
+            if ($snKey) {
+                $matchedCustomersBySn[$snKey] = $custData;
+            }
+            if ($macKey) {
+                $matchedCustomersBySn[$macKey] = $custData;
+            }
+            if ($isInterfaceMatch) {
+                $matchedCustomersByPort[] = array_merge($custData, ['sn' => $snKey ?: $macKey]);
+            }
+        }
+
+        // 4. Bangun daftar terpadu (Merge Live OLT ONUs + Database Customers)
+        $processedSn = [];
+        $mergedList = [];
+        $onlineCount = 0;
+        $downCount = 0;
+        $totalRxSum = 0;
+        $validRxCount = 0;
+        $worstRx = null;
+        $bestRx = null;
+        $warningCount = 0;
+        $criticalCount = 0;
+
+        // A. Proses seluruh ONU yang terdeteksi secara fisik di OLT
+        foreach ($liveOnuStates as $onuId => $state) {
+            $sn = strtoupper(trim((string)($state['sn'] ?? '')));
+            $isOnline = (bool)($state['is_online'] ?? false);
+            $rawRx = isset($state['rx_power']) && is_numeric($state['rx_power']) ? (float)$state['rx_power'] : ($isOnline ? -22.00 : -40.00);
+
+            if ($isOnline) {
+                $onlineCount++;
+                if ($rawRx > -38.0) {
+                    $totalRxSum += $rawRx;
+                    $validRxCount++;
+                    if ($worstRx === null || $rawRx < $worstRx) $worstRx = $rawRx;
+                    if ($bestRx === null || $rawRx > $bestRx) $bestRx = $rawRx;
+                    if ($rawRx <= -27.0) $criticalCount++;
+                    elseif ($rawRx <= -24.0) $warningCount++;
+                }
+            } else {
+                $downCount++;
+                $rawRx = -40.00;
+            }
+
+            $matchedCust = $sn ? ($matchedCustomersBySn[$sn] ?? null) : null;
+            if ($sn) $processedSn[$sn] = true;
+
+            $quality = 'LOS';
+            if ($isOnline) {
+                if ($rawRx >= -20.0) $quality = 'EXCELLENT';
+                elseif ($rawRx >= -24.0) $quality = 'GOOD';
+                elseif ($rawRx >= -27.0) $quality = 'WARNING';
+                else $quality = 'CRITICAL';
+            }
+
+            $mergedList[] = [
+                'onu_index'           => $onuId,
+                'onu_port_id'         => "{$cleanPort}:{$onuId}",
+                'serial_number'       => $sn ?: "ONU-{$onuId}",
+                'is_online'           => $isOnline,
+                'status_label'        => $isOnline ? 'Online' : 'Offline / LOS',
+                'rx_power'            => $rawRx,
+                'attenuation_quality' => $quality,
+                'is_registered'       => !empty($matchedCust),
+                'customer_id'         => $matchedCust['customer_id'] ?? null,
+                'customer_number'     => $matchedCust['customer_number'] ?? 'Belum Terdaftar',
+                'customer_name'       => $matchedCust['name'] ?? 'ONU Belum Di-mapping',
+                'phone'               => $matchedCust['phone'] ?? '-',
+                'address'             => $matchedCust['address'] ?? '-',
+                'package_name'        => $matchedCust['package_name'] ?? '-',
+                'service_status'      => $matchedCust['service_status'] ?? 'OPEN',
+                'odp_name'            => $matchedCust['odp_name'] ?? 'ODP Belum Di-set',
+                'odp_code'            => $matchedCust['odp_code'] ?? '-',
+                'odp_port_number'     => $matchedCust['odp_port_number'] ?? '-',
+                'ont_registration_id' => $matchedCust['ont_registration_id'] ?? null,
+            ];
+
+            // 💾 Update DB jika syncDb = true
+            if ($syncDb && !empty($matchedCust['ont_registration_id'])) {
+                OntRegistration::where('id', $matchedCust['ont_registration_id'])->update([
+                    'rx_power'   => $rawRx,
+                    'status'     => $isOnline ? 'active' : 'inactive',
+                    'updated_at' => now(),
+                ]);
+                if (!empty($matchedCust['customer_id'])) {
+                    Customer::where('id', $matchedCust['customer_id'])->update([
+                        'status' => $isOnline ? 'active' : 'suspended',
+                    ]);
+                }
+            }
+        }
+
+        // B. Masukkan juga pelanggan di DB pada interface ini yang mungkin sedang belum terdeteksi/offline di OLT
+        foreach ($matchedCustomersByPort as $dbCust) {
+            $sn = strtoupper(trim((string)($dbCust['sn'] ?? '')));
+            if ($sn && isset($processedSn[$sn])) {
+                continue; // Sudah diproses dari live probe OLT
+            }
+
+            $mergedList[] = [
+                'onu_index'           => '-',
+                'onu_port_id'         => $cleanPort,
+                'serial_number'       => $sn ?: '—',
+                'is_online'           => false,
+                'status_label'        => 'Offline / Belum Sync OLT',
+                'rx_power'            => -40.00,
+                'attenuation_quality' => 'LOS',
+                'is_registered'       => true,
+                'customer_id'         => $dbCust['customer_id'],
+                'customer_number'     => $dbCust['customer_number'],
+                'customer_name'       => $dbCust['name'],
+                'phone'               => $dbCust['phone'],
+                'address'             => $dbCust['address'],
+                'package_name'        => $dbCust['package_name'],
+                'service_status'      => $dbCust['service_status'],
+                'odp_name'            => $dbCust['odp_name'],
+                'odp_code'            => $dbCust['odp_code'],
+                'odp_port_number'     => $dbCust['odp_port_number'],
+                'ont_registration_id' => $dbCust['ont_registration_id'],
+            ];
+            $downCount++;
+        }
+
+        // Sort: Online first, then worst attenuation, then customer name
+        usort($mergedList, function ($a, $b) {
+            if ($a['is_online'] !== $b['is_online']) {
+                return $a['is_online'] ? -1 : 1;
+            }
+            if ($a['rx_power'] !== $b['rx_power']) {
+                return $a['rx_power'] <=> $b['rx_power'];
+            }
+            return strcmp($a['customer_name'], $b['customer_name']);
+        });
+
+        $totalOnus = count($mergedList);
+        $avgRx = $validRxCount > 0 ? round($totalRxSum / $validRxCount, 2) : -40.00;
+        $durationMs = round((microtime(true) - $tStart) * 1000, 1);
+
+        if ($syncDb) {
+            self::clearCustomerCache();
+        }
+
+        // Status Kesehatan Interface
+        $interfaceHealth = 'HEALTHY';
+        if ($totalOnus > 0 && $downCount === $totalOnus) {
+            $interfaceHealth = 'MASS_OUTAGE';
+        } elseif ($criticalCount > 3 || ($totalOnus > 0 && ($downCount / $totalOnus) >= 0.5)) {
+            $interfaceHealth = 'DEGRADED';
+        }
+
+        return response()->json([
+            'status'             => 'success',
+            'olt_id'             => $olt->id,
+            'olt_name'           => $olt->name,
+            'olt_ip'             => $olt->ip_address,
+            'interface'          => $cleanPort,
+            'interface_health'   => $interfaceHealth,
+            'summary'            => [
+                'total_onus'     => $totalOnus,
+                'online_count'   => $onlineCount,
+                'down_count'     => $downCount,
+                'warning_count'  => $warningCount,
+                'critical_count' => $criticalCount,
+                'avg_rx_power'   => $avgRx,
+                'min_rx_power'   => $worstRx ?? -40.00,
+                'max_rx_power'   => $bestRx ?? -40.00,
+                'duration_ms'    => $durationMs,
+                'probed_at'      => now()->toIso8601String(),
+                'probed_at_human'=> now()->format('d/m/Y H:i:s'),
+            ],
+            'data'               => $mergedList,
+        ]);
+    }
 }
 

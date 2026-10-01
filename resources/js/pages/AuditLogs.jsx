@@ -100,6 +100,372 @@ function LogDetailModal({ log, onClose }) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   MODAL PEMBERSIHAN & RETENSI LOG OTOMATIS
+══════════════════════════════════════════════════════════════════ */
+function LogPruneModal({ onClose, onPruned, isSuperAdmin, currentUser }) {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pruning, setPruning] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
+  const [pruneDays, setPruneDays] = useState(14);
+  const [message, setMessage] = useState(null);
+
+  // Settings State
+  const [telemetryDays, setTelemetryDays] = useState(14);
+  const [userDays, setUserDays] = useState(90);
+  const [autoEnabled, setAutoEnabled] = useState(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const fetchStats = useCallback(() => {
+    setLoading(true);
+    fetch('/api/audit-logs/stats')
+      .then(res => res.json())
+      .then(data => {
+        setStats(data);
+        setTelemetryDays(data.telemetry_retention_days || 14);
+        setUserDays(data.user_retention_days || 90);
+        setAutoEnabled(data.auto_prune_enabled ?? true);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
+        setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  const handlePruneNow = async () => {
+    if (!window.confirm(`Apakah Anda yakin ingin memangkas log telemetri/alarm otomatis yang berusia lebih dari ${pruneDays} hari? Log aktivitas user penting akan tetap aman.`)) {
+      return;
+    }
+
+    setPruning(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/audit-logs/prune', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+          'X-User-Id': currentUser?.id ? String(currentUser.id) : '',
+          'X-User-Role': currentUser?.role || 'Super Administrator',
+          'X-User-Name': currentUser?.name || 'Super Administrator',
+        },
+        body: JSON.stringify({
+          days: parseInt(pruneDays, 10),
+          user_days: parseInt(userDays, 10),
+          vacuum: true,
+          user_id: currentUser?.id,
+          user_role: currentUser?.role,
+          user_name: currentUser?.name,
+        }),
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setMessage({ type: 'success', text: `✅ ${json.message}` });
+        fetchStats();
+        if (onPruned) onPruned();
+      } else {
+        setMessage({ type: 'error', text: `❌ ${json.message || 'Gagal memangkas log'}` });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: `❌ Error: ${err.message}` });
+    } finally {
+      setPruning(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/audit-logs/retention-settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+          'X-User-Id': currentUser?.id ? String(currentUser.id) : '',
+          'X-User-Role': currentUser?.role || 'Super Administrator',
+          'X-User-Name': currentUser?.name || 'Super Administrator',
+        },
+        body: JSON.stringify({
+          telemetry_days: parseInt(telemetryDays, 10),
+          user_days: parseInt(userDays, 10),
+          enabled: autoEnabled,
+          user_id: currentUser?.id,
+          user_role: currentUser?.role,
+          user_name: currentUser?.name,
+        }),
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setMessage({ type: 'success', text: `✅ ${json.message}` });
+        fetchStats();
+      } else {
+        setMessage({ type: 'error', text: `❌ ${json.message || 'Gagal menyimpan pengaturan'}` });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: `❌ Error: ${err.message}` });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    const confirmInput = window.prompt(
+      "⚠️ PERINGATAN SUPER ADMINISTRATOR ⚠️\n\nAnda akan MENGHAPUS SEMUA DATA AUDIT LOG secara permanen dari database!\n\nKetik 'HAPUS' atau 'HAPUS SEMUA LOG' untuk mengonfirmasi:"
+    );
+    if (confirmInput === null) return; // User pressed Cancel
+    
+    const cleanInput = confirmInput.trim().toLowerCase();
+    if (cleanInput !== 'hapus' && cleanInput !== 'hapus semua log' && cleanInput !== 'hapus semua' && cleanInput !== 'clear') {
+      alert("Teks konfirmasi tidak cocok. Tindakan dibatalkan.");
+      return;
+    }
+
+    setClearingAll(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/audit-logs/clear-all', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+          'X-User-Id': currentUser?.id ? String(currentUser.id) : '',
+          'X-User-Role': currentUser?.role || 'Super Administrator',
+          'X-User-Name': currentUser?.name || 'Super Administrator',
+        },
+        body: JSON.stringify({
+          user_id: currentUser?.id,
+          user_role: currentUser?.role || 'Super Administrator',
+          user_name: currentUser?.name || 'Super Administrator',
+        }),
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        setMessage({ type: 'success', text: `💥 ${json.message}` });
+        fetchStats();
+        if (onPruned) onPruned();
+      } else {
+        setMessage({ type: 'error', text: `❌ ${json.message || 'Gagal mengosongkan log'}` });
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: `❌ Error: ${err.message}` });
+    } finally {
+      setClearingAll(false);
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/75 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen">
+      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 max-h-[90vh] flex flex-col my-auto overflow-hidden animate-in fade-in zoom-in duration-150">
+        {/* Header */}
+        <div className="bg-slate-900 dark:bg-slate-950 text-white px-6 py-4 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-base font-bold">Pembersihan &amp; Kebijakan Retensi Log Database</h3>
+              <p className="text-xs text-slate-400">Pangkas log alarm telemetri lama agar database selalu ramping dan responsif</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-800 text-slate-400 font-bold">✕</button>
+        </div>
+
+        <div className="p-6 space-y-6 overflow-y-auto flex-1 text-xs">
+          {message && (
+            <div className={`p-3.5 rounded-xl border text-xs font-bold ${message.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200' : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'}`}>
+              {message.text}
+            </div>
+          )}
+
+          {/* Database Log Volume KPI */}
+          {loading ? (
+            <div className="p-8 text-center text-slate-400 italic">Memuat statistik database...</div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Total Audit Logs</span>
+                <div className="font-mono text-lg font-black text-slate-900 dark:text-white">
+                  {stats?.total_logs?.toLocaleString('id-ID') ?? 0}
+                </div>
+                <p className="text-[10px] text-slate-500">Tersimpan di DB</p>
+              </div>
+
+              <div className="p-3.5 bg-amber-50/60 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-900/60 space-y-1">
+                <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">Usia &gt; 14 Hari</span>
+                <div className="font-mono text-lg font-black text-amber-600 dark:text-amber-400">
+                  {stats?.older_than_14d?.toLocaleString('id-ID') ?? 0}
+                </div>
+                <p className="text-[10px] text-amber-700/80 dark:text-amber-400/80">Dapat dibersihkan</p>
+              </div>
+
+              <div className="p-3.5 bg-rose-50/60 dark:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900/60 space-y-1">
+                <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase">Usia &gt; 30 Hari</span>
+                <div className="font-mono text-lg font-black text-rose-600 dark:text-rose-400">
+                  {stats?.older_than_30d?.toLocaleString('id-ID') ?? 0}
+                </div>
+                <p className="text-[10px] text-rose-700/80 dark:text-rose-400/80">Log sangat lawas</p>
+              </div>
+
+              <div className="p-3.5 bg-indigo-50/60 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-900/60 space-y-1">
+                <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase">Notifikasi Sistem</span>
+                <div className="font-mono text-lg font-black text-indigo-600 dark:text-indigo-400">
+                  {stats?.total_notifications?.toLocaleString('id-ID') ?? 0}
+                </div>
+                <p className="text-[10px] text-indigo-700/80 dark:text-indigo-400/80">Riwayat Alarm NOC</p>
+              </div>
+            </div>
+          )}
+
+          {/* Section 1: Pembersihan On-Demand (Manual Prune) */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">1. Pembersihan Log Sekarang (Manual Pruning)</h4>
+                <p className="text-[11px] text-slate-500">Pangkas log alarm telemetri otomatis yang melebihi batas hari yang dipilih</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <span className="text-slate-600 dark:text-slate-400 whitespace-nowrap font-medium">Hapus log telemetri &gt;</span>
+                <select
+                  value={pruneDays}
+                  onChange={(e) => setPruneDays(e.target.value)}
+                  className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl font-bold font-mono text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                >
+                  <option value="7">7 Hari (Hemat Maksimal)</option>
+                  <option value="14">14 Hari (Standar Rekomendasi)</option>
+                  <option value="30">30 Hari (1 Bulan)</option>
+                  <option value="60">60 Hari (2 Bulan)</option>
+                </select>
+              </div>
+
+              <button
+                onClick={handlePruneNow}
+                disabled={pruning}
+                className="w-full sm:w-auto px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <span>{pruning ? '⏳ Memangkas & Vacuum...' : '🧹 Pangkas Log Sekarang'}</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 italic">
+              * Log aktivitas akun manusia (Login, Create, Update, Delete, OTDR) akan tetap disimpan selama 90 hari.
+            </p>
+          </div>
+
+          {/* Section 2: Kebijakan Retensi Otomatis (Auto-Prune 24/7) */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-4">
+            <div>
+              <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">2. Pengaturan Retensi Pembersihan Otomatis (24/7)</h4>
+              <p className="text-[11px] text-slate-500">Daemon telemetri akan otomatis membersihkan log kadaluarsa setiap 24 jam sekali di background</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                  Retensi Log Alarm Telemetri Otomatis:
+                </label>
+                <select
+                  value={telemetryDays}
+                  onChange={(e) => setTelemetryDays(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl font-bold font-mono text-xs focus:outline-none cursor-pointer"
+                >
+                  <option value="7">7 Hari</option>
+                  <option value="14">14 Hari (Direkomendasikan)</option>
+                  <option value="30">30 Hari</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                  Retensi Log Aktivitas Pengguna (Admin/Teknisi):
+                </label>
+                <select
+                  value={userDays}
+                  onChange={(e) => setUserDays(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl font-bold font-mono text-xs focus:outline-none cursor-pointer"
+                >
+                  <option value="30">30 Hari</option>
+                  <option value="60">60 Hari</option>
+                  <option value="90">90 Hari (3 Bulan - Rekomendasi)</option>
+                  <option value="180">180 Hari (6 Bulan)</option>
+                  <option value="365">365 Hari (1 Tahun)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700/80">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoEnabled}
+                  onChange={(e) => setAutoEnabled(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                />
+                <span className="font-bold text-slate-700 dark:text-slate-300">Aktifkan Auto-Pruning Harian Otomatis</span>
+              </label>
+
+              <button
+                onClick={handleSaveSettings}
+                disabled={savingSettings}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs shadow-xs transition-all disabled:opacity-50"
+              >
+                {savingSettings ? 'Menyimpan...' : 'Simpan Kebijakan'}
+              </button>
+            </div>
+          </div>
+
+          {/* Section 3: Danger Zone - Hapus Semua Log (Khusus Super Administrator) */}
+          {isSuperAdmin && (
+            <div className="p-4 rounded-xl bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 font-black">
+                    🚨
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-rose-900 dark:text-rose-300 text-sm">Zona Bahaya: Kosongkan Seluruh Audit Log</h4>
+                    <p className="text-[11px] text-rose-700/80 dark:text-rose-400/80">
+                      Hapus seluruh 100% data riwayat log tanpa terkecuali dan reset tabel ke 0 (Hanya Super Administrator)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1 border-t border-rose-200/80 dark:border-rose-900/40">
+                <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                  * Tabel akan di-TRUNCATE &amp; di-VACUUM secara instan. 1 log rekam jejak penghapusan baru akan tetap dicatat untuk akuntabilitas.
+                </p>
+                <button
+                  onClick={handleClearAll}
+                  disabled={clearingAll || loading}
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 flex-shrink-0"
+                >
+                  <span>{clearingAll ? '⏳ Mengosongkan Seluruh Log...' : '🗑️ Kosongkan Seluruh Log (Clear All)'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-2 flex justify-end">
+            <button onClick={onClose} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs">Tutup</button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
    MAIN AUDIT LOGS COMPONENT
 ══════════════════════════════════════════════════════════════════ */
 export default function AuditLogs() {
@@ -112,6 +478,7 @@ export default function AuditLogs() {
   const [moduleFilter, setModuleFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [selectedLog, setSelectedLog] = useState(null);
+  const [showPruneModal, setShowPruneModal] = useState(false);
 
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
@@ -193,6 +560,14 @@ export default function AuditLogs() {
             lastUpdatedText={timeAgoText}
             label="Segarkan Log"
           />
+          {isSuperAdmin && (
+            <button
+              onClick={() => setShowPruneModal(true)}
+              className="px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-2 transition-all"
+            >
+              <span>🧹 Pembersihan Log</span>
+            </button>
+          )}
           <button
             onClick={handleExportCSV}
             className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-2 transition-all"
@@ -371,6 +746,16 @@ export default function AuditLogs() {
         <LogDetailModal
           log={selectedLog}
           onClose={() => setSelectedLog(null)}
+        />
+      )}
+
+      {/* PRUNE LOG & RETENTION MODAL */}
+      {showPruneModal && (
+        <LogPruneModal
+          onClose={() => setShowPruneModal(false)}
+          onPruned={() => fetchLogs(1, false)}
+          isSuperAdmin={isSuperAdmin}
+          currentUser={currentUser}
         />
       )}
     </div>

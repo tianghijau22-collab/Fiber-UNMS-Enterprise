@@ -79,6 +79,80 @@ class TelegramService
     }
 
     /**
+     * Filter Kebijakan Notifikasi Telegram:
+     * HANYA kirim notifikasi ke Telegram untuk 5 kategori insiden & gangguan massal:
+     * 1. GANGGUAN INTERFACE MASAL
+     * 2. PEMULIHAN GANGGUAN INTERFACE MASAL
+     * 3. GANGGUAN ODP MASAL
+     * 4. PEMULIHAN GANGGUAN ODP MASAL
+     * 5. INSIDEN MASAL (Kabel Putus / Fiber Cut / Lokalisasi Titik Putus / Siaran Massal)
+     *
+     * Alert perorangan (Single ONT LOS, Single Dying Gasp, dsb.) TETAP TERCATAT LENGKAP
+     * di database & halaman Web "Notifikasi Alert Sistem", tetapi TIDAK DIKIRIM ke Telegram.
+     */
+    public static function isMassOrCriticalNotification(string $title, string $body, string $type = 'NOC'): bool
+    {
+        $typeUpper  = strtoupper(trim($type));
+        $titleUpper = strtoupper(trim($title));
+        $bodyUpper  = strtoupper(trim($body));
+        $combined   = $titleUpper . ' ' . $bodyUpper;
+
+        // 1. Explicit Mass Types
+        if (in_array($typeUpper, ['MASS_OUTAGE', 'MASS_RECOVERY', 'FIBER_CUT', 'BROADCAST'])) {
+            return true;
+        }
+
+        // 2. Kategori 1 & 2: GANGGUAN & PEMULIHAN INTERFACE MASAL
+        if (
+            str_contains($combined, 'INTERFACE') && (
+                str_contains($combined, 'GANGGUAN MASSAL') ||
+                str_contains($combined, 'GANGGUAN MASAL') ||
+                str_contains($combined, 'PEMULIHAN GANGGUAN MASSAL') ||
+                str_contains($combined, 'PEMULIHAN GANGGUAN MASAL') ||
+                str_contains($combined, 'PEMULIHAN MASSAL') ||
+                str_contains($combined, 'PORT DOWN') ||
+                str_contains($combined, 'PORT UP') ||
+                str_contains($combined, 'LINK DOWN') ||
+                str_contains($combined, 'LINK UP')
+            )
+        ) {
+            return true;
+        }
+
+        // 3. Kategori 3 & 4: GANGGUAN & PEMULIHAN ODP MASAL
+        if (
+            str_contains($combined, 'ODP') && (
+                str_contains($combined, 'GANGGUAN MASSAL') ||
+                str_contains($combined, 'GANGGUAN MASAL') ||
+                str_contains($combined, 'PEMULIHAN GANGGUAN MASSAL') ||
+                str_contains($combined, 'PEMULIHAN GANGGUAN MASAL') ||
+                str_contains($combined, 'PEMULIHAN ODP') ||
+                str_contains($combined, 'LOKALISASI PUTUS KABEL') ||
+                str_contains($combined, 'PEMULIHAN KABEL OPTIK')
+            )
+        ) {
+            return true;
+        }
+
+        // 4. Kategori 5: INSIDEN MASAL / FIBER CUT / TITIK PUTUS BACKBONE
+        if (
+            str_contains($combined, 'INSIDEN MASAL') ||
+            str_contains($combined, 'INSIDEN MASSAL') ||
+            str_contains($combined, 'MASS OUTAGE') ||
+            str_contains($combined, 'MASS RECOVERY') ||
+            str_contains($combined, 'FIBER CUT') ||
+            str_contains($combined, 'TITIK PUTUS') ||
+            str_contains($combined, 'LOKALISASI PUTUS KABEL') ||
+            str_contains($combined, 'SIARAN NOTIFIKASI MASSAL') ||
+            str_contains($combined, 'BROADCAST')
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Kirim notifikasi pesan ke seluruh Grup Telegram (Non-Blocking / Asynchronous)
      */
     public static function send(string $title, string $body, string $type = 'NOC', ?string $url = null, ?string $source = null): bool
@@ -121,7 +195,12 @@ class TelegramService
                 Log::warning('TelegramService DB Log Warning: ' . $dbErr->getMessage());
             }
 
-            // 2. Lanjutkan pengiriman ke Telegram Bot
+            // 2. Filter Kebijakan: HANYA teruskan ke Telegram untuk 5 kategori gangguan massal / insiden
+            if (!static::isMassOrCriticalNotification($title, $body, $type)) {
+                return true; // Sukses dicatat di Web UI Notifikasi Alert Sistem, tidak dikirim ke Telegram
+            }
+
+            // 3. Lanjutkan pengiriman ke Telegram Bot
             $enabled = SystemSetting::get('telegram_enabled', env('TELEGRAM_ENABLED', 'false'));
             if ($enabled !== 'true' && $enabled !== true && $enabled !== '1') {
                 return true;
@@ -277,8 +356,9 @@ class TelegramService
                 return false;
             }
 
-            // Hanya izinkan aksi user nyata
-            $allowedActions = ['create', 'update', 'delete', 'login', 'logout', 'login_failed', 'login_blocked', 'provisioning', 'broadcast', 'test'];
+            // Kebijakan: Jangan kirim log aktivitas user harian (Login, CRUD) ke Telegram.
+            // Hanya izinkan siaran pesan massal (Broadcast).
+            $allowedActions = ['broadcast'];
             if (!in_array($actLower, $allowedActions)) {
                 return false;
             }

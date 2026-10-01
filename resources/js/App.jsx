@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './components/AuthContext.jsx';
 import VoiceCallManager from './components/VoiceCallManager.jsx';
 import PageTransitionWrapper from './components/PageTransitionWrapper.jsx';
 import GlobalAlertModal from './components/GlobalAlertModal.jsx';
+import UserPopupAnnouncementModal from './components/UserPopupAnnouncementModal.jsx';
 
 // Route-based Code Splitting (On-demand Lazy Loading)
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
@@ -34,6 +35,7 @@ const PublicTicketTracking = lazy(() => import('./pages/PublicTicketTracking.jsx
 const Login = lazy(() => import('./pages/Login.jsx'));
 const NetworkBridgeSetup = lazy(() => import('./pages/NetworkBridgeSetup.jsx'));
 const MobileAppTesting = lazy(() => import('./pages/MobileAppTesting.jsx'));
+const PopupAlertManagement = lazy(() => import('./pages/PopupAlertManagement.jsx'));
 
 import LoadingState from './components/LoadingState.jsx';
 
@@ -138,12 +140,16 @@ function AppContent() {
                 <Route path="/database-backup" element={<PrivateRoute><DatabaseBackup /></PrivateRoute>} />
                 <Route path="/broadcast-notifications" element={<PrivateRoute><PushNotificationBroadcast /></PrivateRoute>} />
                 <Route path="/mobile-app-testing" element={<PrivateRoute><MobileAppTesting /></PrivateRoute>} />
+                <Route path="/popup-alerts"   element={<PrivateRoute><PopupAlertManagement /></PrivateRoute>} />
                 <Route path="*"               element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Suspense>
           </PageTransitionWrapper>
         </main>
       </div>
+
+      {/* Pop-up Alert & Pengumuman Interaktif untuk Seluruh Pengguna */}
+      <UserPopupAnnouncementModal />
 
       {/* Real-Time WebRTC In-App Voice Call Engine */}
       <VoiceCallManager currentUser={currentUser} />

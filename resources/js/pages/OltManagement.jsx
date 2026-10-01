@@ -170,7 +170,7 @@ const getPortHealth = (port, oltDataRef) => {
   if (!port) return { status: 'down', label: 'Down / Standby', isUp: false, isMassDown: false, isWarning: false, regCount: 0, onCount: 0 };
   
   const portId = port.port_id || '';
-  const clean = portId.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
+  const clean = portId.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '').split(':')[0].trim();
   const slotNum = port.slot;
   const portNum = port.port || port.portNum;
 
@@ -178,8 +178,18 @@ const getPortHealth = (port, oltDataRef) => {
   let portOnus = [];
   if (oltDataRef && oltDataRef.onu_list) {
     portOnus = oltDataRef.onu_list.filter(o => {
-      const p = (o.port || o.detected_port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-      return p === clean || p === portId || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}`));
+      const p = (o.port || o.detected_port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '').split(':')[0].trim();
+      if (p === clean || p === portId) return true;
+      if (slotNum && portNum) {
+        if (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}`) return true;
+        const parts = p.split('/').filter(Boolean);
+        if (parts.length >= 2) {
+          const pSlot = parseInt(parts[parts.length - 2], 10);
+          const pPort = parseInt(parts[parts.length - 1], 10);
+          return pSlot === parseInt(slotNum, 10) && pPort === parseInt(portNum, 10);
+        }
+      }
+      return false;
     });
   }
 
@@ -200,8 +210,18 @@ const getPortHealth = (port, oltDataRef) => {
 
   // Cek apakah ada unconfigured
   const hasUncfg = (oltDataRef?.unconfigured_onus || []).some(o => {
-    const p = (o.detected_port || o.port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-    return p === clean || p === portId || (slotNum && portNum && (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}`));
+    const p = (o.detected_port || o.port || '').replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '').split(':')[0].trim();
+    if (p === clean || p === portId) return true;
+    if (slotNum && portNum) {
+      if (p === `${slotNum}/${portNum}` || p === `1/${slotNum}/${portNum}`) return true;
+      const parts = p.split('/').filter(Boolean);
+      if (parts.length >= 2) {
+        const pSlot = parseInt(parts[parts.length - 2], 10);
+        const pPort = parseInt(parts[parts.length - 1], 10);
+        return pSlot === parseInt(slotNum, 10) && pPort === parseInt(portNum, 10);
+      }
+    }
+    return false;
   });
 
   if (hasUncfg) {
@@ -989,15 +1009,28 @@ export default function OltManagement() {
 
   // ─── Helper Pencocokan Port Multi-Format (ZTE/Huawei/HSGQ) ─────────────────
   const isPortMatching = useCallback((onuPort, filterPort) => {
-    if (!filterPort) return true;
+    if (!filterPort || filterPort === 'all') return true;
     if (!onuPort) return false;
-    const cleanOnu = onuPort.replace(/^(gpon|epon)[-_](olt|onu)_/i, '').split(':')[0];
-    const cleanFilter = filterPort.replace(/^(gpon|epon)[-_](olt|onu)_/i, '').split(':')[0];
-    return onuPort === filterPort ||
-      cleanOnu === cleanFilter ||
-      cleanOnu.startsWith(cleanFilter + '/') ||
-      cleanOnu.startsWith(cleanFilter + ':') ||
-      onuPort.startsWith(filterPort);
+    const cleanOnu = onuPort.replace(/^(gpon|epon)[-_](olt|onu)_/i, '').split(':')[0].trim();
+    const cleanFilter = filterPort.replace(/^(gpon|epon)[-_](olt|onu)_/i, '').split(':')[0].trim();
+    
+    if (cleanOnu === cleanFilter) return true;
+
+    // Bandingkan slot dan port secara presisi angka (misal "1/2/1" vs "1/2/1", BUKAN prefix "1/2/14")
+    const partsOnu = cleanOnu.split('/').filter(Boolean);
+    const partsFilter = cleanFilter.split('/').filter(Boolean);
+
+    if (partsOnu.length >= 2 && partsFilter.length >= 2) {
+      const portOnu = parseInt(partsOnu[partsOnu.length - 1], 10);
+      const slotOnu = parseInt(partsOnu[partsOnu.length - 2], 10);
+
+      const portFilter = parseInt(partsFilter[partsFilter.length - 1], 10);
+      const slotFilter = parseInt(partsFilter[partsFilter.length - 2], 10);
+
+      return portOnu === portFilter && slotOnu === slotFilter;
+    }
+
+    return false;
   }, []);
 
   // ─── Optical Signal Quality Analytics ──────────────────────────────────────
@@ -2450,16 +2483,13 @@ export default function OltManagement() {
                     {/* Persistent Active/Selected & Hovered Port Telemetry HUD */}
                     {(() => {
                       const activePortHUD = hoveredPortInfo || (selectedPortFilter ? (() => {
-                        const matched = (oltData.pon_ports || []).find(p => {
-                          const clean = p.port_id.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-                          return p.port_id === selectedPortFilter || clean === selectedPortFilter || `1/${p.port}` === selectedPortFilter || clean === selectedPortFilter.replace(/^gpon[-_]olt_|^epon[-_]olt_/i, '');
-                        });
+                        const matched = (oltData.pon_ports || []).find(p => isPortMatching(p.port_id, selectedPortFilter));
                         if (matched) return matched;
                         return {
                           port_id: selectedPortFilter,
                           status: 'Up',
-                          registered_onus: (oltData.onus || []).filter(o => o.port_id === selectedPortFilter).length,
-                          online_onus: (oltData.onus || []).filter(o => o.port_id === selectedPortFilter && (o.status === 'online' || o.status === 'Working')).length,
+                          registered_onus: (oltData.onu_list || []).filter(o => isPortMatching(o.port, selectedPortFilter)).length,
+                          online_onus: (oltData.onu_list || []).filter(o => isPortMatching(o.port, selectedPortFilter) && (o.status === 'online' || o.status === 'Online' || o.status === 'Working' || o.status === 'active')).length,
                         };
                       })() : null);
 

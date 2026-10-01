@@ -27,21 +27,6 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [loginSuccess, setLoginSuccess] = useState(false);
 
-  // Session Inactivity Timeout Alert Notice
-  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(() => {
-    try {
-      return sessionStorage.getItem('fiber_session_expired') === '1' || location.state?.sessionExpired === true;
-    } catch {
-      return false;
-    }
-  });
-
-  useEffect(() => {
-    if (sessionExpiredNotice) {
-      sessionStorage.removeItem('fiber_session_expired');
-    }
-  }, [sessionExpiredNotice]);
-
   // Custom Modal for Forgot Password & Register Notice
   const [helpModal, setHelpModal] = useState(null);
 
@@ -131,21 +116,6 @@ export default function Login() {
                 <div className="flex-1 min-w-0">
                   <h4 className="font-bold text-xs">Perubahan Kata Sandi Berhasil</h4>
                   <p className="text-[11px] mt-0.5">{location.state.infoMessage}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Inactivity Session Timeout Alert */}
-            {sessionExpiredNotice && !error && (
-              <div className="bg-amber-50 dark:bg-neutral-900 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-300 p-3.5 rounded-md text-xs flex items-start gap-2.5 animate-in fade-in duration-200">
-                <svg className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-xs">Sesi Berakhir</h4>
-                  <p className="text-[11px] mt-0.5 text-amber-800 dark:text-amber-400/90 leading-relaxed">
-                    Sesi Anda telah berakhir secara otomatis karena tidak ada aktivitas selama 3 menit. Silakan masukkan kredensial untuk masuk kembali.
-                  </p>
                 </div>
               </div>
             )}

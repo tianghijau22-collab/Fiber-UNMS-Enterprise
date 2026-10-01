@@ -24,7 +24,6 @@ export function AuthProvider({ children }) {
         if (lastAct && (Date.now() - parseInt(lastAct, 10) > INACTIVITY_TIMEOUT_MS)) {
           localStorage.removeItem('fiber_user');
           localStorage.removeItem('fiber_last_activity');
-          sessionStorage.setItem('fiber_session_expired', '1');
           return null;
         }
         return JSON.parse(saved);
@@ -62,20 +61,7 @@ export function AuthProvider({ children }) {
     setCurrentUser(null);
     localStorage.removeItem('fiber_user');
     localStorage.removeItem('fiber_last_activity');
-
-    if (reason === 'timeout') {
-      sessionStorage.setItem('fiber_session_expired', '1');
-      if (typeof window !== 'undefined' && window.showAppAlert) {
-        window.showAppAlert({
-          type: 'warning',
-          title: 'Sesi Telah Berakhir',
-          message: 'Sesi login Anda telah berakhir karena tidak ada aktivitas selama 3 menit. Silakan login kembali.',
-          duration: 6000,
-        });
-      }
-    } else {
-      sessionStorage.removeItem('fiber_session_expired');
-    }
+    sessionStorage.removeItem('fiber_session_expired');
 
     if (savedUser) {
       try {

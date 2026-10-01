@@ -188,21 +188,26 @@ class ServerMonitoringController extends Controller
     }
 
     /**
-     * Mengubah mode mesin polling OLT: global_bulk (Se-OLT Sekaligus) atau per_port (Round-Robin Port-by-Port)
+     * Mengubah mode mesin polling OLT: slot_parallel (Slot Parallel ~8-12s), global_bulk, atau per_port (Round-Robin 2-Port)
      */
     public function setPollingMode(Request $request)
     {
-        $mode = $request->input('mode') ?? $request->json('mode') ?? 'global_bulk';
-        if (!in_array($mode, ['global_bulk', 'per_port'])) {
+        $payload = $request->json()->all();
+        $mode = $payload['mode'] ?? ($request->input('mode') ?? ($request->get('mode') ?? 'slot_parallel'));
+        if (!in_array($mode, ['slot_parallel', 'global_bulk', 'per_port'])) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Mode polling tidak valid. Pilih "global_bulk" atau "per_port".',
+                'message' => 'Mode polling tidak valid. Pilih "slot_parallel", "global_bulk", atau "per_port".',
             ], 422);
         }
 
         Cache::put('olt_polling_engine_mode', $mode, 86400 * 30);
 
-        $modeLabel = $mode === 'global_bulk' ? 'Global Bulk Polling (Se-OLT Sekaligus)' : 'Per-Port Round-Robin Polling';
+        $modeLabel = match ($mode) {
+            'slot_parallel' => 'Parallel Slot/Card Batching (Realtime ~8-12s + Anti-Flap)',
+            'global_bulk'   => 'Global Bulk Polling (Se-OLT Sekaligus)',
+            default         => 'Per-Port Round-Robin Polling (Klasik 2-Port)',
+        };
 
         \App\Console\Commands\PollOltTelemetry::appendWorkerLog(
             'SYSTEM',

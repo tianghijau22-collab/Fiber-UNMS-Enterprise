@@ -115,6 +115,84 @@ class FastOpticalProbeService
     }
 
     /**
+     * Eksekusi SNMP Bulk Walk secara PARALEL (Simultan) untuk beberapa OID sekaligus
+     * Mengurangi waktu total dari T1 + T2 menjadi MAX(T1, T2).
+     */
+    public static function executeParallelSnmpBulkWalk(OltDevice $olt, array $oids, int $maxRepetitions = 50, int $timeoutSec = 15): array
+    {
+        $ip = $olt->ip_address;
+        $community = $olt->getEffectiveCommunity() ?: 'public';
+        $port = $olt->snmp_port ?: 161;
+
+        // Cek apakah snmpbulkwalk CLI tersedia di server Linux
+        static $hasBulkWalk = null;
+        if ($hasBulkWalk === null) {
+            $hasBulkWalk = (PHP_OS_FAMILY !== 'Windows' && !empty(shell_exec('which snmpbulkwalk 2>/dev/null')));
+        }
+
+        if (!$hasBulkWalk) {
+            $results = [];
+            foreach ($oids as $k => $oid) {
+                $results[$k] = self::executeSnmpBulkWalk($olt, $oid, $maxRepetitions, $timeoutSec);
+            }
+            return $results;
+        }
+
+        $processes = [];
+        $pipesList = [];
+
+        foreach ($oids as $key => $oid) {
+            $cmd = "snmpbulkwalk -v2c -c " . escapeshellarg($community) . " -t {$timeoutSec} -r 1 -Cr{$maxRepetitions} -On " . escapeshellarg("{$ip}:{$port}") . " " . escapeshellarg($oid) . " 2>/dev/null";
+            $descriptors = [
+                0 => ['pipe', 'r'],
+                1 => ['pipe', 'w'],
+                2 => ['pipe', 'w'],
+            ];
+            $proc = @proc_open($cmd, $descriptors, $pipes);
+            if (is_resource($proc)) {
+                @fclose($pipes[0]);
+                @fclose($pipes[2]);
+                $processes[$key] = $proc;
+                $pipesList[$key] = $pipes[1];
+            }
+        }
+
+        $results = [];
+        foreach ($processes as $key => $proc) {
+            $output = @stream_get_contents($pipesList[$key]);
+            @fclose($pipesList[$key]);
+            @proc_close($proc);
+
+            $parsed = [];
+            if ($output) {
+                $lines = explode("\n", trim($output));
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if (!$line || str_contains($line, 'No Such Object') || str_contains($line, 'No Such Instance')) {
+                        continue;
+                    }
+                    $parts = explode('=', $line, 2);
+                    if (count($parts) === 2) {
+                        $resOid = ltrim(trim($parts[0]), '.');
+                        $resVal = trim($parts[1]);
+                        $parsed[$resOid] = $resVal;
+                    }
+                }
+            }
+            $results[$key] = $parsed;
+        }
+
+        // Fallback jika ada OID yang kosong
+        foreach ($oids as $key => $oid) {
+            if (!isset($results[$key])) {
+                $results[$key] = self::executeSnmpBulkWalk($olt, $oid, $maxRepetitions, $timeoutSec);
+            }
+        }
+
+        return $results;
+    }
+
+    /**
      * Parse raw SNMP serial number string from ZTE OLT to clean format (e.g. ZTEGC123456)
      */
     public static function parseZteSerialNumber(string $raw): string

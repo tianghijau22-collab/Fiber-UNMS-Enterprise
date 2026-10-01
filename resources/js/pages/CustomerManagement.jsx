@@ -8,6 +8,7 @@ import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
 import CustomerFilterPopover from '../components/CustomerFilterPopover';
 import SobokScraperModal from '../components/SobokScraperModal.jsx';
+import InterfaceOpticalProbeModal from '../components/InterfaceOpticalProbeModal.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 
 // Memoized single row component for ultra-fast, zero-delay typing in Auto-Discovery
@@ -331,6 +332,7 @@ export default function CustomerManagement() {
   // OLT Auto-Discovery Wizard State
   const [showDiscoveryModal, setShowDiscoveryModal] = useState(false);
   const [showSobokModal, setShowSobokModal] = useState(false);
+  const [showInterfaceProbeModal, setShowInterfaceProbeModal] = useState(false);
   const [unmappedOnus, setUnmappedOnus] = useState([]);
   const [loadingDiscovery, setLoadingDiscovery] = useState(false);
   const [discoverySearch, setDiscoverySearch] = useState('');
@@ -585,7 +587,7 @@ export default function CustomerManagement() {
     ]);
   }, [fetchCustomers, fetchOdpNodes, fetchOdcNodes, fetchOlts, fetchServicePackages]);
 
-  const isAnyModalOpen = showModal || showDiscoveryModal || showSobokModal || confirmDialog.isOpen;
+  const isAnyModalOpen = showModal || showDiscoveryModal || showSobokModal || showInterfaceProbeModal || confirmDialog.isOpen;
 
   // Background polling specifically targets customer list & redaman (ultra fast & silent)
   const silentCustomerPoll = useCallback(async (silent = true) => {
@@ -1011,6 +1013,23 @@ export default function CustomerManagement() {
     });
   }, [odcNodes, customers, odpNodes, filterOlt]);
 
+  const normalizePortStr = (p) => {
+    if (!p || p === '—' || p === 'none') return '';
+    const clean = String(p).toLowerCase().trim().split(':')[0].split(',')[0];
+    const m = clean.match(/(\d+)\/(\d+)\/(\d+)/);
+    if (m) return `${m[1]}/${m[2]}/${m[3]}`;
+    const m2 = clean.match(/(\d+)\/(\d+)/);
+    if (m2) return `${m2[1]}/${m2[2]}`;
+    return clean.replace(/^(gpon-olt_|gpon_olt_|gpon_|epon-olt_|epon_olt_|epon_)/, '');
+  };
+
+  const isSamePort = (p1, p2) => {
+    if (!p1 || !p2) return false;
+    const n1 = normalizePortStr(p1);
+    const n2 = normalizePortStr(p2);
+    return Boolean(n1 && n2 && n1 === n2);
+  };
+
   // 3. Available ODPs based on filterOlt, filterOdc, and filterInterface
   const availableOdps = useMemo(() => {
     const safeOdpNodes = Array.isArray(odpNodes) ? odpNodes : [];
@@ -1043,9 +1062,9 @@ export default function CustomerManagement() {
 
       // C. Filter by Interface
       if (filterInterface !== 'all') {
-        const directPort = odp.olt_port_ref === filterInterface;
+        const directPort = isSamePort(odp.olt_port_ref, filterInterface);
         const custInPort = safeCustomers.some(c =>
-          (c.gpon_interface === filterInterface || (c.gpon_interface && c.gpon_interface.toLowerCase() === filterInterface.toLowerCase())) &&
+          isSamePort(c.gpon_interface, filterInterface) &&
           (String(c.odp_id) === String(odp.id) || c.odp_name === odp.name)
         );
         if (!directPort && !custInPort) return false;
@@ -1172,9 +1191,7 @@ export default function CustomerManagement() {
         (filterServiceStatus === 'LOSS_BLOCKED' && !isClientOnline && cServiceStatus === 'BLOKIR');
 
       const matchOlt = filterOlt === 'all' || String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt;
-      const matchInterface = filterInterface === 'all' || 
-        c.gpon_interface === filterInterface || 
-        (c.gpon_interface && c.gpon_interface.toLowerCase() === filterInterface.toLowerCase());
+      const matchInterface = filterInterface === 'all' || isSamePort(c.gpon_interface, filterInterface);
       const matchOdc = filterOdc === 'all' || String(c.odc_id) === String(filterOdc) || c.odc_name === filterOdc;
       const matchOdp = filterOdp === 'all' || String(c.odp_id) === String(filterOdp) || c.odp_name === filterOdp;
       const matchPackage = filterPackage === 'all' || c.package_name === filterPackage;
@@ -1270,6 +1287,17 @@ export default function CustomerManagement() {
               </button>
             </>
           )}
+          <button
+            type="button"
+            onClick={() => setShowInterfaceProbeModal(true)}
+            className="w-full sm:w-auto px-3.5 py-2.5 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold rounded-md text-xs border border-indigo-300 dark:border-indigo-800 shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+            title="Cek Redaman Real-Time per Interface Port OLT"
+          >
+            <svg className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span className="truncate">Cek Redaman Interface</span>
+          </button>
           {canCrud && (
             <button
               type="button"
@@ -2328,6 +2356,20 @@ export default function CustomerManagement() {
         </div>,
         document.body
       )}
+
+      {/* Interface Real-time Optical Probe Modal */}
+      <InterfaceOpticalProbeModal
+        isOpen={showInterfaceProbeModal}
+        onClose={() => setShowInterfaceProbeModal(false)}
+        olts={olts}
+        availableInterfaces={availableInterfaces}
+        initialOltId={filterOlt !== 'all' ? filterOlt : (olts[0]?.id || 'all')}
+        initialInterface={filterInterface !== 'all' ? filterInterface : ''}
+        onProbeCompleted={(res) => {
+          showToastMsg(`Pengecekan real-time port ${res.interface} selesai (${res.summary?.total_onus ?? 0} klien, ${res.summary?.online_count ?? 0} online).`);
+          fetchCustomers(true);
+        }}
+      />
 
       {/* Sobok Scraper & Import Modal */}
       <SobokScraperModal

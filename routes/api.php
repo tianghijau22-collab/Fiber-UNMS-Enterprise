@@ -158,6 +158,7 @@ Route::post('customers/sobok/sync-service-status', [\App\Http\Controllers\SobokI
 Route::get('customers/sobok/sync-meta', [\App\Http\Controllers\SobokImportController::class, 'getSyncMeta']);
 Route::post('customers/{id}/swap-onu', [CustomerController::class, 'swapOnu']);
 Route::match(['get', 'post'], 'customers/{id}/diagnostics', [CustomerController::class, 'diagnostics']);
+Route::post('customers/probe-interface-optical', [CustomerController::class, 'probeInterfaceOptical']);
 Route::apiResource('customers', CustomerController::class);
 Route::get('tickets/reference-data', [TicketController::class, 'referenceData']);
 Route::post('tickets/{id}/dispatch-telegram', [TicketController::class, 'dispatchTelegram']);
@@ -165,12 +166,16 @@ Route::post('tickets/{id}/add-progress', [TicketController::class, 'addProgress'
 Route::get('public/tickets/{ticketNumber}', [TicketController::class, 'publicTrack']);
 Route::apiResource('tickets', TicketController::class);
 Route::get('inventory', [InventoryController::class, 'index']);
-// User & RBAC Dynamic Page Access Permissions
+// User Management & RBAC Dynamic Page Access Permissions
+Route::apiResource('users', UserController::class);
 Route::get('rbac/permissions', [UserController::class, 'getRoutePermissions']);
 Route::post('rbac/permissions', [UserController::class, 'saveRoutePermissions']);
 Route::post('rbac/permissions/reset', [UserController::class, 'resetRoutePermissions']);
-Route::apiResource('users', UserController::class);
 Route::get('audit-logs', [AuditLogController::class, 'index']);
+Route::get('audit-logs/stats', [AuditLogController::class, 'getStats']);
+Route::post('audit-logs/prune', [AuditLogController::class, 'prune']);
+Route::post('audit-logs/retention-settings', [AuditLogController::class, 'saveRetentionSettings']);
+Route::post('audit-logs/clear-all', [AuditLogController::class, 'clearAll']);
 
 // Authentication Routes
 Route::post('auth/login', [AuthController::class, 'login']);
@@ -213,4 +218,15 @@ Route::post('app-testing/upload-apk', [\App\Http\Controllers\AppTestingControlle
 Route::post('app-testing/test-api', [\App\Http\Controllers\AppTestingController::class, 'testEndpoints']);
 Route::post('app-testing/trigger-build', [\App\Http\Controllers\AppTestingController::class, 'triggerBuild']);
 Route::get('app-testing/build-status', [\App\Http\Controllers\AppTestingController::class, 'buildStatus']);
+
+// Pop-up Alert Pemberitahuan untuk User (Super Admin & Public Active Alerts)
+Route::get('popup-alerts/active', [\App\Http\Controllers\PopupAlertController::class, 'getActiveAlerts']);
+Route::post('popup-alerts/upload-image', [\App\Http\Controllers\PopupAlertController::class, 'uploadImage']);
+Route::get('popup-alerts', [\App\Http\Controllers\PopupAlertController::class, 'index']);
+Route::post('popup-alerts', [\App\Http\Controllers\PopupAlertController::class, 'store']);
+Route::get('popup-alerts/{id}', [\App\Http\Controllers\PopupAlertController::class, 'show']);
+Route::put('popup-alerts/{id}', [\App\Http\Controllers\PopupAlertController::class, 'update']);
+Route::patch('popup-alerts/{id}/toggle', [\App\Http\Controllers\PopupAlertController::class, 'toggleActive']);
+Route::delete('popup-alerts/{id}', [\App\Http\Controllers\PopupAlertController::class, 'destroy']);
+
 
