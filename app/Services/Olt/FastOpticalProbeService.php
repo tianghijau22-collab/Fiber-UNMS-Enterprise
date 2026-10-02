@@ -63,13 +63,54 @@ class FastOpticalProbeService
     }
 
     /**
+     * Tentukan parameter SNMP optimal secara dinamis berdasarkan kondisi latensi riil (Auto Failover / Fallback)
+     */
+    public static function getOptimalSnmpParameters(OltDevice $olt): array
+    {
+        $pingMs = (int)($olt->last_ping_ms ?? Cache::get("olt_ping_ms_{$olt->id}", 100));
+
+        // 1. Kondisi Normal Direct Peering (Ping <= 45ms): Mode Ultra-Fast
+        if ($pingMs > 0 && $pingMs <= 45) {
+            return [
+                'mode'            => 'ULTRA_FAST_DIRECT',
+                'max_repetitions' => 25,
+                'timeout_sec'     => 4,
+                'retries'         => 1,
+            ];
+        }
+
+        // 2. Kondisi Jaringan Terkendala / Degraded (Ping 46 - 130ms): Mode Adaptif Failsafe (MTU-Safe)
+        if ($pingMs > 45 && $pingMs <= 130) {
+            return [
+                'mode'            => 'ADAPTIVE_FAILSAFE_DEGRADED',
+                'max_repetitions' => 12, // Payload UDP kecil (<400 byte), 100% aman di dalam MTU tunnel L2TP tanpa fragmentasi
+                'timeout_sec'     => 6,
+                'retries'         => 2,
+            ];
+        }
+
+        // 3. Kondisi Kritis (Ping > 130ms): Mode Recovery
+        return [
+            'mode'            => 'CRITICAL_RECOVERY',
+            'max_repetitions' => 8,
+            'timeout_sec'     => 8,
+            'retries'         => 3,
+        ];
+    }
+
+    /**
      * Eksekusi SNMP Bulk Walk berkecepatan tinggi menggunakan CLI snmpbulkwalk (dengan fallback ke PHP SNMP session)
      */
-    public static function executeSnmpBulkWalk(OltDevice $olt, string $oid, int $maxRepetitions = 30, int $timeoutSec = 10): array
+    public static function executeSnmpBulkWalk(OltDevice $olt, string $oid, ?int $maxRepetitions = null, ?int $timeoutSec = null, ?int $retries = null): array
     {
         $ip = $olt->ip_address;
         $community = $olt->getEffectiveCommunity() ?: 'public';
         $port = $olt->snmp_port ?: 161;
+
+        $profile = self::getOptimalSnmpParameters($olt);
+        $maxRepetitions = $maxRepetitions ?: $profile['max_repetitions'];
+        $timeoutSec     = $timeoutSec ?: $profile['timeout_sec'];
+        $retries        = $retries !== null ? $retries : $profile['retries'];
 
         // Cek apakah snmpbulkwalk CLI tersedia di server Linux
         static $hasBulkWalk = null;
@@ -78,7 +119,7 @@ class FastOpticalProbeService
         }
 
         if ($hasBulkWalk) {
-            $cmd = "snmpbulkwalk -v2c -c " . escapeshellarg($community) . " -t {$timeoutSec} -r 1 -Cr{$maxRepetitions} -On " . escapeshellarg("{$ip}:{$port}") . " " . escapeshellarg($oid) . " 2>/dev/null";
+            $cmd = "snmpbulkwalk -v2c -c " . escapeshellarg($community) . " -t {$timeoutSec} -r {$retries} -Cr{$maxRepetitions} -On " . escapeshellarg("{$ip}:{$port}") . " " . escapeshellarg($oid) . " 2>/dev/null";
             $output = @shell_exec($cmd);
             if ($output) {
                 $lines = explode("\n", trim($output));
@@ -102,7 +143,7 @@ class FastOpticalProbeService
         }
 
         // Fallback ke PHP SNMP extension
-        $session = self::getSnmpSession($olt, $timeoutSec * 1000);
+        $session = self::getSnmpSession($olt, $timeoutSec * 1000, $retries);
         if ($session) {
             try {
                 return @$session->walk($oid) ?: [];
@@ -118,11 +159,16 @@ class FastOpticalProbeService
      * Eksekusi SNMP Bulk Walk secara PARALEL (Simultan) untuk beberapa OID sekaligus
      * Mengurangi waktu total dari T1 + T2 menjadi MAX(T1, T2).
      */
-    public static function executeParallelSnmpBulkWalk(OltDevice $olt, array $oids, int $maxRepetitions = 50, int $timeoutSec = 15): array
+    public static function executeParallelSnmpBulkWalk(OltDevice $olt, array $oids, ?int $maxRepetitions = null, ?int $timeoutSec = null, ?int $retries = null): array
     {
         $ip = $olt->ip_address;
         $community = $olt->getEffectiveCommunity() ?: 'public';
         $port = $olt->snmp_port ?: 161;
+
+        $profile = self::getOptimalSnmpParameters($olt);
+        $maxRepetitions = $maxRepetitions ?: $profile['max_repetitions'];
+        $timeoutSec     = $timeoutSec ?: $profile['timeout_sec'];
+        $retries        = $retries !== null ? $retries : $profile['retries'];
 
         // Cek apakah snmpbulkwalk CLI tersedia di server Linux
         static $hasBulkWalk = null;
@@ -133,7 +179,7 @@ class FastOpticalProbeService
         if (!$hasBulkWalk) {
             $results = [];
             foreach ($oids as $k => $oid) {
-                $results[$k] = self::executeSnmpBulkWalk($olt, $oid, $maxRepetitions, $timeoutSec);
+                $results[$k] = self::executeSnmpBulkWalk($olt, $oid, $maxRepetitions, $timeoutSec, $retries);
             }
             return $results;
         }
@@ -142,7 +188,7 @@ class FastOpticalProbeService
         $pipesList = [];
 
         foreach ($oids as $key => $oid) {
-            $cmd = "snmpbulkwalk -v2c -c " . escapeshellarg($community) . " -t {$timeoutSec} -r 1 -Cr{$maxRepetitions} -On " . escapeshellarg("{$ip}:{$port}") . " " . escapeshellarg($oid) . " 2>/dev/null";
+            $cmd = "snmpbulkwalk -v2c -c " . escapeshellarg($community) . " -t {$timeoutSec} -r {$retries} -Cr{$maxRepetitions} -On " . escapeshellarg("{$ip}:{$port}") . " " . escapeshellarg($oid) . " 2>/dev/null";
             $descriptors = [
                 0 => ['pipe', 'r'],
                 1 => ['pipe', 'w'],
@@ -184,8 +230,8 @@ class FastOpticalProbeService
 
         // Fallback jika ada OID yang kosong
         foreach ($oids as $key => $oid) {
-            if (!isset($results[$key])) {
-                $results[$key] = self::executeSnmpBulkWalk($olt, $oid, $maxRepetitions, $timeoutSec);
+            if (!isset($results[$key]) || empty($results[$key])) {
+                $results[$key] = self::executeSnmpBulkWalk($olt, $oid, $maxRepetitions, $timeoutSec, $retries);
             }
         }
 

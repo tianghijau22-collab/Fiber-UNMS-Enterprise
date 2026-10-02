@@ -318,11 +318,11 @@ class PollOltTelemetry extends Command
             $walkStart = microtime(true);
 
             // 3. Ultra-Fast Parallel SNMP Bulk Walk (Menjalankan Phase State & Rx Power simultan dalam proses terpisah)
-            // Menggunakan maxRepetitions 35 dan timeout 12s dengan subprocess terisolasi
+            // Menggunakan adaptive auto-tuning (Auto Failover/Fallback berbasis latensi riil)
             $parallelWalks = FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
                 'states' => "1.3.6.1.4.1.3902.1012.3.50.11.2.1.4",
                 'rx'     => "1.3.6.1.4.1.3902.1012.3.50.12.1.1.10",
-            ], 35, 12);
+            ]);
 
             $rawStates   = $parallelWalks['states'] ?? [];
             $rawRxPowers = $parallelWalks['rx'] ?? [];
@@ -337,7 +337,7 @@ class PollOltTelemetry extends Command
                 $parallelSn = FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
                     'sn1' => "1.3.6.1.4.1.3902.1012.3.50.11.2.1.3",
                     'sn2' => "1.3.6.1.4.1.3902.1012.3.28.1.1.5",
-                ], 35, 10);
+                ]);
                 $rawSn1 = $parallelSn['sn1'] ?? [];
                 $rawSn2 = $parallelSn['sn2'] ?? [];
 
@@ -399,6 +399,10 @@ class PollOltTelemetry extends Command
 
             // 6. Map ONU Sebelumnya untuk Defensive State Filter (Anti-Flapping & Anti-Corrupt)
             $prevSnapshotOnus = collect($existingSnapshot['onu_list'] ?? [])->keyBy(fn($o) => strtoupper(trim((string)($o['serial_number'] ?? ''))));
+            $prevOnlineCount  = $prevSnapshotOnus->filter(fn($o) => in_array(strtolower($o['status'] ?? ''), ['online', 'active', 'working']))->count();
+
+            // 🛡️ Deteksi apakah respons SNMP terganggu / terkena packet loss (Partial Walk / Timeout)
+            $isSnmpDegraded = empty($rawStates) || ($prevOnlineCount > 50 && count($rawStates) < ($prevOnlineCount * 0.70));
 
             $physicalOnuMap = [];
             $onusByPort = [];
@@ -448,18 +452,21 @@ class PollOltTelemetry extends Command
                     $isOnline = true;
                     Cache::forget("ont_miss_count_{$sn}");
                 } else {
-                    // SNMP tidak mengembalikan state=3: Cek apakah drop sementara atau permanen
+                    // SNMP tidak mengembalikan state=3: Cek apakah timeout jaringan atau drop fisik riil
                     $hasTrapDown = Cache::get("ont_trap_down_{$sn}", false);
                     $missCount = (int)Cache::get("ont_miss_count_{$sn}", 0) + 1;
-                    Cache::put("ont_miss_count_{$sn}", $missCount, 120);
+                    Cache::put("ont_miss_count_{$sn}", $missCount, 3600); // 1 jam TTL
 
-                    if ($prevWasOnline && $missCount < 2 && !$hasTrapDown && $stateCode !== 1) {
-                        // 🛡️ Filter Packet Loss: Pertahankan status Online 1 siklus
-                        $rxPower = $prevRx;
+                    // Pertahankan status Online JIKA:
+                    // 1. Terdeteksi respons SNMP terpotong / degraded karena transit VPN loss, ATAU
+                    // 2. Sebelumnya Online dan belum miss 4 siklus berurutan serta tidak ada Trap Down / bukan explicit offline
+                    if ($prevWasOnline && ($isSnmpDegraded || ($missCount < 4 && !$hasTrapDown && $stateCode !== 1))) {
+                        // 🛡️ Filter Packet Loss: Pertahankan status Online & redaman sebelumnya
+                        $rxPower = ($prevRx > -38.0) ? $prevRx : -21.50;
                         $status = 'Online';
                         $isOnline = true;
                     } else {
-                        // Terkonfirmasi Down / LOS
+                        // Terkonfirmasi Down / LOS riil
                         $rxPower = -40.00;
                         $status = 'LOS';
                         $isOnline = false;
@@ -827,6 +834,12 @@ class PollOltTelemetry extends Command
             $txMap = [];
 
             // 6. Bangun Physical ONU Map untuk seluruh ONU di OLT
+            $prevSnapshotOnus = collect($existingSnapshot['onu_list'] ?? [])->keyBy(fn($o) => strtoupper(trim((string)($o['serial_number'] ?? ''))));
+            $prevOnlineCount  = $prevSnapshotOnus->filter(fn($o) => in_array(strtolower($o['status'] ?? ''), ['online', 'active', 'working']))->count();
+
+            // 🛡️ Deteksi apakah respons SNMP terganggu / terkena packet loss (Partial Walk / Timeout)
+            $isSnmpDegraded = empty($rawStates) || ($prevOnlineCount > 50 && count($rawStates) < ($prevOnlineCount * 0.70));
+
             $physicalOnuMap = [];
             $onusByPort = [];
             $allDiscoveredKeys = array_unique(array_merge(array_keys($stateMap), array_keys($snMap)));
@@ -849,31 +862,54 @@ class PollOltTelemetry extends Command
                     continue;
                 }
 
-                $stateCode = $stateMap[$compositeKey] ?? 0;
+                $stateCode = $stateMap[$compositeKey] ?? null;
                 $rawRx     = $rxMap[$compositeKey] ?? null;
-                $rawTx     = $txMap[$compositeKey] ?? null;
 
                 // Hitung Nilai Redaman Optik (DDM Formula)
-                if ($rawRx === null || $rawRx <= 0 || $rawRx >= 65534) {
-                    $rxPower = -40.00;
-                } else {
-                    $rxPower = round(($rawRx * 0.002) - 30.0, 2);
-                }
+                $hasValidRawRx = ($rawRx !== null && $rawRx > 0 && $rawRx < 65534);
+                $calculatedRx  = $hasValidRawRx ? round(($rawRx * 0.002) - 30.0, 2) : null;
+                $isExplicitStateOnline = ($stateCode === 3);
 
-                if ($rawTx === null || $rawTx <= 0 || $rawTx >= 65534) {
-                    $txPower = 0.00;
+                // 🛡️ DEFENSIVE STATE PRESERVATION FILTER (Anti-Glitch / Anti-Packet-Drop)
+                $prevItem = $prevSnapshotOnus->get(strtoupper($sn));
+                $prevWasOnline = $prevItem && in_array(strtolower($prevItem['status'] ?? ''), ['online', 'active', 'working']);
+                $prevRx = (float)($prevItem['rx_power'] ?? -21.50);
+
+                if ($isExplicitStateOnline && $hasValidRawRx && $calculatedRx > -38.0 && $calculatedRx < -5.0) {
+                    // Valid Online dengan redaman riil
+                    $rxPower = $calculatedRx;
+                    $status = 'Online';
+                    $isOnline = true;
+                    Cache::forget("ont_miss_count_{$sn}");
+                } elseif ($isExplicitStateOnline && (!$hasValidRawRx || $calculatedRx <= -38.0)) {
+                    // Phase State Online tapi redaman DDM belum terkirim / jitter: pertahankan redaman terakhir
+                    $rxPower = ($prevWasOnline && $prevRx > -38.0) ? $prevRx : -21.50;
+                    $status = 'Online';
+                    $isOnline = true;
+                    Cache::forget("ont_miss_count_{$sn}");
                 } else {
-                    $txPower = round(($rawTx * 0.002) - 30.0, 2);
-                    if ($txPower < 0 || $txPower > 10) {
-                        $txPower = 1.95;
+                    // SNMP tidak mengembalikan state=3: Cek apakah timeout jaringan atau drop fisik riil
+                    $hasTrapDown = Cache::get("ont_trap_down_{$sn}", false);
+                    $missCount = (int)Cache::get("ont_miss_count_{$sn}", 0) + 1;
+                    Cache::put("ont_miss_count_{$sn}", $missCount, 3600); // 1 jam TTL
+
+                    // Pertahankan status Online JIKA:
+                    // 1. Terdeteksi respons SNMP terpotong / degraded karena transit VPN loss, ATAU
+                    // 2. Sebelumnya Online dan belum miss 4 siklus berurutan serta tidak ada Trap Down / bukan explicit offline
+                    if ($prevWasOnline && ($isSnmpDegraded || ($missCount < 4 && !$hasTrapDown && $stateCode !== 1))) {
+                        // 🛡️ Filter Packet Loss: Pertahankan status Online & redaman sebelumnya
+                        $rxPower = ($prevRx > -38.0) ? $prevRx : -21.50;
+                        $status = 'Online';
+                        $isOnline = true;
+                    } else {
+                        // Terkonfirmasi Down / LOS riil
+                        $rxPower = -40.00;
+                        $status = 'LOS';
+                        $isOnline = false;
                     }
                 }
 
-                $isOnline = ($stateCode === 3 && $rxPower > -35.0 && $rxPower < -5.0);
-                $status   = $isOnline ? 'Online' : 'LOS';
-                if (!$isOnline) {
-                    $rxPower = -40.00;
-                }
+                $txPower = 1.95;
 
                 $onuItem = [
                     '_source'         => 'live_snmp',

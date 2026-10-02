@@ -962,8 +962,12 @@ class NetworkNodeController extends Controller
         // 2. Hitung statistik redaman (optical power) dari pelanggan yang terkoneksi
         $connectedPorts = $ports->filter(fn($p) => !empty($p->customer_id) || !empty($p->customer_service_id) || $p->status === 'used' || !empty($p->customer_name_cache) || !empty($p->destination_label));
         $validRxPowers = $ports->pluck('rx_power')->filter(fn($val) => $val !== null && is_numeric($val))->map(fn($v) => (float) $v);
+        $onlineRxPowers = $ports->filter(function ($p) {
+            $isDown = in_array(strtolower($p->ont_status ?? ''), ['offline', 'los', 'down', 'inactive', 'poweroff']) || (is_numeric($p->rx_power) && (float)$p->rx_power <= -35.0);
+            return !$isDown && is_numeric($p->rx_power);
+        })->pluck('rx_power')->map(fn($v) => (float)$v);
 
-        $avgRx = $validRxPowers->isNotEmpty() ? round($validRxPowers->avg(), 2) : null;
+        $avgRx = $onlineRxPowers->isNotEmpty() ? round($onlineRxPowers->avg(), 2) : ($validRxPowers->isNotEmpty() ? round($validRxPowers->avg(), 2) : null);
         $minRx = $validRxPowers->isNotEmpty() ? round($validRxPowers->min(), 2) : null;
         $maxRx = $validRxPowers->isNotEmpty() ? round($validRxPowers->max(), 2) : null;
 
@@ -972,8 +976,14 @@ class NetworkNodeController extends Controller
         // Warning: -25.01 dBm s/d -28 dBm (Redaman tinggi)
         // Critical: < -28 dBm atau ada ONT Offline/LOS
         $signalStatus = 'no_customer';
-        if ($validRxPowers->isNotEmpty()) {
-            if ($minRx !== null && $minRx < -28.0) {
+        $hasLossOnt = $ports->contains(function ($p) {
+            $isUsed = !empty($p->customer_id) || !empty($p->customer_service_id) || $p->status === 'used';
+            if (!$isUsed) return false;
+            return in_array(strtolower($p->ont_status ?? ''), ['offline', 'los', 'down', 'inactive', 'poweroff']) || (is_numeric($p->rx_power) && (float)$p->rx_power <= -35.0);
+        });
+
+        if ($validRxPowers->isNotEmpty() || $connectedPorts->isNotEmpty()) {
+            if ($hasLossOnt || ($minRx !== null && $minRx < -28.0)) {
                 $signalStatus = 'critical';
             } elseif ($minRx !== null && $minRx < -25.0) {
                 $signalStatus = 'warning';

@@ -4634,13 +4634,21 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                     {portsData.map(port => {
                       const isUsed = !!(port.customer_id || port.customer_service_id || port.status === 'used');
                       const rx = port.rx_power != null ? parseFloat(port.rx_power) : null;
-                      const rxText = rx !== null ? `${rx.toFixed(2)} dBm` : '—';
+                      const ontStatusRaw = (port.ont_status || '').toLowerCase().trim();
+                      const isOfflineOrLoss = ontStatusRaw === 'offline' || ontStatusRaw === 'los' || ontStatusRaw === 'down' || ontStatusRaw === 'inactive' || ontStatusRaw === 'poweroff' || (rx !== null && rx <= -35.0);
+
+                      let rxText = '—';
                       let rxTextColor = 'text-black/50 dark:text-white/50 font-medium';
-                      if (rx !== null) {
+                      if (isOfflineOrLoss) {
+                        rxText = rx !== null && rx <= -35.0 ? `Loss (${rx.toFixed(2)} dBm)` : 'Loss / Offline';
+                        rxTextColor = 'text-rose-600 dark:text-rose-400 font-bold';
+                      } else if (rx !== null) {
+                        rxText = `${rx.toFixed(2)} dBm`;
                         if (rx >= -25.0) rxTextColor = 'text-emerald-600 dark:text-emerald-400 font-bold';
                         else if (rx >= -28.0) rxTextColor = 'text-amber-600 dark:text-amber-400 font-bold';
                         else rxTextColor = 'text-rose-600 dark:text-rose-400 font-bold animate-pulse';
                       }
+
                       const custId = port.customer_number && port.customer_number !== '—'
                         ? port.customer_number
                         : (port.service_number && port.service_number !== '—' ? port.service_number : (port.customer_id ? `ID: ${port.customer_id}` : null));
@@ -4649,21 +4657,28 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                       return (
                         <div
                           key={port.id}
-                          className="bg-white dark:bg-black border border-black/60 dark:border-white/60 rounded-lg flex flex-col justify-between transition-all shadow-xs hover:border-black dark:hover:border-white"
+                          className={`bg-white dark:bg-black border ${isUsed && isOfflineOrLoss ? 'border-rose-400/80 dark:border-rose-900/80 bg-rose-50/20 dark:bg-rose-950/10' : 'border-black/60 dark:border-white/60'} rounded-lg flex flex-col justify-between transition-all shadow-xs hover:border-black dark:hover:border-white`}
                         >
                           <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
                             <div>
                               {/* Port Header */}
                               <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-black/20 dark:border-white/20">
                                 <div className="flex items-center gap-2">
-                                  <span className={`text-xs font-bold font-mono ${isUsed ? 'text-emerald-600 dark:text-emerald-400' : 'text-black/50 dark:text-white/50'}`}>
+                                  <span className={`text-xs font-bold font-mono ${isUsed ? (isOfflineOrLoss ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400') : 'text-black/50 dark:text-white/50'}`}>
                                     P{port.port_number}
                                   </span>
                                   {isUsed && (
-                                    <span className="inline-flex items-center text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span>
-                                      Terisi
-                                    </span>
+                                    isOfflineOrLoss ? (
+                                      <span className="inline-flex items-center text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900/60">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1 animate-pulse"></span>
+                                        Loss / Offline
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-900/50">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1"></span>
+                                        Online
+                                      </span>
+                                    )
                                   )}
                                 </div>
                                 {isUsed ? (
@@ -4873,7 +4888,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                             <div>
                               <span className="text-black/50 dark:text-white/50 block text-[10px]">Status Sinyal Rx Power</span>
                               <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border inline-block ${getRxColor(attenuation?.avg_rx_power ?? node.rx_power)}`}>
-                                {attenuation?.avg_rx_power ? `${parseFloat(attenuation.avg_rx_power).toFixed(2)} dBm (Rata-rata)` : (node.rx_power != null ? `${parseFloat(node.rx_power).toFixed(2)} dBm` : 'Normal (-21.50 dBm)')}
+                                {attenuation?.avg_rx_power ? `${parseFloat(attenuation.avg_rx_power).toFixed(2)} dBm (Rata-rata)` : (node.rx_power != null ? `${parseFloat(node.rx_power).toFixed(2)} dBm` : '—')}
                               </span>
                             </div>
                           </div>
