@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Brand Colors - FONA Enterprise (Modern Cyan & Ocean Blue)
-  static const Color primary = Color(0xFF00A3C4); // PLN / FONA Electric Cyan
-  static const Color primaryDark = Color(0xFF007A99); // Deep Cyan
-  static const Color primaryLight = Color(0xFFE0F7FA); // Soft Cyan Ice
+  // Brand Colors - FONA Enterprise (Vibrant Cyan #00AAE0)
+  static const Color primary = Color(0xFF00AAE0); // User Requested Primary Cyan
+  static const Color primaryDark = Color(0xFF008BB8); // Deep Cyan
+  static const Color primaryLight = Color(0xFFE0F7FE); // Soft Cyan Ice
   
   static const Color secondary = Color(0xFF0284C7); // Ocean Sky Blue
   static const Color secondaryLight = Color(0xFFE0F2FE); // Soft Sky Ice

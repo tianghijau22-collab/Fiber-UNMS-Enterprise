@@ -35,6 +35,12 @@ dependencies:
 
   # Local Notification
   flutter_local_notifications: ^17.1.2
+  share_plus: ^12.0.2
+  path_provider: ^2.1.5
+
+  # GIS Map & Topology
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:

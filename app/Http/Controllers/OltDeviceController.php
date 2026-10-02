@@ -43,12 +43,23 @@ class OltDeviceController extends Controller
             $snapshot = $olt->last_telemetry_snapshot;
             $rawPonPorts = !empty($snapshot['pon_ports']) ? $snapshot['pon_ports'] : [];
 
+            // Hitung total ONU terdaftar dari database (OntRegistration / Customer) atau telemetry snapshot
+            $dbOnuCount = \App\Models\OntRegistration::where(function ($q) use ($oltId) {
+                $q->whereHas('customerService.networkPort.node', fn($sq) => $sq->where('olt_device_id', $oltId))
+                  ->orWhereHas('oltPort.node', fn($sq) => $sq->where('olt_device_id', $oltId));
+            })->count();
+
+            $snapOnuCount = !empty($snapshot['onu_list']) ? count($snapshot['onu_list']) : (!empty($snapshot['registered_onus']) ? (int)$snapshot['registered_onus'] : 0);
+            $totalOnus = max($dbOnuCount, $snapOnuCount);
+
             $oltArray = $olt->makeHidden('last_telemetry_snapshot')->toArray();
             $oltArray['pop_count'] = max(1, $popCount);
             $oltArray['odc_count'] = $odcCount;
             $oltArray['odp_count'] = $odpCount;
             $oltArray['pon_ports'] = $rawPonPorts;
-            $oltArray['real_total_ports'] = count($rawPonPorts) > 0 ? count($rawPonPorts) : ($olt->total_ports ?: 16);
+            $oltArray['pon_ports_count'] = count($rawPonPorts) > 0 ? count($rawPonPorts) : ($olt->total_ports ?: 16);
+            $oltArray['real_total_ports'] = $oltArray['pon_ports_count'];
+            $oltArray['total_onus_count'] = $totalOnus;
 
             return $oltArray;
         });

@@ -198,7 +198,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                                         borderRadius: BorderRadius.circular(100),
                                         gradient: RadialGradient(
                                           colors: [
-                                            const Color(0xFF00A3C4).withValues(alpha: 0.38),
+                                            const Color(0xFF00AAE0).withValues(alpha: 0.38),
                                             const Color(0xFF0284C7).withValues(alpha: 0.18),
                                             const Color(0xFF38BDF8).withValues(alpha: 0.05),
                                             Colors.transparent,
@@ -368,7 +368,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                                         decoration: const BoxDecoration(
                                           gradient: LinearGradient(
                                             colors: [
-                                              Color(0xFF00A3C4), // Electric Cyan
+                                              Color(0xFF00AAE0), // Electric Cyan
                                               Color(0xFF0284C7), // Ocean Blue
                                             ],
                                           ),
@@ -431,7 +431,7 @@ class _OpticalNetworkPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     final paintNode = Paint()
-      ..color = const Color(0xFF00A3C4).withValues(alpha: 0.12)
+      ..color = const Color(0xFF00AAE0).withValues(alpha: 0.12)
       ..style = PaintingStyle.fill;
 
     final cx = size.width / 2;

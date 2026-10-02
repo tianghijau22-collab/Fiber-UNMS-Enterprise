@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../core/constants/api_constants.dart';
+import '../../core/network/dio_client.dart';
 import '../../providers/dashboard_provider.dart';
 
 class SystemAlertScreen extends StatefulWidget {
@@ -14,19 +17,87 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
   String _selectedCategory = 'ALL'; // 'ALL', 'OUTAGE', 'DYING_GASP', 'RECOVERY'
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
+  
+  bool _isLoadingFeed = false;
+  List<dynamic> _alertFeed = [];
+  Map<String, dynamic> _stats = {};
+  Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<DashboardProvider>(context, listen: false).fetchDashboardData();
-    });
+    _fetchAlerts();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) => _fetchAlerts(silent: true));
   }
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchAlerts({bool silent = false}) async {
+    if (!silent) {
+      setState(() => _isLoadingFeed = true);
+    }
+
+    try {
+      final queryParams = <String, dynamic>{
+        'limit': 100,
+      };
+      if (_selectedCategory != 'ALL') {
+        queryParams['type'] = _selectedCategory;
+      }
+      if (_searchQuery.trim().isNotEmpty) {
+        queryParams['search'] = _searchQuery.trim();
+      }
+
+      final response = await DioClient().dio.get(
+        ApiConstants.endpointSystemAlerts,
+        queryParameters: queryParams,
+      );
+
+      if (response.data != null && mounted) {
+        final res = response.data;
+        List<dynamic> loadedMessages = [];
+        Map<String, dynamic> loadedStats = {};
+
+        if (res is Map<String, dynamic>) {
+          if (res['messages'] is List) {
+            loadedMessages = res['messages'] as List;
+          } else if (res['data'] is List) {
+            loadedMessages = res['data'] as List;
+          } else if (res['alerts'] is List) {
+            loadedMessages = res['alerts'] as List;
+          }
+
+          if (res['stats'] is Map<String, dynamic>) {
+            loadedStats = res['stats'] as Map<String, dynamic>;
+          }
+        } else if (res is List) {
+          loadedMessages = res;
+        }
+
+        setState(() {
+          _alertFeed = loadedMessages;
+          _stats = loadedStats;
+          _isLoadingFeed = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        final dp = Provider.of<DashboardProvider>(context, listen: false);
+        if (_alertFeed.isEmpty && dp.systemAlerts.isNotEmpty) {
+          setState(() {
+            _alertFeed = dp.systemAlerts;
+            _isLoadingFeed = false;
+          });
+        } else {
+          setState(() => _isLoadingFeed = false);
+        }
+      }
+    }
   }
 
   String _cleanHtml(String text) {
@@ -183,7 +254,7 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
                   ),
                   child: Text(
                     nodeStr,
-                    style: const TextStyle(color: Color(0xFF00A3C4), fontWeight: FontWeight.bold, fontSize: 11),
+                    style: const TextStyle(color: Color(0xFF00AAE0), fontWeight: FontWeight.bold, fontSize: 11),
                   ),
                 ),
                 const Spacer(),
@@ -193,10 +264,10 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Text(
               cleanTitle,
-              style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+              style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 16),
             ),
             const SizedBox(height: 12),
             Container(
@@ -204,24 +275,25 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              child: Text(
+              child: SelectableText(
                 cleanBody.isNotEmpty ? cleanBody : 'Tidak ada detail tambahan untuk insiden ini.',
                 style: const TextStyle(color: Color(0xFF334155), fontSize: 13, height: 1.5),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    icon: const Icon(Icons.copy_rounded, size: 18),
-                    label: const Text('Salin Format Telegram'),
+                    icon: const Icon(Icons.copy_rounded, size: 18, color: Color(0xFF00AAE0)),
+                    label: const Text('Salin Format Telegram', style: TextStyle(color: Color(0xFF00AAE0), fontWeight: FontWeight.w700)),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      side: const BorderSide(color: Color(0xFF00AAE0)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: telegramText));
@@ -238,14 +310,172 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
                 const SizedBox(width: 10),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00A3C4),
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    backgroundColor: const Color(0xFF00AAE0),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 22),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text('Tutup', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Compact Filter Sheet Modal (Hides bulky category strip)
+  void _showFilterSheet(int totalCount, int outageCount, int dyingGaspCount, int recoveryCount) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Filter Kategori Alert',
+                    style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _selectedCategory = 'ALL');
+                      Navigator.pop(ctx);
+                      _fetchAlerts();
+                    },
+                    child: const Text('Reset', style: TextStyle(color: Color(0xFF00AAE0), fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildFilterOption(
+                label: 'Semua Kategori Insiden',
+                count: totalCount,
+                keyName: 'ALL',
+                icon: Icons.list_alt_rounded,
+                color: const Color(0xFF00AAE0),
+                onTap: () {
+                  setState(() => _selectedCategory = 'ALL');
+                  Navigator.pop(ctx);
+                  _fetchAlerts();
+                },
+              ),
+              _buildFilterOption(
+                label: 'Gangguan & Putus (Outage / LOS)',
+                count: outageCount,
+                keyName: 'OUTAGE',
+                icon: Icons.bolt_rounded,
+                color: const Color(0xFFEF4444),
+                onTap: () {
+                  setState(() => _selectedCategory = 'OUTAGE');
+                  Navigator.pop(ctx);
+                  _fetchAlerts();
+                },
+              ),
+              _buildFilterOption(
+                label: 'Dying Gasp (Mati Listrik PLN)',
+                count: dyingGaspCount,
+                keyName: 'DYING_GASP',
+                icon: Icons.power_off_rounded,
+                color: const Color(0xFFEA580C),
+                onTap: () {
+                  setState(() => _selectedCategory = 'DYING_GASP');
+                  Navigator.pop(ctx);
+                  _fetchAlerts();
+                },
+              ),
+              _buildFilterOption(
+                label: 'Normal / Pulih (Restored)',
+                count: recoveryCount,
+                keyName: 'RECOVERY',
+                icon: Icons.check_circle_outline_rounded,
+                color: const Color(0xFF10B981),
+                onTap: () {
+                  setState(() => _selectedCategory = 'RECOVERY');
+                  Navigator.pop(ctx);
+                  _fetchAlerts();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterOption({
+    required String label,
+    required int count,
+    required String keyName,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    final isSelected = _selectedCategory == keyName;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.1) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? color : const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: const Color(0xFF0F172A),
+                  fontSize: 13.5,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: isSelected ? color : const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  color: isSelected ? Colors.white : const Color(0xFF475569),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
@@ -253,12 +483,27 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
     );
   }
 
+  String _getCategoryLabel(String cat) {
+    return switch (cat) {
+      'OUTAGE' => 'Gangguan',
+      'DYING_GASP' => 'Dying Gasp',
+      'RECOVERY' => 'Pulih',
+      _ => 'Semua',
+    };
+  }
+
+  Color _getCategoryColor(String cat) {
+    return switch (cat) {
+      'OUTAGE' => const Color(0xFFEF4444),
+      'DYING_GASP' => const Color(0xFFEA580C),
+      'RECOVERY' => const Color(0xFF10B981),
+      _ => const Color(0xFF00AAE0),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    final dashboard = Provider.of<DashboardProvider>(context);
-    final rawAlerts = dashboard.systemAlerts;
-
-    final filteredAlerts = rawAlerts.where((raw) {
+    final effectiveAlerts = _alertFeed.where((raw) {
       final alert = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
 
       final title = (alert['title'] ?? '').toString().toLowerCase();
@@ -284,23 +529,29 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
       return matchesCat && matchesSearch;
     }).toList();
 
-    final outageCount = rawAlerts.where((raw) {
+    // Calculate real stats
+    final outageCount = _stats['outage_today'] ?? _stats['outage_interface_today'] ?? _alertFeed.where((raw) {
       final a = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
       final t = (a['title'] ?? '').toString().toLowerCase();
       return (a['is_outage'] == true || t.contains('gangguan') || t.contains('los')) && !(a['is_dying_gasp'] == true || t.contains('dying gasp') || t.contains('listrik'));
     }).length;
 
-    final dyingGaspCount = rawAlerts.where((raw) {
+    final dyingGaspCount = _stats['dying_gasp_today'] ?? _alertFeed.where((raw) {
       final a = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
       final t = (a['title'] ?? '').toString().toLowerCase();
       return a['is_dying_gasp'] == true || t.contains('dying gasp') || t.contains('listrik');
     }).length;
 
-    final recoveryCount = rawAlerts.where((raw) {
+    final recoveryCount = _stats['recovery_today'] ?? _stats['recovery_interface_today'] ?? _alertFeed.where((raw) {
       final a = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
       final t = (a['title'] ?? '').toString().toLowerCase();
       return a['is_recovery'] == true || t.contains('pulih') || t.contains('recovery') || t.contains('normal');
     }).length;
+
+    final int totalCount = _alertFeed.length;
+    final int safeOutageCount = outageCount is int ? outageCount : 0;
+    final int safeDyingGaspCount = dyingGaspCount is int ? dyingGaspCount : 0;
+    final int safeRecoveryCount = recoveryCount is int ? recoveryCount : 0;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -310,61 +561,133 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
         scrolledUnderElevation: 0,
         title: const Text(
           'Alert Sistem & Insiden',
-          style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 18),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF64748B)),
-            onPressed: () => dashboard.fetchDashboardData(),
+            icon: _isLoadingFeed
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00AAE0)),
+                  )
+                : const Icon(Icons.refresh_rounded, color: Color(0xFF64748B)),
+            onPressed: _isLoadingFeed ? null : () => _fetchAlerts(),
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
-          // KPI Counter Strip
+          // ── Compact Search & Filter Bar (Replaces bulky KPI strip) ──
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
             color: Colors.white,
             child: Row(
               children: [
+                // Search Input Field
                 Expanded(
-                  child: _buildCategoryPill(
-                    label: 'Semua',
-                    count: rawAlerts.length,
-                    color: const Color(0xFF00A3C4),
-                    isActive: _selectedCategory == 'ALL',
-                    onTap: () => setState(() => _selectedCategory = 'ALL'),
+                  child: SizedBox(
+                    height: 44,
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (val) {
+                        setState(() => _searchQuery = val.trim());
+                        _fetchAlerts(silent: true);
+                      },
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13.5),
+                      decoration: InputDecoration(
+                        hintText: 'Cari alert, ODP, OLT, SN...',
+                        hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                        prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B), size: 19),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, color: Color(0xFF64748B), size: 16),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() => _searchQuery = '');
+                                  _fetchAlerts();
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: const Color(0xFFF8FAFC),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFF00AAE0), width: 1.5),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _buildCategoryPill(
-                    label: 'Gangguan',
-                    count: outageCount,
-                    color: const Color(0xFFEF4444),
-                    isActive: _selectedCategory == 'OUTAGE',
-                    onTap: () => setState(() => _selectedCategory = 'OUTAGE'),
+                const SizedBox(width: 10),
+
+                // Compact Filter Button with Active Badge
+                InkWell(
+                  onTap: () => _showFilterSheet(
+                    totalCount,
+                    safeOutageCount,
+                    safeDyingGaspCount,
+                    safeRecoveryCount,
                   ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _buildCategoryPill(
-                    label: 'Dying Gasp',
-                    count: dyingGaspCount,
-                    color: const Color(0xFFEA580C),
-                    isActive: _selectedCategory == 'DYING_GASP',
-                    onTap: () => setState(() => _selectedCategory = 'DYING_GASP'),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _buildCategoryPill(
-                    label: 'Pulih',
-                    count: recoveryCount,
-                    color: const Color(0xFF10B981),
-                    isActive: _selectedCategory == 'RECOVERY',
-                    onTap: () => setState(() => _selectedCategory = 'RECOVERY'),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: _selectedCategory != 'ALL'
+                          ? _getCategoryColor(_selectedCategory).withValues(alpha: 0.12)
+                          : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _selectedCategory != 'ALL'
+                            ? _getCategoryColor(_selectedCategory)
+                            : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.filter_list_rounded,
+                          color: _selectedCategory != 'ALL'
+                              ? _getCategoryColor(_selectedCategory)
+                              : const Color(0xFF64748B),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _getCategoryLabel(_selectedCategory),
+                          style: TextStyle(
+                            color: _selectedCategory != 'ALL'
+                                ? _getCategoryColor(_selectedCategory)
+                                : const Color(0xFF334155),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (_selectedCategory != 'ALL') ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: _getCategoryColor(_selectedCategory),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -372,291 +695,227 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
           ),
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-          // Search Field
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (val) => setState(() => _searchQuery = val.trim()),
-              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Cari notifikasi alert, ODP, OLT, SN modem...',
-                hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B), size: 20),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Color(0xFF64748B), size: 18),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-              ),
-            ),
-          ),
-
           // Alert List
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => dashboard.fetchDashboardData(),
-              color: const Color(0xFF00A3C4),
+              onRefresh: () => _fetchAlerts(),
+              color: const Color(0xFF00AAE0),
               backgroundColor: Colors.white,
-              child: filteredAlerts.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_circle_outline_rounded, color: const Color(0xFF10B981).withValues(alpha: 0.6), size: 54),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Tidak Ada Alert Terdeteksi',
-                            style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Seluruh parameter jaringan dan OLT terpantau normal.',
-                            style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                          ),
-                        ],
-                      ),
+              child: _isLoadingFeed && _alertFeed.isEmpty
+                  ? const Center(
+                      child: CircularProgressIndicator(color: Color(0xFF00AAE0)),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: filteredAlerts.length,
-                      itemBuilder: (ctx, i) {
-                        final raw = filteredAlerts[i];
-                        final alert = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+                  : effectiveAlerts.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.check_circle_outline_rounded, color: const Color(0xFF10B981).withValues(alpha: 0.6), size: 54),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Tidak Ada Alert Terdeteksi',
+                                style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Seluruh parameter jaringan dan OLT terpantau normal.',
+                                style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          itemCount: effectiveAlerts.length,
+                          itemBuilder: (ctx, i) {
+                            final raw = effectiveAlerts[i];
+                            final alert = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
 
-                        final rawTitle = alert['title']?.toString() ?? 'Alert Sistem';
-                        final cleanTitle = _cleanAlertTitle(rawTitle);
-                        final subtitle = _formatAlertSubtitle(alert);
-                        final node = _formatAlertNode(alert);
-                        final time = _formatAlertTime(alert);
+                            final rawTitle = alert['title']?.toString() ?? 'Alert Sistem';
+                            final cleanTitle = _cleanAlertTitle(rawTitle);
+                            final subtitle = _formatAlertSubtitle(alert);
+                            final node = _formatAlertNode(alert);
+                            final time = _formatAlertTime(alert);
 
-                        final sev = (alert['severity']?.toString() ?? alert['type']?.toString() ?? alert['category'] ?? '').toUpperCase();
-                        final upperTitle = rawTitle.toUpperCase();
+                            final sev = (alert['severity']?.toString() ?? alert['type']?.toString() ?? alert['category'] ?? '').toUpperCase();
+                            final upperTitle = rawTitle.toUpperCase();
 
-                        final bool isCritical = alert['is_outage'] == true ||
-                            sev.contains('CRITICAL') ||
-                            sev.contains('HIGH') ||
-                            sev.contains('DANGER') ||
-                            upperTitle.contains('LOS') ||
-                            upperTitle.contains('MATI MASSAL') ||
-                            upperTitle.contains('PUTUS');
+                            final bool isCritical = alert['is_outage'] == true ||
+                                sev.contains('CRITICAL') ||
+                                sev.contains('HIGH') ||
+                                sev.contains('DANGER') ||
+                                upperTitle.contains('LOS') ||
+                                upperTitle.contains('MATI MASSAL') ||
+                                upperTitle.contains('PUTUS');
 
-                        final bool isDyingGasp = alert['is_dying_gasp'] == true ||
-                            sev.contains('DYING_GASP') ||
-                            upperTitle.contains('DYING GASP') ||
-                            upperTitle.contains('PADAM') ||
-                            upperTitle.contains('LISTRIK');
+                            final bool isDyingGasp = alert['is_dying_gasp'] == true ||
+                                sev.contains('DYING_GASP') ||
+                                upperTitle.contains('DYING GASP') ||
+                                upperTitle.contains('PADAM') ||
+                                upperTitle.contains('LISTRIK');
 
-                        final bool isRecovery = alert['is_recovery'] == true ||
-                            sev.contains('RECOVERY') ||
-                            upperTitle.contains('PULIH') ||
-                            upperTitle.contains('RESTORED') ||
-                            upperTitle.contains('NORMAL');
+                            final bool isRecovery = alert['is_recovery'] == true ||
+                                sev.contains('RECOVERY') ||
+                                upperTitle.contains('PULIH') ||
+                                upperTitle.contains('RESTORED') ||
+                                upperTitle.contains('NORMAL');
 
-                        final bool isWarning = !isCritical &&
-                            !isDyingGasp &&
-                            !isRecovery &&
-                            (sev.contains('WARNING') || upperTitle.contains('FLAPPING') || upperTitle.contains('ATTENUATION') || upperTitle.contains('REDAMAN'));
+                            final bool isWarning = !isCritical &&
+                                !isDyingGasp &&
+                                !isRecovery &&
+                                (sev.contains('WARNING') || upperTitle.contains('FLAPPING') || upperTitle.contains('ATTENUATION') || upperTitle.contains('REDAMAN'));
 
-                        String badgeText;
-                        Color badgeBg;
-                        Color badgeColor;
-                        Color iconBg;
-                        Color iconColor;
-                        IconData icon;
+                            String badgeText;
+                            Color badgeBg;
+                            Color badgeColor;
+                            Color iconBg;
+                            Color iconColor;
+                            IconData icon;
 
-                        if (isRecovery) {
-                          badgeText = 'RESTORED';
-                          badgeBg = const Color(0xFFDCFCE7);
-                          badgeColor = const Color(0xFF15803D);
-                          iconBg = const Color(0xFFDCFCE7);
-                          iconColor = const Color(0xFF10B981);
-                          icon = Icons.check_circle_outline_rounded;
-                        } else if (isDyingGasp) {
-                          badgeText = 'DYING GASP';
-                          badgeBg = const Color(0xFFFFEDD5);
-                          badgeColor = const Color(0xFFC2410C);
-                          iconBg = const Color(0xFFFFEDD5);
-                          iconColor = const Color(0xFFEA580C);
-                          icon = Icons.power_off_rounded;
-                        } else if (isCritical) {
-                          badgeText = upperTitle.contains('MASSAL') ? 'MASS OUTAGE' : 'LOS CRITICAL';
-                          badgeBg = const Color(0xFFFEE2E2);
-                          badgeColor = const Color(0xFFDC2626);
-                          iconBg = const Color(0xFFFEE2E2);
-                          iconColor = const Color(0xFFEF4444);
-                          icon = Icons.bolt_rounded;
-                        } else if (isWarning) {
-                          badgeText = 'HIGH ATTENUATION';
-                          badgeBg = const Color(0xFFFEF3C7);
-                          badgeColor = const Color(0xFFD97706);
-                          iconBg = const Color(0xFFFEF3C7);
-                          iconColor = const Color(0xFFD97706);
-                          icon = Icons.warning_amber_rounded;
-                        } else {
-                          badgeText = 'SYSTEM ALERT';
-                          badgeBg = const Color(0xFFE0F2FE);
-                          badgeColor = const Color(0xFF0369A1);
-                          iconBg = const Color(0xFFE0F2FE);
-                          iconColor = const Color(0xFF0284C7);
-                          icon = Icons.info_outline_rounded;
-                        }
+                            if (isRecovery) {
+                              badgeText = 'RESTORED';
+                              badgeBg = const Color(0xFFDCFCE7);
+                              badgeColor = const Color(0xFF15803D);
+                              iconBg = const Color(0xFFDCFCE7);
+                              iconColor = const Color(0xFF10B981);
+                              icon = Icons.check_circle_outline_rounded;
+                            } else if (isDyingGasp) {
+                              badgeText = 'DYING GASP';
+                              badgeBg = const Color(0xFFFFEDD5);
+                              badgeColor = const Color(0xFFC2410C);
+                              iconBg = const Color(0xFFFFEDD5);
+                              iconColor = const Color(0xFFEA580C);
+                              icon = Icons.power_off_rounded;
+                            } else if (isCritical) {
+                              badgeText = upperTitle.contains('MASSAL') ? 'MASS OUTAGE' : 'LOS CRITICAL';
+                              badgeBg = const Color(0xFFFEE2E2);
+                              badgeColor = const Color(0xFFDC2626);
+                              iconBg = const Color(0xFFFEE2E2);
+                              iconColor = const Color(0xFFEF4444);
+                              icon = Icons.bolt_rounded;
+                            } else if (isWarning) {
+                              badgeText = 'HIGH ATTENUATION';
+                              badgeBg = const Color(0xFFFEF3C7);
+                              badgeColor = const Color(0xFFD97706);
+                              iconBg = const Color(0xFFFEF3C7);
+                              iconColor = const Color(0xFFD97706);
+                              icon = Icons.warning_amber_rounded;
+                            } else {
+                              badgeText = 'SYSTEM ALERT';
+                              badgeBg = const Color(0xFFE0F2FE);
+                              badgeColor = const Color(0xFF0369A1);
+                              iconBg = const Color(0xFFE0F2FE);
+                              iconColor = const Color(0xFF0284C7);
+                              icon = Icons.info_outline_rounded;
+                            }
 
-                        return InkWell(
-                          onTap: () => _showAlertDetail(alert),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.02),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
+                            return InkWell(
+                              onTap: () => _showAlertDetail(alert),
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: iconBg,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Center(
-                                    child: Icon(icon, color: iconColor, size: 22),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: iconBg,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Center(
+                                        child: Icon(icon, color: iconColor, size: 22),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: badgeBg,
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              badgeText,
-                                              style: TextStyle(
-                                                color: badgeColor,
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.bold,
+                                          Row(
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: badgeBg,
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  badgeText,
+                                                  style: TextStyle(
+                                                    color: badgeColor,
+                                                    fontSize: 9.5,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFF1F5F9),
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              node,
-                                              style: const TextStyle(
-                                                color: Color(0xFF475569),
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 9.5,
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFF1F5F9),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  node,
+                                                  style: const TextStyle(
+                                                    color: Color(0xFF475569),
+                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 9.5,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
+                                              const Spacer(),
+                                              Text(
+                                                time,
+                                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                                              ),
+                                            ],
                                           ),
-                                          const Spacer(),
+                                          const SizedBox(height: 6),
                                           Text(
-                                            time,
-                                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                                            cleanTitle,
+                                            style: const TextStyle(
+                                              color: Color(0xFF0F172A),
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13.5,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            subtitle,
+                                            style: const TextStyle(color: Color(0xFF64748B), fontSize: 11.5),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        cleanTitle,
-                                        style: const TextStyle(
-                                          color: Color(0xFF0F172A),
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13.5,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        subtitle,
-                                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 11.5),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                              ),
+                            );
+                          },
+                        ),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryPill({
-    required String label,
-    required int count,
-    required Color color,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? color.withValues(alpha: 0.12) : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isActive ? color : const Color(0xFFE2E8F0)),
-        ),
-        child: Column(
-          children: [
-            Text(
-              '$count',
-              style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 15),
-            ),
-            Text(
-              label,
-              style: TextStyle(color: isActive ? color : const Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -43,4 +43,5 @@ class ApiConstants {
   // GIS & Infrastructure Nodes
   static const String endpointGisMapData = '/gis/map-data';
   static const String endpointNetworkNodes = '/network-nodes';
+  static String endpointNodePortDetail(int id) => '/network-nodes/$id/port-detail';
 }

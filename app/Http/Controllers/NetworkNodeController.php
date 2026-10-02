@@ -394,7 +394,7 @@ class NetworkNodeController extends Controller
         if ($rawPerPage === 'all' || $request->boolean('all')) {
             $perPage = 10000;
         } else {
-            $defaultPerPage = ($type && $type !== 'ALL') ? 10000 : 100;
+            $defaultPerPage = 10000;
             $perPage = min((int)$request->input('per_page', $defaultPerPage), 10000);
         }
         $nodes = $query->orderByRaw("NULLIF(substring(name from '\d+'), '')::bigint ASC NULLS LAST, name ASC")->paginate($perPage);

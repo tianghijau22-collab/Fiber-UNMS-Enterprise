@@ -226,7 +226,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     bool hasBadgeDot = false,
   }) {
     final isSelected = _currentIndex == index;
-    final color = isSelected ? const Color(0xFF00A3C4) : const Color(0xFF64748B);
+    final color = isSelected ? const Color(0xFF00AAE0) : const Color(0xFF64748B);
 
     return InkWell(
       onTap: () => setState(() => _currentIndex = index),
@@ -285,14 +285,14 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             height: 44,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF00B4D8), Color(0xFF0096C7)],
+                colors: [Color(0xFF00AAE0), Color(0xFF008BB8)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF00A3C4).withValues(alpha: 0.35),
+                  color: const Color(0xFF00AAE0).withValues(alpha: 0.35),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -310,7 +310,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           const Text(
             'Ukur & Scan',
             style: TextStyle(
-              color: Color(0xFF00A3C4),
+              color: Color(0xFF00AAE0),
               fontSize: 10,
               fontWeight: FontWeight.bold,
             ),

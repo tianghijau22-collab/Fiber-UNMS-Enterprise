@@ -26,5 +26,6 @@ Homestead.json
 Homestead.yaml
 /scratch/
 /public/downloads/*.apk
+*.apk
 mobile_app/build/
 mobile_app/.dart_tool/
