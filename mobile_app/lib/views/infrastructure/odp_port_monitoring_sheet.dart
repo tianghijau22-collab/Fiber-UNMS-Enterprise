@@ -131,13 +131,25 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     setState(() => _isCapturingScreenshot = true);
 
     try {
-      // Delay to ensure the unconstrained offstage report boundary is fully painted
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 150));
+      if (!mounted) return;
 
-      final boundary = _fullReportKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) {
+      // ignore: use_build_context_synchronously
+      final renderContext = _fullReportKey.currentContext;
+      if (renderContext == null) {
+        throw Exception('Komponen laporan belum siap. Silakan ulangi.');
+      }
+
+      // ignore: use_build_context_synchronously
+      final boundary = renderContext.findRenderObject();
+      if (boundary is! RenderRepaintBoundary) {
         throw Exception('Komponen laporan lengkap tidak ditemukan.');
       }
+
+      if (boundary.debugNeedsPaint) {
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+      if (!mounted) return;
 
       final ui.Image image = await boundary.toImage(pixelRatio: 2.5);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -809,7 +821,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                               ),
 
                               // Optical Statistics Bar (Min / Avg / Max)
-                              if (_statsData != null && _statsData!['avg_rx_power'] != null) ...[
+                              if (_statsData != null && _statsData?['avg_rx_power'] != null) ...[
                                 const SizedBox(height: 10),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -822,11 +834,11 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                                     children: [
-                                      _buildStatItem('Min (Terkecil)', '${_statsData!['min_rx_power'] ?? '—'} dBm', const Color(0xFFDC2626)),
+                                      _buildStatItem('Min (Terkecil)', '${_statsData?['min_rx_power'] ?? '—'} dBm', const Color(0xFFDC2626)),
                                       Container(width: 1, height: 24, color: AppColors.surfaceBorder),
-                                      _buildStatItem('Rata-rata', '${_statsData!['avg_rx_power'] ?? '—'} dBm', AppColors.secondary),
+                                      _buildStatItem('Rata-rata', '${_statsData?['avg_rx_power'] ?? '—'} dBm', AppColors.secondary),
                                       Container(width: 1, height: 24, color: AppColors.surfaceBorder),
-                                      _buildStatItem('Max (Tertinggi)', '${_statsData!['max_rx_power'] ?? '—'} dBm', const Color(0xFF059669)),
+                                      _buildStatItem('Max (Tertinggi)', '${_statsData?['max_rx_power'] ?? '—'} dBm', const Color(0xFF059669)),
                                     ],
                                   ),
                                 ),
@@ -1060,7 +1072,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
           const SizedBox(height: 10),
 
           // Optical Statistics Bar
-          if (_statsData != null && _statsData!['avg_rx_power'] != null) ...[
+          if (_statsData != null && _statsData?['avg_rx_power'] != null) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -1071,11 +1083,11 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildStatItem('Min (Terkecil)', '${_statsData!['min_rx_power'] ?? '—'} dBm', const Color(0xFFDC2626)),
+                  _buildStatItem('Min (Terkecil)', '${_statsData?['min_rx_power'] ?? '—'} dBm', const Color(0xFFDC2626)),
                   Container(width: 1, height: 24, color: AppColors.surfaceBorder),
-                  _buildStatItem('Rata-rata', '${_statsData!['avg_rx_power'] ?? '—'} dBm', AppColors.secondary),
+                  _buildStatItem('Rata-rata', '${_statsData?['avg_rx_power'] ?? '—'} dBm', AppColors.secondary),
                   Container(width: 1, height: 24, color: AppColors.surfaceBorder),
-                  _buildStatItem('Max (Tertinggi)', '${_statsData!['max_rx_power'] ?? '—'} dBm', const Color(0xFF059669)),
+                  _buildStatItem('Max (Tertinggi)', '${_statsData?['max_rx_power'] ?? '—'} dBm', const Color(0xFF059669)),
                 ],
               ),
             ),
