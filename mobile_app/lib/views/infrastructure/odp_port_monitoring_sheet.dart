@@ -64,10 +64,8 @@ class OdpPortMonitoringSheet extends StatefulWidget {
 }
 
 class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
-  final GlobalKey _reportCanvasKey = GlobalKey();
   bool _isLoading = true;
   bool _isProbingLive = false;
-  bool _isCapturingScreenshot = false;
   String? _errorMessage;
   List<dynamic> _ports = [];
   Map<String, dynamic>? _nodeData;
@@ -126,52 +124,9 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     }
   }
 
-  Future<void> _captureFullDocumentScreenshot() async {
-    if (_isCapturingScreenshot || _isLoading) return;
-    setState(() => _isCapturingScreenshot = true);
-
-    try {
-      // Wait for frame rendering and paint pass to complete
-      await WidgetsBinding.instance.endOfFrame;
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      if (!mounted) return;
-
-      // ignore: use_build_context_synchronously
-      final renderContext = _reportCanvasKey.currentContext;
-      if (renderContext == null) {
-        throw Exception('Komponen laporan belum siap. Silakan coba lagi.');
-      }
-
-      // ignore: use_build_context_synchronously
-      final boundary = renderContext.findRenderObject();
-      if (boundary is! RenderRepaintBoundary) {
-        throw Exception('Komponen laporan lengkap tidak ditemukan.');
-      }
-
-      final ui.Image image = await boundary.toImage(pixelRatio: kIsWeb ? 2.0 : 2.5);
-      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) {
-        throw Exception('Gagal mengonversi gambar laporan ke format PNG.');
-      }
-
-      final pngBytes = byteData.buffer.asUint8List();
-
-      if (mounted) {
-        setState(() => _isCapturingScreenshot = false);
-        _showScreenshotPreviewModal(pngBytes);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isCapturingScreenshot = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal mengambil screenshot: $e'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      }
-    }
+  void _captureFullDocumentScreenshot() {
+    if (_isLoading) return;
+    _openFullReportModal();
   }
 
   void _showInModalAlert(
@@ -324,135 +279,211 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     }
   }
 
-  void _showScreenshotPreviewModal(Uint8List pngBytes) {
+  void _openFullReportModal() {
+    final effectiveOltName = _oltInfoData?['device_name'] ??
+        _nodeData?['olt_device']?['name'] ??
+        widget.oltName ??
+        'OLT Utama';
+
+    final effectiveInterface = _oltInfoData?['auto_port_ref'] ??
+        _nodeData?['olt_port_ref'] ??
+        _nodeData?['auto_detected_port_ref'] ??
+        widget.interfaceRef ??
+        '—';
+
+    final effectiveRatio = _nodeData?['splitter_type']?['ratio'] ??
+        _nodeData?['splitter_type']?['name'] ??
+        widget.splitterRatio ??
+        '1:${widget.totalPorts}';
+
+    final totalPortsCount = _nodeData?['total_ports'] ?? widget.totalPorts;
+    final modalReportKey = GlobalKey();
+    bool isProcessing = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (modalCtx) => Container(
-        height: MediaQuery.of(modalCtx).size.height * 0.90,
-        padding: const EdgeInsets.all(18),
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            // Handle bar
-            Center(
-              child: Container(
-                width: 38,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceBorder,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+      builder: (modalCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          Future<Uint8List> capturePng() async {
+            final boundary = modalReportKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+            if (boundary == null) {
+              throw Exception('Komponen laporan belum siap.');
+            }
+            final ui.Image image = await boundary.toImage(pixelRatio: kIsWeb ? 2.0 : 2.5);
+            final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+            if (byteData == null) {
+              throw Exception('Gagal membuat berkas gambar.');
+            }
+            return byteData.buffer.asUint8List();
+          }
+
+          return Container(
+            height: MediaQuery.of(modalCtx).size.height * 0.94,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
               children: [
-                const Row(
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceBorder,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.photo_camera_rounded, color: AppColors.primary, size: 22),
-                    SizedBox(width: 8),
-                    Text(
-                      'Laporan Lengkap Seluruh Port',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                    const Row(
+                      children: [
+                        Icon(Icons.photo_camera_rounded, color: AppColors.primary, size: 22),
+                        SizedBox(width: 8),
+                        Text(
+                          'Laporan Lengkap Seluruh Port',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary, size: 22),
+                      onPressed: () => Navigator.pop(modalCtx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Rendered Document View (100% visible on screen, right-side up, full resolution)
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.surfaceBorder),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(8),
+                        child: Center(
+                          child: RepaintBoundary(
+                            key: modalReportKey,
+                            child: _buildFullReportCanvas(
+                              effectiveOltName,
+                              effectiveInterface,
+                              effectiveRatio,
+                              totalPortsCount,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Action Buttons (Tutup, Unduh, Bagikan)
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          side: const BorderSide(color: AppColors.surfaceBorder),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: isProcessing ? null : () => Navigator.pop(modalCtx),
+                        child: const Text('Tutup', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: OutlinedButton.icon(
+                        icon: isProcessing
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                            : const Icon(Icons.download_rounded, size: 18, color: AppColors.primary),
+                        label: const Text('Unduh', style: TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w800)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          backgroundColor: AppColors.primaryLight.withValues(alpha: 0.5),
+                          side: const BorderSide(color: AppColors.primaryLight),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: isProcessing
+                            ? null
+                            : () async {
+                                setModalState(() => isProcessing = true);
+                                try {
+                                  final pngBytes = await capturePng();
+                                  if (modalCtx.mounted) {
+                                    await _downloadOrSaveImage(pngBytes, modalCtx);
+                                  }
+                                } catch (e) {
+                                  if (modalCtx.mounted) {
+                                    _showInModalAlert(modalCtx, title: 'Gagal Mengunduh', message: '$e', isSuccess: false);
+                                  }
+                                } finally {
+                                  if (modalCtx.mounted) {
+                                    setModalState(() => isProcessing = false);
+                                  }
+                                }
+                              },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 4,
+                      child: ElevatedButton.icon(
+                        icon: isProcessing
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.share_rounded, size: 18, color: Colors.white),
+                        label: const Text('Bagikan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: isProcessing
+                            ? null
+                            : () async {
+                                setModalState(() => isProcessing = true);
+                                try {
+                                  final pngBytes = await capturePng();
+                                  if (modalCtx.mounted) {
+                                    await _shareImage(pngBytes, modalCtx);
+                                  }
+                                } catch (e) {
+                                  if (modalCtx.mounted) {
+                                    _showInModalAlert(modalCtx, title: 'Gagal Berbagi', message: '$e', isSuccess: false);
+                                  }
+                                } finally {
+                                  if (modalCtx.mounted) {
+                                    setModalState(() => isProcessing = false);
+                                  }
+                                }
+                              },
                       ),
                     ),
                   ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary, size: 22),
-                  onPressed: () => Navigator.pop(modalCtx),
-                ),
+                const SizedBox(height: 4),
               ],
             ),
-            const SizedBox(height: 8),
-            // Image Preview Card (InteractiveViewer supports zoom & pinch)
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.surfaceBorder),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: InteractiveViewer(
-                    maxScale: 5.0,
-                    minScale: 0.5,
-                    child: Center(
-                      child: Image.memory(
-                        pngBytes,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-            // Action Buttons (Download + Share + Close)
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      side: const BorderSide(color: AppColors.surfaceBorder),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () => Navigator.pop(modalCtx),
-                    child: const Text('Tutup', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 3,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.download_rounded, size: 18, color: AppColors.primary),
-                    label: const Text('Unduh', style: TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w800)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      backgroundColor: AppColors.primaryLight.withValues(alpha: 0.5),
-                      side: const BorderSide(color: AppColors.primaryLight),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () async {
-                      await _downloadOrSaveImage(pngBytes, modalCtx);
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 4,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.share_rounded, size: 18, color: Colors.white),
-                    label: const Text('Bagikan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () async {
-                      await _shareImage(pngBytes, modalCtx);
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -511,34 +542,13 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
 
     final totalPortsCount = _nodeData?['total_ports'] ?? widget.totalPorts;
 
-    return Stack(
-      children: [
-        // 1. Background Full Report Canvas (Full opacity, painted in tree, visually behind foreground sheet)
-        Positioned(
-          left: 0,
-          top: 0,
-          width: 520,
-          child: IgnorePointer(
-            child: RepaintBoundary(
-              key: _reportCanvasKey,
-              child: _buildFullReportCanvas(
-                effectiveOltName,
-                effectiveInterface,
-                effectiveRatio,
-                totalPortsCount,
-              ),
-            ),
-          ),
-        ),
-
-        // 2. Foreground Main Interactive Modal Bottom Sheet
-        Container(
-          height: MediaQuery.of(context).size.height * 0.92,
-          decoration: const BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.92,
+      decoration: const BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
             children: [
               // Header Card Section
               Container(
@@ -623,14 +633,8 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                           // Screenshot Action Button
                           IconButton(
                             tooltip: 'Screenshot / Tangkap Layar Laporan Lengkap',
-                            icon: _isCapturingScreenshot
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
-                                  )
-                                : const Icon(Icons.photo_camera_rounded, color: AppColors.textSecondary, size: 20),
-                            onPressed: (_isLoading || _isCapturingScreenshot) ? null : _captureFullDocumentScreenshot,
+                            icon: const Icon(Icons.photo_camera_rounded, color: AppColors.textSecondary, size: 20),
+                            onPressed: _isLoading ? null : _captureFullDocumentScreenshot,
                             visualDensity: VisualDensity.compact,
                           ),
                           // Refresh Action Button
@@ -925,7 +929,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      onPressed: (_isLoading || _isCapturingScreenshot) ? null : _captureFullDocumentScreenshot,
+                      onPressed: _isLoading ? null : _captureFullDocumentScreenshot,
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
@@ -944,9 +948,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
               ),
             ],
           ),
-        ),
-      ],
-    );
+        );
   }
 
   /// Builds the full, unclipped document layout for High-Resolution Screenshot export
