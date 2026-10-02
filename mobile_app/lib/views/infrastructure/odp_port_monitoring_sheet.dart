@@ -131,34 +131,22 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     setState(() => _isCapturingScreenshot = true);
 
     try {
-      RenderRepaintBoundary? boundary;
+      // Wait for frame rendering and paint pass to complete
+      await WidgetsBinding.instance.endOfFrame;
+      await Future.delayed(const Duration(milliseconds: 100));
 
-      // Loop frame ticks waiting for render object to be fully painted
-      for (int i = 0; i < 15; i++) {
-        await WidgetsBinding.instance.endOfFrame;
-        // ignore: use_build_context_synchronously
-        final renderContext = _reportCanvasKey.currentContext;
-        if (renderContext != null) {
-          // ignore: use_build_context_synchronously
-          final obj = renderContext.findRenderObject();
-          if (obj is RenderRepaintBoundary && !obj.debugNeedsPaint) {
-            boundary = obj;
-            break;
-          }
-        }
-        await Future.delayed(const Duration(milliseconds: 30));
+      if (!mounted) return;
+
+      // ignore: use_build_context_synchronously
+      final renderContext = _reportCanvasKey.currentContext;
+      if (renderContext == null) {
+        throw Exception('Komponen laporan belum siap. Silakan coba lagi.');
       }
 
-      if (boundary == null) {
-        // ignore: use_build_context_synchronously
-        final renderContext = _reportCanvasKey.currentContext;
-        // ignore: use_build_context_synchronously
-        final obj = renderContext?.findRenderObject();
-        if (obj is RenderRepaintBoundary) {
-          boundary = obj;
-        } else {
-          throw Exception('Komponen laporan belum siap. Silakan coba lagi.');
-        }
+      // ignore: use_build_context_synchronously
+      final boundary = renderContext.findRenderObject();
+      if (boundary is! RenderRepaintBoundary) {
+        throw Exception('Komponen laporan lengkap tidak ditemukan.');
       }
 
       final ui.Image image = await boundary.toImage(pixelRatio: kIsWeb ? 2.0 : 2.5);
