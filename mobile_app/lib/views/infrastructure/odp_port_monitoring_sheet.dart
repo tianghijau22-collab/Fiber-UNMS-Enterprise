@@ -503,17 +503,22 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
 
     return Stack(
       children: [
-        // 1. Offstage / Invisible Unconstrained Full Report Canvas (Captures 100% of Ports without any scroll clipping)
+        // 1. Offscreen / Invisible Unconstrained Full Report Canvas (Captures 100% of Ports with normal positive coordinates)
         Positioned(
-          left: -9999,
-          top: -9999,
-          child: RepaintBoundary(
-            key: _fullReportKey,
-            child: _buildFullReportCanvas(
-              effectiveOltName,
-              effectiveInterface,
-              effectiveRatio,
-              totalPortsCount,
+          left: 0,
+          top: 0,
+          child: Opacity(
+            opacity: 0.001,
+            child: IgnorePointer(
+              child: RepaintBoundary(
+                key: _fullReportKey,
+                child: _buildFullReportCanvas(
+                  effectiveOltName,
+                  effectiveInterface,
+                  effectiveRatio,
+                  totalPortsCount,
+                ),
+              ),
             ),
           ),
         ),
