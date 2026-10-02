@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -9,7 +11,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/dio_client.dart';
-import '../../utils/widget_screenshot_capturer.dart';
 
 class OdpPortMonitoringSheet extends StatefulWidget {
   final int nodeId;
@@ -63,6 +64,7 @@ class OdpPortMonitoringSheet extends StatefulWidget {
 }
 
 class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
+  final GlobalKey _reportCanvasKey = GlobalKey();
   bool _isLoading = true;
   bool _isProbingLive = false;
   bool _isCapturingScreenshot = false;
@@ -129,36 +131,43 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     setState(() => _isCapturingScreenshot = true);
 
     try {
-      final effectiveOltName = _oltInfoData?['device_name'] ??
-          _nodeData?['olt_device']?['name'] ??
-          widget.oltName ??
-          'OLT Utama';
+      RenderRepaintBoundary? boundary;
 
-      final effectiveInterface = _oltInfoData?['auto_port_ref'] ??
-          _nodeData?['olt_port_ref'] ??
-          _nodeData?['auto_detected_port_ref'] ??
-          widget.interfaceRef ??
-          '—';
+      // Loop frame ticks waiting for render object to be fully painted
+      for (int i = 0; i < 15; i++) {
+        await WidgetsBinding.instance.endOfFrame;
+        // ignore: use_build_context_synchronously
+        final renderContext = _reportCanvasKey.currentContext;
+        if (renderContext != null) {
+          // ignore: use_build_context_synchronously
+          final obj = renderContext.findRenderObject();
+          if (obj is RenderRepaintBoundary && !obj.debugNeedsPaint) {
+            boundary = obj;
+            break;
+          }
+        }
+        await Future.delayed(const Duration(milliseconds: 30));
+      }
 
-      final effectiveRatio = _nodeData?['splitter_type']?['ratio'] ??
-          _nodeData?['splitter_type']?['name'] ??
-          widget.splitterRatio ??
-          '1:${widget.totalPorts}';
+      if (boundary == null) {
+        // ignore: use_build_context_synchronously
+        final renderContext = _reportCanvasKey.currentContext;
+        // ignore: use_build_context_synchronously
+        final obj = renderContext?.findRenderObject();
+        if (obj is RenderRepaintBoundary) {
+          boundary = obj;
+        } else {
+          throw Exception('Komponen laporan belum siap. Silakan coba lagi.');
+        }
+      }
 
-      final totalPortsCount = _nodeData?['total_ports'] ?? widget.totalPorts;
+      final ui.Image image = await boundary.toImage(pixelRatio: kIsWeb ? 2.0 : 2.5);
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('Gagal mengonversi gambar laporan ke format PNG.');
+      }
 
-      final reportCanvasWidget = _buildFullReportCanvas(
-        effectiveOltName,
-        effectiveInterface,
-        effectiveRatio,
-        totalPortsCount,
-      );
-
-      final pngBytes = await WidgetScreenshotCapturer.captureWidget(
-        widget: reportCanvasWidget,
-        targetWidth: 520,
-        pixelRatio: 2.5,
-      );
+      final pngBytes = byteData.buffer.asUint8List();
 
       if (mounted) {
         setState(() => _isCapturingScreenshot = false);
@@ -514,12 +523,33 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
 
     final totalPortsCount = _nodeData?['total_ports'] ?? widget.totalPorts;
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.92,
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+    return Stack(
+      children: [
+        // 1. Background Full Report Canvas (Full opacity, painted in tree, visually behind foreground sheet)
+        Positioned(
+          left: 0,
+          top: 0,
+          width: 520,
+          child: IgnorePointer(
+            child: RepaintBoundary(
+              key: _reportCanvasKey,
+              child: _buildFullReportCanvas(
+                effectiveOltName,
+                effectiveInterface,
+                effectiveRatio,
+                totalPortsCount,
+              ),
+            ),
+          ),
+        ),
+
+        // 2. Foreground Main Interactive Modal Bottom Sheet
+        Container(
+          height: MediaQuery.of(context).size.height * 0.92,
+          decoration: const BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
           child: Column(
             children: [
               // Header Card Section
@@ -926,7 +956,9 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
               ),
             ],
           ),
-        );
+        ),
+      ],
+    );
   }
 
   /// Builds the full, unclipped document layout for High-Resolution Screenshot export
