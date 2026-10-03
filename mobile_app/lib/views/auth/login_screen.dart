@@ -813,7 +813,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             Icon(Icons.lock_outline_rounded, color: Color(0xFF10B981), size: 12),
                             SizedBox(width: 4),
                             Text(
-                              'FONA Enterprise v1.0.4 • 256-Bit Encrypted',
+                              'FONA Enterprise v1.0.5 • 256-Bit Encrypted',
                               style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600),
                             ),
                           ],

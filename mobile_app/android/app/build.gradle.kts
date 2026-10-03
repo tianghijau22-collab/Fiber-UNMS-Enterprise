@@ -33,8 +33,8 @@ android {
         applicationId = "com.fiberunms.fiber_unms_mobile"
         minSdk = 21
         targetSdk = flutter.targetSdkVersion
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     signingConfigs {
