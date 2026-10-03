@@ -13,6 +13,11 @@ class StorageService {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
+  static const String keyRememberedUser = 'fona_remembered_username';
+  static const String keyBiometricUser = 'fona_biometric_username';
+  static const String keyBiometricPass = 'fona_biometric_password';
+  static const String keyBiometricEnabled = 'fona_biometric_enabled';
+
   // --- Server Base URL ---
   Future<String> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
@@ -22,6 +27,47 @@ class StorageService {
   Future<void> setServerUrl(String url) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(ApiConstants.keyServerUrl, url.trim());
+  }
+
+  // --- Remember Me ---
+  Future<String?> getRememberedUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(keyRememberedUser);
+  }
+
+  Future<void> setRememberedUsername(String? username) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (username != null && username.isNotEmpty) {
+      await prefs.setString(keyRememberedUser, username);
+    } else {
+      await prefs.remove(keyRememberedUser);
+    }
+  }
+
+  // --- Biometric Authentication Credentials ---
+  Future<void> saveBiometricCredentials(String username, String password) async {
+    await _secureStorage.write(key: keyBiometricUser, value: username);
+    await _secureStorage.write(key: keyBiometricPass, value: password);
+    await _secureStorage.write(key: keyBiometricEnabled, value: 'true');
+  }
+
+  Future<Map<String, String>?> getBiometricCredentials() async {
+    final isEnabled = await _secureStorage.read(key: keyBiometricEnabled);
+    if (isEnabled != 'true') return null;
+
+    final user = await _secureStorage.read(key: keyBiometricUser);
+    final pass = await _secureStorage.read(key: keyBiometricPass);
+
+    if (user != null && pass != null && user.isNotEmpty && pass.isNotEmpty) {
+      return {'username': user, 'password': pass};
+    }
+    return null;
+  }
+
+  Future<void> clearBiometricCredentials() async {
+    await _secureStorage.delete(key: keyBiometricUser);
+    await _secureStorage.delete(key: keyBiometricPass);
+    await _secureStorage.delete(key: keyBiometricEnabled);
   }
 
   // --- Auth Token ---

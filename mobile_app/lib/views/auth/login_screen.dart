@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/dio_client.dart';
@@ -18,9 +19,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final LocalAuthentication _localAuth = LocalAuthentication();
+
   bool _obscurePassword = true;
   bool _rememberMe = true;
   bool _isRedirecting = false;
+  bool _hasBiometricSaved = false;
 
   // Dynamic Background Banner from Web Admin
   String? _customBannerUrl;
@@ -42,6 +46,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       duration: const Duration(milliseconds: 2600),
     )..repeat(reverse: true);
 
+    _loadSavedState();
     _fetchLoginBanner();
   }
 
@@ -53,6 +58,22 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     super.dispose();
   }
 
+  Future<void> _loadSavedState() async {
+    final storage = StorageService();
+    final remembered = await storage.getRememberedUsername();
+    final bioCreds = await storage.getBiometricCredentials();
+
+    if (mounted) {
+      setState(() {
+        if (remembered != null && remembered.isNotEmpty) {
+          _usernameController.text = remembered;
+          _rememberMe = true;
+        }
+        _hasBiometricSaved = (bioCreds != null);
+      });
+    }
+  }
+
   Future<void> _fetchLoginBanner() async {
     try {
       final res = await DioClient().dio.get('/app-testing/login-banner');
@@ -61,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         if (data != null && data['is_custom'] == true && data['banner_url'] != null) {
           if (mounted) {
             setState(() {
-              _customBannerUrl = data['banner_url'];
+              _customBannerUrl = data['banner_url'].toString();
             });
           }
         } else {
@@ -73,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         }
       }
     } catch (_) {
-      // Gracefully ignore network errors on pre-login fetch; fallback to default illustration
+      // Gracefully fallback to default illustration
     }
   }
 
@@ -81,12 +102,23 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final success = await authProvider.login(
-      _usernameController.text.trim(),
-      _passwordController.text,
-    );
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+
+    final success = await authProvider.login(username, password);
 
     if (success && mounted) {
+      final storage = StorageService();
+      // 1. Handle Remember Me
+      if (_rememberMe) {
+        await storage.setRememberedUsername(username);
+      } else {
+        await storage.setRememberedUsername(null);
+      }
+
+      // 2. Save Credentials for Biometric Quick Access
+      await storage.saveBiometricCredentials(username, password);
+
       setState(() => _isRedirecting = true);
       await Future.delayed(const Duration(milliseconds: 600));
       if (!mounted) return;
@@ -107,6 +139,109 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           },
         ),
       );
+    }
+  }
+
+  Future<void> _handleBiometricLogin() async {
+    final storage = StorageService();
+    final creds = await storage.getBiometricCredentials();
+
+    if (creds == null) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            title: const Row(
+              children: [
+                Icon(Icons.fingerprint_rounded, color: briPrimary, size: 24),
+                SizedBox(width: 8),
+                Text(
+                  'Biometrik Belum Aktif',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+                ),
+              ],
+            ),
+            content: const Text(
+              'Silakan login menggunakan Username dan Kata Sandi satu kali untuk mengaktifkan login cepat Biometrik / Sidik Jari.',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
+            ),
+            actions: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: briPrimary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Mengerti', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      final canCheck = await _localAuth.canCheckBiometrics || await _localAuth.isDeviceSupported();
+      if (!canCheck) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Perangkat tidak mendukung sensor biometrik/sidik jari.'),
+              backgroundColor: Color(0xFFEF4444),
+            ),
+          );
+        }
+        return;
+      }
+
+      final didAuthenticate = await _localAuth.authenticate(
+        localizedReason: 'Pindai Sidik Jari atau Wajah untuk masuk ke akun FONA',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: false,
+        ),
+      );
+
+      if (didAuthenticate && mounted) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final success = await authProvider.login(creds['username']!, creds['password']!);
+
+        if (success && mounted) {
+          setState(() => _isRedirecting = true);
+          await Future.delayed(const Duration(milliseconds: 600));
+          if (!mounted) return;
+
+          Navigator.of(context).pushReplacement(
+            PageRouteBuilder(
+              transitionDuration: const Duration(milliseconds: 600),
+              pageBuilder: (context, animation, secondaryAnimation) => const MainNavigationShell(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutQuart);
+                return FadeTransition(
+                  opacity: Tween<double>(begin: 0.0, end: 1.0).animate(curved),
+                  child: SlideTransition(
+                    position: Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(curved),
+                    child: child,
+                  ),
+                );
+              },
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Autentikasi biometrik dibatalkan: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
     }
   }
 
@@ -613,27 +748,23 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
                             const SizedBox(width: 12),
 
-                            // Biometric Quick Access Button
-                            Container(
-                              height: 52,
-                              width: 52,
-                              decoration: BoxDecoration(
-                                color: briPrimary,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: IconButton(
-                                onPressed: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Autentikasi Biometrik siap digunakan setelah login pertama.'),
-                                      backgroundColor: briPrimary,
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(
-                                  Icons.fingerprint_rounded,
-                                  color: Colors.white,
-                                  size: 28,
+                            // Biometric Quick Access Button (Functional)
+                            Tooltip(
+                              message: _hasBiometricSaved ? 'Login Cepat Biometrik' : 'Aktifkan Biometrik setelah login',
+                              child: Container(
+                                height: 52,
+                                width: 52,
+                                decoration: BoxDecoration(
+                                  color: briPrimary,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: IconButton(
+                                  onPressed: (auth.isLoading || _isRedirecting) ? null : _handleBiometricLogin,
+                                  icon: const Icon(
+                                    Icons.fingerprint_rounded,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
                                 ),
                               ),
                             ),
