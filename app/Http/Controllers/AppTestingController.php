@@ -262,6 +262,7 @@ class AppTestingController extends Controller
     {
         $dir = public_path('branding');
         $files = ['mobile_login_banner.png', 'mobile_login_banner.jpg', 'mobile_login_banner.jpeg', 'mobile_login_banner.webp'];
+        $baseUrl = $request->root() ?: url('/');
         
         foreach ($files as $file) {
             $path = $dir . DIRECTORY_SEPARATOR . $file;
@@ -270,7 +271,7 @@ class AppTestingController extends Controller
                     'status' => 'success',
                     'data'   => [
                         'is_custom'   => true,
-                        'banner_url'  => url('/branding/' . $file) . '?v=' . File::lastModified($path),
+                        'banner_url'  => rtrim($baseUrl, '/') . '/branding/' . $file . '?v=' . File::lastModified($path),
                         'file_size'   => File::size($path),
                         'updated_at'  => Carbon::createFromTimestamp(File::lastModified($path))->toIso8601String(),
                     ],

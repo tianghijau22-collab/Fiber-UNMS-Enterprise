@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
@@ -80,9 +81,22 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       if (res.data != null && res.data['status'] == 'success') {
         final data = res.data['data'];
         if (data != null && data['is_custom'] == true && data['banner_url'] != null) {
+          String bannerUrl = data['banner_url'].toString();
+          // Ensure banner URL matches configured host/protocol if server returns different scheme
+          final serverBase = DioClient().dio.options.baseUrl;
+          final serverUri = Uri.tryParse(serverBase);
+          final bannerUri = Uri.tryParse(bannerUrl);
+          if (serverUri != null && bannerUri != null) {
+            bannerUrl = bannerUri.replace(
+              scheme: serverUri.scheme,
+              host: serverUri.host,
+              port: serverUri.hasPort ? serverUri.port : null,
+            ).toString();
+          }
+
           if (mounted) {
             setState(() {
-              _customBannerUrl = data['banner_url'].toString();
+              _customBannerUrl = bannerUrl;
             });
           }
         } else {
@@ -235,12 +249,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Autentikasi biometrik dibatalkan: $e'),
-            backgroundColor: const Color(0xFFEF4444),
-          ),
-        );
+        final errorStr = e.toString().toLowerCase();
+        // Ignore normal user dismiss / cancellation
+        if (!errorStr.contains('cancel') && !errorStr.contains('user_cancel')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Kendala autentikasi biometrik: $e'),
+              backgroundColor: const Color(0xFFEF4444),
+            ),
+          );
+        }
       }
     }
   }
@@ -379,26 +397,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           children: [
                             // If Custom Banner is Set from Web Admin, render it
                             if (_customBannerUrl != null) ...[
-                              Image.network(
-                                _customBannerUrl!,
+                              CachedNetworkImage(
+                                imageUrl: _customBannerUrl!,
                                 fit: BoxFit.cover,
                                 width: double.infinity,
                                 height: double.infinity,
-                                errorBuilder: (ctx, err, stack) => _buildDefaultHeroIllustration(topPadding),
-                              ),
-                              // Subtle dark overlay to ensure top text readability
-                              Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.black.withValues(alpha: 0.5),
-                                      Colors.black.withValues(alpha: 0.15),
-                                      Colors.black.withValues(alpha: 0.45),
-                                    ],
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                  ),
-                                ),
+                                fadeInDuration: const Duration(milliseconds: 300),
+                                placeholder: (ctx, url) => _buildDefaultHeroIllustration(topPadding),
+                                errorWidget: (ctx, err, stack) => _buildDefaultHeroIllustration(topPadding),
                               ),
                             ] else ...[
                               // Ambient Radial Glow Circles
@@ -441,9 +447,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.22),
+                                      color: _customBannerUrl != null
+                                          ? Colors.black.withValues(alpha: 0.35)
+                                          : Colors.white.withValues(alpha: 0.22),
                                       borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+                                      border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
                                     ),
                                     child: const Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -462,50 +470,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-
-                            // Top Brand & "Halo !" Greeting
-                            Positioned(
-                              top: topPadding + 10,
-                              left: 0,
-                              right: 0,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // FONA Wordmark Brand Logo
-                                  Image.asset(
-                                    'assets/images/fona_wordmark_light.png',
-                                    height: 32,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (ctx, err, stack) => Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Image.asset('assets/images/fona_brand_v2.png', height: 26, errorBuilder: (c, e, s) => const SizedBox()),
-                                        const SizedBox(width: 6),
-                                        const Text(
-                                          'FONA',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: 1.2,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'Halo !',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: -0.4,
-                                    ),
-                                  ),
-                                ],
                               ),
                             ),
                           ],
