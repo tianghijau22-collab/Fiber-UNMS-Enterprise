@@ -104,20 +104,34 @@ class OpticalFaultLocalizationService
                     // 🚀 LIVE PROBE VERIFICATION: Verifikasi langsung ke OLT fisik (~35ms)
                     // Jangan percaya 100% pada database statis jika OLT melaporkan pelanggan sebenarnya hidup!
                     $liveProbe = \App\Services\Olt\FastOpticalProbeService::probeOdpStatus($odpId);
-                    if (!empty($liveProbe['success'])) {
-                        if (!$liveProbe['is_odp_down']) {
-                            // OLT fisik membuktikan ODP ini TIDAK down (mayoritas pelanggan sehat)!
-                            // Batalkan alert palsu dan sinkronkan data aktif ke DB
-                            \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('active', null, $odpId);
-                            continue;
-                        }
-                        $downCount = $liveProbe['down_count'];
-                        $onlineCount = $liveProbe['online_count'];
-                        $pctVal = $liveProbe['pct_down'];
-                        $probeStates = $liveProbe['onu_states'] ?? [];
-                    } else {
-                        $probeStates = [];
+                    if (empty($liveProbe['success'])) {
+                        // 🛡️ TRANSIT SAFEGUARD: Probe SNMP ke OLT tidak merespons (kemungkinan timeout / paket UDP drop di VPN).
+                        // JANGAN kirim notifikasi gangguan massal jika belum terverifikasi oleh OLT!
+                        \Illuminate\Support\Facades\Log::warning("[OpticalFaultLocalization] Skip alert ODP #{$odpId} ({$odpName}): Live probe SNMP timeout/unreachable.");
+                        continue;
                     }
+
+                    if (!$liveProbe['is_odp_down']) {
+                        // OLT fisik membuktikan ODP ini TIDAK down (mayoritas pelanggan sehat)!
+                        // Batalkan alert palsu, reset counter, dan sinkronkan data aktif ke DB
+                        \Illuminate\Support\Facades\Cache::forget("odp_down_confirm_count_{$odpId}");
+                        \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('active', null, $odpId);
+                        continue;
+                    }
+
+                    // 🛡️ ANTI-FLAPPING CONFIRMATION: Butuh minimal 2x siklus kegagalan berturut-turut
+                    $confirmCount = (int)\Illuminate\Support\Facades\Cache::get("odp_down_confirm_count_{$odpId}", 0) + 1;
+                    \Illuminate\Support\Facades\Cache::put("odp_down_confirm_count_{$odpId}", $confirmCount, 180);
+
+                    if ($confirmCount < 2) {
+                        \Illuminate\Support\Facades\Log::info("[OpticalFaultLocalization] ODP #{$odpId} ({$odpName}) terdeteksi down 1x, menunggu konfirmasi siklus berikutnya...");
+                        continue;
+                    }
+
+                    $downCount = $liveProbe['down_count'];
+                    $onlineCount = $liveProbe['online_count'];
+                    $pctVal = $liveProbe['pct_down'];
+                    $probeStates = $liveProbe['onu_states'] ?? [];
 
                     $alertItem = [
                         'odp_id'          => $odpId,
@@ -165,7 +179,7 @@ class OpticalFaultLocalizationService
                             $rxVal = -40.00;
                             if (isset($probeStates[$sn])) {
                                 $isDown = !$probeStates[$sn]['is_online'];
-                                $rxVal = $probeStates[$sn]['rx_power'] ?? ($isDown ? -40.00 : -21.50);
+                                $rxVal = $probeStates[$sn]['rx_power'] ?? ($isDown ? -40.00 : null);
                             } else {
                                 $isDown = ($onu->status !== 'active' || $onu->rx_power === null || !is_numeric($onu->rx_power) || (float)$onu->rx_power <= -32.0);
                                 $rxVal = $isDown ? -40.00 : (float)$onu->rx_power;
@@ -177,7 +191,7 @@ class OpticalFaultLocalizationService
                             } else {
                                 $badge = "🟢";
                                 $onlineSerials[] = $sn;
-                                $rxStr = number_format($rxVal, 2, '.', '') . " dBm (ONLINE)";
+                                $rxStr = $rxVal !== null ? number_format($rxVal, 2, '.', '') . " dBm (ONLINE)" : "ONLINE";
                             }
 
                             $clientLines[] = "{$idx}. {$badge} [{$cId}] <b>{$cName}</b>\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
@@ -232,6 +246,7 @@ class OpticalFaultLocalizationService
                     }
 
                     \Illuminate\Support\Facades\Cache::forget($massKey);
+                    \Illuminate\Support\Facades\Cache::forget("odp_down_confirm_count_{$odpId}");
                     \Illuminate\Support\Facades\Cache::forget('dashboard_metrics_payload');
 
                     // 💾 Bulk sync DB ke active

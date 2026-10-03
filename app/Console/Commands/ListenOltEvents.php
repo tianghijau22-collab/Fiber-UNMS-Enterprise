@@ -1179,10 +1179,10 @@ class ListenOltEvents extends Command
 
                             if ($probed) {
                                 $isUp = $probed['is_online'];
-                                $finalRx = $probed['rx_power'] ?? ($isUp ? -21.50 : -40.00);
+                                $finalRx = $probed['rx_power'] ?? ($isUp ? null : -40.00);
                             } elseif ($isRecentlyRecovered) {
                                 $isUp = true;
-                                $finalRx = ($recoveredRxPower !== null && (float)$recoveredRxPower > -35.0) ? (float)$recoveredRxPower : -21.50;
+                                $finalRx = ($recoveredRxPower !== null && (float)$recoveredRxPower > -35.0) ? (float)$recoveredRxPower : null;
                             } elseif ($matched && strtolower((string)$matched->status) === 'active' && is_numeric($matched->rx_power) && (float)$matched->rx_power > -35.0) {
                                 $isUp = true;
                                 $finalRx = (float)$matched->rx_power;
@@ -1191,15 +1191,17 @@ class ListenOltEvents extends Command
                             if ($isUp) {
                                 $actualOnlineCount++;
                                 $badge = "🟢";
-                                $finalRx = ($finalRx !== null && $finalRx > -35.0) ? $finalRx : -21.50;
-                                $rxStr = number_format($finalRx, 2, '.', '') . " dBm (ONLINE)";
+                                $rxStr = $finalRx !== null ? number_format($finalRx, 2, '.', '') . " dBm (ONLINE)" : "ONLINE";
                                 // Update DB
                                 if ($cSn && $cSn !== '—') {
-                                    DB::table('ont_registrations')->where('onu_serial', $cSn)->orWhere('onu_mac', $cSn)->update([
+                                    $updateOnt = [
                                         'status'     => 'active',
-                                        'rx_power'   => $finalRx,
                                         'updated_at' => now(),
-                                    ]);
+                                    ];
+                                    if ($finalRx !== null) {
+                                        $updateOnt['rx_power'] = $finalRx;
+                                    }
+                                    DB::table('ont_registrations')->where('onu_serial', $cSn)->orWhere('onu_mac', $cSn)->update($updateOnt);
                                 }
                             } else {
                                 $badge = "🔴";

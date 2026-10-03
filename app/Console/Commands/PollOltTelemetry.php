@@ -437,7 +437,7 @@ class PollOltTelemetry extends Command
                 // 🛡️ DEFENSIVE STATE PRESERVATION FILTER (Anti-Glitch / Anti-Packet-Drop)
                 $prevItem = $prevSnapshotOnus->get(strtoupper($sn));
                 $prevWasOnline = $prevItem && in_array(strtolower($prevItem['status'] ?? ''), ['online', 'active', 'working']);
-                $prevRx = (float)($prevItem['rx_power'] ?? -21.50);
+                $prevRx = isset($prevItem['rx_power']) && is_numeric($prevItem['rx_power']) && (float)$prevItem['rx_power'] > -35.0 ? (float)$prevItem['rx_power'] : null;
 
                 if ($isExplicitStateOnline && $hasValidRawRx && $calculatedRx > -38.0 && $calculatedRx < -5.0) {
                     // Valid Online dengan redaman riil
@@ -446,8 +446,8 @@ class PollOltTelemetry extends Command
                     $isOnline = true;
                     Cache::forget("ont_miss_count_{$sn}");
                 } elseif ($isExplicitStateOnline && (!$hasValidRawRx || $calculatedRx <= -38.0)) {
-                    // Phase State Online tapi redaman DDM belum terkirim / jitter: pertahankan redaman terakhir
-                    $rxPower = ($prevWasOnline && $prevRx > -38.0) ? $prevRx : -21.50;
+                    // Phase State Online tapi redaman DDM belum terkirim / jitter: pertahankan redaman terakhir yang valid atau null
+                    $rxPower = ($prevWasOnline && $prevRx !== null) ? $prevRx : null;
                     $status = 'Online';
                     $isOnline = true;
                     Cache::forget("ont_miss_count_{$sn}");
@@ -462,7 +462,7 @@ class PollOltTelemetry extends Command
                     // 2. Sebelumnya Online dan belum miss 4 siklus berurutan serta tidak ada Trap Down / bukan explicit offline
                     if ($prevWasOnline && ($isSnmpDegraded || ($missCount < 4 && !$hasTrapDown && $stateCode !== 1))) {
                         // 🛡️ Filter Packet Loss: Pertahankan status Online & redaman sebelumnya
-                        $rxPower = ($prevRx > -38.0) ? $prevRx : -21.50;
+                        $rxPower = $prevRx;
                         $status = 'Online';
                         $isOnline = true;
                     } else {
@@ -873,7 +873,7 @@ class PollOltTelemetry extends Command
                 // 🛡️ DEFENSIVE STATE PRESERVATION FILTER (Anti-Glitch / Anti-Packet-Drop)
                 $prevItem = $prevSnapshotOnus->get(strtoupper($sn));
                 $prevWasOnline = $prevItem && in_array(strtolower($prevItem['status'] ?? ''), ['online', 'active', 'working']);
-                $prevRx = (float)($prevItem['rx_power'] ?? -21.50);
+                $prevRx = isset($prevItem['rx_power']) && is_numeric($prevItem['rx_power']) && (float)$prevItem['rx_power'] > -35.0 ? (float)$prevItem['rx_power'] : null;
 
                 if ($isExplicitStateOnline && $hasValidRawRx && $calculatedRx > -38.0 && $calculatedRx < -5.0) {
                     // Valid Online dengan redaman riil
@@ -882,8 +882,8 @@ class PollOltTelemetry extends Command
                     $isOnline = true;
                     Cache::forget("ont_miss_count_{$sn}");
                 } elseif ($isExplicitStateOnline && (!$hasValidRawRx || $calculatedRx <= -38.0)) {
-                    // Phase State Online tapi redaman DDM belum terkirim / jitter: pertahankan redaman terakhir
-                    $rxPower = ($prevWasOnline && $prevRx > -38.0) ? $prevRx : -21.50;
+                    // Phase State Online tapi redaman DDM belum terkirim / jitter: pertahankan redaman terakhir yang valid atau null
+                    $rxPower = ($prevWasOnline && $prevRx !== null) ? $prevRx : null;
                     $status = 'Online';
                     $isOnline = true;
                     Cache::forget("ont_miss_count_{$sn}");
@@ -898,7 +898,7 @@ class PollOltTelemetry extends Command
                     // 2. Sebelumnya Online dan belum miss 4 siklus berurutan serta tidak ada Trap Down / bukan explicit offline
                     if ($prevWasOnline && ($isSnmpDegraded || ($missCount < 4 && !$hasTrapDown && $stateCode !== 1))) {
                         // 🛡️ Filter Packet Loss: Pertahankan status Online & redaman sebelumnya
-                        $rxPower = ($prevRx > -38.0) ? $prevRx : -21.50;
+                        $rxPower = $prevRx;
                         $status = 'Online';
                         $isOnline = true;
                     } else {
@@ -1937,49 +1937,63 @@ class PollOltTelemetry extends Command
                     $prevStatus = $previousPorts[$portName] ?? null;
 
                     if ($prevStatus !== null) {
+                        $downCounterKey = "sfp_pulse_down_count_{$device->id}_{$portName}";
                         // Transisi 1: UP -> DOWN (SFP Dicabut / Kabel Putus Dekat OLT)
                         if ($prevStatus === 'UP' && $currentStatus === 'DOWN') {
-                            $this->warn("🚨 [HARDWARE SFP PULSE] Port {$portName} pada {$device->name} TRANSISI UP -> DOWN!");
+                            $downCount = (int)Cache::get($downCounterKey, 0) + 1;
+                            Cache::put($downCounterKey, $downCount, 120);
 
-                            // 1. Bulk DB Sync ke inactive & -40.00 dBm seketika (<3ms)
-                            FastOpticalProbeService::instantBulkDbSync('inactive', $portName, null, -40.00);
+                            if ($downCount >= 2) {
+                                Cache::forget($downCounterKey);
+                                $this->warn("🚨 [HARDWARE SFP PULSE] Port {$portName} pada {$device->name} TERKONFIRMASI DOWN!");
 
-                            // 2. Kirim Notifikasi Alarm Gangguan Massal (Telegram & Web UI)
-                            AppNotification::notifyAll(
-                                "🚨 ALARM GANGGUAN MASSAL: Interface {$portName}",
-                                "<b>• OLT:</b> {$device->name}\n" .
-                                "<b>• Interface / Port:</b> <code>{$portName}</code>\n" .
-                                "<b>• Penyebab:</b> 🔌 <b>PORT SFP OPTIK PADAM (LINK DOWN)</b>\n" .
-                                "<b>• Deteksi:</b> Sensor fisik Hardware SFP Link Pulse (ifOperStatus)\n\n" .
-                                "<b>Keterangan:</b> Sensor operasional port mendeteksi port fisik mati. Indikasi kabel patchcord putus di dekat OLT, modul SFP longgar/rusak, atau laser padam.",
-                                'MASS_OUTAGE',
-                                '/network',
-                                'MASS_OUTAGE',
-                                true, // sendTelegram = true (Eksklusif Gangguan Massal)
-                                'HARDWARE_SFP_PULSE'
-                            );
+                                // 1. Bulk DB Sync ke inactive & -40.00 dBm seketika (<3ms)
+                                FastOpticalProbeService::instantBulkDbSync('inactive', $portName, null, -40.00);
+
+                                // 2. Kirim Notifikasi Alarm Gangguan Massal (Telegram & Web UI)
+                                AppNotification::notifyAll(
+                                    "🚨 ALARM GANGGUAN MASSAL: Interface {$portName}",
+                                    "<b>• OLT:</b> {$device->name}\n" .
+                                    "<b>• Interface / Port:</b> <code>{$portName}</code>\n" .
+                                    "<b>• Penyebab:</b> 🔌 <b>PORT SFP OPTIK PADAM (LINK DOWN)</b>\n" .
+                                    "<b>• Deteksi:</b> Sensor fisik Hardware SFP Link Pulse (ifOperStatus)\n\n" .
+                                    "<b>Keterangan:</b> Sensor operasional port mendeteksi port fisik mati. Indikasi kabel patchcord putus di dekat OLT, modul SFP longgar/rusak, atau laser padam.",
+                                    'MASS_OUTAGE',
+                                    '/network',
+                                    'MASS_OUTAGE',
+                                    true, // sendTelegram = true (Eksklusif Gangguan Massal)
+                                    'HARDWARE_SFP_PULSE'
+                                );
+                            } else {
+                                $this->info("⏳ [HARDWARE SFP PULSE] Port {$portName} down 1x, menunggu konfirmasi siklus berikutnya...");
+                                // Pertahankan state UP di cache agar tidak trigger false alarm
+                                $currentPorts[$portName] = 'UP';
+                            }
                         }
                         // Transisi 2: DOWN -> UP (SFP Dicolok / Patchcord Tersambung)
-                        elseif ($prevStatus === 'DOWN' && $currentStatus === 'UP') {
-                            $this->info("🟢 [HARDWARE SFP PULSE] Port {$portName} pada {$device->name} TRANSISI DOWN -> UP!");
+                        elseif ($currentStatus === 'UP') {
+                            Cache::forget($downCounterKey);
+                            if ($prevStatus === 'DOWN') {
+                                $this->info("🟢 [HARDWARE SFP PULSE] Port {$portName} pada {$device->name} TRANSISI DOWN -> UP!");
 
-                            // 1. Bulk DB Sync ke active seketika
-                            FastOpticalProbeService::instantBulkDbSync('active', $portName, null);
+                                // 1. Bulk DB Sync ke active seketika
+                                FastOpticalProbeService::instantBulkDbSync('active', $portName, null);
 
-                            // 2. Kirim Notifikasi Pemulihan Massal (Telegram & Web UI)
-                            AppNotification::notifyAll(
-                                "🟢 PEMULIHAN GANGGUAN MASSAL: Interface {$portName}",
-                                "<b>• OLT:</b> {$device->name}\n" .
-                                "<b>• Interface / Port:</b> <code>{$portName}</code>\n" .
-                                "<b>• Status:</b> 🟢 <b>LINK SFP TELAH AKTIF KEMBALI (OPERATIONAL UP)</b>\n" .
-                                "<b>• Deteksi:</b> Sensor fisik Hardware SFP Link Pulse (ifOperStatus)\n\n" .
-                                "<b>Keterangan:</b> Jalur fisik transmisi optik pada port ini telah tersambung kembali dengan normal.",
-                                'MASS_RECOVERY',
-                                '/network',
-                                'MASS_RECOVERY',
-                                true, // sendTelegram = true
-                                'HARDWARE_SFP_PULSE'
-                            );
+                                // 2. Kirim Notifikasi Pemulihan Massal (Telegram & Web UI)
+                                AppNotification::notifyAll(
+                                    "🟢 PEMULIHAN GANGGUAN MASSAL: Interface {$portName}",
+                                    "<b>• OLT:</b> {$device->name}\n" .
+                                    "<b>• Interface / Port:</b> <code>{$portName}</code>\n" .
+                                    "<b>• Status:</b> 🟢 <b>LINK SFP TELAH AKTIF KEMBALI (OPERATIONAL UP)</b>\n" .
+                                    "<b>• Deteksi:</b> Sensor fisik Hardware SFP Link Pulse (ifOperStatus)\n\n" .
+                                    "<b>Keterangan:</b> Jalur fisik transmisi optik pada port ini telah tersambung kembali dengan normal.",
+                                    'MASS_RECOVERY',
+                                    '/network',
+                                    'MASS_RECOVERY',
+                                    true, // sendTelegram = true
+                                    'HARDWARE_SFP_PULSE'
+                                );
+                            }
                         }
                     }
                 }

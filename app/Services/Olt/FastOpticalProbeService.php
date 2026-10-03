@@ -69,13 +69,13 @@ class FastOpticalProbeService
     {
         $pingMs = (int)($olt->last_ping_ms ?? Cache::get("olt_ping_ms_{$olt->id}", 100));
 
-        // 1. Kondisi Normal Direct Peering (Ping <= 45ms): Mode Ultra-Fast
+        // 1. Kondisi Normal Direct Peering (Ping <= 45ms): Mode Ultra-Fast (MTU-Safe)
         if ($pingMs > 0 && $pingMs <= 45) {
             return [
                 'mode'            => 'ULTRA_FAST_DIRECT',
-                'max_repetitions' => 25,
-                'timeout_sec'     => 4,
-                'retries'         => 1,
+                'max_repetitions' => 10,
+                'timeout_sec'     => 5,
+                'retries'         => 2,
             ];
         }
 
@@ -83,7 +83,7 @@ class FastOpticalProbeService
         if ($pingMs > 45 && $pingMs <= 130) {
             return [
                 'mode'            => 'ADAPTIVE_FAILSAFE_DEGRADED',
-                'max_repetitions' => 12, // Payload UDP kecil (<400 byte), 100% aman di dalam MTU tunnel L2TP tanpa fragmentasi
+                'max_repetitions' => 8, // Payload UDP sangat kecil (<350 byte), 100% aman di dalam MTU tunnel L2TP/WireGuard tanpa fragmentasi
                 'timeout_sec'     => 6,
                 'retries'         => 2,
             ];
@@ -92,7 +92,7 @@ class FastOpticalProbeService
         // 3. Kondisi Kritis (Ping > 130ms): Mode Recovery
         return [
             'mode'            => 'CRITICAL_RECOVERY',
-            'max_repetitions' => 8,
+            'max_repetitions' => 5,
             'timeout_sec'     => 8,
             'retries'         => 3,
         ];
@@ -413,9 +413,18 @@ class FastOpticalProbeService
 
         if ($session && !empty($oidsToQuery)) {
             try {
-                // Multi-OID GET dalam 1 paket UDP bulat (~30-50ms)
-                $rawResults = @$session->get($oidsToQuery);
-                if (is_array($rawResults)) {
+                // Multi-OID GET di-chunk per 12 OID agar ukuran paket UDP aman di bawah MTU (<400 bytes)
+                $rawResults = [];
+                foreach (array_chunk($oidsToQuery, 12) as $oidChunk) {
+                    try {
+                        $chunkRes = @$session->get($oidChunk);
+                        if (is_array($chunkRes)) {
+                            $rawResults = array_merge($rawResults, $chunkRes);
+                        }
+                    } catch (\Throwable $e) {}
+                }
+
+                if (!empty($rawResults)) {
                     $normalized = [];
                     foreach ($rawResults as $k => $v) {
                         $cleanK = ltrim(str_replace('iso.', '1.', (string)$k), '.');
@@ -452,12 +461,11 @@ class FastOpticalProbeService
 
                         if ($isUp) {
                             $onlineCount++;
-                            // Jika DDM masih mengukur (65535 atau 0), tapi state sudah 3 (Online):
-                            // Jangan beri -40.00 dBm! Gunakan redaman terakhir di DB jika valid atau baseline normal (-21.50 dBm)
+                            // Jika online tapi DDM masih kalibrasi, gunakan nilai DB riil sebelumnya jika valid, atau null (jangan dipalsukan -21.50)
                             if ($currentRx === null) {
                                 $currentRx = (isset($onu->rx_power) && is_numeric($onu->rx_power) && (float)$onu->rx_power > -35.0)
                                     ? (float)$onu->rx_power
-                                    : -21.50;
+                                    : null;
                             }
                         } else {
                             $downCount++;
@@ -700,7 +708,7 @@ class FastOpticalProbeService
                         'sn'        => $sn,
                         'oper'      => $oper,
                         'is_online' => $isOnline,
-                        'rx_power'  => $isOnline ? -21.50 : -40.00, // Baseline sehat jika DDM masih kalibrasi
+                        'rx_power'  => $isOnline ? null : -40.00,
                     ];
                     $onuStates[$onuId] = $stateEntry;
                     if ($sn) {
@@ -1030,8 +1038,18 @@ class FastOpticalProbeService
 
         if (!empty($oidsToQuery)) {
             try {
-                $rawResults = @$session->get($oidsToQuery);
-                if (is_array($rawResults)) {
+                // Multi-OID GET di-chunk per 12 OID agar aman dari limit MTU VPN (<400 bytes)
+                $rawResults = [];
+                foreach (array_chunk($oidsToQuery, 12) as $oidChunk) {
+                    try {
+                        $chunkRes = @$session->get($oidChunk);
+                        if (is_array($chunkRes)) {
+                            $rawResults = array_merge($rawResults, $chunkRes);
+                        }
+                    } catch (\Throwable $e) {}
+                }
+
+                if (!empty($rawResults)) {
                     $normalized = [];
                     foreach ($rawResults as $k => $v) {
                         $cleanK = ltrim(str_replace('iso.', '1.', (string)$k), '.');
@@ -1070,7 +1088,7 @@ class FastOpticalProbeService
                             if ($currentRx === null) {
                                 $currentRx = (isset($onu->rx_power) && is_numeric($onu->rx_power) && (float)$onu->rx_power > -35.0)
                                     ? (float)$onu->rx_power
-                                    : -21.50;
+                                    : null;
                             }
                         } else {
                             $downCount++;
