@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../alerts/system_alert_screen.dart';
+import '../notifications/notification_center_screen.dart';
 import '../olt/olt_list_screen.dart';
 import '../infrastructure/nodes_list_screen.dart';
 import '../gis/gis_map_screen.dart';
@@ -26,12 +28,17 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
       final dp = Provider.of<DashboardProvider>(context, listen: false);
       dp.fetchDashboardData();
       dp.startAutoRefresh(interval: const Duration(seconds: 15));
+
+      final np = Provider.of<NotificationProvider>(context, listen: false);
+      np.fetchNotifications();
+      np.startAutoSync(interval: const Duration(seconds: 15));
     });
   }
 
   @override
   void dispose() {
     Provider.of<DashboardProvider>(context, listen: false).stopAutoRefresh();
+    Provider.of<NotificationProvider>(context, listen: false).stopAutoSync();
     super.dispose();
   }
 
@@ -39,6 +46,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final dashboard = Provider.of<DashboardProvider>(context);
+    final notifProvider = Provider.of<NotificationProvider>(context);
 
     final user = auth.currentUser;
     final userName = (user?.name != null && user!.name.isNotEmpty) ? user.name : 'Jasen Ard';
@@ -61,7 +69,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         : (totalCustomers - onlineCustomers > 0 ? totalCustomers - onlineCustomers : 180);
 
     final double customerOnlinePct = totalCustomers > 0 ? ((onlineCustomers / totalCustomers) * 100) : 89.0;
-    final alertCount = dashboard.systemAlerts.isNotEmpty ? dashboard.systemAlerts.length : 0;
+    final totalUnread = notifProvider.unreadCount;
 
     final topPadding = MediaQuery.of(context).padding.top;
 
@@ -213,7 +221,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                             Material(
                               color: Colors.transparent,
                               child: InkWell(
-                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemAlertScreen())),
+                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationCenterScreen())),
                                 borderRadius: BorderRadius.circular(20),
                                 child: Container(
                                   padding: const EdgeInsets.all(8),
@@ -226,17 +234,29 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                                     clipBehavior: Clip.none,
                                     children: [
                                       const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 20),
-                                      if (alertCount > 0)
+                                      if (totalUnread > 0)
                                         Positioned(
-                                          top: -2,
-                                          right: -2,
+                                          top: -4,
+                                          right: -4,
                                           child: Container(
-                                            padding: const EdgeInsets.all(3),
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xFFEF4444),
-                                              shape: BoxShape.circle,
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEF4444),
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(color: Colors.white, width: 1.5),
                                             ),
-                                            constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+                                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                            child: Center(
+                                              child: Text(
+                                                totalUnread > 99 ? '99+' : '$totalUnread',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w900,
+                                                  height: 1,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                     ],

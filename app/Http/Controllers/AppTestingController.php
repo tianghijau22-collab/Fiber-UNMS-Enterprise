@@ -255,6 +255,116 @@ class AppTestingController extends Controller
     }
 
     /**
+     * GET /api/app-testing/login-banner
+     * Get mobile login header banner image
+     */
+    public function getLoginBanner(Request $request)
+    {
+        $dir = public_path('branding');
+        $files = ['mobile_login_banner.png', 'mobile_login_banner.jpg', 'mobile_login_banner.jpeg', 'mobile_login_banner.webp'];
+        
+        foreach ($files as $file) {
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+            if (File::exists($path)) {
+                return response()->json([
+                    'status' => 'success',
+                    'data'   => [
+                        'is_custom'   => true,
+                        'banner_url'  => url('/branding/' . $file) . '?v=' . File::lastModified($path),
+                        'file_size'   => File::size($path),
+                        'updated_at'  => Carbon::createFromTimestamp(File::lastModified($path))->toIso8601String(),
+                    ],
+                ]);
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => [
+                'is_custom'   => false,
+                'banner_url'  => null,
+                'updated_at'  => null,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/app-testing/login-banner
+     * Upload custom login header banner image from web admin
+     */
+    public function uploadLoginBanner(Request $request)
+    {
+        $request->validate([
+            'banner_image' => 'required|image|mimes:jpeg,png,jpg,webp|max:5120', // Max 5MB
+        ]);
+
+        $file = $request->file('banner_image');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $dir = public_path('branding');
+
+        if (!File::exists($dir)) {
+            File::makeDirectory($dir, 0755, true);
+        }
+
+        // Clean previous banner files
+        $oldFiles = ['mobile_login_banner.png', 'mobile_login_banner.jpg', 'mobile_login_banner.jpeg', 'mobile_login_banner.webp'];
+        foreach ($oldFiles as $old) {
+            $oldPath = $dir . DIRECTORY_SEPARATOR . $old;
+            if (File::exists($oldPath)) {
+                File::delete($oldPath);
+            }
+        }
+
+        $filename = 'mobile_login_banner.' . $ext;
+        $file->move($dir, $filename);
+        $fullPath = $dir . DIRECTORY_SEPARATOR . $filename;
+
+        AuditLog::record(
+            'MOBILE_BANNER_UPDATE',
+            'App Testing',
+            "Administrator memperbarui gambar latar belakang login aplikasi mobile FONA.",
+            null,
+            ['filename' => $filename, 'file_size' => File::size($fullPath)]
+        );
+
+        return response()->json([
+            'status'     => 'success',
+            'message'    => 'Gambar latar belakang login aplikasi mobile berhasil diperbarui!',
+            'banner_url' => url('/branding/' . $filename) . '?v=' . time(),
+        ]);
+    }
+
+    /**
+     * DELETE /api/app-testing/login-banner
+     * Reset login header banner to default
+     */
+    public function deleteLoginBanner(Request $request)
+    {
+        $dir = public_path('branding');
+        $oldFiles = ['mobile_login_banner.png', 'mobile_login_banner.jpg', 'mobile_login_banner.jpeg', 'mobile_login_banner.webp'];
+        
+        foreach ($oldFiles as $old) {
+            $oldPath = $dir . DIRECTORY_SEPARATOR . $old;
+            if (File::exists($oldPath)) {
+                File::delete($oldPath);
+            }
+        }
+
+        AuditLog::record(
+            'MOBILE_BANNER_RESET',
+            'App Testing',
+            "Administrator mereset gambar latar belakang login aplikasi mobile ke default.",
+            null,
+            []
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Latar belakang login aplikasi mobile berhasil direset ke tampilan default.',
+        ]);
+    }
+
+    /**
      * Helper to format bytes to human-readable format
      */
     private function formatBytes($bytes, $precision = 2): string

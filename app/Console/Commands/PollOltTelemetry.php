@@ -445,9 +445,14 @@ class PollOltTelemetry extends Command
                     $status = 'Online';
                     $isOnline = true;
                     Cache::forget("ont_miss_count_{$sn}");
-                } elseif ($isExplicitStateOnline && (!$hasValidRawRx || $calculatedRx <= -38.0)) {
-                    // Phase State Online tapi redaman DDM belum terkirim / jitter: pertahankan redaman terakhir yang valid atau null
-                    $rxPower = ($prevWasOnline && $prevRx !== null) ? $prevRx : null;
+                } elseif ($rawRx === 65535 || $rawRx === 0 || $rawRx === 2147483647 || ($hasValidRawRx && $calculatedRx <= -38.0)) {
+                    // 🚨 Terkonfirmasi Tegas: Hardware OLT Transceiver mengembalikan 65535 / 0 (Dark Fiber / Loss of Signal)
+                    $rxPower = -40.00;
+                    $status = 'LOS';
+                    $isOnline = false;
+                } elseif ($isExplicitStateOnline && $rawRx === null) {
+                    // Phase State Online tapi redaman DDM belum terkirim / jitter paket: pertahankan redaman terakhir yang valid atau null
+                    $rxPower = ($prevWasOnline && $prevRx !== null && (float)$prevRx != -21.50) ? $prevRx : null;
                     $status = 'Online';
                     $isOnline = true;
                     Cache::forget("ont_miss_count_{$sn}");
@@ -881,9 +886,14 @@ class PollOltTelemetry extends Command
                     $status = 'Online';
                     $isOnline = true;
                     Cache::forget("ont_miss_count_{$sn}");
-                } elseif ($isExplicitStateOnline && (!$hasValidRawRx || $calculatedRx <= -38.0)) {
-                    // Phase State Online tapi redaman DDM belum terkirim / jitter: pertahankan redaman terakhir yang valid atau null
-                    $rxPower = ($prevWasOnline && $prevRx !== null) ? $prevRx : null;
+                } elseif ($rawRx === 65535 || $rawRx === 0 || $rawRx === 2147483647 || ($hasValidRawRx && $calculatedRx <= -38.0)) {
+                    // 🚨 Terkonfirmasi Tegas: Hardware OLT Transceiver mengembalikan 65535 / 0 (Dark Fiber / Loss of Signal)
+                    $rxPower = -40.00;
+                    $status = 'LOS';
+                    $isOnline = false;
+                } elseif ($isExplicitStateOnline && $rawRx === null) {
+                    // Phase State Online tapi redaman DDM belum terkirim / jitter paket: pertahankan redaman terakhir yang valid atau null
+                    $rxPower = ($prevWasOnline && $prevRx !== null && (float)$prevRx != -21.50) ? $prevRx : null;
                     $status = 'Online';
                     $isOnline = true;
                     Cache::forget("ont_miss_count_{$sn}");

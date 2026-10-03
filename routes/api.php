@@ -218,6 +218,9 @@ Route::post('app-testing/upload-apk', [\App\Http\Controllers\AppTestingControlle
 Route::post('app-testing/test-api', [\App\Http\Controllers\AppTestingController::class, 'testEndpoints']);
 Route::post('app-testing/trigger-build', [\App\Http\Controllers\AppTestingController::class, 'triggerBuild']);
 Route::get('app-testing/build-status', [\App\Http\Controllers\AppTestingController::class, 'buildStatus']);
+Route::get('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'getLoginBanner']);
+Route::post('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'uploadLoginBanner']);
+Route::delete('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'deleteLoginBanner']);
 
 // Pop-up Alert Pemberitahuan untuk User (Super Admin & Public Active Alerts)
 Route::get('popup-alerts/active', [\App\Http\Controllers\PopupAlertController::class, 'getActiveAlerts']);

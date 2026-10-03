@@ -15,20 +15,47 @@ class NotificationController extends Controller
     {
         $userId = Auth::id();
 
-        $notifications = AppNotification::query()
+        $baseQuery = AppNotification::query()
             ->where(function ($q) use ($userId) {
-                $q->whereNull('user_id')
-                  ->orWhere('user_id', $userId);
+                // 1. Tiket khusus yang ditugaskan ke user yang bersangkutan
+                $q->where(function ($sub) use ($userId) {
+                    $sub->where('user_id', $userId)
+                        ->where('type', 'TICKET');
+                })
+                // 2. Siaran Massal Admin / Pengumuman / Pemeliharaan (Broadcast)
+                ->orWhere(function ($sub) {
+                    $sub->whereNull('user_id')
+                        ->whereIn('type', ['BROADCAST', 'MAINTENANCE', 'INFO', 'WARNING', 'SECURITY', 'ANNOUNCEMENT']);
+                })
+                // 3. Gangguan Massal Interface & ODP
+                ->orWhere(function ($sub) {
+                    $sub->whereIn('type', ['MASS_OUTAGE', 'OUTAGE_INTERFACE', 'OUTAGE_ODP'])
+                        ->orWhere('title', 'like', '%GANGGUAN MASSAL%')
+                        ->orWhere('title', 'like', '%GANGGUAN PORT%')
+                        ->orWhere('title', 'like', '%GANGGUAN ODP%')
+                        ->orWhere('title', 'like', '%PUTUS KABEL%');
+                })
+                // 4. Pemulihan Gangguan Massal Interface & ODP
+                ->orWhere(function ($sub) {
+                    $sub->whereIn('type', ['MASS_RECOVERY', 'RECOVERY_INTERFACE', 'RECOVERY_ODP'])
+                        ->orWhere('title', 'like', '%PEMULIHAN MASSAL%')
+                        ->orWhere('title', 'like', '%PEMULIHAN PORT%')
+                        ->orWhere('title', 'like', '%PEMULIHAN ODP%')
+                        ->orWhere('title', 'like', '%PULIH MASSAL%');
+                });
             })
+            // Exclude noise telemetri individual / alarm modem individual
+            ->whereNotIn('type', ['TRAP_INDIVIDUAL', 'POLL', 'SNMP', 'ALARM'])
+            ->where('title', 'not like', '%SNMP TRAP%')
+            ->where('title', 'not like', '%Modem %')
+            ->where('title', 'not like', '%ONU %');
+
+        $notifications = (clone $baseQuery)
             ->orderBy('created_at', 'desc')
-            ->limit(30)
+            ->limit(50)
             ->get();
 
-        $unreadCount = AppNotification::query()
-            ->where(function ($q) use ($userId) {
-                $q->whereNull('user_id')
-                  ->orWhere('user_id', $userId);
-            })
+        $unreadCount = (clone $baseQuery)
             ->where('is_read', false)
             ->count();
 
@@ -158,7 +185,7 @@ class NotificationController extends Controller
         $request->validate([
             'title'       => 'required|string|max:255',
             'body'        => 'required|string',
-            'type'        => 'required|string|in:NOC,SECURITY,BILLING,PROVISIONING',
+            'type'        => 'required|string|in:NOC,SECURITY,BILLING,PROVISIONING,MAINTENANCE,BROADCAST,ALARM,TICKET,INFO,WARNING',
             'target_role' => 'required|string',
             'url'         => 'nullable|string|max:255',
         ]);

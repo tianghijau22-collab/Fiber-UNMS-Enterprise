@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'core/constants/app_colors.dart';
 import 'core/network/dio_client.dart';
+import 'core/services/notification_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/dashboard_provider.dart';
+import 'providers/notification_provider.dart';
 import 'providers/odp_provider.dart';
 import 'providers/ticket_provider.dart';
 import 'views/splash/splash_screen.dart';
@@ -23,8 +25,9 @@ void main() async {
     ),
   );
 
-  // Initialize Network Client
+  // Initialize Network Client & Notification Service
   await DioClient().init();
+  await NotificationService().init();
 
   runApp(const FonaMobileApp());
 }
@@ -40,6 +43,7 @@ class FonaMobileApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
         ChangeNotifierProvider(create: (_) => TicketProvider()),
         ChangeNotifierProvider(create: (_) => OdpProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
       child: MaterialApp(
         title: 'FONA Mobile',

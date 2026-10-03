@@ -532,7 +532,20 @@ class OltController extends Controller
             $finalPort = $portClean ? (explode(',', $portClean)[0] ?? $portClean) : null;
 
             $rawStatus = $liveOnu['status'] ?? ($ont->status === 'active' ? 'Online' : 'Offline');
-            $statusClean = (strtoupper($rawStatus) === 'ONLINE') ? 'Online' : 'Offline';
+            $statusClean = (in_array(strtoupper($rawStatus), ['ONLINE', 'ACTIVE', 'WORKING'])) ? 'Online' : 'Offline';
+            $isOnline = ($statusClean === 'Online');
+
+            $rxPower = null;
+            if (isset($liveOnu['rx_power']) && is_numeric($liveOnu['rx_power'])) {
+                $rxPower = (float)$liveOnu['rx_power'];
+            } elseif ($isOnline && isset($ont->rx_power) && is_numeric($ont->rx_power) && (float)$ont->rx_power > -35.0 && (float)$ont->rx_power != -21.50) {
+                $rxPower = (float)$ont->rx_power;
+            }
+
+            if (!$isOnline || ($rxPower !== null && $rxPower <= -38.0)) {
+                $statusClean = 'Offline';
+                $rxPower = -40.00;
+            }
 
             $registeredOnus[] = [
                 '_source'         => $liveOnu ? 'live_snmp' : 'database',
@@ -545,7 +558,7 @@ class OltController extends Controller
                 'serial_number'   => $ont->onu_serial,
                 'mac_address'     => $ont->onu_mac,
                 'status'          => $statusClean,
-                'rx_power'        => isset($liveOnu['rx_power']) ? (float)$liveOnu['rx_power'] : (float)($ont->rx_power ?? -19.5),
+                'rx_power'        => $rxPower,
                 'tx_power'        => isset($liveOnu['tx_power']) ? (float)$liveOnu['tx_power'] : (float)($ont->tx_power ?? 2.1),
                 'distance_meters' => $liveOnu['distance_meters'] ?? 850,
                 'ip_address'      => $ont->customerService?->ip_address ?: '—',

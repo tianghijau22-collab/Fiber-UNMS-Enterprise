@@ -212,7 +212,10 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        padding: const EdgeInsets.all(20),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.88,
+        ),
+        padding: const EdgeInsets.only(top: 12, left: 20, right: 20, bottom: 20),
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -225,7 +228,7 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
               child: Container(
                 width: 40,
                 height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
+                margin: const EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
                   color: const Color(0xFFE2E8F0),
                   borderRadius: BorderRadius.circular(2),
@@ -264,26 +267,31 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Text(
               cleanTitle,
               style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 16),
             ),
             const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: SelectableText(
-                cleanBody.isNotEmpty ? cleanBody : 'Tidak ada detail tambahan untuk insiden ini.',
-                style: const TextStyle(color: Color(0xFF334155), fontSize: 13, height: 1.5),
+            Flexible(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: SelectableText(
+                    cleanBody.isNotEmpty ? cleanBody : 'Tidak ada detail tambahan untuk insiden ini.',
+                    style: const TextStyle(color: Color(0xFF334155), fontSize: 13, height: 1.5),
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -327,7 +335,6 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
     );
   }
 
-  /// Compact Filter Sheet Modal (Hides bulky category strip)
   void _showFilterSheet(int totalCount, int outageCount, int dyingGaspCount, int recoveryCount) {
     showModalBottomSheet(
       context: context,
@@ -483,24 +490,6 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
     );
   }
 
-  String _getCategoryLabel(String cat) {
-    return switch (cat) {
-      'OUTAGE' => 'Gangguan',
-      'DYING_GASP' => 'Dying Gasp',
-      'RECOVERY' => 'Pulih',
-      _ => 'Semua',
-    };
-  }
-
-  Color _getCategoryColor(String cat) {
-    return switch (cat) {
-      'OUTAGE' => const Color(0xFFEF4444),
-      'DYING_GASP' => const Color(0xFFEA580C),
-      'RECOVERY' => const Color(0xFF10B981),
-      _ => const Color(0xFF00AAE0),
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     final effectiveAlerts = _alertFeed.where((raw) {
@@ -529,7 +518,6 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
       return matchesCat && matchesSearch;
     }).toList();
 
-    // Calculate real stats
     final outageCount = _stats['outage_today'] ?? _stats['outage_interface_today'] ?? _alertFeed.where((raw) {
       final a = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
       final t = (a['title'] ?? '').toString().toLowerCase();
@@ -560,7 +548,7 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: const Text(
-          'Alert Sistem & Insiden',
+          'Alert & Gangguan Jaringan',
           style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w800, fontSize: 18),
         ),
         actions: [
@@ -579,13 +567,12 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
       ),
       body: Column(
         children: [
-          // ── Compact Search & Filter Bar (Replaces bulky KPI strip) ──
+          // Search & Filter Bar
           Container(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
             color: Colors.white,
             child: Row(
               children: [
-                // Search Input Field
                 Expanded(
                   child: SizedBox(
                     height: 44,
@@ -613,25 +600,14 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
                         filled: true,
                         fillColor: const Color(0xFFF8FAFC),
                         contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFF00AAE0), width: 1.5),
-                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF00AAE0), width: 1.5)),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 10),
-
-                // Compact Filter Button with Active Badge
                 InkWell(
                   onTap: () => _showFilterSheet(
                     totalCount,
@@ -645,47 +621,22 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       color: _selectedCategory != 'ALL'
-                          ? _getCategoryColor(_selectedCategory).withValues(alpha: 0.12)
+                          ? const Color(0xFF00AAE0).withValues(alpha: 0.12)
                           : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: _selectedCategory != 'ALL'
-                            ? _getCategoryColor(_selectedCategory)
-                            : const Color(0xFFE2E8F0),
+                        color: _selectedCategory != 'ALL' ? const Color(0xFF00AAE0) : const Color(0xFFE2E8F0),
                       ),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.filter_list_rounded,
-                          color: _selectedCategory != 'ALL'
-                              ? _getCategoryColor(_selectedCategory)
-                              : const Color(0xFF64748B),
-                          size: 18,
-                        ),
-                        const SizedBox(width: 6),
+                        Icon(Icons.filter_list_rounded, color: Color(0xFF00AAE0), size: 18),
+                        SizedBox(width: 6),
                         Text(
-                          _getCategoryLabel(_selectedCategory),
-                          style: TextStyle(
-                            color: _selectedCategory != 'ALL'
-                                ? _getCategoryColor(_selectedCategory)
-                                : const Color(0xFF334155),
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          'Filter',
+                          style: TextStyle(color: Color(0xFF0F172A), fontSize: 12.5, fontWeight: FontWeight.w700),
                         ),
-                        if (_selectedCategory != 'ALL') ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: _getCategoryColor(_selectedCategory),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -794,7 +745,7 @@ class _SystemAlertScreenState extends State<SystemAlertScreen> {
                               iconColor = const Color(0xFFEF4444);
                               icon = Icons.bolt_rounded;
                             } else if (isWarning) {
-                              badgeText = 'HIGH ATTENUATION';
+                              badgeText = 'ATTENUATION';
                               badgeBg = const Color(0xFFFEF3C7);
                               badgeColor = const Color(0xFFD97706);
                               iconBg = const Color(0xFFFEF3C7);

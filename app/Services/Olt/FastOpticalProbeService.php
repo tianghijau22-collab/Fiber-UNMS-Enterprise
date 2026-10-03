@@ -448,28 +448,32 @@ class FastOpticalProbeService
                             }
                         }
 
-                        // 3 = Online (ZTE GPON MIB)
-                        $isUp = ($stateVal === 3);
-                        $currentRx = null;
-
-                        if ($rawRx !== null && $rawRx > 0 && $rawRx < 65535) {
+                        // Hitung Nilai Redaman Optik (DDM Formula ZTE GPON)
+                        if ($rawRx !== null && $rawRx > 0 && $rawRx < 65534) {
                             $calculated = round(($rawRx * 0.002) - 30.0, 2);
                             if ($calculated > -38.0 && $calculated < -5.0) {
                                 $currentRx = $calculated;
                             }
                         }
 
-                        if ($isUp) {
-                            $onlineCount++;
-                            // Jika online tapi DDM masih kalibrasi, gunakan nilai DB riil sebelumnya jika valid, atau null (jangan dipalsukan -21.50)
-                            if ($currentRx === null) {
-                                $currentRx = (isset($onu->rx_power) && is_numeric($onu->rx_power) && (float)$onu->rx_power > -35.0)
-                                    ? (float)$onu->rx_power
-                                    : null;
-                            }
-                        } else {
-                            $downCount++;
+                        // 🎯 Deteksi Tegas: Jika transceiver hardware mengembalikan 65535 / 0 (dark fiber / no light)
+                        if ($rawRx === 65535 || $rawRx === 0 || $rawRx === 2147483647 || ($currentRx !== null && $currentRx <= -38.0)) {
+                            $isUp = false;
                             $currentRx = -40.00;
+                            $downCount++;
+                        } else {
+                            $isUp = ($stateVal === 3);
+                            if ($isUp) {
+                                $onlineCount++;
+                                if ($currentRx === null) {
+                                    $currentRx = (isset($onu->rx_power) && is_numeric($onu->rx_power) && (float)$onu->rx_power > -35.0 && (float)$onu->rx_power != -21.50)
+                                        ? (float)$onu->rx_power
+                                        : null;
+                                }
+                            } else {
+                                $downCount++;
+                                $currentRx = -40.00;
+                            }
                         }
 
                         $probedStates[$sn] = [
@@ -728,13 +732,24 @@ class FastOpticalProbeService
                     $rxParts = explode('.', (string)$rxOid);
                     $onuIdPart = (end($rxParts) === '1' && count($rxParts) >= 2) ? (int)$rxParts[count($rxParts)-2] : (int)end($rxParts);
                     $rawInt = (int)trim(str_replace(['INTEGER:', ' '], '', (string)$rxVal));
-                    if ($rawInt > 0 && $rawInt < 65535) {
+                    if ($rawInt > 0 && $rawInt < 65534) {
                         $dbm = round(($rawInt * 0.002) - 30.0, 2);
                         if ($dbm > -38.0 && $dbm < -5.0 && isset($onuStates[$onuIdPart])) {
                             $onuStates[$onuIdPart]['rx_power'] = $dbm;
                             $sn = $onuStates[$onuIdPart]['sn'] ?? null;
                             if ($sn && isset($onuStatesBySn[$sn])) {
                                 $onuStatesBySn[$sn]['rx_power'] = $dbm;
+                            }
+                        }
+                    } elseif ($rawInt === 65535 || $rawInt === 0 || $rawInt === 2147483647) {
+                        // 🎯 Explicit Loss of Optical Signal / No Light
+                        if (isset($onuStates[$onuIdPart])) {
+                            $onuStates[$onuIdPart]['rx_power'] = -40.00;
+                            $onuStates[$onuIdPart]['is_online'] = false;
+                            $sn = $onuStates[$onuIdPart]['sn'] ?? null;
+                            if ($sn && isset($onuStatesBySn[$sn])) {
+                                $onuStatesBySn[$sn]['rx_power'] = -40.00;
+                                $onuStatesBySn[$sn]['is_online'] = false;
                             }
                         }
                     }
@@ -1073,26 +1088,32 @@ class FastOpticalProbeService
                             }
                         }
 
-                        $isUp = ($stateVal === 3);
-                        $currentRx = null;
-
-                        if ($rawRx !== null && $rawRx > 0 && $rawRx < 65535) {
+                        // Hitung Nilai Redaman Optik (DDM Formula ZTE GPON)
+                        if ($rawRx !== null && $rawRx > 0 && $rawRx < 65534) {
                             $calculated = round(($rawRx * 0.002) - 30.0, 2);
                             if ($calculated > -38.0 && $calculated < -5.0) {
                                 $currentRx = $calculated;
                             }
                         }
 
-                        if ($isUp) {
-                            $onlineCount++;
-                            if ($currentRx === null) {
-                                $currentRx = (isset($onu->rx_power) && is_numeric($onu->rx_power) && (float)$onu->rx_power > -35.0)
-                                    ? (float)$onu->rx_power
-                                    : null;
-                            }
-                        } else {
-                            $downCount++;
+                        // 🎯 Deteksi Tegas: Jika transceiver hardware mengembalikan 65535 / 0 (dark fiber / no light)
+                        if ($rawRx === 65535 || $rawRx === 0 || $rawRx === 2147483647 || ($currentRx !== null && $currentRx <= -38.0)) {
+                            $isUp = false;
                             $currentRx = -40.00;
+                            $downCount++;
+                        } else {
+                            $isUp = ($stateVal === 3);
+                            if ($isUp) {
+                                $onlineCount++;
+                                if ($currentRx === null) {
+                                    $currentRx = (isset($onu->rx_power) && is_numeric($onu->rx_power) && (float)$onu->rx_power > -35.0 && (float)$onu->rx_power != -21.50)
+                                        ? (float)$onu->rx_power
+                                        : null;
+                                }
+                            } else {
+                                $downCount++;
+                                $currentRx = -40.00;
+                            }
                         }
 
                         // 5. Update Database ont_registrations seketika

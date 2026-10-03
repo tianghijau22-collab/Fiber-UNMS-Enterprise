@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "410010233312",
+    "project_id": "fona-mobile",
+    "storage_bucket": "fona-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:410010233312:android:f058731af7f889ec576385",
+        "android_client_info": {
+          "package_name": "com.fiberunms.fiber_unms_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBXAeuxNzLtS6VZK0LmnOS5WEkS0_ZL9qI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

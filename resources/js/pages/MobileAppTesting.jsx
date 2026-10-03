@@ -13,17 +13,94 @@ export default function MobileAppTesting() {
   const [testingApi, setTestingApi] = useState(false);
   const [alertMsg, setAlertMsg] = useState(null);
 
+  // Mobile Login Background Banner States
+  const [bannerInfo, setBannerInfo] = useState(null);
+  const [bannerUploading, setBannerUploading] = useState(false);
+  const [bannerResetting, setBannerResetting] = useState(false);
+
   const fetchAppInfo = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/app-testing/info');
-      if (res.data && res.data.status === 'success') {
-        setAppInfo(res.data.data);
+      const [resApp, resBanner] = await Promise.all([
+        axios.get('/api/app-testing/info'),
+        axios.get('/api/app-testing/login-banner'),
+      ]);
+      if (resApp.data && resApp.data.status === 'success') {
+        setAppInfo(resApp.data.data);
+      }
+      if (resBanner.data && resBanner.data.status === 'success') {
+        setBannerInfo(resBanner.data.data);
       }
     } catch (err) {
       console.error('Failed to fetch mobile app info:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBannerUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setAlertMsg({ type: 'error', text: 'Format gambar harus PNG, JPG, JPEG, atau WEBP.' });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setAlertMsg({ type: 'error', text: 'Ukuran gambar maksimal 5MB.' });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('banner_image', file);
+
+    setBannerUploading(true);
+    setAlertMsg(null);
+
+    try {
+      const res = await axios.post('/api/app-testing/login-banner', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data && res.data.status === 'success') {
+        setAlertMsg({ type: 'success', text: res.data.message });
+        setBannerInfo({
+          is_custom: true,
+          banner_url: res.data.banner_url,
+          updated_at: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      setAlertMsg({
+        type: 'error',
+        text: err.response?.data?.message || 'Gagal mengunggah gambar latar belakang login.',
+      });
+    } finally {
+      setBannerUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleBannerReset = async () => {
+    if (!window.confirm('Yakin ingin mereset gambar latar belakang login ke tampilan maskot default?')) return;
+
+    setBannerResetting(true);
+    setAlertMsg(null);
+    try {
+      const res = await axios.delete('/api/app-testing/login-banner');
+      if (res.data && res.data.status === 'success') {
+        setAlertMsg({ type: 'success', text: res.data.message });
+        setBannerInfo({
+          is_custom: false,
+          banner_url: null,
+          updated_at: null,
+        });
+      }
+    } catch (err) {
+      setAlertMsg({ type: 'error', text: 'Gagal mereset gambar latar belakang login.' });
+    } finally {
+      setBannerResetting(false);
     }
   };
 
@@ -207,6 +284,90 @@ export default function MobileAppTesting() {
                   className="hidden"
                 />
               </label>
+            </div>
+          </div>
+
+          {/* Kustomisasi Background / Banner Login Mobile Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                  <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Kustomisasi Banner Header Login Mobile
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">Ubah gambar latar belakang / maskot header pada layar login aplikasi FONA Mobile</p>
+              </div>
+              <span className={`px-2.5 py-1 text-xs font-semibold rounded-lg ${
+                bannerInfo?.is_custom 
+                  ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30' 
+                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+              }`}>
+                {bannerInfo?.is_custom ? 'Gambar Kustom Aktif' : 'Default Maskot FONA'}
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-5 items-center">
+              {/* Image Preview Box */}
+              <div className="w-full sm:w-64 h-36 rounded-xl overflow-hidden bg-gradient-to-b from-blue-900 to-sky-700 border border-slate-700 flex items-center justify-center relative shadow-inner group">
+                {bannerInfo?.is_custom && bannerInfo?.banner_url ? (
+                  <img
+                    src={bannerInfo.banner_url}
+                    alt="Custom Login Banner"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center p-3 text-white">
+                    <div className="w-10 h-10 mx-auto rounded-full bg-white/20 flex items-center justify-center mb-1.5 backdrop-blur-sm">
+                      <span className="text-xl">🐱</span>
+                    </div>
+                    <span className="text-xs font-semibold block">Maskot FONA (Default)</span>
+                    <span className="text-[10px] text-white/70">Gradasi Royal Blue + Arc Curve</span>
+                  </div>
+                )}
+                {bannerInfo?.is_custom && (
+                  <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded text-[10px] text-white font-mono">
+                    Kustom
+                  </div>
+                )}
+              </div>
+
+              {/* Upload & Reset Controls */}
+              <div className="flex-1 space-y-3 w-full">
+                <div className="text-xs text-slate-300 leading-relaxed">
+                  Unggah gambar banner (PNG, JPG, WEBP maks 5MB). Rekomendasi rasio <strong>4:3</strong> atau <strong>16:9</strong> dengan resolusi <strong>800×600 px</strong>.
+                </div>
+
+                <div className="flex flex-wrap gap-2.5 pt-1">
+                  <label className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition shadow-lg shadow-indigo-950/40 cursor-pointer">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    {bannerUploading ? 'Mengunggah...' : 'Ganti Gambar Banner'}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      onChange={handleBannerUpload}
+                      disabled={bannerUploading}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {bannerInfo?.is_custom && (
+                    <button
+                      onClick={handleBannerReset}
+                      disabled={bannerResetting}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-800 hover:bg-rose-900/40 text-slate-300 hover:text-rose-400 text-xs font-semibold rounded-xl border border-slate-700 hover:border-rose-500/30 transition"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      {bannerResetting ? 'Mereset...' : 'Reset ke Default'}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

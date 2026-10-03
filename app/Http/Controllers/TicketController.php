@@ -169,12 +169,23 @@ class TicketController extends Controller
             ['ticket_number' => $ticket->ticket_number, 'title' => $ticket->title, 'status' => $ticket->status, 'technician' => $ticket->technician_name]
         );
 
-        AppNotification::notifyAll(
-            "Tiket Jointer Baru #{$ticket->ticket_number}",
-            "{$ticket->category}: {$ticket->title}" . ($ticket->technician_name ? " (Ditugaskan: {$ticket->technician_name})" : ""),
-            'NOC',
-            '/tickets'
-        );
+        // Notifikasi HANYA dikirim ke teknisi yang bersangkutan / ditugaskan
+        if (!empty($ticket->technician_name)) {
+            $techNames = array_map('trim', explode(',', $ticket->technician_name));
+            $assignedUsers = User::whereIn('name', $techNames)
+                ->orWhereIn('username', $techNames)
+                ->get();
+
+            foreach ($assignedUsers as $techUser) {
+                AppNotification::notifyUser(
+                    $techUser->id,
+                    "Tiket Jointer Baru #{$ticket->ticket_number}",
+                    "{$ticket->category}: {$ticket->title} telah ditugaskan kepada Anda.",
+                    'TICKET',
+                    '/tickets'
+                );
+            }
+        }
 
         if ($dispatchTelegram) {
             $this->sendTelegramNotification($ticket);
@@ -253,12 +264,23 @@ class TicketController extends Controller
         // Notifikasi Telegram otomatis saat tiket berstatus Resolved
         if (isset($validated['status']) && $validated['status'] === 'Resolved' && $previousStatus !== 'Resolved') {
             $this->sendResolvedTelegramNotification($ticket, $request->log_note, $userName);
-            AppNotification::notifyAll(
-                "Tiket #{$ticket->ticket_number} Telah Selesai (Resolved)",
-                "{$ticket->category}: {$ticket->title} telah diselesaikan oleh {$userName}",
-                'NOC',
-                '/tickets'
-            );
+            
+            if (!empty($ticket->technician_name)) {
+                $techNames = array_map('trim', explode(',', $ticket->technician_name));
+                $assignedUsers = User::whereIn('name', $techNames)
+                    ->orWhereIn('username', $techNames)
+                    ->get();
+
+                foreach ($assignedUsers as $techUser) {
+                    AppNotification::notifyUser(
+                        $techUser->id,
+                        "Tiket #{$ticket->ticket_number} Telah Selesai (Resolved)",
+                        "{$ticket->category}: {$ticket->title} telah diselesaikan oleh {$userName}",
+                        'TICKET',
+                        '/tickets'
+                    );
+                }
+            }
         }
 
         return response()->json([
@@ -362,12 +384,23 @@ class TicketController extends Controller
             // Notifikasi Telegram otomatis saat tiket diubah ke Resolved oleh teknisi
             if ($request->input('status') === 'Resolved' && $previousStatus !== 'Resolved') {
                 $this->sendResolvedTelegramNotification($ticket, $request->input('comment'), $userName);
-                AppNotification::notifyAll(
-                    "Tiket #{$ticket->ticket_number} Telah Selesai (Resolved)",
-                    "{$ticket->category}: {$ticket->title} telah diselesaikan oleh {$userName}",
-                    'NOC',
-                    '/tickets'
-                );
+                
+                if (!empty($ticket->technician_name)) {
+                    $techNames = array_map('trim', explode(',', $ticket->technician_name));
+                    $assignedUsers = User::whereIn('name', $techNames)
+                        ->orWhereIn('username', $techNames)
+                        ->get();
+
+                    foreach ($assignedUsers as $techUser) {
+                        AppNotification::notifyUser(
+                            $techUser->id,
+                            "Tiket #{$ticket->ticket_number} Telah Selesai (Resolved)",
+                            "{$ticket->category}: {$ticket->title} telah diselesaikan oleh {$userName}",
+                            'TICKET',
+                            '/tickets'
+                        );
+                    }
+                }
             }
 
             return response()->json([

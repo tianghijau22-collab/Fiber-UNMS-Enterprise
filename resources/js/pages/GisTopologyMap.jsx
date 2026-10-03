@@ -1011,8 +1011,108 @@ function LeafletMap({
     return node.node_type === 'ODP' ? 'Belum ada pelanggan' : '';
   };
 
-  // 6b. Ultra-Lightweight Unified Enterprise Marker System (Model Bulat / Circular Pin)
-  const buildCircleHtml = (node, effStatus, optMeta, isSelected, isBadgeMode) => {
+  // Helper: Visual Node Shapes (ODP Box, ODC Cabinet, POP NOC/Data Center)
+  const getNodeVisualSvg = (nodeType, effStatus, isMini = false) => {
+    const isLoss = effStatus?.isTotalLoss;
+    const isInactive = effStatus?.isInactive;
+    const isNoClients = effStatus?.hasNoClients;
+    
+    // Status color accent for interior lights
+    const ledColor = isLoss ? '#ef4444' : (isInactive ? '#94a3b8' : '#10b981');
+
+    if (nodeType === 'ODC') {
+      // Realistic ODC (Outdoor Optical Distribution Cabinet with Dual Doors, Vents, and Base)
+      return `
+        <svg class="gis-node-svg gis-svg-odc ${isMini ? 'is-mini' : ''}" viewBox="0 0 28 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Cabinet Roof Rain Visor -->
+          <path d="M4 6.5 L14 3.5 L24 6.5 H4Z" class="svg-roof" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
+          <!-- Main Cabinet Enclosure -->
+          <rect x="4" y="6.5" width="20" height="19.5" rx="1.5" class="svg-body" stroke="currentColor" stroke-width="1.4" />
+          <!-- Dual Door Center Split Line -->
+          <line x1="14" y1="6.5" x2="14" y2="26" stroke="currentColor" stroke-width="1.2" />
+          <!-- Door Latches / Key Locks -->
+          <rect x="12" y="15" width="1.2" height="3" rx="0.5" class="svg-latch" fill="currentColor" />
+          <rect x="14.8" y="15" width="1.2" height="3" rx="0.5" class="svg-latch" fill="currentColor" />
+          <!-- Air Ventilation Louvers (Left & Right) -->
+          <line x1="6.5" y1="9.5" x2="11.5" y2="9.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.85" />
+          <line x1="6.5" y1="12" x2="11.5" y2="12" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.85" />
+          <line x1="16.5" y1="9.5" x2="21.5" y2="9.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.85" />
+          <line x1="16.5" y1="12" x2="21.5" y2="12" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.85" />
+          <!-- Internal Fiber Patch Tray Rows -->
+          <line x1="6.5" y1="20.5" x2="11.5" y2="20.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.75" />
+          <line x1="6.5" y1="23" x2="11.5" y2="23" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.75" />
+          <line x1="16.5" y1="20.5" x2="21.5" y2="20.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.75" />
+          <line x1="16.5" y1="23" x2="21.5" y2="23" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.75" />
+          <!-- Status Indicator LED -->
+          <circle cx="8" cy="16.5" r="0.85" fill="${ledColor}" />
+          <!-- Concrete Pedestal Base -->
+          <rect x="3" y="26" width="22" height="3" rx="0.8" class="svg-base" stroke="currentColor" stroke-width="1.2" fill="currentColor" opacity="0.3" />
+        </svg>
+      `;
+    }
+
+    if (nodeType === 'POP') {
+      // Realistic POP (Central Office / Data Center / NOC Server Tower with Fiber Emitter)
+      return `
+        <svg class="gis-node-svg gis-svg-pop ${isMini ? 'is-mini' : ''}" viewBox="0 0 28 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Central Optical Emitter Antenna -->
+          <line x1="14" y1="6" x2="14" y2="1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+          <circle cx="14" cy="1.5" r="1.2" fill="${ledColor}" />
+          <path d="M10.5 3.5 Q14 2 17.5 3.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.7" />
+          <!-- Main NOC Hub Structure -->
+          <rect x="4" y="6" width="20" height="20" rx="2" class="svg-body" stroke="currentColor" stroke-width="1.4" />
+          <!-- Server Rack Row 1 -->
+          <rect x="6.5" y="8.5" width="15" height="3.5" rx="0.8" class="svg-rack" stroke="currentColor" stroke-width="0.9" />
+          <circle cx="8.5" cy="10.25" r="0.7" fill="${ledColor}" />
+          <circle cx="10.5" cy="10.25" r="0.7" fill="#3b82f6" />
+          <line x1="13" y1="10.25" x2="19.5" y2="10.25" stroke="currentColor" stroke-width="0.8" stroke-linecap="round" opacity="0.7" />
+          <!-- Server Rack Row 2 -->
+          <rect x="6.5" y="13.5" width="15" height="3.5" rx="0.8" class="svg-rack" stroke="currentColor" stroke-width="0.9" />
+          <circle cx="8.5" cy="15.25" r="0.7" fill="${ledColor}" />
+          <circle cx="10.5" cy="15.25" r="0.7" fill="#3b82f6" />
+          <line x1="13" y1="15.25" x2="19.5" y2="15.25" stroke="currentColor" stroke-width="0.8" stroke-linecap="round" opacity="0.7" />
+          <!-- Server Rack Row 3 -->
+          <rect x="6.5" y="18.5" width="15" height="3.5" rx="0.8" class="svg-rack" stroke="currentColor" stroke-width="0.9" />
+          <circle cx="8.5" cy="20.25" r="0.7" fill="${ledColor}" />
+          <circle cx="10.5" cy="20.25" r="0.7" fill="#3b82f6" />
+          <line x1="13" y1="20.25" x2="19.5" y2="20.25" stroke="currentColor" stroke-width="0.8" stroke-linecap="round" opacity="0.7" />
+          <!-- Foundation Plinth -->
+          <rect x="3" y="26" width="22" height="3" rx="0.8" class="svg-base" stroke="currentColor" stroke-width="1.2" fill="currentColor" opacity="0.3" />
+        </svg>
+      `;
+    }
+
+    // Default: Realistic ODP (Outdoor Optical Distribution Box with Splitters & Cable Glands)
+    return `
+      <svg class="gis-node-svg gis-svg-odp ${isMini ? 'is-mini' : ''}" viewBox="0 0 26 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- ODP Box Top Weather Hood -->
+        <path d="M4 6.5 C4 4.5 5.5 3.5 8 3.5 H18 C20.5 3.5 22 4.5 22 6.5 V8 H4 V6.5Z" class="svg-hood" stroke="currentColor" stroke-width="1.2" />
+        <!-- Main ODP Rugged Body -->
+        <rect x="4" y="8" width="18" height="15.5" rx="1.5" class="svg-body" stroke="currentColor" stroke-width="1.4" />
+        <!-- Center Box Security Latch -->
+        <rect x="11.5" y="7" width="3" height="3" rx="0.6" class="svg-latch" fill="currentColor" stroke="currentColor" stroke-width="0.5" />
+        <!-- Fiber Splitter Ports Matrix (Row 1) -->
+        <rect x="6.5" y="11" width="2.5" height="2.5" rx="0.5" class="svg-port" fill="currentColor" opacity="0.9" />
+        <rect x="10.25" y="11" width="2.5" height="2.5" rx="0.5" class="svg-port" fill="currentColor" opacity="0.9" />
+        <rect x="14" y="11" width="2.5" height="2.5" rx="0.5" class="svg-port" fill="currentColor" opacity="0.9" />
+        <rect x="17.75" y="11" width="2.5" height="2.5" rx="0.5" class="svg-port" fill="currentColor" opacity="0.9" />
+        <!-- Fiber Splitter Ports Matrix (Row 2) -->
+        <rect x="6.5" y="15" width="2.5" height="2.5" rx="0.5" class="svg-port" fill="currentColor" opacity="0.9" />
+        <rect x="10.25" y="15" width="2.5" height="2.5" rx="0.5" class="svg-port" fill="currentColor" opacity="0.9" />
+        <rect x="14" y="15" width="2.5" height="2.5" rx="0.5" class="svg-port" fill="currentColor" opacity="0.9" />
+        <rect x="17.75" y="15" width="2.5" height="2.5" rx="0.5" class="svg-port" fill="currentColor" opacity="0.9" />
+        <!-- Bottom Drop Cable Glands / Entry Tubes -->
+        <rect x="6.5" y="23.5" width="2.2" height="2.5" rx="0.5" class="svg-gland" fill="currentColor" />
+        <rect x="11.9" y="23.5" width="2.2" height="2.5" rx="0.5" class="svg-gland" fill="currentColor" />
+        <rect x="17.3" y="23.5" width="2.2" height="2.5" rx="0.5" class="svg-gland" fill="currentColor" />
+        <!-- Status Indicator Dot in Corner -->
+        <circle cx="7.5" cy="5.5" r="0.8" fill="${ledColor}" />
+      </svg>
+    `;
+  };
+
+  // 6b. Ultra-Lightweight Unified Enterprise Marker System (Visual Realistic Node Pin)
+  const buildCircleHtml = (node, effStatus, optMeta, isSelected, isBadgeMode, multiCount = 1) => {
     const isOdp = node.node_type === 'ODP';
     const compactDbm = isOdp && !effStatus.isInactive ? formatCompactOptical(node, effStatus) : '';
 
@@ -1023,12 +1123,17 @@ function LeafletMap({
     else if (effStatus.hasNoClients) statusCls = 'gis-circle-no-clients';
 
     const nodeTypeCls = node.node_type === 'POP' ? 'is-pop' : node.node_type === 'ODC' ? 'is-odc' : 'is-odp';
+    const visualSvg = getNodeVisualSvg(node.node_type, effStatus);
 
     return `
       <div class="gis-circle-marker ${nodeTypeCls} ${statusCls} ${isSelected ? 'is-selected' : ''}">
         <div class="gis-circle-node" style="border-color: ${effStatus.pinBg};">
-          <span class="gis-circle-icon">${node.node_type}</span>
+          <div class="gis-node-visual-wrap">
+            ${visualSvg}
+          </div>
+          <span class="gis-node-type-label">${node.node_type}</span>
           ${effStatus.hasRadar ? `<span class="gis-circle-ping" style="border-color: ${effStatus.pinBg};"></span>` : ''}
+          ${multiCount > 1 ? `<span class="gis-multi-count-pill" title="Terdapat ${multiCount} node di titik ini">${multiCount}</span>` : ''}
         </div>
         ${isBadgeMode ? `
           <div class="gis-circle-stack">
@@ -1044,6 +1149,110 @@ function LeafletMap({
     `;
   };
 
+  // Global selection dispatcher for bulletproof popup item click on desktop & mobile
+  useEffect(() => {
+    window.__gisSelectNode = (nodeId) => {
+      const target = safeNodes.find(n => n.id === nodeId);
+      if (target) {
+        onSelectNode(target);
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.closePopup();
+        }
+      }
+    };
+    return () => {
+      delete window.__gisSelectNode;
+    };
+  }, [safeNodes, onSelectNode]);
+
+  // 6c. Multi-Node Selection Picker Popup (When multiple nodes share the exact same or close coordinates)
+  const openMultiNodePicker = useCallback((e, coNodes, Lf, map) => {
+    if (!coNodes || coNodes.length === 0) return;
+    const latLng = e.latlng || [parseFloat(coNodes[0].latitude), parseFloat(coNodes[0].longitude)];
+    
+    const popupHtml = `
+      <div class="gis-multi-picker-box">
+        <div class="gis-multi-picker-head">
+          <div class="gis-multi-picker-title">
+            <svg style="width:14px;height:14px;display:inline-block;vertical-align:-2px;margin-right:5px;color:#4f46e5;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+            <b>Pilih Node (${coNodes.length} Node di Titik Ini)</b>
+          </div>
+          <div class="gis-multi-picker-sub">Terdapat ${coNodes.length} perangkat di lokasi ini. Pilih salah satu:</div>
+        </div>
+        <div class="gis-multi-picker-items">
+          ${coNodes.map((n) => {
+            const nStatus = getNodeEffectiveStatus(n);
+            const nOpt = nStatus.isTotalLoss 
+              ? { label: 'Loss Total', color: '#ef4444' }
+              : (nStatus.hasNoClients ? { label: 'Belum Ada Pelanggan', color: '#64748b' } : getOpticalQuality(n.best_rx_power ?? n.optical_power_dbm));
+            const nPower = formatCompactOptical(n, nStatus);
+            const isThisSelected = selectedNode?.id === n.id;
+            const isOdc = n.node_type === 'ODC';
+            const isPop = n.node_type === 'POP';
+            const typeColor = isOdc ? '#2563eb' : (isPop ? '#4f46e5' : '#059669');
+            const typeBg = isOdc ? '#eff6ff' : (isPop ? '#eef2ff' : '#ecfdf5');
+
+            return `
+              <div class="gis-multi-item ${isThisSelected ? 'is-active' : ''}" data-node-id="${n.id}" onclick="window.__gisSelectNode && window.__gisSelectNode(${n.id})">
+                <div class="gis-multi-item-left">
+                  <span class="gis-multi-type-tag" style="color:${typeColor};background:${typeBg};border-color:${typeColor};">
+                    ${getNodeVisualSvg(n.node_type, nStatus, true)}
+                    <span>${n.node_type}</span>
+                  </span>
+                  <div class="gis-multi-item-text">
+                    <div class="gis-multi-item-name">${n.name}</div>
+                    <div class="gis-multi-item-meta">
+                      ${n.code ? `<code>${n.code}</code> ` : ''}
+                      ${n.total_ports ? `<span>• ${n.used_ports || 0}/${n.total_ports} Port</span>` : ''}
+                    </div>
+                  </div>
+                </div>
+                <div class="gis-multi-item-right">
+                  ${nPower ? `<span class="gis-multi-power-tag" style="color:${nOpt.color};">${nPower}</span>` : ''}
+                  <span class="gis-multi-select-btn">Pilih →</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    const popup = Lf.popup({
+      className: 'gis-multi-node-leaflet-popup',
+      closeButton: true,
+      autoClose: true,
+      closeOnEscapeKey: true,
+      maxWidth: 320,
+      minWidth: 260,
+      offset: [0, -14],
+    })
+    .setLatLng(latLng)
+    .setContent(popupHtml)
+    .openOn(map);
+
+    setTimeout(() => {
+      const container = popup.getElement();
+      if (!container) return;
+      const items = container.querySelectorAll('.gis-multi-item');
+      items.forEach(el => {
+        el.onclick = (ev) => {
+          ev.stopPropagation();
+          const nodeId = parseInt(el.getAttribute('data-node-id'), 10);
+          if (window.__gisSelectNode) {
+            window.__gisSelectNode(nodeId);
+          } else {
+            const targetNode = coNodes.find(n => n.id === nodeId);
+            if (targetNode) {
+              onSelectNode(targetNode);
+              map.closePopup(popup);
+            }
+          }
+        };
+      });
+    }, 50);
+  }, [selectedNode, onSelectNode]);
+
   const renderNodes = useCallback(() => {
     if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current || !nodesLayerGroupRef.current) return;
     const Lf = leafletRef.current;
@@ -1055,10 +1264,36 @@ function LeafletMap({
 
     const zoom = map.getZoom();
     const nodeMap = new Map();
+
+    // Proximity-based Spatial Clustering (Groups nodes within ~25 meters = 0.00022 deg)
+    const clusters = [];
     safeNodes.forEach(n => {
       if (n?.latitude && n?.longitude && parseFloat(n.latitude) !== 0) {
         nodeMap.set(n.id, n);
+        const nLat = parseFloat(n.latitude);
+        const nLng = parseFloat(n.longitude);
+
+        let found = null;
+        for (const cl of clusters) {
+          const lead = cl[0];
+          const dLat = Math.abs(parseFloat(lead.latitude) - nLat);
+          const dLng = Math.abs(parseFloat(lead.longitude) - nLng);
+          if (dLat < 0.00022 && dLng < 0.00022) {
+            found = cl;
+            break;
+          }
+        }
+        if (found) {
+          found.push(n);
+        } else {
+          clusters.push([n]);
+        }
       }
+    });
+
+    const nodeToCluster = new Map();
+    clusters.forEach(cl => {
+      cl.forEach(n => nodeToCluster.set(n.id, cl));
     });
 
     // 1. Draw Fiber Connections ONLY when Path Tracing is explicitly active
@@ -1091,7 +1326,7 @@ function LeafletMap({
       });
     }
 
-    // 2. High-performance Hybrid Marker System: Hardware Canvas GPU for Overview + Rich DOM for Details
+    // 2. High-performance Hybrid Marker System with Multi-Node Coincident Fan-out
     const currentMarkers = markersMapRef.current;
     const nextNodeIds = new Set();
 
@@ -1102,6 +1337,20 @@ function LeafletMap({
 
       const lat = parseFloat(node.latitude);
       const lng = parseFloat(node.longitude);
+      const coNodes = nodeToCluster.get(node.id) || [node];
+      const multiCount = coNodes.length;
+      const nodeIndex = coNodes.findIndex(n => n.id === node.id);
+
+      // Micro-displacement fan-out on high zoom so multiple coincident nodes are physically distinct & clickable
+      let renderLat = lat;
+      let renderLng = lng;
+      if (multiCount > 1 && zoom >= 15) {
+        const angle = (nodeIndex * (2 * Math.PI / multiCount)) - (Math.PI / 2);
+        const distanceDeg = zoom >= 18 ? 0.000045 : (zoom >= 17 ? 0.000035 : 0.000025);
+        renderLat = lat + (Math.sin(angle) * distanceDeg);
+        renderLng = lng + (Math.cos(angle) * distanceDeg * 1.12);
+      }
+
       const isSelected = selectedNode?.id === id;
       const effStatus = getNodeEffectiveStatus(node);
       const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
@@ -1113,11 +1362,10 @@ function LeafletMap({
             : getOpticalQuality(effectiveBestPower));
 
       const opticalDbmText = formatCompactOptical(node, effStatus) || '—';
-
       const isPopOrOdc = node.node_type === 'POP' || node.node_type === 'ODC';
       
-      // Use DOM element only if explicitly selected, critical total loss, POP/ODC, or zoomed in very close (>=17)
-      const useDomMarker = isSelected || isFault || (isPopOrOdc ? zoom >= 14 : zoom >= 17);
+      // Use DOM element only if explicitly selected, critical total loss, multi-node cluster, POP/ODC, or zoomed in close (>=17)
+      const useDomMarker = isSelected || isFault || multiCount > 1 || (isPopOrOdc ? zoom >= 14 : zoom >= 17);
       const isBadgeMode = isSelected || isFault || (isPopOrOdc ? zoom >= 16 : zoom >= 17);
       const markerType = useDomMarker ? (isBadgeMode ? 'dom-badge' : 'dom-circle') : 'canvas-dot';
 
@@ -1128,14 +1376,15 @@ function LeafletMap({
           existing.markerType !== markerType || 
           existing.statusKey !== effStatus.key || 
           existing.opticalDbm !== effectiveBestPower || 
-          existing.isSelected !== isSelected
+          existing.isSelected !== isSelected ||
+          existing.multiCount !== multiCount
         ) {
           nodesGroup.removeLayer(existing.marker);
           existing = null;
         } else {
           const curLatLng = existing.marker.getLatLng();
-          if (Math.abs(curLatLng.lat - lat) > 0.000001 || Math.abs(curLatLng.lng - lng) > 0.000001) {
-            existing.marker.setLatLng([lat, lng]);
+          if (Math.abs(curLatLng.lat - renderLat) > 0.000001 || Math.abs(curLatLng.lng - renderLng) > 0.000001) {
+            existing.marker.setLatLng([renderLat, renderLng]);
           }
         }
       }
@@ -1143,18 +1392,18 @@ function LeafletMap({
       if (!existing) {
         let marker;
         if (useDomMarker) {
-          const iconHtml = buildCircleHtml(node, effStatus, optMeta, isSelected, isBadgeMode);
+          const iconHtml = buildCircleHtml(node, effStatus, optMeta, isSelected, isBadgeMode, multiCount);
           const icon = Lf.divIcon({
             className: 'gis-marker-container',
             html: iconHtml,
             iconSize: [0, 0],
             iconAnchor: [0, 0],
           });
-          marker = Lf.marker([lat, lng], { icon }).addTo(nodesGroup);
+          marker = Lf.marker([renderLat, renderLng], { icon }).addTo(nodesGroup);
         } else {
           // Hardware-accelerated Canvas circleMarker (0 DOM elements for 60-120 FPS mobile panning)
           const dotRadius = isPopOrOdc ? (zoom >= 13 ? 8 : 6) : (zoom >= 15 ? 6 : (zoom >= 13 ? 4.5 : 3.5));
-          marker = Lf.circleMarker([lat, lng], {
+          marker = Lf.circleMarker([renderLat, renderLng], {
             renderer: canvasRendererRef.current || undefined,
             radius: dotRadius,
             fillColor: effStatus.pinBg,
@@ -1165,13 +1414,14 @@ function LeafletMap({
           }).addTo(nodesGroup);
         }
 
+        const multiHint = multiCount > 1 ? `<br><span style="color:#6366f1;font-weight:bold;">📍 Ada ${multiCount} Perangkat di lokasi ini (Klik untuk memilih)</span>` : '';
         const tooltipSub = effStatus.hasNoClients 
           ? '<br><span style="color:#64748b;font-weight:bold;">Belum Ada Pelanggan</span>'
           : (effStatus.isTotalLoss 
               ? '<br><span style="color:#ef4444;font-weight:bold;">Loss Total (Semua Klien)</span>'
               : (opticalDbmText !== '—' ? '<br>Rx: ' + opticalDbmText : ''));
 
-        marker.bindTooltip(`<b>${node.name}</b> (${node.code})<br>Tipe: ${node.node_type} • Status: ${effStatus.label}${tooltipSub}`, {
+        marker.bindTooltip(`<b>${node.name}</b> (${node.code})<br>Tipe: ${node.node_type} • Status: ${effStatus.label}${tooltipSub}${multiHint}`, {
           direction: 'top',
           offset: [0, useDomMarker ? -18 : -8],
           opacity: 0.95,
@@ -1184,7 +1434,28 @@ function LeafletMap({
             setRulerPoints(pts => [...pts, [lat, lng]]);
             return;
           }
-          onSelectNode(node);
+
+          // Dynamic screen-space proximity check (find all overlapping/nearby nodes within 45px on screen)
+          let nearby = [];
+          try {
+            const targetPt = map.latLngToContainerPoint([lat, lng]);
+            nearby = safeNodes.filter(n => {
+              if (!n?.latitude || !n?.longitude || parseFloat(n.latitude) === 0) return false;
+              const pt = map.latLngToContainerPoint([parseFloat(n.latitude), parseFloat(n.longitude)]);
+              const pxDist = Math.hypot(targetPt.x - pt.x, targetPt.y - pt.y);
+              return pxDist <= 45;
+            });
+          } catch {
+            nearby = coNodes;
+          }
+
+          if (nearby.length > 1) {
+            openMultiNodePicker(e, nearby, Lf, map);
+          } else if (multiCount > 1) {
+            openMultiNodePicker(e, coNodes, Lf, map);
+          } else {
+            onSelectNode(node);
+          }
         });
 
         currentMarkers.set(id, {
@@ -1193,6 +1464,9 @@ function LeafletMap({
           isSelected,
           statusKey: effStatus.key,
           opticalDbm: effectiveBestPower,
+          multiCount,
+          renderLat,
+          renderLng,
         });
       }
     });
@@ -1204,7 +1478,7 @@ function LeafletMap({
         currentMarkers.delete(id);
       }
     }
-  }, [mapLoaded, safeNodes, selectedNode, tracedPath, onSelectNode, setRulerPoints]);
+  }, [mapLoaded, safeNodes, selectedNode, tracedPath, onSelectNode, setRulerPoints, openMultiNodePicker]);
 
   // 6c. Attach Smooth Viewport & Zoom Listeners
   useEffect(() => {
@@ -1287,71 +1561,108 @@ function LeafletMap({
         }
 
         .gis-circle-node {
-          width: 26px;
-          height: 26px;
-          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          border-radius: 9px;
           display: flex;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
           border: 2px solid #10b981;
           background: #ffffff;
-          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+          box-shadow: 0 2px 7px rgba(0, 0, 0, 0.22);
           position: relative;
           transition: all 0.14s ease;
           flex-shrink: 0;
+          padding: 2px;
         }
         .dark .gis-circle-node {
-          background: #000000;
-          box-shadow: 0 1px 4px rgba(255, 255, 255, 0.2);
+          background: #09090b;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
         }
 
         .gis-circle-marker.is-pop .gis-circle-node {
-          width: 34px;
-          height: 34px;
-          border-width: 2.5px;
+          width: 38px;
+          height: 38px;
+          border-width: 2.2px;
+          border-color: #4f46e5;
         }
         .gis-circle-marker.is-odc .gis-circle-node {
-          width: 30px;
-          height: 30px;
+          width: 35px;
+          height: 35px;
           border-width: 2px;
+          border-color: #2563eb;
         }
 
-        .gis-circle-icon {
-          font-size: 8px;
-          font-weight: 900;
-          letter-spacing: -0.02em;
-          color: #000000;
-          line-height: 1;
+        .gis-node-visual-wrap {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          height: 100%;
         }
-        .dark .gis-circle-icon {
-          color: #ffffff;
-        }
-        .gis-circle-marker.is-pop .gis-circle-icon {
-          font-size: 10.5px;
-          color: #4f46e5;
-        }
-        .dark .gis-circle-marker.is-pop .gis-circle-icon {
-          color: #818cf8;
-        }
-        .gis-circle-marker.is-odc .gis-circle-icon {
-          font-size: 9px;
-          color: #2563eb;
-        }
-        .dark .gis-circle-marker.is-odc .gis-circle-icon {
-          color: #60a5fa;
-        }
-        .gis-circle-marker.is-odp .gis-circle-icon {
-          font-size: 8px;
+
+        .gis-node-svg {
+          width: 22px;
+          height: 22px;
+          transition: transform 0.15s ease;
           color: #059669;
         }
-        .dark .gis-circle-marker.is-odp .gis-circle-icon {
+        .dark .gis-node-svg {
           color: #34d399;
+        }
+        .gis-circle-marker.is-odc .gis-node-svg {
+          width: 24px;
+          height: 24px;
+          color: #2563eb;
+        }
+        .dark .gis-circle-marker.is-odc .gis-node-svg {
+          color: #60a5fa;
+        }
+        .gis-circle-marker.is-pop .gis-node-svg {
+          width: 26px;
+          height: 26px;
+          color: #4f46e5;
+        }
+        .dark .gis-circle-marker.is-pop .gis-node-svg {
+          color: #818cf8;
+        }
+
+        .gis-node-svg .svg-body {
+          fill: #f8fafc;
+        }
+        .dark .gis-node-svg .svg-body {
+          fill: #18181b;
+        }
+        .gis-node-svg .svg-roof, 
+        .gis-node-svg .svg-hood, 
+        .gis-node-svg .svg-rack {
+          fill: #f1f5f9;
+        }
+        .dark .gis-node-svg .svg-roof, 
+        .dark .gis-node-svg .svg-hood, 
+        .dark .gis-node-svg .svg-rack {
+          fill: #27272a;
+        }
+
+        .gis-node-type-label {
+          display: none;
+        }
+
+        .gis-circle-loss .gis-node-svg {
+          color: #ef4444 !important;
+        }
+        .gis-circle-loss .gis-node-svg .svg-body {
+          fill: #ffe4e6 !important;
+        }
+        .dark .gis-circle-loss .gis-node-svg .svg-body {
+          fill: #2e0808 !important;
         }
 
         .gis-circle-ping {
           position: absolute;
           inset: -4px;
-          border-radius: 50%;
+          border-radius: 11px;
           border: 2px solid #ef4444;
           animation: radarPing 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
           pointer-events: none;
@@ -1499,6 +1810,216 @@ function LeafletMap({
           border: 3px solid #d946ef;
           animation: targetPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
           pointer-events: none;
+        }
+
+        .gis-multi-count-pill {
+          position: absolute;
+          top: -6px;
+          right: -6px;
+          min-width: 15px;
+          height: 15px;
+          padding: 0 3px;
+          border-radius: 9999px;
+          background: #4f46e5;
+          color: #ffffff;
+          font-size: 8.5px;
+          font-weight: 900;
+          line-height: 15px;
+          text-align: center;
+          border: 1.5px solid #ffffff;
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+          z-index: 10;
+        }
+        .dark .gis-multi-count-pill {
+          border-color: #000000;
+          background: #6366f1;
+        }
+
+        /* Multi-Node Selection Popup Styles */
+        .gis-multi-node-leaflet-popup .leaflet-popup-content-wrapper {
+          background: #ffffff;
+          color: #0f172a;
+          border: 1px solid #cbd5e1;
+          border-radius: 12px;
+          box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.25);
+          padding: 0;
+          overflow: hidden;
+        }
+        .dark .gis-multi-node-leaflet-popup .leaflet-popup-content-wrapper {
+          background: #09090b;
+          color: #f8fafc;
+          border-color: #27272a;
+          box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.7);
+        }
+        .gis-multi-node-leaflet-popup .leaflet-popup-content {
+          margin: 0;
+          line-height: 1.4;
+        }
+        .gis-multi-node-leaflet-popup .leaflet-popup-tip {
+          background: #ffffff;
+        }
+        .dark .gis-multi-node-leaflet-popup .leaflet-popup-tip {
+          background: #09090b;
+        }
+        .gis-multi-node-leaflet-popup .leaflet-popup-close-button {
+          top: 8px !important;
+          right: 8px !important;
+          color: #64748b !important;
+        }
+        .dark .gis-multi-node-leaflet-popup .leaflet-popup-close-button {
+          color: #a1a1aa !important;
+        }
+
+        .gis-multi-picker-box {
+          padding: 12px;
+          width: 290px;
+          font-family: inherit;
+        }
+        .gis-multi-picker-head {
+          margin-bottom: 9px;
+          border-bottom: 1px solid #f1f5f9;
+          padding-bottom: 7px;
+        }
+        .dark .gis-multi-picker-head {
+          border-bottom-color: #27272a;
+        }
+        .gis-multi-picker-title {
+          font-size: 12px;
+          font-weight: 800;
+          color: #0f172a;
+          display: flex;
+          align-items: center;
+        }
+        .dark .gis-multi-picker-title {
+          color: #f8fafc;
+        }
+        .gis-multi-picker-sub {
+          font-size: 10px;
+          color: #64748b;
+          margin-top: 2px;
+        }
+        .dark .gis-multi-picker-sub {
+          color: #94a3b8;
+        }
+        .gis-multi-picker-items {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          max-height: 220px;
+          overflow-y: auto;
+        }
+        .gis-multi-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 7px 9px;
+          border-radius: 8px;
+          border: 1px solid #e2e8f0;
+          background: #f8fafc;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .gis-multi-item:hover {
+          background: #f1f5f9;
+          border-color: #cbd5e1;
+          transform: translateX(2px);
+        }
+        .gis-multi-item.is-active {
+          border-color: #6366f1;
+          background: #eef2ff;
+        }
+        .dark .gis-multi-item {
+          border-color: #27272a;
+          background: #18181b;
+        }
+        .dark .gis-multi-item:hover {
+          background: #27272a;
+          border-color: #3f3f46;
+        }
+        .dark .gis-multi-item.is-active {
+          border-color: #6366f1;
+          background: #1e1b4b;
+        }
+        .gis-multi-item-left {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+        .gis-multi-type-tag {
+          font-size: 8.5px;
+          font-weight: 800;
+          padding: 2px 5.5px;
+          border-radius: 5px;
+          border: 1px solid;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          gap: 3.5px;
+        }
+        .gis-multi-type-tag .gis-node-svg {
+          width: 14px;
+          height: 14px;
+          flex-shrink: 0;
+        }
+        .gis-multi-item-text {
+          min-width: 0;
+        }
+        .gis-multi-item-name {
+          font-size: 11px;
+          font-weight: 800;
+          color: #0f172a;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 100px;
+        }
+        .dark .gis-multi-item-name {
+          color: #f8fafc;
+        }
+        .gis-multi-item-meta {
+          font-size: 9px;
+          color: #64748b;
+          margin-top: 1px;
+        }
+        .dark .gis-multi-item-meta {
+          color: #a1a1aa;
+        }
+        .gis-multi-item-right {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-shrink: 0;
+        }
+        .gis-multi-power-tag {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 9.5px;
+          font-weight: 800;
+        }
+        .gis-multi-select-btn {
+          font-size: 9.5px;
+          font-weight: 700;
+          color: #4f46e5;
+          background: #ffffff;
+          border: 1px solid #c7d2fe;
+          padding: 2px 7px;
+          border-radius: 5px;
+          transition: all 0.12s ease;
+        }
+        .dark .gis-multi-select-btn {
+          color: #818cf8;
+          background: #27272a;
+          border-color: #4338ca;
+        }
+        .gis-multi-item:hover .gis-multi-select-btn {
+          background: #4f46e5;
+          color: #ffffff;
+          border-color: #4f46e5;
+        }
+        .dark .gis-multi-item:hover .gis-multi-select-btn {
+          background: #6366f1;
+          color: #ffffff;
+          border-color: #6366f1;
         }
       `}</style>
 

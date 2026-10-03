@@ -875,7 +875,8 @@ class NetworkNodeController extends Controller
     public function portDetail(Request $request, NetworkNode $networkNode)
     {
         $liveProbeResult = null;
-        if ($request->boolean('live') || $request->boolean('refresh')) {
+        // Default selalu jalankan live optical probe OLT langsung (sub-150ms) kecuali diminta skip_live=1
+        if (!$request->boolean('skip_live')) {
             $liveProbeResult = FastOpticalProbeService::probeOdpLiveOptical($networkNode->id);
         }
 
@@ -940,6 +941,27 @@ class NetworkNodeController extends Controller
                 }
                 if (isset($liveData['status'])) {
                     $port->ont_status = $liveData['status'];
+                }
+            }
+
+            // Normalisasi Rx power & status offline/loss:
+            $rxVal = $port->rx_power !== null ? (float)$port->rx_power : null;
+            $ontSt = strtolower(trim((string)$port->ont_status));
+            if ($ontSt === 'inactive' || $ontSt === 'offline' || $ontSt === 'los' || $ontSt === 'down' || ($rxVal !== null && $rxVal <= -38.0) || $rxVal === 0.0) {
+                $port->rx_power = -40.00;
+                $port->ont_status = 'inactive';
+            }
+        }
+
+        // Jika live probe ODP dijalankan, timpa port dengan data hasil probe terkini
+        if ($liveProbeResult && !empty($liveProbeResult['probed_states'])) {
+            $liveStates = $liveProbeResult['probed_states'];
+            foreach ($ports as $port) {
+                $sn = strtoupper(trim((string)$port->onu_serial));
+                if ($sn && isset($liveStates[$sn])) {
+                    $st = $liveStates[$sn];
+                    $port->rx_power = $st['rx_power'];
+                    $port->ont_status = $st['is_online'] ? 'active' : 'inactive';
                 }
             }
         }

@@ -3936,7 +3936,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
         setSelectedOdp(prev => prev ? { ...prev, used_ports: d.node.used_ports } : null);
       }
 
-      if (isLiveRefresh && d.live_probe) {
+      if (d.live_probe) {
         if (d.live_probe.success) {
           setLiveProbeFeedback({
             type: 'success',
@@ -4633,14 +4633,15 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5">
                     {portsData.map(port => {
                       const isUsed = !!(port.customer_id || port.customer_service_id || port.status === 'used');
-                      const rx = port.rx_power != null ? parseFloat(port.rx_power) : null;
+                      const parsedRx = port.rx_power != null ? parseFloat(port.rx_power) : null;
+                      const rx = (parsedRx !== null && isFinite(parsedRx) && parsedRx !== 0) ? parsedRx : null;
                       const ontStatusRaw = (port.ont_status || '').toLowerCase().trim();
-                      const isOfflineOrLoss = ontStatusRaw === 'offline' || ontStatusRaw === 'los' || ontStatusRaw === 'down' || ontStatusRaw === 'inactive' || ontStatusRaw === 'poweroff' || (rx !== null && rx <= -35.0);
+                      const isOfflineOrLoss = ontStatusRaw === 'offline' || ontStatusRaw === 'los' || ontStatusRaw === 'down' || ontStatusRaw === 'inactive' || ontStatusRaw === 'poweroff' || (parsedRx !== null && (parsedRx <= -35.0 || parsedRx === 0));
 
                       let rxText = '—';
                       let rxTextColor = 'text-black/50 dark:text-white/50 font-medium';
                       if (isOfflineOrLoss) {
-                        rxText = rx !== null && rx <= -35.0 ? `Loss (${rx.toFixed(2)} dBm)` : 'Loss / Offline';
+                        rxText = (rx !== null && rx <= -35.0) || parsedRx === 0 ? `Loss (${(rx || -40.0).toFixed(2)} dBm)` : 'Loss / Offline';
                         rxTextColor = 'text-rose-600 dark:text-rose-400 font-bold';
                       } else if (rx !== null) {
                         rxText = `${rx.toFixed(2)} dBm`;

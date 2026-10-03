@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
@@ -18,40 +19,66 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  bool _rememberMe = false;
-  bool _agreedToTerms = true;
+  bool _rememberMe = true;
   bool _isRedirecting = false;
 
-  late AnimationController _pulseController;
+  // Dynamic Background Banner from Web Admin
+  String? _customBannerUrl;
+
+  // BRImo Signature Corporate Palette
+  static const Color briPrimary = Color(0xFF0060AF);      // Royal Blue Utama
+  static const Color briDeepNavy = Color(0xFF003870);     // Deep Navy Blue
+  static const Color briElectric = Color(0xFF007EC5);     // Electric Blue Highlight
+  static const Color briOrange = Color(0xFFF37021);       // BRI Accent Orange
+  static const Color briCardBg = Color(0xFFF8FAFC);       // Soft Clean Fill
+
+  late AnimationController _floatController;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
+    _floatController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat();
+      duration: const Duration(milliseconds: 2600),
+    )..repeat(reverse: true);
+
+    _fetchLoginBanner();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    _floatController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
+  Future<void> _fetchLoginBanner() async {
+    try {
+      final res = await DioClient().dio.get('/app-testing/login-banner');
+      if (res.data != null && res.data['status'] == 'success') {
+        final data = res.data['data'];
+        if (data != null && data['is_custom'] == true && data['banner_url'] != null) {
+          if (mounted) {
+            setState(() {
+              _customBannerUrl = data['banner_url'];
+            });
+          }
+        } else {
+          if (mounted && _customBannerUrl != null) {
+            setState(() {
+              _customBannerUrl = null;
+            });
+          }
+        }
+      }
+    } catch (_) {
+      // Gracefully ignore network errors on pre-login fetch; fallback to default illustration
+    }
+  }
+
   void _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
-    if (!_agreedToTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Silakan centang persetujuan syarat & ketentuan terlebih dahulu.'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final success = await authProvider.login(
@@ -61,19 +88,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
     if (success && mounted) {
       setState(() => _isRedirecting = true);
-      await Future.delayed(const Duration(milliseconds: 650));
+      await Future.delayed(const Duration(milliseconds: 600));
       if (!mounted) return;
 
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 700),
+          transitionDuration: const Duration(milliseconds: 600),
           pageBuilder: (context, animation, secondaryAnimation) => const MainNavigationShell(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutQuart);
             return FadeTransition(
               opacity: Tween<double>(begin: 0.0, end: 1.0).animate(curved),
               child: SlideTransition(
-                position: Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero).animate(curved),
+                position: Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(curved),
                 child: child,
               ),
             );
@@ -94,14 +121,22 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
           children: [
-            Icon(Icons.dns_rounded, color: Color(0xFF00AAE0), size: 22),
-            SizedBox(width: 8),
-            Text(
-              'Konfigurasi Server URL',
-              style: TextStyle(color: Color(0xFF0F172A), fontSize: 17, fontWeight: FontWeight.bold),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Color(0xFFE0F2FE),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.dns_rounded, color: briPrimary, size: 20),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              'Server Endpoint URL',
+              style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.w800),
             ),
           ],
         ),
@@ -110,20 +145,21 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Masukkan alamat API backend server FONA:',
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+              'Alamat API backend server Fiber-UNMS:',
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 12.5),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: urlController,
-              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
+              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13.5, fontWeight: FontWeight.w600),
               decoration: InputDecoration(
                 hintText: 'http://103.89.6.125/api',
-                hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
                 filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                fillColor: briCardBg,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: briPrimary, width: 1.5)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               ),
             ),
@@ -132,13 +168,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Batal', style: TextStyle(color: Color(0xFF64748B))),
+            child: const Text('Batal', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00AAE0),
+              backgroundColor: briPrimary,
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () async {
               final newUrl = urlController.text.trim();
@@ -150,10 +187,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Server URL diubah: ${DioClient().dio.options.baseUrl}'),
-                    backgroundColor: AppColors.success,
+                    content: Text('Server URL berhasil diubah: ${DioClient().dio.options.baseUrl}'),
+                    backgroundColor: const Color(0xFF10B981),
                   ),
                 );
+                _fetchLoginBanner();
               }
             },
             child: const Text('Simpan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -166,411 +204,496 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
+    final topPadding = MediaQuery.of(context).padding.top;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        actions: [
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: const Icon(Icons.settings_outlined, color: Color(0xFF64748B), size: 19),
-            ),
-            tooltip: 'Server Setting',
-            onPressed: _showServerSettingsDialog,
-          ),
-          const SizedBox(width: 14),
-        ],
-      ),
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 4.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ── Network Topology Card (OLT ➔ ODC ➔ ODP ➔ ONT) ──
-                      _buildNetworkTopologyCard(),
-
-                      const SizedBox(height: 18),
-
-                      // ── Official FONA Brand Logo Header ──
-                      Center(
-                        child: Container(
-                          constraints: const BoxConstraints(maxWidth: 290),
-                          child: Image.asset(
-                            'assets/images/fona_brand_v2.png',
-                            height: 135,
-                            fit: BoxFit.contain,
-                            filterQuality: FilterQuality.high,
-                            errorBuilder: (ctx, err, stack) => Image.asset(
-                              'assets/images/fona_logo.png',
-                              height: 135,
-                              fit: BoxFit.contain,
-                              errorBuilder: (c, e, s) => const Icon(
-                                Icons.hub_rounded,
-                                size: 68,
-                                color: Color(0xFF00AAE0),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // ── Greeting Title: Hai, Sobat FONA! 👋 ──
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Hai, Sobat FONA!',
-                            style: TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontSize: 19,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          SizedBox(width: 6),
-                          Text('👋', style: TextStyle(fontSize: 19)),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Masuk ke portal operasional FONA Mobile',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-
-                      const SizedBox(height: 22),
-
-                      // Error Banner
-                      if (auth.errorMessage != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.dangerLight,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.danger.withValues(alpha: 0.4)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 20),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  auth.errorMessage!,
-                                  style: const TextStyle(color: AppColors.danger, fontSize: 12.5, fontWeight: FontWeight.w600),
-                                ),
-                              ),
+          // ── Scrollable Body ──
+          SingleChildScrollView(
+            physics: const ClampingScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── 1. Top Section with Arc Curve (Dynamic Banner or Default Mascot) ──
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // Royal Blue Gradient Area with Bottom Curved Arc
+                    ClipPath(
+                      clipper: _BriMoCurvedArcClipper(),
+                      child: Container(
+                        height: math.max(screenHeight * 0.44, 310.0),
+                        width: double.infinity,
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              briDeepNavy,
+                              briPrimary,
+                              Color(0xFF0075D8),
                             ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
                           ),
                         ),
-                        const SizedBox(height: 14),
-                      ],
-
-                      // ── Username Field ──
-                      const Text(
-                        'Username',
-                        style: TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _usernameController,
-                        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
-                        decoration: InputDecoration(
-                          hintText: 'Username Petugas',
-                          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5),
-                          prefixIcon: const Icon(Icons.person_outline_rounded, color: Color(0xFF94A3B8), size: 20),
-                          filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFF00AAE0), width: 1.5),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                        ),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Masukkan username Anda' : null,
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // ── Password Field ──
-                      const Text(
-                        'Kata Sandi',
-                        style: TextStyle(
-                          color: Color(0xFF0F172A),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
-                        decoration: InputDecoration(
-                          hintText: 'Masukkan kata sandi',
-                          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13.5),
-                          prefixIcon: const Icon(Icons.lock_outline_rounded, color: Color(0xFF94A3B8), size: 20),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                              color: const Color(0xFF94A3B8),
-                              size: 20,
-                            ),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF8FAFC),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: Color(0xFF00AAE0), width: 1.5),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                        ),
-                        validator: (v) => (v == null || v.isEmpty) ? 'Masukkan kata sandi Anda' : null,
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      // ── Remember Me & Forgot Password Row ──
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          InkWell(
-                            onTap: () => setState(() => _rememberMe = !_rememberMe),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: Checkbox(
-                                    value: _rememberMe,
-                                    onChanged: (val) => setState(() => _rememberMe = val ?? false),
-                                    activeColor: const Color(0xFF00AAE0),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Ingat Saya',
-                                  style: TextStyle(color: Color(0xFF64748B), fontSize: 12.5, fontWeight: FontWeight.w500),
-                                ),
-                              ],
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Silakan hubungi Administrator untuk reset kata sandi.'),
-                                  backgroundColor: Color(0xFF00AAE0),
-                                ),
-                              );
-                            },
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: const Text(
-                              'Lupa Sandi?',
-                              style: TextStyle(
-                                color: Color(0xFF00AAE0),
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // If Custom Banner is Set from Web Admin, render it
+                            if (_customBannerUrl != null) ...[
+                              Image.network(
+                                _customBannerUrl!,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorBuilder: (ctx, err, stack) => _buildDefaultHeroIllustration(topPadding),
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // ── Terms & Conditions Checkbox ──
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: Checkbox(
-                              value: _agreedToTerms,
-                              onChanged: (val) => setState(() => _agreedToTerms = val ?? true),
-                              activeColor: const Color(0xFF00AAE0),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: RichText(
-                              text: const TextSpan(
-                                style: TextStyle(color: Color(0xFF64748B), fontSize: 11, height: 1.3),
-                                children: [
-                                  TextSpan(text: 'Dengan masuk ke sistem, Anda menyetujui '),
-                                  TextSpan(
-                                    text: 'Syarat & Ketentuan',
-                                    style: TextStyle(color: Color(0xFF00AAE0), fontWeight: FontWeight.w600),
+                              // Subtle dark overlay to ensure top text readability
+                              Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.black.withValues(alpha: 0.5),
+                                      Colors.black.withValues(alpha: 0.15),
+                                      Colors.black.withValues(alpha: 0.45),
+                                    ],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
                                   ),
-                                  TextSpan(text: ' serta '),
-                                  TextSpan(
-                                    text: 'Kebijakan Keamanan Jaringan',
-                                    style: TextStyle(color: Color(0xFF00AAE0), fontWeight: FontWeight.w600),
-                                  ),
-                                  TextSpan(text: ' FONA.'),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // ── Solid Main Action Button (#00AAE0) ──
-                      ElevatedButton(
-                        onPressed: (auth.isLoading || _isRedirecting) ? null : _handleLogin,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00AAE0),
-                          disabledBackgroundColor: const Color(0xFF00AAE0).withValues(alpha: 0.6),
-                          elevation: 0,
-                          shadowColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: auth.isLoading
-                            ? const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0),
+                            ] else ...[
+                              // Ambient Radial Glow Circles
+                              Positioned(
+                                top: -60,
+                                right: -60,
+                                child: Container(
+                                  width: 240,
+                                  height: 240,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white.withValues(alpha: 0.08),
                                   ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    'Memverifikasi...',
-                                    style: TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              Positioned(
+                                top: 100,
+                                left: -60,
+                                child: Container(
+                                  width: 180,
+                                  height: 180,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: briElectric.withValues(alpha: 0.16),
                                   ),
-                                ],
-                              )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Masuk ke Sistem',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              _buildDefaultHeroIllustration(topPadding),
+                            ],
+
+                            // Header Controls (Server Endpoint Setting)
+                            Positioned(
+                              top: topPadding + 6,
+                              right: 18,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _showServerSettingsDialog,
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.22),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.tune_rounded, color: Colors.white, size: 14),
+                                        SizedBox(width: 5),
+                                        Text(
+                                          'Server',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  SizedBox(width: 8),
-                                  Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
-                                ],
+                                ),
                               ),
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      // ── Biometric Login Secondary Button ──
-                      OutlinedButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Autentikasi Biometrik siap digunakan setelah login pertama kali.'),
-                              backgroundColor: Color(0xFF00AAE0),
                             ),
-                          );
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 13),
-                          side: const BorderSide(color: Color(0xFFE2E8F0)),
-                          backgroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.fingerprint_rounded, color: Color(0xFF00AAE0), size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'Masuk dengan Sidik Jari / Face ID',
-                              style: TextStyle(
-                                color: Color(0xFF0F172A),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
+
+                            // Top Brand & "Halo !" Greeting
+                            Positioned(
+                              top: topPadding + 10,
+                              left: 0,
+                              right: 0,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // FONA Wordmark Brand Logo
+                                  Image.asset(
+                                    'assets/images/fona_wordmark_light.png',
+                                    height: 32,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (ctx, err, stack) => Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Image.asset('assets/images/fona_brand_v2.png', height: 26, errorBuilder: (c, e, s) => const SizedBox()),
+                                        const SizedBox(width: 6),
+                                        const Text(
+                                          'FONA',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Halo !',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: -0.4,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
+                    ),
+                  ],
+                ),
 
-                      const SizedBox(height: 20),
-                      const Divider(color: Color(0xFFE2E8F0), height: 1),
-                      const SizedBox(height: 14),
-
-                      // ── Footer: Version & 256-Bit SSL ──
-                      const Text(
-                        'FONA Mobile Enterprise • v2.4.0 (Build 2026)',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.lock_rounded, color: Color(0xFF10B981), size: 12),
-                          SizedBox(width: 4),
-                          Text(
-                            '256-Bit SSL End-to-End Encrypted',
-                            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w500),
+                // ── 2. Direct Inline Login Form (White Section) ──
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Title & Subtitle
+                        const Text(
+                          'Masuk ke Akun Petugas',
+                          style: TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.3,
                           ),
+                        ),
+                        const SizedBox(height: 3),
+                        const Text(
+                          'Gunakan username & kata sandi UNMS Anda',
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 12.5,
+                          ),
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        // Error Banner
+                        if (auth.errorMessage != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    auth.errorMessage!,
+                                    style: const TextStyle(color: AppColors.danger, fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
                         ],
-                      ),
-                      const SizedBox(height: 14),
-                    ],
+
+                        // ── Username Input Field ──
+                        const Text(
+                          'Username',
+                          style: TextStyle(color: Color(0xFF1E293B), fontSize: 12.5, fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _usernameController,
+                          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
+                          decoration: InputDecoration(
+                            hintText: 'Masukkan username',
+                            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                            prefixIcon: const Icon(Icons.person_outline_rounded, color: briPrimary, size: 20),
+                            filled: true,
+                            fillColor: briCardBg,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: briPrimary, width: 1.8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          ),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Username tidak boleh kosong' : null,
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        // ── Password Input Field ──
+                        const Text(
+                          'Kata Sandi',
+                          style: TextStyle(color: Color(0xFF1E293B), fontSize: 12.5, fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 6),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w600),
+                          decoration: InputDecoration(
+                            hintText: 'Masukkan kata sandi',
+                            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                            prefixIcon: const Icon(Icons.lock_outline_rounded, color: briPrimary, size: 20),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                color: const Color(0xFF94A3B8),
+                                size: 20,
+                              ),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                            filled: true,
+                            fillColor: briCardBg,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(color: briPrimary, width: 1.8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          ),
+                          validator: (v) => (v == null || v.isEmpty) ? 'Kata sandi tidak boleh kosong' : null,
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // ── Remember Me & Forgot Password ──
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            InkWell(
+                              onTap: () => setState(() => _rememberMe = !_rememberMe),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: Checkbox(
+                                      value: _rememberMe,
+                                      onChanged: (val) => setState(() => _rememberMe = val ?? false),
+                                      activeColor: briPrimary,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Ingat Saya',
+                                    style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Silakan hubungi Superadmin NOC untuk mereset kata sandi.'),
+                                    backgroundColor: briPrimary,
+                                  ),
+                                );
+                              },
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text(
+                                'Lupa Sandi?',
+                                style: TextStyle(
+                                  color: briPrimary,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── BRImo Style Action Row: Login Button + Biometric Button ──
+                        Row(
+                          children: [
+                            // Expanded Primary Login Button
+                            Expanded(
+                              child: SizedBox(
+                                height: 52,
+                                child: ElevatedButton(
+                                  onPressed: (auth.isLoading || _isRedirecting) ? null : _handleLogin,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: briPrimary,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: auth.isLoading
+                                      ? const Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            SizedBox(
+                                              height: 18,
+                                              width: 18,
+                                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                                            ),
+                                            SizedBox(width: 10),
+                                            Text(
+                                              'Memverifikasi...',
+                                              style: TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w700),
+                                            ),
+                                          ],
+                                        )
+                                      : const Text(
+                                          'Login',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.4,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 12),
+
+                            // Biometric Quick Access Button
+                            Container(
+                              height: 52,
+                              width: 52,
+                              decoration: BoxDecoration(
+                                color: briPrimary,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: IconButton(
+                                onPressed: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Autentikasi Biometrik siap digunakan setelah login pertama.'),
+                                      backgroundColor: briPrimary,
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.fingerprint_rounded,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // ── Help Link & Footer ──
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'Butuh bantuan akses? ',
+                              style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                            ),
+                            InkWell(
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Hubungi Tim NOC Pusat atau IT Support.'),
+                                    backgroundColor: briPrimary,
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'Hubungi NOC',
+                                style: TextStyle(
+                                  color: briOrange,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 14),
+                        const Divider(color: Color(0xFFE2E8F0), height: 1),
+                        const SizedBox(height: 12),
+
+                        // SSL Security Footnote
+                        const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.lock_outline_rounded, color: Color(0xFF10B981), size: 12),
+                            SizedBox(width: 4),
+                            Text(
+                              'FONA Enterprise v1.0.4 • 256-Bit Encrypted',
+                              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+
+                        SizedBox(height: bottomPadding + 10),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
 
@@ -578,7 +701,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           if (_isRedirecting)
             Positioned.fill(
               child: Container(
-                color: Colors.white.withValues(alpha: 0.94),
+                color: Colors.white.withValues(alpha: 0.95),
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -586,14 +709,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE0F7FE),
+                          color: const Color(0xFFE0F2FE),
                           shape: BoxShape.circle,
                           border: Border.all(color: const Color(0xFFBAE6FD)),
                         ),
                         child: const Icon(
                           Icons.check_circle_rounded,
-                          size: 48,
-                          color: Color(0xFF00AAE0),
+                          size: 46,
+                          color: briPrimary,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -602,12 +725,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         style: TextStyle(
                           color: Color(0xFF0F172A),
                           fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'Mempersiapkan dasbor operasional...',
+                        'Membuka dasbor operasional...',
                         style: TextStyle(
                           color: Color(0xFF64748B),
                           fontSize: 12.5,
@@ -621,7 +744,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           child: LinearProgressIndicator(
                             minHeight: 3.5,
                             backgroundColor: Color(0xFFE2E8F0),
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00AAE0)),
+                            valueColor: AlwaysStoppedAnimation<Color>(briPrimary),
                           ),
                         ),
                       ),
@@ -635,328 +758,184 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
-  /// ── Network Topology Card Builder (OLT ➔ ODC ➔ ODP ➔ ONT) ──
-  Widget _buildNetworkTopologyCard() {
-    return Container(
-      width: double.infinity,
-      height: 140,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0FDF4).withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE0F2FE)),
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFFE0F7FE).withValues(alpha: 0.4),
-            const Color(0xFFF8FAFC),
-            const Color(0xFFE0F7FE).withValues(alpha: 0.3),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Animated Stream Canvas with Dot Grid Background
-          AnimatedBuilder(
-            animation: _pulseController,
-            builder: (context, child) {
-              return CustomPaint(
-                size: const Size(double.infinity, 140),
-                painter: _TopologicalTransmissionPainter(
-                  progress: _pulseController.value,
+  // Default Mascot Hero Illustration
+  Widget _buildDefaultHeroIllustration(double topPadding) {
+    return Positioned(
+      top: topPadding + 70,
+      left: 0,
+      right: 0,
+      bottom: 6,
+      child: AnimatedBuilder(
+        animation: _floatController,
+        builder: (context, _) {
+          final floatOffset = math.sin(_floatController.value * math.pi) * 3.5;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              // Central Mascot / Illustration
+              Transform.translate(
+                offset: Offset(0, floatOffset * 0.5),
+                child: Image.asset(
+                  'assets/images/fona_mascot_transparent.png',
+                  height: 185,
+                  fit: BoxFit.contain,
+                  errorBuilder: (ctx, err, stack) => Image.asset(
+                    'assets/images/fona_mascot.png',
+                    height: 185,
+                    fit: BoxFit.contain,
+                    errorBuilder: (c, e, s) => Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.hub_rounded, size: 60, color: Colors.white),
+                    ),
+                  ),
                 ),
-              );
-            },
-          ),
+              ),
 
-          // Foreground 4 Interactive Network Topology Nodes
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Node 1: OLT (Rack Server)
-                _buildNodeWidget(
+              // Floating Squircle Badge 1: OLT / Redaman (Top-Left)
+              Positioned(
+                top: 16 - floatOffset,
+                left: 32,
+                child: _buildFloatingBadge(
+                  icon: Icons.cell_tower_rounded,
+                  iconColor: const Color(0xFF0284C7),
                   label: 'OLT',
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.2),
-                          blurRadius: 5,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(width: 3.5, height: 3.5, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
-                            const SizedBox(width: 2.5),
-                            Container(width: 3.5, height: 3.5, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
-                            const SizedBox(width: 2.5),
-                            Container(width: 3.5, height: 3.5, decoration: const BoxDecoration(color: Color(0xFF00AAE0), shape: BoxShape.circle)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Container(width: 24, height: 2, color: const Color(0xFF334155)),
-                        const SizedBox(height: 2.5),
-                        Container(width: 24, height: 2, color: const Color(0xFF334155)),
-                      ],
-                    ),
-                  ),
                 ),
+              ),
 
-                // Node 2: ODC (Outdoor Cabinet Pillar)
-                _buildNodeWidget(
-                  label: 'ODC',
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF0284C7), width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0284C7).withValues(alpha: 0.15),
-                          blurRadius: 5,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 22,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF38BDF8),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(width: 3, height: 3, decoration: const BoxDecoration(color: Color(0xFF38BDF8), shape: BoxShape.circle)),
-                            const SizedBox(width: 2),
-                            Container(width: 3, height: 3, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
-                            const SizedBox(width: 2),
-                            Container(width: 3, height: 3, decoration: const BoxDecoration(color: Color(0xFFF59E0B), shape: BoxShape.circle)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+              // Floating Squircle Badge 2: Ping / Speed (Top-Center-Left)
+              Positioned(
+                top: 2 + floatOffset,
+                left: 105,
+                child: _buildFloatingBadge(
+                  icon: Icons.speed_rounded,
+                  iconColor: const Color(0xFF2563EB),
+                  label: 'Speed',
                 ),
+              ),
 
-                // Node 3: ODP (Distribution Closure Box)
-                _buildNodeWidget(
+              // Floating Squircle Badge 3: Ticket / Gangguan (Top-Center-Right)
+              Positioned(
+                top: 4 - floatOffset,
+                right: 100,
+                child: _buildFloatingBadge(
+                  icon: Icons.confirmation_number_rounded,
+                  iconColor: const Color(0xFFEC4899),
+                  label: 'Tiket',
+                ),
+              ),
+
+              // Floating Squircle Badge 4: ODP / Map (Top-Right)
+              Positioned(
+                top: 20 + floatOffset,
+                right: 28,
+                child: _buildFloatingBadge(
+                  icon: Icons.share_location_rounded,
+                  iconColor: const Color(0xFF10B981),
                   label: 'ODP',
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF00AAE0), width: 1.8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF00AAE0).withValues(alpha: 0.15),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 26,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(width: 3, height: 3, decoration: const BoxDecoration(color: Color(0xFF00AAE0), shape: BoxShape.circle)),
-                              const SizedBox(width: 5),
-                              Container(width: 3, height: 3, decoration: const BoxDecoration(color: Color(0xFF00AAE0), shape: BoxShape.circle)),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(width: 2.5, height: 2.5, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
-                            const SizedBox(width: 1.5),
-                            Container(width: 2.5, height: 2.5, decoration: const BoxDecoration(color: Color(0xFF00AAE0), shape: BoxShape.circle)),
-                            const SizedBox(width: 1.5),
-                            Container(width: 2.5, height: 2.5, decoration: const BoxDecoration(color: Color(0xFF00AAE0), shape: BoxShape.circle)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
+              ),
 
-                // Node 4: ONT (Customer Optical Modem)
-                _buildNodeWidget(
-                  label: 'ONT',
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF00AAE0), width: 1.4),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF00AAE0).withValues(alpha: 0.1),
-                          blurRadius: 5,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Positioned(
-                          top: -2,
-                          child: Container(
-                            width: 12,
-                            height: 4,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF00AAE0),
-                              borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
-                            ),
-                          ),
-                        ),
-                        const Icon(Icons.wifi_rounded, color: Color(0xFF00AAE0), size: 20),
-                      ],
-                    ),
-                  ),
+              // Floating Squircle Badge 5: Server Status (Bottom-Left)
+              Positioned(
+                bottom: 32 - floatOffset,
+                left: 20,
+                child: _buildFloatingBadge(
+                  icon: Icons.dns_rounded,
+                  iconColor: const Color(0xFF8B5CF6),
+                  label: 'Server',
                 ),
-              ],
+              ),
+
+              // Floating Sparkles / Stars
+              const Positioned(
+                top: 38,
+                right: 75,
+                child: Text('✦', style: TextStyle(color: Colors.white, fontSize: 15)),
+              ),
+              const Positioned(
+                top: 60,
+                left: 85,
+                child: Text('✦', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              ),
+              const Positioned(
+                bottom: 44,
+                right: 36,
+                child: Text('✦', style: TextStyle(color: Colors.white, fontSize: 13)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // Floating Squircle Badge Builder
+  Widget _buildFloatingBadge({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF002758).withValues(alpha: 0.22),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: iconColor, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildNodeWidget({required String label, required Widget child}) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        child,
-        const SizedBox(height: 5),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF00AAE0),
-            fontSize: 9.5,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.5,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
-/// Dynamic Topological Path & Light Stream Laser Pulse Painter (OLT ➔ ODC ➔ ODP ➔ ONT)
-class _TopologicalTransmissionPainter extends CustomPainter {
-  final double progress;
-
-  _TopologicalTransmissionPainter({required this.progress});
-
+/// ── BRImo Smooth Arc Curve Clipper ──
+class _BriMoCurvedArcClipper extends CustomClipper<Path> {
   @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
+  Path getClip(Size size) {
+    final path = Path();
+    path.lineTo(0, size.height - 40);
 
-    // 1. Draw subtle background dot grid
-    final dotPaint = Paint()
-      ..color = const Color(0xFF94A3B8).withValues(alpha: 0.18)
-      ..style = PaintingStyle.fill;
+    // Smooth convex curve dipping gently down in the middle
+    final firstControlPoint = Offset(size.width / 2, size.height + 20);
+    final firstEndPoint = Offset(size.width, size.height - 40);
 
-    for (double x = 14; x < w; x += 14) {
-      for (double y = 12; y < h; y += 12) {
-        canvas.drawCircle(Offset(x, y), 0.85, dotPaint);
-      }
-    }
+    path.quadraticBezierTo(
+      firstControlPoint.dx,
+      firstControlPoint.dy,
+      firstEndPoint.dx,
+      firstEndPoint.dy,
+    );
 
-    // 2. Optical Fiber Connecting Cable Path (4 Nodes: 12%, 37%, 63%, 88%)
-    final p1 = Offset(w * 0.12, h * 0.40);
-    final p2 = Offset(w * 0.37, h * 0.40);
-    final p3 = Offset(w * 0.63, h * 0.40);
-    final p4 = Offset(w * 0.88, h * 0.40);
-
-    final linePaint = Paint()
-      ..color = const Color(0xFFCBD5E1)
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path()
-      ..moveTo(p1.dx, p1.dy)
-      ..cubicTo(w * 0.22, h * 0.35, w * 0.27, h * 0.45, p2.dx, p2.dy)
-      ..cubicTo(w * 0.48, h * 0.35, w * 0.52, h * 0.45, p3.dx, p3.dy)
-      ..cubicTo(w * 0.73, h * 0.35, w * 0.78, h * 0.45, p4.dx, p4.dy);
-
-    canvas.drawPath(path, linePaint);
-
-    // 3. Moving Laser Pulse Photons (Cyan Light Beams)
-    final metrics = path.computeMetrics().toList();
-    if (metrics.isNotEmpty) {
-      final metric = metrics.first;
-      final totalLength = metric.length;
-
-      for (int i = 0; i < 3; i++) {
-        final curProgress = (progress + (i * 0.33)) % 1.0;
-        final dist = curProgress * totalLength;
-        final tangent = metric.getTangentForOffset(dist);
-
-        if (tangent != null) {
-          final pos = tangent.position;
-
-          // Glowing Aura
-          final auraPaint = Paint()
-            ..color = const Color(0xFF00AAE0).withValues(alpha: 0.40)
-            ..style = PaintingStyle.fill;
-          canvas.drawCircle(pos, 7.5, auraPaint);
-
-          // Solid Photon Beam
-          final beamPaint = Paint()
-            ..color = const Color(0xFF00AAE0)
-            ..style = PaintingStyle.fill;
-          canvas.drawCircle(pos, 3.8, beamPaint);
-
-          // Pure White Hot Center
-          final centerSpark = Paint()
-            ..color = Colors.white
-            ..style = PaintingStyle.fill;
-          canvas.drawCircle(pos, 1.6, centerSpark);
-        }
-      }
-    }
+    path.lineTo(size.width, 0);
+    path.close();
+    return path;
   }
 
   @override
-  bool shouldRepaint(covariant _TopologicalTransmissionPainter oldDelegate) =>
-      oldDelegate.progress != progress;
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

@@ -73,6 +73,19 @@ class AppNotification extends Model
             \App\Services\TelegramService::send($title, $body, $type, $url, $source);
         }
 
+        // Otomatis kirim FCM Push Notification ke seluruh perangkat mobile FONA
+        try {
+            \App\Services\FcmService::sendTopicNotification(
+                'fona_global_alerts',
+                $title,
+                strip_tags(preg_replace('/<[^>]*>/', ' ', $body)),
+                $type,
+                $url
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("FCM Broadcast Warning: " . $e->getMessage());
+        }
+
         return $notif;
     }
 
@@ -105,6 +118,25 @@ class AppNotification extends Model
 
         // Otomatis sinkronisasi kirim ke Telegram Bot jika diaktifkan
         \App\Services\TelegramService::send($title, $body, $type, $url, $source);
+
+        // Kirim FCM ke perangkat spesifik jika memiliki token
+        try {
+            $subscriptions = \App\Models\PushSubscription::where('user_id', $userId)->get();
+            foreach ($subscriptions as $sub) {
+                if (str_starts_with($sub->endpoint, 'fcm:')) {
+                    $token = str_replace('fcm:', '', $sub->endpoint);
+                    \App\Services\FcmService::sendToDevice(
+                        $token,
+                        $title,
+                        strip_tags(preg_replace('/<[^>]*>/', ' ', $body)),
+                        $type,
+                        $url
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("FCM User Push Warning: " . $e->getMessage());
+        }
 
         return $notif;
     }
