@@ -17,6 +17,14 @@ export default function MobileAppTesting() {
   const [bannerInfo, setBannerInfo] = useState(null);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [bannerResetting, setBannerResetting] = useState(false);
+  const [bannerConfig, setBannerConfig] = useState({
+    fit: 'cover',
+    alignment_x: 0.0,
+    alignment_y: 0.0,
+    scale: 1.0,
+    overlay_opacity: 0.0,
+  });
+  const [savingConfig, setSavingConfig] = useState(false);
 
   const fetchAppInfo = async () => {
     setLoading(true);
@@ -30,6 +38,9 @@ export default function MobileAppTesting() {
       }
       if (resBanner.data && resBanner.data.status === 'success') {
         setBannerInfo(resBanner.data.data);
+        if (resBanner.data.data.config) {
+          setBannerConfig(resBanner.data.data.config);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch mobile app info:', err);
@@ -65,11 +76,12 @@ export default function MobileAppTesting() {
       });
       if (res.data && res.data.status === 'success') {
         setAlertMsg({ type: 'success', text: res.data.message });
-        setBannerInfo({
+        setBannerInfo((prev) => ({
+          ...prev,
           is_custom: true,
           banner_url: res.data.banner_url,
           updated_at: new Date().toISOString(),
-        });
+        }));
       }
     } catch (err) {
       setAlertMsg({
@@ -96,12 +108,50 @@ export default function MobileAppTesting() {
           banner_url: null,
           updated_at: null,
         });
+        setBannerConfig({
+          fit: 'cover',
+          alignment_x: 0.0,
+          alignment_y: 0.0,
+          scale: 1.0,
+          overlay_opacity: 0.0,
+        });
       }
     } catch (err) {
       setAlertMsg({ type: 'error', text: 'Gagal mereset gambar latar belakang login.' });
     } finally {
       setBannerResetting(false);
     }
+  };
+
+  const handleSaveBannerConfig = async () => {
+    setSavingConfig(true);
+    setAlertMsg(null);
+    try {
+      const res = await axios.post('/api/app-testing/login-banner-config', bannerConfig);
+      if (res.data && res.data.status === 'success') {
+        setAlertMsg({ type: 'success', text: res.data.message });
+        if (res.data.data?.config) {
+          setBannerConfig(res.data.data.config);
+        }
+      }
+    } catch (err) {
+      setAlertMsg({
+        type: 'error',
+        text: err.response?.data?.message || 'Gagal menyimpan pengaturan posisi banner.',
+      });
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleResetPosition = () => {
+    setBannerConfig({
+      fit: 'cover',
+      alignment_x: 0.0,
+      alignment_y: 0.0,
+      scale: 1.0,
+      overlay_opacity: 0.0,
+    });
   };
 
   useEffect(() => {
@@ -295,7 +345,7 @@ export default function MobileAppTesting() {
           </div>
 
           {/* Kustomisasi Background / Banner Login Mobile Card */}
-          <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-5 shadow-sm space-y-4">
+          <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-5 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/20 dark:border-white/20 pb-3">
               <div>
                 <h2 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
@@ -304,7 +354,7 @@ export default function MobileAppTesting() {
                   </svg>
                   Kustomisasi Banner Header Login Mobile
                 </h2>
-                <p className="text-[11px] text-black/60 dark:text-white/60 mt-0.5">Ubah gambar latar belakang / maskot header pada layar login aplikasi FONA Mobile</p>
+                <p className="text-[11px] text-black/60 dark:text-white/60 mt-0.5">Ubah gambar latar belakang &amp; atur posisi/skala agar pas dengan tampilan layar aplikasi mobile FONA</p>
               </div>
               <span className={`self-start sm:self-auto px-2 py-0.5 text-xs font-bold rounded ${
                 bannerInfo?.is_custom 
@@ -315,37 +365,73 @@ export default function MobileAppTesting() {
               </span>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 items-center">
-              {/* Image Preview Box */}
-              <div className="w-full sm:w-60 h-32 rounded-md overflow-hidden bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 flex items-center justify-center relative shadow-inner">
-                {bannerInfo?.is_custom && bannerInfo?.banner_url ? (
-                  <img
-                    src={bannerInfo.banner_url}
-                    alt="Custom Login Banner"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="text-center p-3 text-black dark:text-white">
-                    <div className="w-9 h-9 mx-auto rounded-md bg-black/10 dark:bg-white/10 border border-black/20 dark:border-white/20 flex items-center justify-center mb-1 text-black dark:text-white">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
+            {/* Top Row: Live Mockup Preview & File Upload */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+              {/* Interactive Live Mobile Mockup Preview */}
+              <div className="md:col-span-6 lg:col-span-5 flex flex-col items-center">
+                <div className="w-full max-w-[280px] bg-black dark:bg-black rounded-lg border border-black/40 dark:border-white/40 shadow-md p-2 overflow-hidden">
+                  <div className="flex items-center justify-between px-2 py-1 text-[10px] text-white/70 font-mono border-b border-white/10 mb-1.5">
+                    <span>Preview Layar HP</span>
+                    <span>100% Live</span>
+                  </div>
+
+                  {/* Mockup Screen Header with Arc Mask */}
+                  <div className="relative w-full h-44 rounded-md overflow-hidden bg-gradient-to-b from-[#003870] to-[#0060AF] border border-white/10 flex items-center justify-center">
+                    {bannerInfo?.is_custom && bannerInfo?.banner_url ? (
+                      <div className="w-full h-full relative overflow-hidden">
+                        <img
+                          src={bannerInfo.banner_url}
+                          alt="Live Custom Banner Preview"
+                          style={{
+                            objectFit: bannerConfig.fit === 'fitWidth' ? 'fill' : bannerConfig.fit,
+                            objectPosition: `${((Number(bannerConfig.alignment_x) + 1) / 2) * 100}% ${((Number(bannerConfig.alignment_y) + 1) / 2) * 100}%`,
+                            transform: `scale(${bannerConfig.scale})`,
+                            transformOrigin: `${((Number(bannerConfig.alignment_x) + 1) / 2) * 100}% ${((Number(bannerConfig.alignment_y) + 1) / 2) * 100}%`,
+                          }}
+                          className="w-full h-full transition-transform duration-75"
+                        />
+                        {bannerConfig.overlay_opacity > 0 && (
+                          <div 
+                            className="absolute inset-0 pointer-events-none transition-colors duration-75"
+                            style={{ backgroundColor: `rgba(0,0,0,${bannerConfig.overlay_opacity})` }}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center p-3 text-white">
+                        <div className="w-9 h-9 mx-auto rounded-md bg-white/20 border border-white/30 flex items-center justify-center mb-1 text-white">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-bold block">Maskot FONA (Default)</span>
+                        <span className="text-[10px] text-white/70">Gradasi Royal Blue + Arc Curve</span>
+                      </div>
+                    )}
+
+                    {/* Top Status Indicators Mockup */}
+                    <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-xs rounded text-[9px] text-white/90 font-mono border border-white/20 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      <span>Server Online</span>
                     </div>
-                    <span className="text-xs font-bold block">Maskot FONA (Default)</span>
-                    <span className="text-[10px] text-black/60 dark:text-white/60">Gradasi Royal Blue + Arc Curve</span>
+
+                    {/* Arc Curve Bottom Overlay Indicator */}
+                    <div className="absolute -bottom-4 left-0 right-0 h-8 bg-white/10 dark:bg-black/30 backdrop-blur-xs rounded-[50%] border-t border-white/20 pointer-events-none"></div>
                   </div>
-                )}
-                {bannerInfo?.is_custom && (
-                  <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/80 text-white rounded text-[10px] font-mono border border-white/20">
-                    Kustom
+
+                  <div className="mt-2 text-center text-[10px] text-white/60 font-mono">
+                    Mode: {bannerConfig.fit} • Zoom: {(bannerConfig.scale * 100).toFixed(0)}%
                   </div>
-                )}
+                </div>
               </div>
 
-              {/* Upload & Reset Controls */}
-              <div className="flex-1 space-y-3 w-full">
-                <div className="text-xs text-black/70 dark:text-white/70 leading-relaxed">
-                  Unggah gambar banner (PNG, JPG, WEBP maks 5MB). Rekomendasi rasio <strong className="font-bold text-black dark:text-white">4:3</strong> atau <strong className="font-bold text-black dark:text-white">16:9</strong> dengan resolusi <strong className="font-bold text-black dark:text-white">800×600 px</strong>.
+              {/* Upload Controls & Description */}
+              <div className="md:col-span-6 lg:col-span-7 space-y-3.5">
+                <div className="p-3 bg-black/5 dark:bg-white/5 rounded-md border border-black/15 dark:border-white/15 text-xs space-y-1.5">
+                  <span className="font-bold text-black dark:text-white block">Petunjuk Format Gambar:</span>
+                  <p className="text-black/70 dark:text-white/70 leading-relaxed text-[11px]">
+                    Unggah gambar latar header (PNG, JPG, JPEG, atau WEBP maks 5MB). Rekomendasi rasio <strong className="font-bold text-black dark:text-white">4:3</strong> atau <strong className="font-bold text-black dark:text-white">16:9</strong> dengan resolusi <strong className="font-bold text-black dark:text-white">800×600 px</strong>.
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2.5 pt-1">
@@ -353,7 +439,7 @@ export default function MobileAppTesting() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
-                    {bannerUploading ? 'Mengunggah...' : 'Ganti Gambar Banner'}
+                    {bannerUploading ? 'Mengunggah...' : 'Ganti / Unggah Gambar'}
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/jpg,image/webp"
@@ -379,6 +465,202 @@ export default function MobileAppTesting() {
                 </div>
               </div>
             </div>
+
+            {/* Visual Position & Scale Editor Controls */}
+            {bannerInfo?.is_custom && (
+              <div className="pt-4 border-t border-black/20 dark:border-white/20 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-black dark:text-white uppercase tracking-wider flex items-center gap-2">
+                    <span>Pengaturan Posisi, Skala &amp; Keselarasan Mobile</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleResetPosition}
+                    className="text-[11px] text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-medium hover:underline cursor-pointer"
+                  >
+                    ↺ Reset Slider ke Tengah
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  {/* Preset 9 Posisi Cepat */}
+                  <div className="md:col-span-4 p-3.5 bg-black/5 dark:bg-white/5 rounded-md border border-black/20 dark:border-white/20 space-y-2">
+                    <label className="text-[11px] font-bold text-black dark:text-white block">
+                      Preset Posisi Cepat:
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5 max-w-[150px] mx-auto">
+                      {[
+                        { label: '↖', x: -1.0, y: -1.0, title: 'Atas Kiri' },
+                        { label: '↑', x: 0.0, y: -1.0, title: 'Atas Tengah' },
+                        { label: '↗', x: 1.0, y: -1.0, title: 'Atas Kanan' },
+                        { label: '←', x: -1.0, y: 0.0, title: 'Tengah Kiri' },
+                        { label: '•', x: 0.0, y: 0.0, title: 'Pusat (Center)' },
+                        { label: '→', x: 1.0, y: 0.0, title: 'Tengah Kanan' },
+                        { label: '↙', x: -1.0, y: 1.0, title: 'Bawah Kiri' },
+                        { label: '↓', x: 0.0, y: 1.0, title: 'Bawah Tengah' },
+                        { label: '↘', x: 1.0, y: 1.0, title: 'Bawah Kanan' },
+                      ].map((p, idx) => {
+                        const isActive = Math.abs(bannerConfig.alignment_x - p.x) < 0.05 && Math.abs(bannerConfig.alignment_y - p.y) < 0.05;
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            title={p.title}
+                            onClick={() => setBannerConfig((prev) => ({ ...prev, alignment_x: p.x, alignment_y: p.y }))}
+                            className={`h-8 rounded-md font-bold text-xs flex items-center justify-center transition-all cursor-pointer border ${
+                              isActive
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                : 'bg-white dark:bg-black text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10'
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Fit Mode & Precision Sliders */}
+                  <div className="md:col-span-8 p-3.5 bg-black/5 dark:bg-white/5 rounded-md border border-black/20 dark:border-white/20 space-y-3.5">
+                    {/* Fit Mode */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-black dark:text-white">Kesesuaian Tampilan (Fit Mode):</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{bannerConfig.fit}</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { key: 'cover', label: 'Cover (Penuh & Crop)' },
+                          { key: 'contain', label: 'Contain (Muat Penuh)' },
+                          { key: 'fitWidth', label: 'Fit Width (Lebar)' },
+                          { key: 'fill', label: 'Fill (Regangkan)' },
+                        ].map((mode) => (
+                          <button
+                            key={mode.key}
+                            type="button"
+                            onClick={() => setBannerConfig((prev) => ({ ...prev, fit: mode.key }))}
+                            className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition border cursor-pointer ${
+                              bannerConfig.fit === mode.key
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                : 'bg-white dark:bg-black text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10'
+                            }`}
+                          >
+                            {mode.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Sliders Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                      {/* Horizontal Alignment Slider */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-black/70 dark:text-white/70 font-medium">Posisi Horizontal (X):</span>
+                          <span className="font-mono font-bold text-black dark:text-white">
+                            {Number(bannerConfig.alignment_x) === 0 ? 'Tengah (0%)' : `${(Number(bannerConfig.alignment_x) * 100).toFixed(0)}%`}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-1"
+                          max="1"
+                          step="0.05"
+                          value={bannerConfig.alignment_x}
+                          onChange={(e) => setBannerConfig((prev) => ({ ...prev, alignment_x: parseFloat(e.target.value) }))}
+                          className="w-full accent-blue-600 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[9px] text-black/50 dark:text-white/50 font-mono">
+                          <span>Kiri (-100%)</span>
+                          <span>Kanan (+100%)</span>
+                        </div>
+                      </div>
+
+                      {/* Vertical Alignment Slider */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-black/70 dark:text-white/70 font-medium">Posisi Vertikal (Y):</span>
+                          <span className="font-mono font-bold text-black dark:text-white">
+                            {Number(bannerConfig.alignment_y) === 0 ? 'Tengah (0%)' : `${(Number(bannerConfig.alignment_y) * 100).toFixed(0)}%`}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-1"
+                          max="1"
+                          step="0.05"
+                          value={bannerConfig.alignment_y}
+                          onChange={(e) => setBannerConfig((prev) => ({ ...prev, alignment_y: parseFloat(e.target.value) }))}
+                          className="w-full accent-blue-600 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[9px] text-black/50 dark:text-white/50 font-mono">
+                          <span>Atas (-100%)</span>
+                          <span>Bawah (+100%)</span>
+                        </div>
+                      </div>
+
+                      {/* Scale / Zoom Slider */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-black/70 dark:text-white/70 font-medium">Zoom / Skala:</span>
+                          <span className="font-mono font-bold text-black dark:text-white">{(Number(bannerConfig.scale) * 100).toFixed(0)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2.5"
+                          step="0.05"
+                          value={bannerConfig.scale}
+                          onChange={(e) => setBannerConfig((prev) => ({ ...prev, scale: parseFloat(e.target.value) }))}
+                          className="w-full accent-blue-600 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[9px] text-black/50 dark:text-white/50 font-mono">
+                          <span>50%</span>
+                          <span>100%</span>
+                          <span>250%</span>
+                        </div>
+                      </div>
+
+                      {/* Dark Contrast Overlay Opacity */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-black/70 dark:text-white/70 font-medium">Lapisan Gelap Kontras:</span>
+                          <span className="font-mono font-bold text-black dark:text-white">{(Number(bannerConfig.overlay_opacity) * 100).toFixed(0)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="0.8"
+                          step="0.05"
+                          value={bannerConfig.overlay_opacity}
+                          onChange={(e) => setBannerConfig((prev) => ({ ...prev, overlay_opacity: parseFloat(e.target.value) }))}
+                          className="w-full accent-blue-600 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[9px] text-black/50 dark:text-white/50 font-mono">
+                          <span>Transparan (0%)</span>
+                          <span>Gelap (80%)</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Save Position Button */}
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleSaveBannerConfig}
+                        disabled={savingConfig}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-md transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        {savingConfig ? 'Menyimpan...' : 'Simpan Pengaturan Posisi Banner'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Mobile API Diagnostics Card */}

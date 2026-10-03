@@ -256,13 +256,29 @@ class AppTestingController extends Controller
 
     /**
      * GET /api/app-testing/login-banner
-     * Get mobile login header banner image
+     * Get mobile login header banner image & position configuration
      */
     public function getLoginBanner(Request $request)
     {
         $dir = public_path('branding');
         $files = ['mobile_login_banner.png', 'mobile_login_banner.jpg', 'mobile_login_banner.jpeg', 'mobile_login_banner.webp'];
         $baseUrl = $request->root() ?: url('/');
+        $configFile = $dir . DIRECTORY_SEPARATOR . 'mobile_login_banner_config.json';
+        
+        $config = [
+            'fit'             => 'cover',
+            'alignment_x'     => 0.0,
+            'alignment_y'     => 0.0,
+            'scale'           => 1.0,
+            'overlay_opacity' => 0.0,
+        ];
+
+        if (File::exists($configFile)) {
+            $savedConfig = json_decode(File::get($configFile), true);
+            if (is_array($savedConfig)) {
+                $config = array_merge($config, $savedConfig);
+            }
+        }
         
         foreach ($files as $file) {
             $path = $dir . DIRECTORY_SEPARATOR . $file;
@@ -274,6 +290,7 @@ class AppTestingController extends Controller
                         'banner_url'  => rtrim($baseUrl, '/') . '/branding/' . $file . '?v=' . File::lastModified($path),
                         'file_size'   => File::size($path),
                         'updated_at'  => Carbon::createFromTimestamp(File::lastModified($path))->toIso8601String(),
+                        'config'      => $config,
                     ],
                 ]);
             }
@@ -285,6 +302,7 @@ class AppTestingController extends Controller
                 'is_custom'   => false,
                 'banner_url'  => null,
                 'updated_at'  => null,
+                'config'      => $config,
             ],
         ]);
     }
@@ -336,13 +354,68 @@ class AppTestingController extends Controller
     }
 
     /**
+     * POST /api/app-testing/login-banner-config
+     * Save position and display settings for the mobile login banner
+     */
+    public function saveLoginBannerConfig(Request $request)
+    {
+        $validated = $request->validate([
+            'fit'             => 'nullable|string|in:cover,contain,fitWidth,fill',
+            'alignment_x'     => 'nullable|numeric|between:-1,1',
+            'alignment_y'     => 'nullable|numeric|between:-1,1',
+            'scale'           => 'nullable|numeric|between:0.5,3.0',
+            'overlay_opacity' => 'nullable|numeric|between:0,0.9',
+        ]);
+
+        $dir = public_path('branding');
+        if (!File::exists($dir)) {
+            File::makeDirectory($dir, 0755, true);
+        }
+
+        $configFile = $dir . DIRECTORY_SEPARATOR . 'mobile_login_banner_config.json';
+        $currentConfig = [
+            'fit'             => 'cover',
+            'alignment_x'     => 0.0,
+            'alignment_y'     => 0.0,
+            'scale'           => 1.0,
+            'overlay_opacity' => 0.0,
+        ];
+
+        if (File::exists($configFile)) {
+            $existing = json_decode(File::get($configFile), true);
+            if (is_array($existing)) {
+                $currentConfig = array_merge($currentConfig, $existing);
+            }
+        }
+
+        $updatedConfig = array_merge($currentConfig, array_filter($validated, fn($val) => $val !== null));
+        File::put($configFile, json_encode($updatedConfig, JSON_PRETTY_PRINT));
+
+        AuditLog::record(
+            'MOBILE_BANNER_CONFIG_UPDATE',
+            'App Testing',
+            "Administrator memperbarui konfigurasi tata letak dan posisi banner login mobile.",
+            null,
+            $updatedConfig
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Pengaturan posisi dan tampilan banner login berhasil disimpan!',
+            'data'    => [
+                'config' => $updatedConfig,
+            ],
+        ]);
+    }
+
+    /**
      * DELETE /api/app-testing/login-banner
      * Reset login header banner to default
      */
     public function deleteLoginBanner(Request $request)
     {
         $dir = public_path('branding');
-        $oldFiles = ['mobile_login_banner.png', 'mobile_login_banner.jpg', 'mobile_login_banner.jpeg', 'mobile_login_banner.webp'];
+        $oldFiles = ['mobile_login_banner.png', 'mobile_login_banner.jpg', 'mobile_login_banner.jpeg', 'mobile_login_banner.webp', 'mobile_login_banner_config.json'];
         
         foreach ($oldFiles as $old) {
             $oldPath = $dir . DIRECTORY_SEPARATOR . $old;

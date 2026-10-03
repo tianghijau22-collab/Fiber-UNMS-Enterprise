@@ -29,6 +29,25 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   // Dynamic Background Banner from Web Admin
   String? _customBannerUrl;
+  String _bannerFit = 'cover';
+  double _bannerAlignX = 0.0;
+  double _bannerAlignY = 0.0;
+  double _bannerScale = 1.0;
+  double _bannerOverlayOpacity = 0.0;
+
+  BoxFit _getBannerBoxFit(String fit) {
+    switch (fit) {
+      case 'contain':
+        return BoxFit.contain;
+      case 'fitWidth':
+        return BoxFit.fitWidth;
+      case 'fill':
+        return BoxFit.fill;
+      case 'cover':
+      default:
+        return BoxFit.cover;
+    }
+  }
 
   // BRImo Signature Corporate Palette
   static const Color briPrimary = Color(0xFF0060AF);      // Royal Blue Utama
@@ -63,7 +82,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     final storage = StorageService();
     final remembered = await storage.getRememberedUsername();
     final bioCreds = await storage.getBiometricCredentials();
-
     if (mounted) {
       setState(() {
         if (remembered != null && remembered.isNotEmpty) {
@@ -94,9 +112,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ).toString();
           }
 
+          final config = data['config'] as Map<String, dynamic>?;
+
           if (mounted) {
             setState(() {
               _customBannerUrl = bannerUrl;
+              if (config != null) {
+                _bannerFit = config['fit']?.toString() ?? 'cover';
+                _bannerAlignX = double.tryParse(config['alignment_x']?.toString() ?? '0') ?? 0.0;
+                _bannerAlignY = double.tryParse(config['alignment_y']?.toString() ?? '0') ?? 0.0;
+                _bannerScale = double.tryParse(config['scale']?.toString() ?? '1.0') ?? 1.0;
+                _bannerOverlayOpacity = double.tryParse(config['overlay_opacity']?.toString() ?? '0.0') ?? 0.0;
+              }
             });
           }
         } else {
@@ -397,15 +424,26 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           children: [
                             // If Custom Banner is Set from Web Admin, render it
                             if (_customBannerUrl != null) ...[
-                              CachedNetworkImage(
-                                imageUrl: _customBannerUrl!,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                                fadeInDuration: const Duration(milliseconds: 300),
-                                placeholder: (ctx, url) => _buildDefaultHeroIllustration(topPadding),
-                                errorWidget: (ctx, err, stack) => _buildDefaultHeroIllustration(topPadding),
+                              ClipRect(
+                                child: Transform.scale(
+                                  scale: _bannerScale,
+                                  alignment: Alignment(_bannerAlignX, _bannerAlignY),
+                                  child: CachedNetworkImage(
+                                    imageUrl: _customBannerUrl!,
+                                    fit: _getBannerBoxFit(_bannerFit),
+                                    alignment: Alignment(_bannerAlignX, _bannerAlignY),
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    fadeInDuration: const Duration(milliseconds: 300),
+                                    placeholder: (ctx, url) => _buildDefaultHeroIllustration(topPadding),
+                                    errorWidget: (ctx, err, stack) => _buildDefaultHeroIllustration(topPadding),
+                                  ),
+                                ),
                               ),
+                              if (_bannerOverlayOpacity > 0.0)
+                                Container(
+                                  color: Colors.black.withValues(alpha: _bannerOverlayOpacity.clamp(0.0, 0.9)),
+                                ),
                             ] else ...[
                               // Ambient Radial Glow Circles
                               Positioned(

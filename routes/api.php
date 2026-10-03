@@ -220,6 +220,7 @@ Route::post('app-testing/trigger-build', [\App\Http\Controllers\AppTestingContro
 Route::get('app-testing/build-status', [\App\Http\Controllers\AppTestingController::class, 'buildStatus']);
 Route::get('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'getLoginBanner']);
 Route::post('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'uploadLoginBanner']);
+Route::post('app-testing/login-banner-config', [\App\Http\Controllers\AppTestingController::class, 'saveLoginBannerConfig']);
 Route::delete('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'deleteLoginBanner']);
 
 // Pop-up Alert Pemberitahuan untuk User (Super Admin & Public Active Alerts)
