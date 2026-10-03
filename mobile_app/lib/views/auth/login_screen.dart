@@ -280,7 +280,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Alamat API backend server Fiber-UNMS:',
+              'Alamat API backend server:',
               style: TextStyle(color: Color(0xFF64748B), fontSize: 12.5),
             ),
             const SizedBox(height: 12),
@@ -525,7 +525,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       children: [
                         // Title & Subtitle
                         const Text(
-                          'Masuk ke Akun Petugas',
+                          'Silahkan login',
                           style: TextStyle(
                             color: Color(0xFF0F172A),
                             fontSize: 18,
@@ -535,7 +535,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         ),
                         const SizedBox(height: 3),
                         const Text(
-                          'Gunakan username & kata sandi UNMS Anda',
+                          'Gunakan username & kata sandi Anda',
                           style: TextStyle(
                             color: Color(0xFF64748B),
                             fontSize: 12.5,
@@ -677,7 +677,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               onPressed: () {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Silakan hubungi Superadmin NOC untuk mereset kata sandi.'),
+                                    content: Text('Silahkan hubungin @jasenardian untuk mereset kata sandi'),
                                     backgroundColor: briPrimary,
                                   ),
                                 );
@@ -778,20 +778,20 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             const Text(
-                              'Butuh bantuan akses? ',
+                              'Belum punya akun ? ',
                               style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
                             ),
                             InkWell(
                               onTap: () {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Hubungi Tim NOC Pusat atau IT Support.'),
+                                    content: Text('Silahkan hubungi @jasenardian untuk pendaftaran akun baru'),
                                     backgroundColor: briPrimary,
                                   ),
                                 );
                               },
                               child: const Text(
-                                'Hubungi NOC',
+                                'Hubungi admin',
                                 style: TextStyle(
                                   color: briOrange,
                                   fontSize: 12,
