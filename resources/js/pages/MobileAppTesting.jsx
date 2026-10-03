@@ -167,7 +167,7 @@ export default function MobileAppTesting() {
   const qrDownloadUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(downloadUrl)}`;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 text-black dark:text-white">
+    <div className="space-y-6 w-full pb-12 text-black dark:text-white animate-in fade-in duration-200">
       {/* Header & Access Badge */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-black border border-black/70 dark:border-white/70 p-5 rounded-lg shadow-sm">
         <div>
@@ -217,9 +217,9 @@ export default function MobileAppTesting() {
       )}
 
       {/* Main Grid Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         {/* Left Column: Build Info & Direct Actions */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="xl:col-span-7 2xl:col-span-8 space-y-6">
           {/* Build Details Card */}
           <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-5 shadow-sm space-y-5">
             <div className="flex items-center justify-between border-b border-black/20 dark:border-white/20 pb-3">
@@ -236,7 +236,7 @@ export default function MobileAppTesting() {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-3.5 text-xs">
               <div className="p-3 bg-black/5 dark:bg-white/5 rounded-md border border-black/20 dark:border-white/20">
                 <span className="text-[11px] text-black/60 dark:text-white/60 block mb-0.5">Nama Aplikasi</span>
                 <span className="font-bold text-black dark:text-white">{appInfo?.app_name || 'Fiber-UNMS Mobile'}</span>
@@ -431,7 +431,7 @@ export default function MobileAppTesting() {
         </div>
 
         {/* Right Column: QR Code Direct Download & Install Guide */}
-        <div className="space-y-6">
+        <div className="xl:col-span-5 2xl:col-span-4 space-y-6">
           {/* QR Code Card */}
           <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-5 shadow-sm text-center space-y-4">
             <h3 className="text-sm font-bold text-black dark:text-white">Scan QR untuk Download di HP</h3>
