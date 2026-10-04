@@ -22,7 +22,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
     'Semua Notifikasi',
     'Info',
     'Gangguan',
-    'Tiket NOC',
+    'Tiket',
     'Pemeliharaan',
   ];
 
@@ -54,7 +54,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
               title.contains('gangguan') ||
               title.contains('putus kabel') ||
               title.contains('down');
-        case 'Tiket NOC':
+        case 'Tiket':
           return t == 'TICKET' || title.contains('tiket') || title.contains('noc');
         case 'Pemeliharaan':
           return t == 'MAINTENANCE' || title.contains('pemeliharaan') || title.contains('maintenance');
