@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/dio_client.dart';
-import '../odp/odp_form_screen.dart';
 import 'odp_port_monitoring_sheet.dart';
 
 class NodesListScreen extends StatefulWidget {
@@ -1000,8 +999,6 @@ class _NodesListScreenState extends State<NodesListScreen> {
     }
 
     final percentage = totalPorts > 0 ? ((usedPorts / totalPorts) * 100).round() : 0;
-    final lat = node['latitude'];
-    final lng = node['longitude'];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1160,58 +1157,16 @@ class _NodesListScreenState extends State<NodesListScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Aksi Buttons
-                Row(
-                  children: [
-                    if (type == 'ODP')
-                      Expanded(
-                        flex: 3,
-                        child: _buildActionButton(
-                          icon: Icons.speed_rounded,
-                          label: 'Cek Port',
-                          color: _brandBlue,
-                          filled: true,
-                          onTap: () => _openPortMonitoring(node),
-                        ),
-                      )
-                    else
-                      Expanded(
-                        flex: 3,
-                        child: _buildActionButton(
-                          icon: Icons.info_outline_rounded,
-                          label: 'Lihat Detail',
-                          color: _brandBlue,
-                          filled: true,
-                          onTap: () => _showDetailModal(node),
-                        ),
-                      ),
-                    const SizedBox(width: 8),
-                    if (lat != null && lng != null)
-                      _buildSmallIconButton(
-                        icon: Icons.near_me_rounded,
-                        color: _cyan,
-                        tooltip: 'Buka Maps',
-                        onTap: () => _openInMaps(lat, lng),
-                      ),
-                    const SizedBox(width: 8),
-                    _buildSmallIconButton(
-                      icon: Icons.settings_outlined,
-                      color: AppColors.warning,
-                      tooltip: 'Maintenance',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => OdpFormScreen(
-                              prefilledOdpCode: node['code']?.toString(),
-                              prefilledOdpName: name,
-                              prefilledOdpNodeId: node['id'],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
+                // Aksi Button
+                SizedBox(
+                  width: double.infinity,
+                  child: _buildActionButton(
+                    icon: type == 'ODP' ? Icons.speed_rounded : Icons.info_outline_rounded,
+                    label: type == 'ODP' ? 'Cek Port' : 'Lihat Detail',
+                    color: _brandBlue,
+                    filled: true,
+                    onTap: () => type == 'ODP' ? _openPortMonitoring(node) : _showDetailModal(node),
+                  ),
                 ),
               ],
             ),
@@ -1314,28 +1269,6 @@ class _NodesListScreenState extends State<NodesListScreen> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSmallIconButton({
-    required IconData icon,
-    required Color color,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: color.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: Container(
-          width: 36,
-          height: 36,
-          alignment: Alignment.center,
-          child: Icon(icon, size: 17, color: color),
         ),
       ),
     );
