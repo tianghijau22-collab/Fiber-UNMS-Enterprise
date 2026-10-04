@@ -48,43 +48,95 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchCustomers({String? query}) async {
+  Future<void> _fetchCustomers({String? query, bool force = false}) async {
+    if (_isLoading) return;
+
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
+      if (_customers.isEmpty) {
+        _errorMessage = null;
+      }
     });
 
     try {
+      final Map<String, dynamic> params = {};
+      if (query != null && query.isNotEmpty) {
+        params['search'] = query;
+      }
+      if (force) {
+        params['force'] = '1';
+      }
+
       final response = await DioClient().dio.get(
         ApiConstants.endpointCustomers,
-        queryParameters: query != null && query.isNotEmpty ? {'search': query} : null,
+        queryParameters: params.isNotEmpty ? params : null,
       );
 
       if (response.data != null) {
-        final rawList = response.data is List
-            ? response.data
-            : (response.data['data'] is List ? response.data['data'] : []);
+        final dynamic dataField = response.data is Map ? response.data['data'] : response.data;
+        final rawList = dataField is List ? dataField : [];
+
+        final List<CustomerModel> parsed = [];
+        for (final item in rawList) {
+          if (item is Map<String, dynamic>) {
+            parsed.add(CustomerModel.fromJson(item));
+          } else if (item is Map) {
+            parsed.add(CustomerModel.fromJson(Map<String, dynamic>.from(item)));
+          }
+        }
 
         if (!mounted) return;
         setState(() {
-          _customers = (rawList as List).map((i) => CustomerModel.fromJson(i)).toList();
+          _customers = parsed;
           _isLoading = false;
+          _errorMessage = null;
         });
+      } else {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
       }
     } on DioException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = e.response?.data is Map
-            ? (e.response?.data['message'] ?? 'Gagal memuat data pelanggan.')
-            : 'Gagal memuat data pelanggan.';
-        _isLoading = false;
-      });
+      final msg = e.response?.data is Map
+          ? (e.response?.data['message'] ?? 'Gagal memuat data pelanggan.')
+          : (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.receiveTimeout
+              ? 'Koneksi ke server timeout. Silakan coba lagi.'
+              : 'Gagal terhubung ke server.');
+
+      if (_customers.isNotEmpty) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        setState(() {
+          _errorMessage = msg;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _errorMessage = 'Terjadi kesalahan: $e';
-        _isLoading = false;
-      });
+      final msg = 'Terjadi kesalahan: $e';
+      if (_customers.isNotEmpty) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        setState(() {
+          _errorMessage = msg;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -124,7 +176,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       child: Scaffold(
         backgroundColor: _bg,
         body: RefreshIndicator(
-          onRefresh: () => _fetchCustomers(query: _searchController.text.trim()),
+          onRefresh: () => _fetchCustomers(query: _searchController.text.trim(), force: true),
           color: _brandBlue,
           backgroundColor: Colors.white,
           edgeOffset: 200,
@@ -246,8 +298,8 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                         ),
                       ),
                       _glassIconButton(
-                        Icons.refresh_rounded,
-                        () => _fetchCustomers(query: _searchController.text.trim()),
+                        _isLoading ? Icons.hourglass_top_rounded : Icons.refresh_rounded,
+                        () => _fetchCustomers(query: _searchController.text.trim(), force: true),
                       ),
                     ],
                   ),

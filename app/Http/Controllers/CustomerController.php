@@ -26,9 +26,13 @@ class CustomerController extends Controller
     /**
      * Daftar pelanggan lengkap dengan layanan, port ODP, dan registrasi ONT.
      */
-    public function index()
+    public function index(Request $request)
     {
-        return Cache::remember('customers_index_payload_v5', 8, function () {
+        if ($request->boolean('refresh') || $request->boolean('force')) {
+            self::clearCustomerCache();
+        }
+
+        $result = Cache::remember('customers_index_payload_v5', 120, function () {
             // Build real-time optical power & status map from OLT live database snapshots
             $liveOnuMap = [];
             $oltDevices = OltDevice::whereNotNull('last_telemetry_snapshot')->get(['id', 'name', 'last_telemetry_snapshot']);
