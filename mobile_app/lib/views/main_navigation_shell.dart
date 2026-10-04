@@ -14,13 +14,15 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = const [
-    HomeDashboardScreen(),
-    GisMapScreen(),
-    ProfileScreen(),
+    HomeDashboardScreen(), // Index 0: Home
+    GisMapScreen(),        // Index 1: Maps
+    ProfileScreen(),       // Index 2: Profil
   ];
 
   @override
   Widget build(BuildContext context) {
+    final isHomeActive = _currentIndex == 0;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: IndexedStack(
@@ -30,52 +32,52 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       bottomNavigationBar: SafeArea(
         top: false,
         child: SizedBox(
-          height: 70,
+          height: 76,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              // 1. Curved Background with concave scoop notch & top border
+              // 1. Curved Background with wide flared scoop notch & rounded top shoulders
               Positioned.fill(
                 child: CustomPaint(
                   painter: _CurvedNavBarPainter(),
                 ),
               ),
 
-              // 2. Navigation Items (Home, Center Tap Area, Profil)
+              // 2. Navigation Items (Maps on Left, Center Home Tap Area, Profil on Right)
               Positioned.fill(
                 child: Row(
                   children: [
-                    // Home
+                    // Left Item: Maps
                     Expanded(
                       child: _buildSideNavItem(
-                        index: 0,
-                        icon: Icons.home_outlined,
-                        activeIcon: Icons.home_rounded,
-                        label: 'Home',
+                        index: 1,
+                        icon: Icons.map_outlined,
+                        activeIcon: Icons.map_rounded,
+                        label: 'Maps',
                       ),
                     ),
 
-                    // Center Placeholder for Maps
+                    // Center Item Tap Area: Home
                     Expanded(
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => setState(() => _currentIndex = 1),
+                        onTap: () => setState(() => _currentIndex = 0),
                         child: Container(
                           alignment: Alignment.bottomCenter,
-                          padding: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.only(bottom: 11),
                           child: Text(
-                            'Maps',
+                            'Home',
                             style: TextStyle(
-                              color: _currentIndex == 1 ? const Color(0xFF005BAA) : const Color(0xFF64748B),
+                              color: isHomeActive ? const Color(0xFF005BAA) : const Color(0xFF64748B),
                               fontSize: 11,
-                              fontWeight: _currentIndex == 1 ? FontWeight.w700 : FontWeight.w500,
+                              fontWeight: isHomeActive ? FontWeight.w700 : FontWeight.w500,
                             ),
                           ),
                         ),
                       ),
                     ),
 
-                    // Profil
+                    // Right Item: Profil
                     Expanded(
                       child: _buildSideNavItem(
                         index: 2,
@@ -88,38 +90,55 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                 ),
               ),
 
-              // 3. Floating Elevated Center Button (Maps)
+              // 3. Floating Hero Center Button: Home
               Align(
                 alignment: Alignment.topCenter,
                 child: Transform.translate(
-                  offset: const Offset(0, -20),
+                  offset: const Offset(0, -22),
                   child: GestureDetector(
-                    onTap: () => setState(() => _currentIndex = 1),
+                    onTap: () => setState(() => _currentIndex = 0),
                     child: Container(
-                      width: 50,
-                      height: 50,
+                      width: 52,
+                      height: 52,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white,
+                        gradient: isHomeActive
+                            ? const LinearGradient(
+                                colors: [Color(0xFF0284C7), Color(0xFF005BAA)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              )
+                            : null,
+                        color: isHomeActive ? null : Colors.white,
                         border: Border.all(
-                          color: _currentIndex == 1 ? const Color(0xFF005BAA) : const Color(0xFFCBD5E1),
-                          width: _currentIndex == 1 ? 2.0 : 1.5,
+                          color: isHomeActive ? const Color(0xFF005BAA) : const Color(0xFFCBD5E1),
+                          width: isHomeActive ? 2.0 : 1.5,
                         ),
                         boxShadow: [
-                          BoxShadow(
-                            color: _currentIndex == 1
-                                ? const Color(0xFF005BAA).withValues(alpha: 0.25)
-                                : Colors.black.withValues(alpha: 0.10),
-                            blurRadius: _currentIndex == 1 ? 12 : 8,
-                            offset: const Offset(0, 3),
-                          ),
+                          if (isHomeActive) ...[
+                            BoxShadow(
+                              color: const Color(0xFF005BAA).withValues(alpha: 0.38),
+                              blurRadius: 14,
+                              offset: const Offset(0, 5),
+                            ),
+                            BoxShadow(
+                              color: const Color(0xFF0284C7).withValues(alpha: 0.20),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ] else
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
                         ],
                       ),
                       child: Center(
                         child: Icon(
-                          _currentIndex == 1 ? Icons.map_rounded : Icons.map_outlined,
-                          color: _currentIndex == 1 ? const Color(0xFF005BAA) : const Color(0xFF64748B),
-                          size: 24,
+                          isHomeActive ? Icons.home_rounded : Icons.home_outlined,
+                          color: isHomeActive ? Colors.white : const Color(0xFF64748B),
+                          size: 26,
                         ),
                       ),
                     ),
@@ -149,12 +168,19 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            isSelected ? activeIcon : icon,
-            color: color,
-            size: 24,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            decoration: BoxDecoration(
+              color: isSelected ? const Color(0xFFE0F2FE) : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              isSelected ? activeIcon : icon,
+              color: color,
+              size: 24,
+            ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(
             label,
             style: TextStyle(
@@ -176,23 +202,26 @@ class _CurvedNavBarPainter extends CustomPainter {
     final h = size.height;
     final centerX = w / 2;
 
-    const scoopWidth = 46.0;
-    const scoopDrop = 32.0;
+    const cornerRadius = 20.0;
+    const scoopWidth = 58.0;
+    const scoopDrop = 34.0;
 
     final path = Path()
-      ..moveTo(0, 0)
+      ..moveTo(0, cornerRadius)
+      ..quadraticBezierTo(0, 0, cornerRadius, 0)
       ..lineTo(centerX - scoopWidth, 0)
       ..cubicTo(
-        centerX - scoopWidth * 0.5, 0,
-        centerX - scoopWidth * 0.5, scoopDrop,
+        centerX - 38, 0,
+        centerX - 34, scoopDrop,
         centerX, scoopDrop,
       )
       ..cubicTo(
-        centerX + scoopWidth * 0.5, scoopDrop,
-        centerX + scoopWidth * 0.5, 0,
+        centerX + 34, scoopDrop,
+        centerX + 38, 0,
         centerX + scoopWidth, 0,
       )
-      ..lineTo(w, 0)
+      ..lineTo(w - cornerRadius, 0)
+      ..quadraticBezierTo(w, 0, w, cornerRadius)
       ..lineTo(w, h)
       ..lineTo(0, h)
       ..close();
@@ -201,7 +230,7 @@ class _CurvedNavBarPainter extends CustomPainter {
     canvas.drawShadow(
       path,
       const Color(0xFF0F172A).withValues(alpha: 0.10),
-      8.0,
+      10.0,
       true,
     );
 
@@ -211,21 +240,23 @@ class _CurvedNavBarPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     canvas.drawPath(path, fillPaint);
 
-    // Top border outline following the curve
+    // Top border outline following the curve & rounded shoulders
     final borderPath = Path()
-      ..moveTo(0, 0)
+      ..moveTo(0, cornerRadius)
+      ..quadraticBezierTo(0, 0, cornerRadius, 0)
       ..lineTo(centerX - scoopWidth, 0)
       ..cubicTo(
-        centerX - scoopWidth * 0.5, 0,
-        centerX - scoopWidth * 0.5, scoopDrop,
+        centerX - 38, 0,
+        centerX - 34, scoopDrop,
         centerX, scoopDrop,
       )
       ..cubicTo(
-        centerX + scoopWidth * 0.5, scoopDrop,
-        centerX + scoopWidth * 0.5, 0,
+        centerX + 34, scoopDrop,
+        centerX + 38, 0,
         centerX + scoopWidth, 0,
       )
-      ..lineTo(w, 0);
+      ..lineTo(w - cornerRadius, 0)
+      ..quadraticBezierTo(w, 0, w, cornerRadius);
 
     final borderPaint = Paint()
       ..color = const Color(0xFFE2E8F0)
