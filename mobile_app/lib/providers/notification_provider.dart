@@ -252,32 +252,17 @@ class NotificationProvider extends ChangeNotifier {
     final typeUpper = n.type.toUpperCase();
     final titleUpper = n.title.toUpperCase();
 
-    // 1. Blacklist noise telemetri individual & alarm modem individual
+    // Blacklist individual telemetry traps & raw individual modem flapping
     if (typeUpper == 'TRAP_INDIVIDUAL' ||
         typeUpper == 'POLL' ||
         typeUpper == 'SNMP' ||
-        typeUpper == 'ALARM' ||
         titleUpper.contains('SNMP TRAP') ||
         titleUpper.contains('MODEM ') ||
         titleUpper.contains('ONU ')) {
       return false;
     }
 
-    // 2. Allowed notification types only:
-    final isBroadcast = ['BROADCAST', 'MAINTENANCE', 'INFO', 'WARNING', 'SECURITY', 'ANNOUNCEMENT'].contains(typeUpper);
-    final isTicket = ['TICKET', 'PROVISIONING'].contains(typeUpper);
-    final isMassOutage = ['MASS_OUTAGE', 'OUTAGE_INTERFACE', 'OUTAGE_ODP'].contains(typeUpper) ||
-        titleUpper.contains('GANGGUAN MASSAL') ||
-        titleUpper.contains('GANGGUAN PORT') ||
-        titleUpper.contains('GANGGUAN ODP') ||
-        titleUpper.contains('PUTUS KABEL');
-    final isMassRecovery = ['MASS_RECOVERY', 'RECOVERY_INTERFACE', 'RECOVERY_ODP'].contains(typeUpper) ||
-        titleUpper.contains('PEMULIHAN MASSAL') ||
-        titleUpper.contains('PEMULIHAN PORT') ||
-        titleUpper.contains('PEMULIHAN ODP') ||
-        titleUpper.contains('PULIH MASSAL');
-
-    return isBroadcast || isTicket || isMassOutage || isMassRecovery;
+    return true;
   }
 
   @override

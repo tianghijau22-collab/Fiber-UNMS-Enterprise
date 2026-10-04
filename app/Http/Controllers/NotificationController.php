@@ -17,35 +17,13 @@ class NotificationController extends Controller
 
         $baseQuery = AppNotification::query()
             ->where(function ($q) use ($userId) {
-                // 1. Tiket khusus yang ditugaskan ke user yang bersangkutan
-                $q->where(function ($sub) use ($userId) {
-                    $sub->where('user_id', $userId)
-                        ->where('type', 'TICKET');
-                })
-                // 2. Siaran Massal Admin / Pengumuman / Pemeliharaan (Broadcast)
-                ->orWhere(function ($sub) {
-                    $sub->whereNull('user_id')
-                        ->whereIn('type', ['BROADCAST', 'MAINTENANCE', 'INFO', 'WARNING', 'SECURITY', 'ANNOUNCEMENT']);
-                })
-                // 3. Gangguan Massal Interface & ODP
-                ->orWhere(function ($sub) {
-                    $sub->whereIn('type', ['MASS_OUTAGE', 'OUTAGE_INTERFACE', 'OUTAGE_ODP'])
-                        ->orWhere('title', 'like', '%GANGGUAN MASSAL%')
-                        ->orWhere('title', 'like', '%GANGGUAN PORT%')
-                        ->orWhere('title', 'like', '%GANGGUAN ODP%')
-                        ->orWhere('title', 'like', '%PUTUS KABEL%');
-                })
-                // 4. Pemulihan Gangguan Massal Interface & ODP
-                ->orWhere(function ($sub) {
-                    $sub->whereIn('type', ['MASS_RECOVERY', 'RECOVERY_INTERFACE', 'RECOVERY_ODP'])
-                        ->orWhere('title', 'like', '%PEMULIHAN MASSAL%')
-                        ->orWhere('title', 'like', '%PEMULIHAN PORT%')
-                        ->orWhere('title', 'like', '%PEMULIHAN ODP%')
-                        ->orWhere('title', 'like', '%PULIH MASSAL%');
-                });
+                // 1. Notifikasi siaran umum untuk seluruh user (user_id IS NULL)
+                $q->whereNull('user_id')
+                // 2. Atau notifikasi khusus yang ditugaskan ke user bersangkutan
+                ->orWhere('user_id', $userId);
             })
-            // Exclude noise telemetri individual / alarm modem individual
-            ->whereNotIn('type', ['TRAP_INDIVIDUAL', 'POLL', 'SNMP', 'ALARM'])
+            // Exclude noise telemetri individual & alarm modem individual mentah
+            ->whereNotIn('type', ['TRAP_INDIVIDUAL', 'POLL', 'SNMP'])
             ->where('title', 'not like', '%SNMP TRAP%')
             ->where('title', 'not like', '%Modem %')
             ->where('title', 'not like', '%ONU %');

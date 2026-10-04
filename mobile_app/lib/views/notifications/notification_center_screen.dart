@@ -46,7 +46,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
       switch (_selectedCategory) {
         case 'Info':
-          return t == 'INFO' || t == 'ANNOUNCEMENT' || t == 'BROADCAST' || title.contains('info') || title.contains('pengumuman');
+          return t == 'INFO' || t == 'ANNOUNCEMENT' || t == 'BROADCAST' || t == 'SYSTEM' || t == 'SYSTEM_ALERT' || t == 'NOC' || title.contains('info') || title.contains('pengumuman');
         case 'Promo':
           return t == 'PROMO' || title.contains('promo') || title.contains('bonus') || title.contains('diskon') || body.contains('promo');
         case 'Gangguan':
