@@ -13,33 +13,64 @@ export default function MobileAppTesting() {
   const [testingApi, setTestingApi] = useState(false);
   const [alertMsg, setAlertMsg] = useState(null);
 
-  // Mobile Login Background Banner States
-  const [bannerInfo, setBannerInfo] = useState(null);
-  const [bannerUploading, setBannerUploading] = useState(false);
-  const [bannerResetting, setBannerResetting] = useState(false);
-  const [bannerConfig, setBannerConfig] = useState({
+  // Mobile Background Banner States (Dashboard & Login)
+  const [activeBannerTab, setActiveBannerTab] = useState('dashboard'); // 'dashboard' | 'login'
+
+  const [loginBannerInfo, setLoginBannerInfo] = useState(null);
+  const [loginBannerConfig, setLoginBannerConfig] = useState({
     fit: 'cover',
     alignment_x: 0.0,
     alignment_y: 0.0,
     scale: 1.0,
     overlay_opacity: 0.0,
   });
+
+  const [dashBannerInfo, setDashBannerInfo] = useState(null);
+  const [dashBannerConfig, setDashBannerConfig] = useState({
+    fit: 'cover',
+    alignment_x: 0.0,
+    alignment_y: 0.0,
+    scale: 1.0,
+    overlay_opacity: 0.0,
+  });
+
+  const [bannerUploading, setBannerUploading] = useState(false);
+  const [bannerResetting, setBannerResetting] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
+
+  // Active banner helpers
+  const isDashboard = activeBannerTab === 'dashboard';
+  const currentBannerInfo = isDashboard ? dashBannerInfo : loginBannerInfo;
+  const currentBannerConfig = isDashboard ? dashBannerConfig : loginBannerConfig;
+  const setCurrentBannerConfig = (updater) => {
+    if (isDashboard) {
+      setDashBannerConfig(updater);
+    } else {
+      setLoginBannerConfig(updater);
+    }
+  };
 
   const fetchAppInfo = async () => {
     setLoading(true);
     try {
-      const [resApp, resBanner] = await Promise.all([
+      const [resApp, resLogin, resDash] = await Promise.all([
         axios.get('/api/app-testing/info'),
         axios.get('/api/app-testing/login-banner'),
+        axios.get('/api/app-testing/dashboard-banner'),
       ]);
       if (resApp.data && resApp.data.status === 'success') {
         setAppInfo(resApp.data.data);
       }
-      if (resBanner.data && resBanner.data.status === 'success') {
-        setBannerInfo(resBanner.data.data);
-        if (resBanner.data.data.config) {
-          setBannerConfig(resBanner.data.data.config);
+      if (resLogin.data && resLogin.data.status === 'success') {
+        setLoginBannerInfo(resLogin.data.data);
+        if (resLogin.data.data.config) {
+          setLoginBannerConfig(resLogin.data.data.config);
+        }
+      }
+      if (resDash.data && resDash.data.status === 'success') {
+        setDashBannerInfo(resDash.data.data);
+        if (resDash.data.data.config) {
+          setDashBannerConfig(resDash.data.data.config);
         }
       }
     } catch (err) {
@@ -70,23 +101,29 @@ export default function MobileAppTesting() {
     setBannerUploading(true);
     setAlertMsg(null);
 
+    const endpoint = isDashboard ? '/api/app-testing/dashboard-banner' : '/api/app-testing/login-banner';
+
     try {
-      const res = await axios.post('/api/app-testing/login-banner', formData, {
+      const res = await axios.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       if (res.data && res.data.status === 'success') {
         setAlertMsg({ type: 'success', text: res.data.message });
-        setBannerInfo((prev) => ({
-          ...prev,
+        const updated = {
           is_custom: true,
           banner_url: res.data.banner_url,
           updated_at: new Date().toISOString(),
-        }));
+        };
+        if (isDashboard) {
+          setDashBannerInfo((prev) => ({ ...prev, ...updated }));
+        } else {
+          setLoginBannerInfo((prev) => ({ ...prev, ...updated }));
+        }
       }
     } catch (err) {
       setAlertMsg({
         type: 'error',
-        text: err.response?.data?.message || 'Gagal mengunggah gambar latar belakang login.',
+        text: err.response?.data?.message || 'Gagal mengunggah gambar latar belakang.',
       });
     } finally {
       setBannerUploading(false);
@@ -95,29 +132,39 @@ export default function MobileAppTesting() {
   };
 
   const handleBannerReset = async () => {
-    if (!window.confirm('Yakin ingin mereset gambar latar belakang login ke tampilan maskot default?')) return;
+    const targetName = isDashboard ? 'dashboard' : 'login';
+    if (!window.confirm(`Yakin ingin mereset gambar latar belakang ${targetName} ke tampilan default?`)) return;
 
     setBannerResetting(true);
     setAlertMsg(null);
+    const endpoint = isDashboard ? '/api/app-testing/dashboard-banner' : '/api/app-testing/login-banner';
+
     try {
-      const res = await axios.delete('/api/app-testing/login-banner');
+      const res = await axios.delete(endpoint);
       if (res.data && res.data.status === 'success') {
         setAlertMsg({ type: 'success', text: res.data.message });
-        setBannerInfo({
+        const resetInfo = {
           is_custom: false,
           banner_url: null,
           updated_at: null,
-        });
-        setBannerConfig({
+        };
+        const resetConfig = {
           fit: 'cover',
           alignment_x: 0.0,
           alignment_y: 0.0,
           scale: 1.0,
           overlay_opacity: 0.0,
-        });
+        };
+        if (isDashboard) {
+          setDashBannerInfo(resetInfo);
+          setDashBannerConfig(resetConfig);
+        } else {
+          setLoginBannerInfo(resetInfo);
+          setLoginBannerConfig(resetConfig);
+        }
       }
     } catch (err) {
-      setAlertMsg({ type: 'error', text: 'Gagal mereset gambar latar belakang login.' });
+      setAlertMsg({ type: 'error', text: 'Gagal mereset gambar latar belakang.' });
     } finally {
       setBannerResetting(false);
     }
@@ -126,12 +173,14 @@ export default function MobileAppTesting() {
   const handleSaveBannerConfig = async () => {
     setSavingConfig(true);
     setAlertMsg(null);
+    const endpoint = isDashboard ? '/api/app-testing/dashboard-banner-config' : '/api/app-testing/login-banner-config';
+
     try {
-      const res = await axios.post('/api/app-testing/login-banner-config', bannerConfig);
+      const res = await axios.post(endpoint, currentBannerConfig);
       if (res.data && res.data.status === 'success') {
         setAlertMsg({ type: 'success', text: res.data.message });
         if (res.data.data?.config) {
-          setBannerConfig(res.data.data.config);
+          setCurrentBannerConfig(res.data.data.config);
         }
       }
     } catch (err) {
@@ -145,7 +194,7 @@ export default function MobileAppTesting() {
   };
 
   const handleResetPosition = () => {
-    setBannerConfig({
+    setCurrentBannerConfig({
       fit: 'cover',
       alignment_x: 0.0,
       alignment_y: 0.0,
@@ -344,24 +393,76 @@ export default function MobileAppTesting() {
             </div>
           </div>
 
-          {/* Kustomisasi Background / Banner Login Mobile Card */}
+          {/* Kustomisasi Background / Banner Mobile Card (Dashboard & Login) */}
           <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-5 shadow-sm space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/20 dark:border-white/20 pb-3">
+            {/* Top Sub-tabs Switcher */}
+            <div className="flex border-b border-black/20 dark:border-white/20 -mx-5 px-5 gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveBannerTab('dashboard')}
+                className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition cursor-pointer ${
+                  activeBannerTab === 'dashboard'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                Header Dashboard Mobile
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  dashBannerInfo?.is_custom 
+                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30' 
+                    : 'bg-black/5 dark:bg-white/10 text-black/60 dark:text-white/60 border border-black/10 dark:border-white/10'
+                }`}>
+                  {dashBannerInfo?.is_custom ? 'Kustom Aktif' : 'Default FONA'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveBannerTab('login')}
+                className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition cursor-pointer ${
+                  activeBannerTab === 'login'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                Header Login Mobile
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                  loginBannerInfo?.is_custom 
+                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30' 
+                    : 'bg-black/5 dark:bg-white/10 text-black/60 dark:text-white/60 border border-black/10 dark:border-white/10'
+                }`}>
+                  {loginBannerInfo?.is_custom ? 'Kustom Aktif' : 'Default Maskot'}
+                </span>
+              </button>
+            </div>
+
+            {/* Header Description & Status */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/15 dark:border-white/15 pb-3">
               <div>
                 <h2 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
-                  <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  Kustomisasi Banner Header Login Mobile
+                  {isDashboard ? 'Kustomisasi Background Header Dashboard' : 'Kustomisasi Background Header Login'}
                 </h2>
-                <p className="text-[11px] text-black/60 dark:text-white/60 mt-0.5">Ubah gambar latar belakang &amp; atur posisi/skala agar pas dengan tampilan layar aplikasi mobile FONA</p>
+                <p className="text-[11px] text-black/60 dark:text-white/60 mt-0.5">
+                  {isDashboard
+                    ? 'Ubah gambar latar belakang header dashboard FONA Mobile, atur posisi & skala secara langsung.'
+                    : 'Ubah gambar latar belakang layar login & atur posisi/skala agar pas dengan maskot/banner aplikasi.'}
+                </p>
               </div>
               <span className={`self-start sm:self-auto px-2 py-0.5 text-xs font-bold rounded ${
-                bannerInfo?.is_custom 
-                  ? 'text-indigo-600 dark:text-indigo-400 border border-indigo-500/30' 
+                currentBannerInfo?.is_custom 
+                  ? 'text-blue-600 dark:text-blue-400 border border-blue-500/30' 
                   : 'text-black/60 dark:text-white/60 border border-black/20 dark:border-white/20'
               }`}>
-                {bannerInfo?.is_custom ? 'Gambar Kustom Aktif' : 'Default Maskot FONA'}
+                {currentBannerInfo?.is_custom ? 'Gambar Kustom Aktif' : (isDashboard ? 'Tema Cyber FONA Default' : 'Default Maskot FONA')}
               </span>
             </div>
 
@@ -369,58 +470,145 @@ export default function MobileAppTesting() {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
               {/* Interactive Live Mobile Mockup Preview */}
               <div className="md:col-span-6 lg:col-span-5 flex flex-col items-center">
-                <div className="w-full max-w-[280px] bg-black dark:bg-black rounded-lg border border-black/40 dark:border-white/40 shadow-md p-2 overflow-hidden">
-                  <div className="flex items-center justify-between px-2 py-1 text-[10px] text-white/70 font-mono border-b border-white/10 mb-1.5">
-                    <span>Preview Layar HP</span>
+                <div className="w-full max-w-[280px] bg-slate-900 rounded-2xl border-2 border-slate-700 shadow-xl p-2.5 overflow-hidden">
+                  <div className="flex items-center justify-between px-2 py-1 text-[10px] text-white/70 font-mono border-b border-white/10 mb-2">
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      Preview {isDashboard ? 'Dashboard' : 'Login'}
+                    </span>
                     <span>100% Live</span>
                   </div>
 
-                  {/* Mockup Screen Header with Arc Mask */}
-                  <div className="relative w-full h-44 rounded-md overflow-hidden bg-gradient-to-b from-[#003870] to-[#0060AF] border border-white/10 flex items-center justify-center">
-                    {bannerInfo?.is_custom && bannerInfo?.banner_url ? (
-                      <div className="w-full h-full relative overflow-hidden">
-                        <img
-                          src={bannerInfo.banner_url}
-                          alt="Live Custom Banner Preview"
-                          style={{
-                            objectFit: bannerConfig.fit === 'fitWidth' ? 'fill' : bannerConfig.fit,
-                            objectPosition: `${((Number(bannerConfig.alignment_x) + 1) / 2) * 100}% ${((Number(bannerConfig.alignment_y) + 1) / 2) * 100}%`,
-                            transform: `scale(${bannerConfig.scale})`,
-                            transformOrigin: `${((Number(bannerConfig.alignment_x) + 1) / 2) * 100}% ${((Number(bannerConfig.alignment_y) + 1) / 2) * 100}%`,
-                          }}
-                          className="w-full h-full transition-transform duration-75"
-                        />
-                        {bannerConfig.overlay_opacity > 0 && (
-                          <div 
-                            className="absolute inset-0 pointer-events-none transition-colors duration-75"
-                            style={{ backgroundColor: `rgba(0,0,0,${bannerConfig.overlay_opacity})` }}
-                          />
+                  {/* Mockup Frame Container */}
+                  {isDashboard ? (
+                    /* ── DASHBOARD MOCKUP SCREEN ── */
+                    <div className="relative w-full rounded-xl overflow-hidden bg-[#F4F6F9] border border-white/10 flex flex-col">
+                      {/* Top Curved Sunset / Custom Background */}
+                      <div className="relative w-full h-36 rounded-b-[24px] overflow-hidden shadow-md">
+                        {currentBannerInfo?.is_custom && currentBannerInfo?.banner_url ? (
+                          <div className="w-full h-full relative overflow-hidden bg-slate-950">
+                            <img
+                              src={currentBannerInfo.banner_url}
+                              alt="Live Custom Dashboard Banner Preview"
+                              style={{
+                                objectFit: currentBannerConfig.fit === 'fitWidth' ? 'fill' : currentBannerConfig.fit,
+                                objectPosition: `${((Number(currentBannerConfig.alignment_x) + 1) / 2) * 100}% ${((Number(currentBannerConfig.alignment_y) + 1) / 2) * 100}%`,
+                                transform: `scale(${currentBannerConfig.scale})`,
+                                transformOrigin: `${((Number(currentBannerConfig.alignment_x) + 1) / 2) * 100}% ${((Number(currentBannerConfig.alignment_y) + 1) / 2) * 100}%`,
+                              }}
+                              className="w-full h-full transition-transform duration-75"
+                            />
+                            {currentBannerConfig.overlay_opacity > 0 && (
+                              <div 
+                                className="absolute inset-0 pointer-events-none transition-colors duration-75"
+                                style={{ backgroundColor: `rgba(0,0,0,${currentBannerConfig.overlay_opacity})` }}
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          /* Modern Default Cyber Telecom FONA Background */
+                          <div className="w-full h-full bg-gradient-to-b from-[#020B1C] via-[#002752] to-[#005B9E] p-3 flex flex-col justify-between relative overflow-hidden">
+                            {/* Cyber telecom mesh glow circles */}
+                            <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full bg-[#00AAE0]/20 blur-lg"></div>
+                            <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full bg-[#0284C7]/25 blur-md"></div>
+                            {/* Decorative Fiber Optic Wave lines */}
+                            <svg className="absolute inset-0 w-full h-full opacity-40" preserveAspectRatio="none" viewBox="0 0 200 100">
+                              <path d="M0,60 Q50,20 100,50 T200,30" fill="none" stroke="#00E5FF" strokeWidth="1.2" />
+                              <path d="M0,80 Q60,40 120,70 T200,50" fill="none" stroke="#38BDF8" strokeWidth="0.8" />
+                              <circle cx="50" cy="20" r="2" fill="#00E5FF" />
+                              <circle cx="120" cy="70" r="2.5" fill="#38BDF8" />
+                              <circle cx="160" cy="38" r="1.8" fill="#FDE68A" />
+                            </svg>
+                            <div className="relative z-10">
+                              <span className="text-[9px] font-mono text-cyan-300 font-bold tracking-wider uppercase block">Tema Default FONA</span>
+                              <span className="text-[10px] text-white/90 font-bold">Cyber Fiber Optics</span>
+                            </div>
+                            <div className="relative z-10 flex items-center justify-between text-[8px] text-white/70 font-mono">
+                              <span>Topology Wave</span>
+                              <span>High-Speed UNMS</span>
+                            </div>
+                          </div>
                         )}
-                      </div>
-                    ) : (
-                      <div className="text-center p-3 text-white">
-                        <div className="w-9 h-9 mx-auto rounded-md bg-white/20 border border-white/30 flex items-center justify-center mb-1 text-white">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                          </svg>
+
+                        {/* Top Bar Header Overlay (Logo & Bell) */}
+                        <div className="absolute top-2 left-2.5 right-2.5 flex items-center justify-between z-20 pointer-events-none">
+                          <div className="px-1.5 py-0.5 bg-black/35 backdrop-blur-xs rounded flex items-center gap-1 border border-white/20">
+                            <span className="text-[10px] font-black text-white tracking-wider">FONA</span>
+                            <span className="text-[8px] text-cyan-300 font-bold">MOBILE</span>
+                          </div>
+                          <div className="w-5 h-5 rounded-full bg-black/40 backdrop-blur-xs border border-white/25 flex items-center justify-center text-white text-[9px]">
+                            🔔
+                          </div>
                         </div>
-                        <span className="text-xs font-bold block">Maskot FONA (Default)</span>
-                        <span className="text-[10px] text-white/70">Gradasi Royal Blue + Arc Curve</span>
                       </div>
-                    )}
 
-                    {/* Top Status Indicators Mockup */}
-                    <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-xs rounded text-[9px] text-white/90 font-mono border border-white/20 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      <span>Server Online</span>
+                      {/* Mockup Preview of Hero Card ("Status Jaringan") Overlapping the Curve */}
+                      <div className="px-2.5 -mt-8 pb-3 z-10">
+                        <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
+                          <div className="bg-gradient-to-r from-[#00529E] to-[#0064B8] p-2 text-white">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-bold">Status Jaringan &amp; Pelanggan</span>
+                              <span className="text-[8px] bg-white/20 px-1 rounded">Normal</span>
+                            </div>
+                            <div className="text-xs font-black mt-1">98.5% Online</div>
+                          </div>
+                          <div className="grid grid-cols-4 gap-1 p-1.5 text-center text-[7px] text-slate-600 font-semibold bg-slate-50">
+                            <div>Alert</div>
+                            <div>OLT</div>
+                            <div>Peta GIS</div>
+                            <div>Data Node</div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                  ) : (
+                    /* ── LOGIN MOCKUP SCREEN ── */
+                    <div className="relative w-full h-44 rounded-md overflow-hidden bg-gradient-to-b from-[#003870] to-[#0060AF] border border-white/10 flex items-center justify-center">
+                      {currentBannerInfo?.is_custom && currentBannerInfo?.banner_url ? (
+                        <div className="w-full h-full relative overflow-hidden">
+                          <img
+                            src={currentBannerInfo.banner_url}
+                            alt="Live Custom Banner Preview"
+                            style={{
+                              objectFit: currentBannerConfig.fit === 'fitWidth' ? 'fill' : currentBannerConfig.fit,
+                              objectPosition: `${((Number(currentBannerConfig.alignment_x) + 1) / 2) * 100}% ${((Number(currentBannerConfig.alignment_y) + 1) / 2) * 100}%`,
+                              transform: `scale(${currentBannerConfig.scale})`,
+                              transformOrigin: `${((Number(currentBannerConfig.alignment_x) + 1) / 2) * 100}% ${((Number(currentBannerConfig.alignment_y) + 1) / 2) * 100}%`,
+                            }}
+                            className="w-full h-full transition-transform duration-75"
+                          />
+                          {currentBannerConfig.overlay_opacity > 0 && (
+                            <div 
+                              className="absolute inset-0 pointer-events-none transition-colors duration-75"
+                              style={{ backgroundColor: `rgba(0,0,0,${currentBannerConfig.overlay_opacity})` }}
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center p-3 text-white">
+                          <div className="w-9 h-9 mx-auto rounded-md bg-white/20 border border-white/30 flex items-center justify-center mb-1 text-white">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <span className="text-xs font-bold block">Maskot FONA (Default)</span>
+                          <span className="text-[10px] text-white/70">Gradasi Royal Blue + Arc Curve</span>
+                        </div>
+                      )}
 
-                    {/* Arc Curve Bottom Overlay Indicator */}
-                    <div className="absolute -bottom-4 left-0 right-0 h-8 bg-white/10 dark:bg-black/30 backdrop-blur-xs rounded-[50%] border-t border-white/20 pointer-events-none"></div>
-                  </div>
+                      {/* Top Status Indicators Mockup */}
+                      <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-xs rounded text-[9px] text-white/90 font-mono border border-white/20 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        <span>Server Online</span>
+                      </div>
+
+                      {/* Arc Curve Bottom Overlay Indicator */}
+                      <div className="absolute -bottom-4 left-0 right-0 h-8 bg-white/10 dark:bg-black/30 backdrop-blur-xs rounded-[50%] border-t border-white/20 pointer-events-none"></div>
+                    </div>
+                  )}
 
                   <div className="mt-2 text-center text-[10px] text-white/60 font-mono">
-                    Mode: {bannerConfig.fit} • Zoom: {(bannerConfig.scale * 100).toFixed(0)}%
+                    Mode: {currentBannerConfig.fit} • Zoom: {(currentBannerConfig.scale * 100).toFixed(0)}%
                   </div>
                 </div>
               </div>
@@ -428,18 +616,18 @@ export default function MobileAppTesting() {
               {/* Upload Controls & Description */}
               <div className="md:col-span-6 lg:col-span-7 space-y-3.5">
                 <div className="p-3 bg-black/5 dark:bg-white/5 rounded-md border border-black/15 dark:border-white/15 text-xs space-y-1.5">
-                  <span className="font-bold text-black dark:text-white block">Petunjuk Format Gambar:</span>
+                  <span className="font-bold text-black dark:text-white block">Petunjuk Format Gambar {isDashboard ? 'Header Dashboard' : 'Header Login'}:</span>
                   <p className="text-black/70 dark:text-white/70 leading-relaxed text-[11px]">
-                    Unggah gambar latar header (PNG, JPG, JPEG, atau WEBP maks 5MB). Rekomendasi rasio <strong className="font-bold text-black dark:text-white">4:3</strong> atau <strong className="font-bold text-black dark:text-white">16:9</strong> dengan resolusi <strong className="font-bold text-black dark:text-white">800×600 px</strong>.
+                    Unggah gambar latar header (PNG, JPG, JPEG, atau WEBP maks 5MB). Rekomendasi rasio <strong className="font-bold text-black dark:text-white">16:9</strong> atau <strong className="font-bold text-black dark:text-white">4:3</strong> dengan resolusi minimal <strong className="font-bold text-black dark:text-white">800×450 px</strong>.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2.5 pt-1">
-                  <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-md transition shadow-xs cursor-pointer">
+                  <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md transition shadow-xs cursor-pointer">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
-                    {bannerUploading ? 'Mengunggah...' : 'Ganti / Unggah Gambar'}
+                    {bannerUploading ? 'Mengunggah...' : `Ganti / Unggah Gambar ${isDashboard ? 'Dashboard' : 'Login'}`}
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/jpg,image/webp"
@@ -449,7 +637,7 @@ export default function MobileAppTesting() {
                     />
                   </label>
 
-                  {bannerInfo?.is_custom && (
+                  {currentBannerInfo?.is_custom && (
                     <button
                       type="button"
                       onClick={handleBannerReset}
@@ -467,11 +655,11 @@ export default function MobileAppTesting() {
             </div>
 
             {/* Visual Position & Scale Editor Controls */}
-            {bannerInfo?.is_custom && (
+            {currentBannerInfo?.is_custom && (
               <div className="pt-4 border-t border-black/20 dark:border-white/20 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold text-black dark:text-white uppercase tracking-wider flex items-center gap-2">
-                    <span>Pengaturan Posisi, Skala &amp; Keselarasan Mobile</span>
+                    <span>Pengaturan Posisi, Skala &amp; Keselarasan {isDashboard ? 'Dashboard' : 'Login'}</span>
                   </h3>
                   <button
                     type="button"
@@ -500,13 +688,13 @@ export default function MobileAppTesting() {
                         { label: '↓', x: 0.0, y: 1.0, title: 'Bawah Tengah' },
                         { label: '↘', x: 1.0, y: 1.0, title: 'Bawah Kanan' },
                       ].map((p, idx) => {
-                        const isActive = Math.abs(bannerConfig.alignment_x - p.x) < 0.05 && Math.abs(bannerConfig.alignment_y - p.y) < 0.05;
+                        const isActive = Math.abs(currentBannerConfig.alignment_x - p.x) < 0.05 && Math.abs(currentBannerConfig.alignment_y - p.y) < 0.05;
                         return (
                           <button
                             key={idx}
                             type="button"
                             title={p.title}
-                            onClick={() => setBannerConfig((prev) => ({ ...prev, alignment_x: p.x, alignment_y: p.y }))}
+                            onClick={() => setCurrentBannerConfig((prev) => ({ ...prev, alignment_x: p.x, alignment_y: p.y }))}
                             className={`h-8 rounded-md font-bold text-xs flex items-center justify-center transition-all cursor-pointer border ${
                               isActive
                                 ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
@@ -526,7 +714,7 @@ export default function MobileAppTesting() {
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="font-bold text-black dark:text-white">Kesesuaian Tampilan (Fit Mode):</span>
-                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{bannerConfig.fit}</span>
+                        <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">{currentBannerConfig.fit}</span>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {[
@@ -538,9 +726,9 @@ export default function MobileAppTesting() {
                           <button
                             key={mode.key}
                             type="button"
-                            onClick={() => setBannerConfig((prev) => ({ ...prev, fit: mode.key }))}
+                            onClick={() => setCurrentBannerConfig((prev) => ({ ...prev, fit: mode.key }))}
                             className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition border cursor-pointer ${
-                              bannerConfig.fit === mode.key
+                              currentBannerConfig.fit === mode.key
                                 ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                                 : 'bg-white dark:bg-black text-black dark:text-white border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/10'
                             }`}
@@ -558,7 +746,7 @@ export default function MobileAppTesting() {
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-black/70 dark:text-white/70 font-medium">Posisi Horizontal (X):</span>
                           <span className="font-mono font-bold text-black dark:text-white">
-                            {Number(bannerConfig.alignment_x) === 0 ? 'Tengah (0%)' : `${(Number(bannerConfig.alignment_x) * 100).toFixed(0)}%`}
+                            {Number(currentBannerConfig.alignment_x) === 0 ? 'Tengah (0%)' : `${(Number(currentBannerConfig.alignment_x) * 100).toFixed(0)}%`}
                           </span>
                         </div>
                         <input
@@ -566,8 +754,8 @@ export default function MobileAppTesting() {
                           min="-1"
                           max="1"
                           step="0.05"
-                          value={bannerConfig.alignment_x}
-                          onChange={(e) => setBannerConfig((prev) => ({ ...prev, alignment_x: parseFloat(e.target.value) }))}
+                          value={currentBannerConfig.alignment_x}
+                          onChange={(e) => setCurrentBannerConfig((prev) => ({ ...prev, alignment_x: parseFloat(e.target.value) }))}
                           className="w-full accent-blue-600 cursor-pointer"
                         />
                         <div className="flex justify-between text-[9px] text-black/50 dark:text-white/50 font-mono">
@@ -581,7 +769,7 @@ export default function MobileAppTesting() {
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-black/70 dark:text-white/70 font-medium">Posisi Vertikal (Y):</span>
                           <span className="font-mono font-bold text-black dark:text-white">
-                            {Number(bannerConfig.alignment_y) === 0 ? 'Tengah (0%)' : `${(Number(bannerConfig.alignment_y) * 100).toFixed(0)}%`}
+                            {Number(currentBannerConfig.alignment_y) === 0 ? 'Tengah (0%)' : `${(Number(currentBannerConfig.alignment_y) * 100).toFixed(0)}%`}
                           </span>
                         </div>
                         <input
@@ -589,8 +777,8 @@ export default function MobileAppTesting() {
                           min="-1"
                           max="1"
                           step="0.05"
-                          value={bannerConfig.alignment_y}
-                          onChange={(e) => setBannerConfig((prev) => ({ ...prev, alignment_y: parseFloat(e.target.value) }))}
+                          value={currentBannerConfig.alignment_y}
+                          onChange={(e) => setCurrentBannerConfig((prev) => ({ ...prev, alignment_y: parseFloat(e.target.value) }))}
                           className="w-full accent-blue-600 cursor-pointer"
                         />
                         <div className="flex justify-between text-[9px] text-black/50 dark:text-white/50 font-mono">
@@ -603,15 +791,15 @@ export default function MobileAppTesting() {
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-black/70 dark:text-white/70 font-medium">Zoom / Skala:</span>
-                          <span className="font-mono font-bold text-black dark:text-white">{(Number(bannerConfig.scale) * 100).toFixed(0)}%</span>
+                          <span className="font-mono font-bold text-black dark:text-white">{(Number(currentBannerConfig.scale) * 100).toFixed(0)}%</span>
                         </div>
                         <input
                           type="range"
                           min="0.5"
                           max="2.5"
                           step="0.05"
-                          value={bannerConfig.scale}
-                          onChange={(e) => setBannerConfig((prev) => ({ ...prev, scale: parseFloat(e.target.value) }))}
+                          value={currentBannerConfig.scale}
+                          onChange={(e) => setCurrentBannerConfig((prev) => ({ ...prev, scale: parseFloat(e.target.value) }))}
                           className="w-full accent-blue-600 cursor-pointer"
                         />
                         <div className="flex justify-between text-[9px] text-black/50 dark:text-white/50 font-mono">
@@ -625,15 +813,15 @@ export default function MobileAppTesting() {
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-black/70 dark:text-white/70 font-medium">Lapisan Gelap Kontras:</span>
-                          <span className="font-mono font-bold text-black dark:text-white">{(Number(bannerConfig.overlay_opacity) * 100).toFixed(0)}%</span>
+                          <span className="font-mono font-bold text-black dark:text-white">{(Number(currentBannerConfig.overlay_opacity) * 100).toFixed(0)}%</span>
                         </div>
                         <input
                           type="range"
                           min="0"
                           max="0.8"
                           step="0.05"
-                          value={bannerConfig.overlay_opacity}
-                          onChange={(e) => setBannerConfig((prev) => ({ ...prev, overlay_opacity: parseFloat(e.target.value) }))}
+                          value={currentBannerConfig.overlay_opacity}
+                          onChange={(e) => setCurrentBannerConfig((prev) => ({ ...prev, overlay_opacity: parseFloat(e.target.value) }))}
                           className="w-full accent-blue-600 cursor-pointer"
                         />
                         <div className="flex justify-between text-[9px] text-black/50 dark:text-white/50 font-mono">
@@ -654,7 +842,7 @@ export default function MobileAppTesting() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                         </svg>
-                        {savingConfig ? 'Menyimpan...' : 'Simpan Pengaturan Posisi Banner'}
+                        {savingConfig ? 'Menyimpan...' : `Simpan Pengaturan Posisi ${isDashboard ? 'Dashboard' : 'Login'}`}
                       </button>
                     </div>
                   </div>

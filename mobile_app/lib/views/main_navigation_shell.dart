@@ -171,7 +171,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
           border: const Border(top: BorderSide(color: Color(0xFFE2E8F0), width: 1)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, -2),
             ),
@@ -179,7 +179,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -187,7 +187,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                   index: 0,
                   icon: Icons.home_outlined,
                   activeIcon: Icons.home_rounded,
-                  label: 'Beranda',
+                  label: 'Home',
                 ),
                 _buildNavItem(
                   index: 1,
@@ -196,7 +196,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                   label: 'Alert',
                   hasBadgeDot: true,
                 ),
-                // Floating Center Button: Ukur & Scan
+                // Floating Center QRIS-Style Button
                 _buildCenterActionButton(),
                 _buildNavItem(
                   index: 2,
@@ -226,7 +226,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     bool hasBadgeDot = false,
   }) {
     final isSelected = _currentIndex == index;
-    final color = isSelected ? const Color(0xFF00AAE0) : const Color(0xFF64748B);
+    final color = isSelected ? const Color(0xFF005BAA) : const Color(0xFF64748B);
 
     return InkWell(
       onTap: () => setState(() => _currentIndex = index),
@@ -277,45 +277,46 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   Widget _buildCenterActionButton() {
     return GestureDetector(
       onTap: _showQuickActionSheet,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF00AAE0), Color(0xFF008BB8)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF00AAE0).withValues(alpha: 0.35),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+      child: Container(
+        width: 54,
+        height: 54,
+        decoration: const BoxDecoration(
+          color: Color(0xFFD6EEFD),
+          shape: BoxShape.circle,
+        ),
+        padding: const EdgeInsets.all(4.5),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF0075D8), Color(0xFF005BAA)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            shape: BoxShape.circle,
+          ),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                Text(
+                  'SCAN',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 7.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.4,
+                    height: 1.1,
+                  ),
                 ),
               ],
             ),
-            child: const Center(
-              child: Icon(
-                Icons.bolt_rounded,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
           ),
-          const SizedBox(height: 3),
-          const Text(
-            'Ukur & Scan',
-            style: TextStyle(
-              color: Color(0xFF00AAE0),
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

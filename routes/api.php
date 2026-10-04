@@ -222,6 +222,10 @@ Route::get('app-testing/login-banner', [\App\Http\Controllers\AppTestingControll
 Route::post('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'uploadLoginBanner']);
 Route::post('app-testing/login-banner-config', [\App\Http\Controllers\AppTestingController::class, 'saveLoginBannerConfig']);
 Route::delete('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'deleteLoginBanner']);
+Route::get('app-testing/dashboard-banner', [\App\Http\Controllers\AppTestingController::class, 'getDashboardBanner']);
+Route::post('app-testing/dashboard-banner', [\App\Http\Controllers\AppTestingController::class, 'uploadDashboardBanner']);
+Route::post('app-testing/dashboard-banner-config', [\App\Http\Controllers\AppTestingController::class, 'saveDashboardBannerConfig']);
+Route::delete('app-testing/dashboard-banner', [\App\Http\Controllers\AppTestingController::class, 'deleteDashboardBanner']);
 
 // Pop-up Alert Pemberitahuan untuk User (Super Admin & Public Active Alerts)
 Route::get('popup-alerts/active', [\App\Http\Controllers\PopupAlertController::class, 'getActiveAlerts']);

@@ -1,6 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
+import '../../core/network/dio_client.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../alerts/system_alert_screen.dart';
@@ -21,9 +22,85 @@ class HomeDashboardScreen extends StatefulWidget {
 }
 
 class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
+  // Official BRImo Corporate Palette
+  static const Color brimoBlue = Color(0xFF005BAA);        // Signature BRImo Primary Blue
+  static const Color brimoOrange = Color(0xFFF37021);      // BRImo Warm Accent Orange
+  static const Color brimoBg = Color(0xFFF4F6F9);          // Light grey background
+
+  bool _obscureBalance = false;
+  bool _obscureMetrics = false;
+
+  // Dynamic Background Banner from Web Admin
+  String? _customBannerUrl;
+  String _bannerFit = 'cover';
+  double _bannerAlignX = 0.0;
+  double _bannerAlignY = 0.0;
+  double _bannerScale = 1.0;
+  double _bannerOverlayOpacity = 0.0;
+
+  BoxFit _getBannerBoxFit(String fit) {
+    switch (fit) {
+      case 'contain':
+        return BoxFit.contain;
+      case 'fitWidth':
+        return BoxFit.fitWidth;
+      case 'fill':
+        return BoxFit.fill;
+      case 'cover':
+      default:
+        return BoxFit.cover;
+    }
+  }
+
+  Future<void> _fetchDashboardBanner() async {
+    try {
+      final res = await DioClient().dio.get('/app-testing/dashboard-banner');
+      if (res.data != null && res.data['status'] == 'success') {
+        final data = res.data['data'];
+        if (data != null && data['is_custom'] == true && data['banner_url'] != null) {
+          String bannerUrl = data['banner_url'].toString();
+          final serverBase = DioClient().dio.options.baseUrl;
+          final serverUri = Uri.tryParse(serverBase);
+          final bannerUri = Uri.tryParse(bannerUrl);
+          if (serverUri != null && bannerUri != null) {
+            bannerUrl = bannerUri.replace(
+              scheme: serverUri.scheme,
+              host: serverUri.host,
+              port: serverUri.hasPort ? serverUri.port : null,
+            ).toString();
+          }
+
+          final config = data['config'] as Map<String, dynamic>?;
+
+          if (mounted) {
+            setState(() {
+              _customBannerUrl = bannerUrl;
+              if (config != null) {
+                _bannerFit = config['fit']?.toString() ?? 'cover';
+                _bannerAlignX = double.tryParse(config['alignment_x']?.toString() ?? '0') ?? 0.0;
+                _bannerAlignY = double.tryParse(config['alignment_y']?.toString() ?? '0') ?? 0.0;
+                _bannerScale = double.tryParse(config['scale']?.toString() ?? '1.0') ?? 1.0;
+                _bannerOverlayOpacity = double.tryParse(config['overlay_opacity']?.toString() ?? '0.0') ?? 0.0;
+              }
+            });
+          }
+        } else {
+          if (mounted && _customBannerUrl != null) {
+            setState(() {
+              _customBannerUrl = null;
+            });
+          }
+        }
+      }
+    } catch (_) {
+      // Gracefully fallback to default modern FONA telecom theme
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _fetchDashboardBanner();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final dp = Provider.of<DashboardProvider>(context, listen: false);
       dp.fetchDashboardData();
@@ -44,15 +121,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
     final dashboard = Provider.of<DashboardProvider>(context);
     final notifProvider = Provider.of<NotificationProvider>(context);
-
-    final user = auth.currentUser;
-    final userName = (user?.name != null && user!.name.isNotEmpty) ? user.name : 'Jasen Ard';
-    final userDivision = (user?.division != null && user!.division.isNotEmpty)
-        ? user.division
-        : (user?.phone != null && user!.phone!.isNotEmpty ? user.phone! : 'NOC Operations');
 
     final customerStats = (dashboard.metrics?['customer_stats'] is Map) ? dashboard.metrics!['customer_stats'] as Map : {};
     final onuHealth = (dashboard.metrics?['onu_health'] is Map) ? dashboard.metrics!['onu_health'] as Map : {};
@@ -74,379 +144,331 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF00AAE0),
+      backgroundColor: brimoBg,
       body: RefreshIndicator(
-        onRefresh: () => dashboard.fetchDashboardData(),
-        color: const Color(0xFF00AAE0),
+        onRefresh: () async {
+          await Future.wait([
+            dashboard.fetchDashboardData(),
+            _fetchDashboardBanner(),
+          ]);
+        },
+        color: brimoBlue,
         backgroundColor: Colors.white,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── 1. MODERN PROFESSIONAL GRAPHIC HEADER ──
+              // ── 1. FONA CYBER TELECOM / CUSTOM WEB ADMIN BANNER & HERO CARD STACK ──
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Vector Optical Landscape Background
+                  // Dynamic Background: Web Admin Custom Image OR FONA Cyber Telecom Default
                   Container(
-                    height: topPadding + 148,
+                    height: topPadding + 220,
                     width: double.infinity,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Color(0xFF008BB8),
-                          Color(0xFF00AAE0),
-                          Color(0xFF38BDF8),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(32),
+                        bottomRight: Radius.circular(32),
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF001B3A).withValues(alpha: 0.35),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
                     ),
-                    child: CustomPaint(
-                      painter: _ModernNetworkLandscapePainter(),
-                    ),
+                    child: _customBannerUrl != null
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Container(color: const Color(0xFF002244)),
+                              Transform.scale(
+                                scale: _bannerScale,
+                                alignment: Alignment(_bannerAlignX, _bannerAlignY),
+                                child: CachedNetworkImage(
+                                  imageUrl: _customBannerUrl!,
+                                  fit: _getBannerBoxFit(_bannerFit),
+                                  alignment: Alignment(_bannerAlignX, _bannerAlignY),
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  fadeInDuration: const Duration(milliseconds: 300),
+                                  placeholder: (ctx, url) => const SizedBox.shrink(),
+                                  errorWidget: (ctx, err, stack) => const SizedBox.shrink(),
+                                ),
+                              ),
+                              if (_bannerOverlayOpacity > 0.0)
+                                Container(
+                                  color: Colors.black.withValues(alpha: _bannerOverlayOpacity.clamp(0.0, 0.9)),
+                                ),
+                            ],
+                          )
+                        : Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Color(0xFF020B1C), // Deepest obsidian cyber navy
+                                  Color(0xFF001B3A), // Deep corporate blue
+                                  Color(0xFF003875), // Rich fiber royal blue
+                                  Color(0xFF005BAA), // FONA signature primary blue
+                                  Color(0xFF008ED6), // Electric cyber cyan highlight
+                                ],
+                                stops: [0.0, 0.25, 0.55, 0.82, 1.0],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                            ),
+                            child: CustomPaint(
+                              painter: _FonaTelecomMeshPainter(),
+                            ),
+                          ),
                   ),
 
-                  // Header Top Row: User Avatar, Greeting & Actions
+                  // Header Top Row: Logo & Notification Bell
                   Positioned(
-                    top: topPadding + 8,
+                    top: topPadding + 12,
                     left: 16,
                     right: 16,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Left: Avatar + Greeting & Division
-                        Row(
-                          children: [
-                            Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
+                        // Left: Official FONA Logo
+                        Image.asset(
+                          'assets/images/fona_horizontal_light.png',
+                          height: 32,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Image.asset(
+                            'assets/images/fona_brand_v2.png',
+                            height: 32,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Text(
+                              'FONA',
+                              style: TextStyle(
                                 color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 2),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.08),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: ClipOval(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4.0),
-                                  child: Image.asset(
-                                    'assets/images/fona_brand_v2.png',
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (c, e, s) => const Icon(
-                                      Icons.person_rounded,
-                                      color: Color(0xFF00AAE0),
-                                      size: 24,
-                                    ),
-                                  ),
-                                ),
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.5,
                               ),
                             ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Hai, $userName',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: -0.2,
-                                        shadows: [
-                                          Shadow(
-                                            color: Colors.black26,
-                                            blurRadius: 4,
-                                            offset: Offset(0, 1),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Text('👋', style: TextStyle(fontSize: 14)),
-                                  ],
-                                ),
-                                const SizedBox(height: 1),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.22),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    userDivision,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                          ),
                         ),
 
-                        // Right: Notification Bell & Refresh Action
-                        Row(
-                          children: [
-                            Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () => dashboard.fetchDashboardData(),
-                                borderRadius: BorderRadius.circular(20),
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.18),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
-                                  ),
-                                  child: const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
-                                ),
-                              ),
+                        // Right: Notification Bell with Badge
+                        InkWell(
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationCenterScreen())),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.22),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
                             ),
-                            const SizedBox(width: 8),
-                            Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationCenterScreen())),
-                                borderRadius: BorderRadius.circular(20),
-                                child: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.18),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 21),
+                                if (totalUnread > 0)
+                                  Positioned(
+                                    top: 5,
+                                    right: 5,
+                                    child: Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: brimoOrange,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
                                   ),
-                                  child: Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 20),
-                                      if (totalUnread > 0)
-                                        Positioned(
-                                          top: -4,
-                                          right: -4,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFEF4444),
-                                              borderRadius: BorderRadius.circular(10),
-                                              border: Border.all(color: Colors.white, width: 1.5),
-                                            ),
-                                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                                            child: Center(
-                                              child: Text(
-                                                totalUnread > 99 ? '99+' : '$totalUnread',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w900,
-                                                  height: 1,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
                   ),
 
-                  // ── Floating Network Health Balance Card ──
+                  // ── 2. HERO CARD (Saldo Rekening Utama + 4 Quick Actions) ──
                   Positioned(
                     left: 16,
                     right: 16,
-                    bottom: -34,
+                    top: topPadding + 76,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-                            blurRadius: 18,
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 16,
                             offset: const Offset(0, 6),
                           ),
                         ],
                       ),
-                      child: Row(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          // 1. Pelanggan Online
-                          Expanded(
-                            child: InkWell(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const CustomerListScreen(initialFilter: 'ONLINE')),
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFDCFCE7),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: const Icon(
-                                      Icons.wifi_rounded,
-                                      color: Color(0xFF10B981),
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Online',
-                                          style: TextStyle(
-                                            color: Color(0xFF64748B),
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Text(
-                                          '$onlineCustomers',
-                                          style: const TextStyle(
-                                            color: Color(0xFF0F172A),
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          // Divider 1
+                          // Upper Blue Header Card: Saldo Rekening Utama
                           Container(
-                            width: 1,
-                            height: 30,
-                            color: const Color(0xFFE2E8F0),
-                            margin: const EdgeInsets.symmetric(horizontal: 10),
-                          ),
-
-                          // 2. Pelanggan Offline / Gangguan
-                          Expanded(
-                            child: InkWell(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const CustomerListScreen(initialFilter: 'OFFLINE')),
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFEF2F2),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: const Icon(
-                                      Icons.portable_wifi_off_rounded,
-                                      color: Color(0xFFEF4444),
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'Offline',
-                                          style: TextStyle(
-                                            color: Color(0xFF64748B),
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        Text(
-                                          '$offlineCustomers',
-                                          style: const TextStyle(
-                                            color: Color(0xFFEF4444),
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Color(0xFF00529E),
+                                  Color(0xFF0064B8),
                                 ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(20),
+                                topRight: Radius.circular(20),
                               ),
                             ),
-                          ),
-
-                          // Divider 2
-                          Container(
-                            width: 1,
-                            height: 30,
-                            color: const Color(0xFFE2E8F0),
-                            margin: const EdgeInsets.symmetric(horizontal: 10),
-                          ),
-
-                          // 3. Total & Explore
-                          InkWell(
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const CustomerListScreen()),
-                            ),
-                            borderRadius: BorderRadius.circular(10),
                             child: Column(
-                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                // Title & Eye Toggle
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Status Jaringan & Pelanggan',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.1,
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () => setState(() => _obscureBalance = !_obscureBalance),
+                                      child: Icon(
+                                        _obscureBalance ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                        color: Colors.white,
+                                        size: 19,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+
+                                // Value
+                                _obscureBalance
+                                    ? const Row(
+                                        children: [
+                                          Icon(Icons.circle, size: 8, color: Colors.white),
+                                          SizedBox(width: 5),
+                                          Icon(Icons.circle, size: 8, color: Colors.white),
+                                          SizedBox(width: 5),
+                                          Icon(Icons.circle, size: 8, color: Colors.white),
+                                          SizedBox(width: 5),
+                                          Icon(Icons.circle, size: 8, color: Colors.white),
+                                          SizedBox(width: 5),
+                                          Icon(Icons.circle, size: 8, color: Colors.white),
+                                          SizedBox(width: 5),
+                                          Icon(Icons.circle, size: 8, color: Colors.white),
+                                        ],
+                                      )
+                                    : Row(
+                                        children: [
+                                          Text(
+                                            '$totalCustomers Pelanggan',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: 0.2,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.22),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              '${customerOnlinePct.toStringAsFixed(1)}% Online',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                const SizedBox(height: 12),
+
+                                // Thin Divider
                                 Container(
-                                  width: 32,
-                                  height: 32,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  ),
-                                  child: const Icon(
-                                    Icons.arrow_forward_rounded,
-                                    color: Color(0xFF00AAE0),
-                                    size: 18,
+                                  height: 1,
+                                  color: Colors.white.withValues(alpha: 0.18),
+                                ),
+                                const SizedBox(height: 10),
+
+                                // Bottom Link: Semua Pelanggan & Node
+                                InkWell(
+                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen())),
+                                  child: const Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Semua Pelanggan & Node',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Semua',
-                                  style: TextStyle(
-                                    color: Color(0xFF475569),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              ],
+                            ),
+                          ),
+
+                          // Lower White Section: 4 FONA Quick Actions (Alert, OLT GPON, Peta GIS, Data Node)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _buildCardQuickAction(
+                                  label: 'Alert',
+                                  icon: Icons.notification_important_rounded,
+                                  iconBgColor: const Color(0xFFFEF2F2),
+                                  iconColor: const Color(0xFFEF4444),
+                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemAlertScreen())),
+                                ),
+                                _buildCardQuickAction(
+                                  label: 'OLT GPON',
+                                  icon: Icons.router_rounded,
+                                  iconBgColor: const Color(0xFFE0F2FE),
+                                  iconColor: const Color(0xFF0284C7),
+                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OltListScreen())),
+                                ),
+                                _buildCardQuickAction(
+                                  label: 'Peta GIS',
+                                  icon: Icons.map_rounded,
+                                  iconBgColor: const Color(0xFFE0F7FA),
+                                  iconColor: const Color(0xFF0D9488),
+                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GisMapScreen())),
+                                ),
+                                _buildCardQuickAction(
+                                  label: 'Data Node',
+                                  icon: Icons.hub_rounded,
+                                  iconBgColor: const Color(0xFFE8F5E9),
+                                  iconColor: const Color(0xFF10B981),
+                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NodesListScreen())),
                                 ),
                               ],
                             ),
@@ -458,101 +480,24 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 ],
               ),
 
-              const SizedBox(height: 46),
+              // Spacer for the hero card height with comfortable margin
+              const SizedBox(height: 115),
 
-              // ── 2. WHITE BOTTOM SHEET MAIN CONTENT ──
-              Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              // ── 3. MAIN DASHBOARD BODY CONTENT ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Grab Handle Bar
-                    Center(
-                      child: Container(
-                        width: 38,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFCBD5E1),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
+                    // ── A. FEATURE GRID (4x2 BRImo Style Squircle Buttons) ──
+                    _buildFeatureGrid(context),
+                    const SizedBox(height: 24),
+
+                    // ── D. CATATAN KEUANGANMO (Metrik Jaringan) ──
+                    _buildFinancialNotesSection(onlineCustomers, offlineCustomers),
                     const SizedBox(height: 20),
 
-                    // ── 3. 4-COLUMN ICON GRID (Clean & Professional Solid Buttons) ──
-                    GridView.count(
-                      crossAxisCount: 4,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: 0.78,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        _buildGridItem(
-                          icon: Icons.notification_important_rounded,
-                          label: 'Alert &\nGangguan',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemAlertScreen())),
-                        ),
-                        _buildGridItem(
-                          icon: Icons.router_rounded,
-                          label: 'OLT &\nPort GPON',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OltListScreen())),
-                        ),
-                        _buildGridItem(
-                          icon: Icons.grid_view_rounded,
-                          label: 'Data\nNode',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NodesListScreen())),
-                        ),
-                        _buildGridItem(
-                          icon: Icons.map_rounded,
-                          label: 'Peta Sebaran\nGIS Fiber',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GisMapScreen())),
-                        ),
-                        _buildGridItem(
-                          icon: Icons.people_alt_rounded,
-                          label: 'Data\nPelanggan',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen())),
-                        ),
-                        _buildGridItem(
-                          icon: Icons.confirmation_number_rounded,
-                          label: 'Tiket\nGangguan',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TicketListScreen())),
-                        ),
-                        _buildGridItem(
-                          icon: Icons.speed_rounded,
-                          label: 'Ukur ODP\n(OPM Log)',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OdpFormScreen())),
-                        ),
-                        _buildGridItem(
-                          icon: Icons.qr_code_scanner_rounded,
-                          label: 'Scan Barcode\nONU Modem',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OntScanScreen())),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // ── 4. EVENT / BANNER OPERASIONAL ──
-                    const Text(
-                      'Informasi Operasional',
-                      style: TextStyle(
-                        color: Color(0xFF0F172A),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildOperationalBanner(context, totalCustomers, customerOnlinePct),
-
-                    const SizedBox(height: 24),
-
-                    // ── 5. ALERT & INFO TERKINI ──
+                    // ── E. ALERT & INFO TERKINI ──
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -569,7 +514,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                           child: const Text(
                             'Lihat Semua',
                             style: TextStyle(
-                              color: Color(0xFF00AAE0),
+                              color: brimoBlue,
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                             ),
@@ -578,10 +523,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-
-                    // Dynamic Realtime Alert Cards from Backend API
                     _buildDynamicAlerts(dashboard),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 28),
                   ],
                 ),
               ),
@@ -592,53 +535,38 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  /// Modern Solid Button Grid Item
-  Widget _buildGridItem({
-    required IconData icon,
+  /// 4 Quick Action Item inside Hero Card (Transfer, BRIVA, PDAM, Pulsa/Data)
+  Widget _buildCardQuickAction({
     required String label,
+    required IconData icon,
+    required Color iconBgColor,
+    required Color iconColor,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              color: const Color(0xFF00AAE0),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF00AAE0).withValues(alpha: 0.25),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+              color: iconBgColor,
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Center(
-              child: Icon(
-                icon,
-                color: Colors.white,
-                size: 26,
-              ),
+              child: Icon(icon, color: iconColor, size: 24),
             ),
           ),
           const SizedBox(height: 6),
-          Expanded(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF1E293B),
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
-                height: 1.2,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -646,138 +574,313 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  /// Operational Banner (Match/Event Banner Style)
-  Widget _buildOperationalBanner(BuildContext context, int totalCustomers, double onlinePct) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF0F172A),
-            Color(0xFF1E293B),
-            Color(0xFF0369A1),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.14),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Background Optical Light Glow
-          Positioned(
-            right: -25,
-            bottom: -25,
-            child: Container(
-              width: 130,
-              height: 130,
-              decoration: BoxDecoration(
-                color: const Color(0xFF00AAE0).withValues(alpha: 0.22),
-                shape: BoxShape.circle,
-              ),
+  /// Feature Grid (8 items in 4x2 layout, matching FONA Mobile features)
+  Widget _buildFeatureGrid(BuildContext context) {
+    return Column(
+      children: [
+        // Row 1: Pelanggan, Tiket NOC, Ukur ODP, Scan ONU
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildBrimoGridButton(
+              label: 'Pelanggan',
+              icon: Icons.people_alt_rounded,
+              bgColor: const Color(0xFFE8F5E9),
+              iconColor: const Color(0xFF16A34A),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen())),
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(radius: 3, backgroundColor: Colors.white),
-                        SizedBox(width: 5),
-                        Text(
-                          'LIVE UNMS 24/7',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 9.5,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      ],
+            _buildBrimoGridButton(
+              label: 'Tiket NOC',
+              icon: Icons.confirmation_number_rounded,
+              bgColor: const Color(0xFFFEE2E2),
+              iconColor: const Color(0xFFE11D48),
+              hasDotBadge: true,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TicketListScreen())),
+            ),
+            _buildBrimoGridButton(
+              label: 'Ukur ODP',
+              icon: Icons.speed_rounded,
+              bgColor: const Color(0xFFE0F7FA),
+              iconColor: const Color(0xFF0891B2),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OdpFormScreen())),
+            ),
+            _buildBrimoGridButton(
+              label: 'Scan ONU',
+              icon: Icons.qr_code_scanner_rounded,
+              bgColor: const Color(0xFFE0F2FE),
+              iconColor: const Color(0xFF0284C7),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OntScanScreen())),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+
+        // Row 2: Topologi GIS, Data OLT, Data Node, Log Trap
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildBrimoGridButton(
+              label: 'Topologi GIS',
+              icon: Icons.share_location_rounded,
+              bgColor: const Color(0xFFFCE7F3),
+              iconColor: const Color(0xFFDB2777),
+              hasDotBadge: true,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GisMapScreen())),
+            ),
+            _buildBrimoGridButton(
+              label: 'Data OLT',
+              icon: Icons.settings_ethernet_rounded,
+              bgColor: const Color(0xFFEFF6FF),
+              iconColor: const Color(0xFF2563EB),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OltListScreen())),
+            ),
+            _buildBrimoGridButton(
+              label: 'Data Node',
+              icon: Icons.dns_rounded,
+              bgColor: const Color(0xFFFEF3C7),
+              iconColor: const Color(0xFFD97706),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NodesListScreen())),
+            ),
+            _buildBrimoGridButton(
+              label: 'Log Trap',
+              icon: Icons.history_toggle_off_rounded,
+              bgColor: const Color(0xFFF3E8FF),
+              iconColor: const Color(0xFF7C3AED),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemAlertScreen())),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBrimoGridButton({
+    required String label,
+    required IconData icon,
+    required Color bgColor,
+    required Color iconColor,
+    required VoidCallback onTap,
+    bool hasDotBadge = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Center(
+                    child: Icon(icon, color: iconColor, size: 26),
+                  ),
+                ),
+                if (hasDotBadge)
+                  Positioned(
+                    top: -2,
+                    right: -2,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
                     ),
                   ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF1E293B),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                height: 1.15,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-                  // NOC Center Pill
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
+  /// Kesehatan Jaringanfona Section (Side-by-side green & red split cards)
+  Widget _buildFinancialNotesSection(int onlineCustomers, int offlineCustomers) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            RichText(
+              text: const TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Kesehatan Jaringan',
+                    style: TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.support_agent_rounded, color: Color(0xFF00AAE0), size: 14),
-                        SizedBox(width: 4),
-                        Text(
-                          'NOC Center',
-                          style: TextStyle(
-                            color: Color(0xFF0F172A),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
+                  ),
+                  TextSpan(
+                    text: 'fona',
+                    style: TextStyle(
+                      color: brimoOrange,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              const Text(
-                'Monitoring Jalur Fiber & OLT',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Row(
+            ),
+            InkWell(
+              onTap: () => setState(() => _obscureMetrics = !_obscureMetrics),
+              child: Row(
                 children: [
-                  Text(
-                    '$totalCustomers Pelanggan Terdata',
+                  const Text(
+                    'Tampilkan',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(width: 3, height: 3, decoration: const BoxDecoration(color: Colors.white54, shape: BoxShape.circle)),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${onlinePct.toStringAsFixed(1)}% Stabil',
-                    style: const TextStyle(
-                      color: Color(0xFF38BDF8),
-                      fontSize: 12,
+                      color: brimoBlue,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    _obscureMetrics ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    color: brimoBlue,
+                    size: 16,
+                  ),
                 ],
               ),
-            ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          'Status Operasional Realtime 24/7',
+          style: TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+
+        // Split Cards: Pelanggan Online & Pelanggan Offline
+        Row(
+          children: [
+            // Left Card: Pelanggan Online
+            Expanded(
+              child: InkWell(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen(initialFilter: 'ONLINE'))),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Pelanggan Online',
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Icon(Icons.wifi_rounded, color: Color(0xFF10B981), size: 16),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      _obscureMetrics
+                          ? const Text('● ● ● ● ● ●', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold))
+                          : Text('$onlineCustomers Online', style: const TextStyle(color: Color(0xFF10B981), fontSize: 13, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // Right Card: Pelanggan Offline
+            Expanded(
+              child: InkWell(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen(initialFilter: 'OFFLINE'))),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Pelanggan Offline',
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Icon(Icons.portable_wifi_off_rounded, color: Color(0xFFEF4444), size: 16),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      _obscureMetrics
+                          ? const Text('● ● ● ● ● ●', style: TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.bold))
+                          : Text('$offlineCustomers Offline', style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -792,7 +895,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
@@ -1134,63 +1237,140 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   }
 }
 
-/// Modern Network Landscape Vector Background Painter
-class _ModernNetworkLandscapePainter extends CustomPainter {
+/// Modern Telecom Cyber Mesh Painter for FONA Mobile Enterprise
+/// Renders luminous optical fiber wave signals, cyber network mesh,
+/// glowing topology nodes (OLT/ODP/Nodes), and high-speed telemetry pulse dots.
+class _FonaTelecomMeshPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Soft Dynamic Optical Waves in background
-    final wavePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.12)
-      ..style = PaintingStyle.fill;
+    // 1. Ambient Radial Glow (Laser Optical Transceivers)
+    final glowCenter1 = Offset(size.width * 0.85, size.height * 0.20);
+    final glowPaint1 = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          const Color(0xFF00E5FF).withValues(alpha: 0.22),
+          const Color(0xFF00529E).withValues(alpha: 0.08),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      ).createShader(Rect.fromCircle(center: glowCenter1, radius: size.width * 0.45));
+    canvas.drawCircle(glowCenter1, size.width * 0.45, glowPaint1);
 
-    final wavePath = Path()
-      ..moveTo(0, size.height * 0.72)
-      ..cubicTo(size.width * 0.28, size.height * 0.58, size.width * 0.65, size.height * 0.82, size.width, size.height * 0.68)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(wavePath, wavePaint);
+    final glowCenter2 = Offset(size.width * 0.15, size.height * 0.70);
+    final glowPaint2 = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          const Color(0xFF0284C7).withValues(alpha: 0.25),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 1.0],
+      ).createShader(Rect.fromCircle(center: glowCenter2, radius: size.width * 0.35));
+    canvas.drawCircle(glowCenter2, size.width * 0.35, glowPaint2);
 
-    // 2. Optical Fiber Lines
-    final wirePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.22)
+    // 2. Isometric Cyber Telecom Grid Lines
+    final gridPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.04)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    for (double i = -size.width * 0.2; i <= size.width * 1.4; i += 36) {
+      canvas.drawLine(
+        Offset(i, 0),
+        Offset(i + size.height * 0.6, size.height),
+        gridPaint,
+      );
+    }
+
+    // 3. Optical Fiber Signal Wave Paths (Luminous Beziers)
+    final fiberPaint1 = Paint()
+      ..color = const Color(0xFF00E5FF).withValues(alpha: 0.45)
+      ..strokeWidth = 1.8
+      ..style = PaintingStyle.stroke;
+
+    final fiberPath1 = Path()
+      ..moveTo(0, size.height * 0.68)
+      ..cubicTo(
+        size.width * 0.28, size.height * 0.32,
+        size.width * 0.62, size.height * 0.88,
+        size.width, size.height * 0.38,
+      );
+    canvas.drawPath(fiberPath1, fiberPaint1);
+
+    final fiberPaint2 = Paint()
+      ..color = const Color(0xFF38BDF8).withValues(alpha: 0.32)
       ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke;
 
-    final wirePath1 = Path()
-      ..moveTo(0, size.height * 0.38)
-      ..cubicTo(size.width * 0.32, size.height * 0.52, size.width * 0.68, size.height * 0.28, size.width, size.height * 0.44);
-    canvas.drawPath(wirePath1, wirePaint);
+    final fiberPath2 = Path()
+      ..moveTo(0, size.height * 0.52)
+      ..cubicTo(
+        size.width * 0.34, size.height * 0.78,
+        size.width * 0.72, size.height * 0.28,
+        size.width, size.height * 0.56,
+      );
+    canvas.drawPath(fiberPath2, fiberPaint2);
 
-    // 3. Subtle Telecom Grid Silhouette
-    final towerPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.24)
-      ..strokeWidth = 1.4
+    final fiberPaint3 = Paint()
+      ..color = const Color(0xFF818CF8).withValues(alpha: 0.22)
+      ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
-    // Tower silhouette
-    final tx = size.width * 0.86;
-    final ty = size.height * 0.64;
-    final tPath = Path()
-      ..moveTo(tx - 15, ty)
-      ..lineTo(tx + 15, ty)
-      ..lineTo(tx + 4, ty - 46)
-      ..lineTo(tx - 4, ty - 46)
-      ..close()
-      ..moveTo(tx - 16, ty - 24)
-      ..lineTo(tx + 16, ty - 24)
-      ..moveTo(tx - 11, ty - 37)
-      ..lineTo(tx + 11, ty - 37);
-    canvas.drawPath(tPath, towerPaint);
+    final fiberPath3 = Path()
+      ..moveTo(0, size.height * 0.35)
+      ..cubicTo(
+        size.width * 0.45, size.height * 0.55,
+        size.width * 0.78, size.height * 0.15,
+        size.width, size.height * 0.42,
+      );
+    canvas.drawPath(fiberPath3, fiberPaint3);
 
-    // 4. Subtle Optical Nodes
-    final nodePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.3)
+    // 4. Interconnected Network Nodes (OLT / ODC / ODP Points)
+    final nodes = [
+      Offset(size.width * 0.12, size.height * 0.42),
+      Offset(size.width * 0.28, size.height * 0.32),
+      Offset(size.width * 0.48, size.height * 0.58),
+      Offset(size.width * 0.72, size.height * 0.28),
+      Offset(size.width * 0.88, size.height * 0.48),
+      Offset(size.width * 0.62, size.height * 0.75),
+    ];
+
+    final linkPaint = Paint()
+      ..color = const Color(0xFF00E5FF).withValues(alpha: 0.18)
+      ..strokeWidth = 0.8
+      ..style = PaintingStyle.stroke;
+
+    for (int i = 0; i < nodes.length - 1; i++) {
+      canvas.drawLine(nodes[i], nodes[i + 1], linkPaint);
+    }
+
+    // Draw glowing nodes
+    for (int i = 0; i < nodes.length; i++) {
+      final node = nodes[i];
+      // Outer halo
+      final haloPaint = Paint()
+        ..color = (i % 2 == 0 ? const Color(0xFF00E5FF) : const Color(0xFF38BDF8)).withValues(alpha: 0.25)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(node, 6, haloPaint);
+
+      // Core dot
+      final corePaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(node, 2.2, corePaint);
+    }
+
+    // 5. High-speed Optical Pulses (Telemetry Photons)
+    final pulsePaintGold = Paint()
+      ..color = const Color(0xFFFDE68A).withValues(alpha: 0.85)
+      ..style = PaintingStyle.fill;
+    final pulsePaintCyan = Paint()
+      ..color = const Color(0xFF00E5FF).withValues(alpha: 0.90)
       ..style = PaintingStyle.fill;
 
-    canvas.drawCircle(Offset(size.width * 0.22, size.height * 0.44), 3.0, nodePaint);
-    canvas.drawCircle(Offset(size.width * 0.54, size.height * 0.36), 3.5, nodePaint);
-    canvas.drawCircle(Offset(size.width * 0.72, size.height * 0.48), 2.8, nodePaint);
+    canvas.drawCircle(Offset(size.width * 0.20, size.height * 0.48), 2.5, pulsePaintCyan);
+    canvas.drawCircle(Offset(size.width * 0.65, size.height * 0.45), 3.0, pulsePaintGold);
+    canvas.drawCircle(Offset(size.width * 0.82, size.height * 0.62), 2.2, pulsePaintCyan);
+    canvas.drawCircle(Offset(size.width * 0.38, size.height * 0.72), 2.0, pulsePaintGold);
   }
 
   @override

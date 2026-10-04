@@ -439,6 +439,190 @@ class AppTestingController extends Controller
     }
 
     /**
+     * GET /api/app-testing/dashboard-banner
+     * Get mobile dashboard header banner image & position configuration
+     */
+    public function getDashboardBanner(Request $request)
+    {
+        $dir = public_path('branding');
+        $files = ['mobile_dashboard_banner.png', 'mobile_dashboard_banner.jpg', 'mobile_dashboard_banner.jpeg', 'mobile_dashboard_banner.webp'];
+        $baseUrl = $request->root() ?: url('/');
+        $configFile = $dir . DIRECTORY_SEPARATOR . 'mobile_dashboard_banner_config.json';
+        
+        $config = [
+            'fit'             => 'cover',
+            'alignment_x'     => 0.0,
+            'alignment_y'     => 0.0,
+            'scale'           => 1.0,
+            'overlay_opacity' => 0.0,
+        ];
+
+        if (File::exists($configFile)) {
+            $savedConfig = json_decode(File::get($configFile), true);
+            if (is_array($savedConfig)) {
+                $config = array_merge($config, $savedConfig);
+            }
+        }
+        
+        foreach ($files as $file) {
+            $path = $dir . DIRECTORY_SEPARATOR . $file;
+            if (File::exists($path)) {
+                return response()->json([
+                    'status' => 'success',
+                    'data'   => [
+                        'is_custom'   => true,
+                        'banner_url'  => rtrim($baseUrl, '/') . '/branding/' . $file . '?v=' . File::lastModified($path),
+                        'file_size'   => File::size($path),
+                        'updated_at'  => Carbon::createFromTimestamp(File::lastModified($path))->toIso8601String(),
+                        'config'      => $config,
+                    ],
+                ]);
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => [
+                'is_custom'   => false,
+                'banner_url'  => null,
+                'updated_at'  => null,
+                'config'      => $config,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/app-testing/dashboard-banner
+     * Upload custom dashboard header banner image from web admin
+     */
+    public function uploadDashboardBanner(Request $request)
+    {
+        $request->validate([
+            'banner_image' => 'required|image|mimes:jpeg,png,jpg,webp|max:5120', // Max 5MB
+        ]);
+
+        $file = $request->file('banner_image');
+        $ext = strtolower($file->getClientOriginalExtension());
+        $dir = public_path('branding');
+
+        if (!File::exists($dir)) {
+            File::makeDirectory($dir, 0755, true);
+        }
+
+        // Clean previous banner files
+        $oldFiles = ['mobile_dashboard_banner.png', 'mobile_dashboard_banner.jpg', 'mobile_dashboard_banner.jpeg', 'mobile_dashboard_banner.webp'];
+        foreach ($oldFiles as $old) {
+            $oldPath = $dir . DIRECTORY_SEPARATOR . $old;
+            if (File::exists($oldPath)) {
+                File::delete($oldPath);
+            }
+        }
+
+        $filename = 'mobile_dashboard_banner.' . $ext;
+        $file->move($dir, $filename);
+        $fullPath = $dir . DIRECTORY_SEPARATOR . $filename;
+
+        AuditLog::record(
+            'MOBILE_DASHBOARD_BANNER_UPDATE',
+            'App Testing',
+            "Administrator memperbarui gambar latar belakang header dashboard aplikasi mobile FONA.",
+            null,
+            ['filename' => $filename, 'file_size' => File::size($fullPath)]
+        );
+
+        return response()->json([
+            'status'     => 'success',
+            'message'    => 'Gambar latar belakang dashboard aplikasi mobile berhasil diperbarui!',
+            'banner_url' => url('/branding/' . $filename) . '?v=' . time(),
+        ]);
+    }
+
+    /**
+     * POST /api/app-testing/dashboard-banner-config
+     * Save position and display settings for the mobile dashboard banner
+     */
+    public function saveDashboardBannerConfig(Request $request)
+    {
+        $validated = $request->validate([
+            'fit'             => 'nullable|string|in:cover,contain,fitWidth,fill',
+            'alignment_x'     => 'nullable|numeric|between:-1,1',
+            'alignment_y'     => 'nullable|numeric|between:-1,1',
+            'scale'           => 'nullable|numeric|between:0.5,3.0',
+            'overlay_opacity' => 'nullable|numeric|between:0,0.9',
+        ]);
+
+        $dir = public_path('branding');
+        if (!File::exists($dir)) {
+            File::makeDirectory($dir, 0755, true);
+        }
+
+        $configFile = $dir . DIRECTORY_SEPARATOR . 'mobile_dashboard_banner_config.json';
+        $currentConfig = [
+            'fit'             => 'cover',
+            'alignment_x'     => 0.0,
+            'alignment_y'     => 0.0,
+            'scale'           => 1.0,
+            'overlay_opacity' => 0.0,
+        ];
+
+        if (File::exists($configFile)) {
+            $existing = json_decode(File::get($configFile), true);
+            if (is_array($existing)) {
+                $currentConfig = array_merge($currentConfig, $existing);
+            }
+        }
+
+        $updatedConfig = array_merge($currentConfig, array_filter($validated, fn($val) => $val !== null));
+        File::put($configFile, json_encode($updatedConfig, JSON_PRETTY_PRINT));
+
+        AuditLog::record(
+            'MOBILE_DASHBOARD_BANNER_CONFIG_UPDATE',
+            'App Testing',
+            "Administrator memperbarui konfigurasi tata letak dan posisi banner dashboard mobile.",
+            null,
+            $updatedConfig
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Pengaturan posisi dan tampilan banner dashboard berhasil disimpan!',
+            'data'    => [
+                'config' => $updatedConfig,
+            ],
+        ]);
+    }
+
+    /**
+     * DELETE /api/app-testing/dashboard-banner
+     * Reset dashboard header banner to default
+     */
+    public function deleteDashboardBanner(Request $request)
+    {
+        $dir = public_path('branding');
+        $oldFiles = ['mobile_dashboard_banner.png', 'mobile_dashboard_banner.jpg', 'mobile_dashboard_banner.jpeg', 'mobile_dashboard_banner.webp', 'mobile_dashboard_banner_config.json'];
+        
+        foreach ($oldFiles as $old) {
+            $oldPath = $dir . DIRECTORY_SEPARATOR . $old;
+            if (File::exists($oldPath)) {
+                File::delete($oldPath);
+            }
+        }
+
+        AuditLog::record(
+            'MOBILE_DASHBOARD_BANNER_RESET',
+            'App Testing',
+            "Administrator mereset gambar latar belakang header dashboard aplikasi mobile ke default.",
+            null,
+            []
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Latar belakang dashboard aplikasi mobile berhasil direset ke tampilan default.',
+        ]);
+    }
+
+    /**
      * Helper to format bytes to human-readable format
      */
     private function formatBytes($bytes, $precision = 2): string
