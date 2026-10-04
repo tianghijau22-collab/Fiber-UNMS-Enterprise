@@ -1,9 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../network/dio_client.dart';
+import '../../views/alerts/system_alert_screen.dart';
+import '../../views/customers/customer_list_screen.dart';
+import '../../views/gis/gis_map_screen.dart';
+import '../../views/infrastructure/nodes_list_screen.dart';
+import '../../views/notifications/notification_center_screen.dart';
+import '../../views/tickets/ticket_list_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -22,7 +29,21 @@ class NotificationService {
   bool _isInitialized = false;
   String? _fcmToken;
 
+  GlobalKey<NavigatorState>? _navigatorKey;
+  Map<String, dynamic>? _pendingNotificationData;
+
   String? get fcmToken => _fcmToken;
+
+  void setNavigatorKey(GlobalKey<NavigatorState> key) {
+    _navigatorKey = key;
+    if (_pendingNotificationData != null) {
+      final data = _pendingNotificationData!;
+      _pendingNotificationData = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        handleNotificationRouting(data);
+      });
+    }
+  }
 
   static const String channelId = 'fona_custom_alerts_v1';
   static const String channelName = 'FONA Global Alerts & Broadcast';
@@ -60,7 +81,19 @@ class NotificationService {
       await _localNotifications.initialize(
         initSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
-          debugPrint('Notification tapped: ${response.payload}');
+          debugPrint('Local Notification tapped: payload=${response.payload}');
+          if (response.payload != null && response.payload!.isNotEmpty) {
+            try {
+              final decoded = jsonDecode(response.payload!);
+              if (decoded is Map<String, dynamic>) {
+                handleNotificationRouting(decoded);
+                return;
+              }
+            } catch (_) {}
+            handleNotificationRouting({'url': response.payload});
+          } else {
+            handleNotificationRouting({'url': '/notifications'});
+          }
         },
       );
 
@@ -117,24 +150,66 @@ class NotificationService {
           syncFcmTokenWithBackend(newToken);
         });
 
-        // 7. Handle Foreground Messages
+        // 7. Handle Foreground Messages (Display local notification with full payload)
         FirebaseMessaging.onMessage.listen((RemoteMessage message) {
           debugPrint('FCM Foreground message: ${message.notification?.title}');
           final notification = message.notification;
           if (notification != null) {
+            final Map<String, dynamic> combinedPayload = Map<String, dynamic>.from(message.data);
+            if (!combinedPayload.containsKey('title')) {
+              combinedPayload['title'] = notification.title;
+            }
+            if (!combinedPayload.containsKey('body')) {
+              combinedPayload['body'] = notification.body;
+            }
+
             showLocalNotification(
               id: message.hashCode,
               title: notification.title ?? 'Pemberitahuan Sistem',
               body: notification.body ?? '',
-              payload: message.data['url']?.toString(),
+              payload: jsonEncode(combinedPayload),
             );
           }
         });
 
-        // 8. Handle Notification Opened App
+        // 8. Handle Notification Opened App when in Background
         FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-          debugPrint('FCM onMessageOpenedApp: ${message.data}');
+          debugPrint('FCM onMessageOpenedApp tapped: ${message.data}');
+          final Map<String, dynamic> combinedPayload = Map<String, dynamic>.from(message.data);
+          if (message.notification != null) {
+            combinedPayload['title'] ??= message.notification!.title;
+            combinedPayload['body'] ??= message.notification!.body;
+          }
+          handleNotificationRouting(combinedPayload);
         });
+
+        // 9. Handle Notification Opened App when Terminated / Cold Start
+        final initialMessage = await messaging.getInitialMessage();
+        if (initialMessage != null) {
+          debugPrint('FCM Initial Message (from terminated): ${initialMessage.data}');
+          final Map<String, dynamic> combinedPayload = Map<String, dynamic>.from(initialMessage.data);
+          if (initialMessage.notification != null) {
+            combinedPayload['title'] ??= initialMessage.notification!.title;
+            combinedPayload['body'] ??= initialMessage.notification!.body;
+          }
+          handleNotificationRouting(combinedPayload);
+        }
+
+        // 10. Check Local Notifications Launch Details
+        final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
+        if (launchDetails != null &&
+            launchDetails.didNotificationLaunchApp &&
+            launchDetails.notificationResponse?.payload != null) {
+          final payloadStr = launchDetails.notificationResponse!.payload!;
+          try {
+            final decoded = jsonDecode(payloadStr);
+            if (decoded is Map<String, dynamic>) {
+              handleNotificationRouting(decoded);
+            }
+          } catch (_) {
+            handleNotificationRouting({'url': payloadStr});
+          }
+        }
       } catch (fcmError) {
         debugPrint('FCM messaging setup error: $fcmError');
       }
@@ -202,6 +277,109 @@ class NotificationService {
       );
     } catch (e) {
       debugPrint('Error showing local notification: $e');
+    }
+  }
+
+  /// Routing terpadu saat notifikasi diklik
+  void handleNotificationRouting(Map<String, dynamic> data) {
+    debugPrint('🔔 [NotificationService] Routing click with data: $data');
+
+    final navState = _navigatorKey?.currentState;
+    if (navState == null) {
+      debugPrint('Navigator state not ready yet, queuing notification routing.');
+      _pendingNotificationData = data;
+      return;
+    }
+
+    final String url = (data['url'] ?? '').toString().toLowerCase();
+    final String type = (data['type'] ?? '').toString().toUpperCase();
+    final dynamic rawNodeId = data['node_id'] ?? data['nodeId'] ?? data['highlightNodeId'];
+
+    // 1. GIS / Topologi / Gangguan Jalur Optik
+    if (url.contains('/gis') ||
+        url.contains('topol') ||
+        type == 'TOPOLOGY_FAULT' ||
+        type == 'OUTAGE_INTERFACE' ||
+        type == 'OUTAGE_ODP') {
+      final int? nodeId = rawNodeId != null ? int.tryParse(rawNodeId.toString()) : null;
+      navState.push(
+        MaterialPageRoute(
+          builder: (_) => GisMapScreen(highlightNodeId: nodeId),
+        ),
+      );
+      return;
+    }
+
+    // 2. Data Node / ODP / ODC / POP
+    if (url.contains('/infrastructure') ||
+        url.contains('/nodes') ||
+        url.contains('/odp') ||
+        type == 'ODP' ||
+        type == 'ODC' ||
+        type == 'POP') {
+      String initialType = 'ODP';
+      if (type == 'ODC' || url.contains('odc')) initialType = 'ODC';
+      if (type == 'POP' || url.contains('pop')) initialType = 'POP';
+
+      navState.push(
+        MaterialPageRoute(
+          builder: (_) => NodesListScreen(initialType: initialType),
+        ),
+      );
+      return;
+    }
+
+    // 3. Pelanggan (Customers) / Tagihan / Expiring / Isolir / Offline
+    if (url.contains('/customers') ||
+        url.contains('/pelanggan') ||
+        type == 'CUSTOMER' ||
+        type == 'EXPIRING' ||
+        type == 'OFFLINE' ||
+        type == 'ISOLIR') {
+      navState.push(
+        MaterialPageRoute(
+          builder: (_) => const CustomerListScreen(),
+        ),
+      );
+      return;
+    }
+
+    // 4. Tiket Gangguan / NOC Support
+    if (url.contains('/tickets') || url.contains('/tiket') || type == 'TICKET') {
+      navState.push(
+        MaterialPageRoute(
+          builder: (_) => const TicketListScreen(),
+        ),
+      );
+      return;
+    }
+
+    // 5. System Alerts / Alarm Masal
+    if (url.contains('/alerts') || url.contains('/alarm') || type == 'MASS_OUTAGE' || type == 'ALARM') {
+      navState.push(
+        MaterialPageRoute(
+          builder: (_) => const SystemAlertScreen(),
+        ),
+      );
+      return;
+    }
+
+    // 6. Default: Buka Pusat Notifikasi (Notification Center Screen)
+    navState.push(
+      MaterialPageRoute(
+        builder: (_) => const NotificationCenterScreen(),
+      ),
+    );
+  }
+
+  /// Dipanggil saat shell utama aktif untuk mengecek antrian notifikasi
+  void consumePendingNotification(BuildContext context) {
+    if (_pendingNotificationData != null) {
+      final data = _pendingNotificationData!;
+      _pendingNotificationData = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        handleNotificationRouting(data);
+      });
     }
   }
 }

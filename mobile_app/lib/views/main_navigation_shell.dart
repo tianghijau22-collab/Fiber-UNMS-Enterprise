@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/services/notification_service.dart';
 import 'dashboard/home_dashboard_screen.dart';
 import 'gis/gis_map_screen.dart';
 import 'profile/profile_screen.dart';
@@ -12,6 +13,14 @@ class MainNavigationShell extends StatefulWidget {
 
 class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService().consumePendingNotification(context);
+    });
+  }
 
   final List<Widget> _screens = const [
     HomeDashboardScreen(), // Index 0: Home

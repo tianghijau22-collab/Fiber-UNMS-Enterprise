@@ -20,6 +20,8 @@ class CustomHttpOverrides extends HttpOverrides {
   }
 }
 
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = CustomHttpOverrides();
@@ -37,6 +39,7 @@ void main() async {
 
   // Initialize Network Client & Notification Service
   await DioClient().init();
+  NotificationService().setNavigatorKey(rootNavigatorKey);
   await NotificationService().init();
 
   runApp(const FonaMobileApp());
@@ -56,6 +59,7 @@ class FonaMobileApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
       child: MaterialApp(
+        navigatorKey: rootNavigatorKey,
         title: 'FONA Mobile',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
