@@ -251,7 +251,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
                   Row(
                     children: [
                       Expanded(
@@ -264,7 +264,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                           onTap: () => setState(() => _statusFilter = 'ALL'),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _buildStatCard(
                           label: 'Online',
@@ -275,7 +275,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                           onTap: () => setState(() => _statusFilter = _statusFilter == 'ONLINE' ? 'ALL' : 'ONLINE'),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _buildStatCard(
                           label: 'Offline',
@@ -315,9 +315,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(icon, color: Colors.white, size: 18),
+          width: 38,
+          height: 38,
+          child: Icon(icon, color: Colors.white, size: 17),
         ),
       ),
     );
@@ -334,54 +334,65 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
+        duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.18),
+            width: 1,
           ),
           boxShadow: isActive
-              ? [BoxShadow(color: _navyDeep.withValues(alpha: 0.25), blurRadius: 14, offset: const Offset(0, 6))]
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
               : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(5),
+                  padding: const EdgeInsets.all(3.5),
                   decoration: BoxDecoration(
-                    color: isActive ? _brandBlue.withValues(alpha: 0.1) : accent.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(8),
+                    color: isActive ? accent.withValues(alpha: 0.15) : accent.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(5),
                   ),
-                  child: Icon(icon, size: 13, color: isActive ? _brandBlue : accent),
+                  child: Icon(icon, size: 10.5, color: accent),
                 ),
-                const Spacer(),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: isActive ? _textBody : Colors.white.withValues(alpha: 0.85),
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 if (isActive)
-                  const Icon(Icons.check_circle_rounded, size: 14, color: _brandBlue),
+                  const Icon(Icons.check_circle_rounded, size: 11, color: _brandBlue),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 5),
             Text(
               '$count',
               style: TextStyle(
                 color: isActive ? _textDark : Colors.white,
-                fontSize: 20,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w800,
-                height: 1,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? _textBody : Colors.white.withValues(alpha: 0.75),
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
+                height: 1.1,
               ),
             ),
           ],
