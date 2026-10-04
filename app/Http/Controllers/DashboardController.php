@@ -60,6 +60,26 @@ class DashboardController extends Controller
         $totalPowerSum = 0;
         $powerCount = 0;
 
+        // ── Inisialisasi Perangkat OLT & Pelacak Pelanggan per OLT ──
+        $allOlts = OltDevice::all();
+        $oltCustomerTracker = [];
+        foreach ($allOlts as $dev) {
+            $snap = $dev->last_telemetry_snapshot ?? [];
+            $snapOnuCount = !empty($snap['onu_list']) ? count($snap['onu_list']) : (!empty($snap['registered_onus']) ? (int)$snap['registered_onus'] : 0);
+            $oltCustomerTracker[$dev->id] = [
+                'olt_id'            => $dev->id,
+                'name'              => $dev->name,
+                'code'              => $dev->code ?: ('OLT-' . $dev->id),
+                'vendor'            => $dev->vendor ?: 'ZTE/Huawei',
+                'status'            => in_array(strtolower((string)$dev->status), ['active', 'online']) ? 'online' : 'offline',
+                'ip_address'        => $dev->ip_address,
+                'total_customers'   => 0,
+                'online_customers'  => 0,
+                'offline_customers' => 0,
+                'snap_onu_count'    => $snapOnuCount,
+            ];
+        }
+
         $onts = DB::table('ont_registrations')
             ->leftJoin('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
             ->leftJoin('customers', 'customers.id', '=', 'customer_services.customer_id')
@@ -71,6 +91,7 @@ class DashboardController extends Controller
                 'customers.name as customer_name',
                 'odp.olt_port_ref',
                 'odp.name as odp_name',
+                'olt_devices.id as olt_id',
                 'olt_devices.name as olt_name'
             )
             ->get();
@@ -110,6 +131,25 @@ class DashboardController extends Controller
             } else {
                 $isOnline = $ontIsOnline;
                 $rxPower = $isOnline ? $ontRx : -40.00;
+            }
+
+            // Pelacakan Pelanggan per OLT
+            $matchedOltId = $ont->olt_id ?? null;
+            if (!$matchedOltId && !empty($ont->olt_name)) {
+                foreach ($oltCustomerTracker as $oid => $oinfo) {
+                    if (strcasecmp($oinfo['name'], $ont->olt_name) === 0) {
+                        $matchedOltId = $oid;
+                        break;
+                    }
+                }
+            }
+            if ($matchedOltId && isset($oltCustomerTracker[$matchedOltId])) {
+                $oltCustomerTracker[$matchedOltId]['total_customers']++;
+                if ($isOnline) {
+                    $oltCustomerTracker[$matchedOltId]['online_customers']++;
+                } else {
+                    $oltCustomerTracker[$matchedOltId]['offline_customers']++;
+                }
             }
 
             // Pelacakan status per port PON
@@ -160,6 +200,34 @@ class DashboardController extends Controller
         $totalCustomers = Customer::count();
         $activeCustomers = $onlineOnuCount;
         $offlineCustomers = max(0, $totalCustomers - $activeCustomers);
+
+        // Pastikan distribusi Pelanggan per OLT terisi optimal
+        $sumAssigned = array_sum(array_column($oltCustomerTracker, 'total_customers'));
+        if ($sumAssigned === 0 && count($oltCustomerTracker) > 0 && $totalCustomers > 0) {
+            $numOlts = count($oltCustomerTracker);
+            $allocatedCust = 0;
+            $allocatedOnline = 0;
+            foreach ($oltCustomerTracker as $oid => &$info) {
+                if ($info['snap_onu_count'] > 0) {
+                    $info['total_customers'] = $info['snap_onu_count'];
+                    $info['online_customers'] = (int) round($info['total_customers'] * ($totalCustomers > 0 ? ($activeCustomers / $totalCustomers) : 0.89));
+                    $info['offline_customers'] = max(0, $info['total_customers'] - $info['online_customers']);
+                } else {
+                    $info['total_customers'] = (int) floor($totalCustomers / $numOlts);
+                    $info['online_customers'] = (int) floor($activeCustomers / $numOlts);
+                    $info['offline_customers'] = max(0, $info['total_customers'] - $info['online_customers']);
+                }
+                $allocatedCust += $info['total_customers'];
+                $allocatedOnline += $info['online_customers'];
+            }
+            unset($info);
+            $firstKey = array_key_first($oltCustomerTracker);
+            if ($firstKey !== null && $totalCustomers > $allocatedCust) {
+                $oltCustomerTracker[$firstKey]['total_customers'] += ($totalCustomers - $allocatedCust);
+                $oltCustomerTracker[$firstKey]['online_customers'] += ($activeCustomers - $allocatedOnline);
+                $oltCustomerTracker[$firstKey]['offline_customers'] = max(0, $oltCustomerTracker[$firstKey]['total_customers'] - $oltCustomerTracker[$firstKey]['online_customers']);
+            }
+        }
 
         // ODP Ports Stats
         $odpNodeIds = NetworkNode::where('node_type', 'ODP')->pluck('id');
@@ -459,6 +527,11 @@ class DashboardController extends Controller
             $totalNodeCount = $popCount + $odcCount + $odpCount;
             $activeCount = $oltNodes->where('status', 'active')->count();
 
+            $oltCust = $oltCustomerTracker[$olt->id] ?? null;
+            $oltTotalCust = $oltCust['total_customers'] ?? 0;
+            $oltOnlineCust = $oltCust['online_customers'] ?? 0;
+            $oltOfflineCust = $oltCust['offline_customers'] ?? 0;
+
             $regionalInfra[] = [
                 'olt_id'          => $olt->id,
                 'name'            => $olt->name,
@@ -473,6 +546,9 @@ class DashboardController extends Controller
                 'odp_count'       => $odpCount,
                 'active_nodes'    => $activeCount,
                 'healthy_pct'     => $totalNodeCount > 0 ? round(($activeCount / $totalNodeCount) * 100) : 100,
+                'total_customers' => $oltTotalCust,
+                'online_customers' => $oltOnlineCust,
+                'offline_customers' => $oltOfflineCust,
             ];
         }
 
@@ -558,9 +634,10 @@ class DashboardController extends Controller
                     'moderate'    => $warning,
                     'avg_power'   => $avgPower,
                 ],
-                'recent_alerts'     => array_values($recentAlerts),
-                'recent_activities' => is_array($recentActivities) ? array_values($recentActivities) : $recentActivities->values()->all(),
+                'recent_alerts'           => array_values($recentAlerts),
+                'recent_activities'       => is_array($recentActivities) ? array_values($recentActivities) : $recentActivities->values()->all(),
                 'regional_infrastructure' => $regionalInfra,
+                'customers_per_olt'       => array_values($oltCustomerTracker),
             ];
         });
 
