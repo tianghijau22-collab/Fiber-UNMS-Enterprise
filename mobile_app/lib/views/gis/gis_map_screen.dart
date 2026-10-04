@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -32,10 +33,15 @@ class _GisMapScreenState extends State<GisMapScreen> {
   static const Color _border = Color(0xFFE2E8F0);
 
   final MapController _mapController = MapController();
-  List<dynamic> _nodes = [];
-  List<dynamic> _cables = [];
+  List<_GisNode> _parsedNodes = [];
+  List<Polyline> _cachedPolylines = [];
   bool _isLoading = true;
   String? _errorMessage;
+
+  // Viewport & Zoom Optimization
+  double _currentZoom = 14.5;
+  LatLngBounds? _visibleBounds;
+  Timer? _debounceTimer;
 
   // Filters & Toggles
   String _selectedFilter = 'ALL'; // 'ALL', 'ODP', 'ODC', 'POP', 'LOSS'
@@ -48,7 +54,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
   bool _showLabels = true;
   String _currentTileType = 'google_roadmap'; // 'google_roadmap', 'satellite', 'osm', 'dark'
   Position? _currentPosition;
-  Map<String, dynamic>? _selectedNode;
+  _GisNode? _selectedNode;
 
   static const Map<String, String> _tileLayers = {
     'google_roadmap': 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
@@ -65,6 +71,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -86,18 +93,29 @@ class _GisMapScreenState extends State<GisMapScreen> {
         final rawNodes = payload['nodes'] is List ? payload['nodes'] : [];
         final rawCables = payload['cables'] is List ? payload['cables'] : [];
 
-        final oltsSet = <String>{'ALL'};
+        // Pre-parse nodes in memory for ultra-fast UI rendering
+        final List<_GisNode> parsed = [];
+        final Set<String> oltsSet = {'ALL'};
+
         for (var n in rawNodes) {
-          final olt = n['olt_name'] ?? (n['olt_device'] is Map ? n['olt_device']['name'] : null);
-          if (olt != null && olt.toString().isNotEmpty) {
-            oltsSet.add(olt.toString());
+          if (n is Map<String, dynamic>) {
+            final node = _GisNode.fromMap(n);
+            if (node.latLng.latitude != 0.0 && node.latLng.longitude != 0.0) {
+              parsed.add(node);
+              if (node.oltName != '-' && node.oltName.isNotEmpty) {
+                oltsSet.add(node.oltName);
+              }
+            }
           }
         }
 
+        // Pre-build cached polylines
+        final polylines = _precomputePolylines(rawCables, parsed);
+
         if (mounted) {
           setState(() {
-            _nodes = rawNodes;
-            _cables = rawCables;
+            _parsedNodes = parsed;
+            _cachedPolylines = polylines;
             _availableOlts = oltsSet.toList();
             _isLoading = false;
           });
@@ -129,36 +147,105 @@ class _GisMapScreenState extends State<GisMapScreen> {
     }
   }
 
-  void _focusNodeById(int id) {
-    final target = _nodes.firstWhere(
-      (n) => n['id'] == id,
-      orElse: () => null,
-    );
-    if (target != null) {
-      final lat = double.tryParse(target['latitude']?.toString() ?? '');
-      final lng = double.tryParse(target['longitude']?.toString() ?? '');
-      if (lat != null && lng != null) {
-        _mapController.move(LatLng(lat, lng), 17.0);
-        _showNodeDetailSheet(target as Map<String, dynamic>);
+  List<Polyline> _precomputePolylines(List<dynamic> rawCables, List<_GisNode> nodesList) {
+    final polylines = <Polyline>[];
+    final nodeMap = {for (var n in nodesList) n.id: n};
+
+    for (var c in rawCables) {
+      final rawCoords = c['route_coordinates'];
+      List<LatLng> points = [];
+
+      if (rawCoords is List) {
+        for (var pt in rawCoords) {
+          if (pt is List && pt.length >= 2) {
+            final lat = double.tryParse(pt[0].toString());
+            final lng = double.tryParse(pt[1].toString());
+            if (lat != null && lng != null) points.add(LatLng(lat, lng));
+          } else if (pt is Map && pt['lat'] != null && pt['lng'] != null) {
+            final lat = double.tryParse(pt['lat'].toString());
+            final lng = double.tryParse(pt['lng'].toString());
+            if (lat != null && lng != null) points.add(LatLng(lat, lng));
+          }
+        }
+      } else if (rawCoords is String && rawCoords.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(rawCoords);
+          if (decoded is List) {
+            for (var pt in decoded) {
+              if (pt is List && pt.length >= 2) {
+                final lat = double.tryParse(pt[0].toString());
+                final lng = double.tryParse(pt[1].toString());
+                if (lat != null && lng != null) points.add(LatLng(lat, lng));
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (points.length < 2 && c['from_node_id'] != null && c['to_node_id'] != null) {
+        final fromNode = nodeMap[c['from_node_id']];
+        final toNode = nodeMap[c['to_node_id']];
+        if (fromNode != null && toNode != null) {
+          points = [fromNode.latLng, toNode.latLng];
+        }
+      }
+
+      if (points.length >= 2) {
+        final rawColor = (c['cable_color'] ?? '').toString().toLowerCase();
+        Color lineColor = _cyan;
+        if (rawColor.contains('biru') || rawColor.contains('blue')) {
+          lineColor = _cyan;
+        } else if (rawColor.contains('orange') || rawColor.contains('oranye')) {
+          lineColor = const Color(0xFFF97316);
+        } else if (rawColor.contains('hijau') || rawColor.contains('green')) {
+          lineColor = const Color(0xFF10B981);
+        } else if (rawColor.contains('cokelat') || rawColor.contains('brown')) {
+          lineColor = const Color(0xFF78350F);
+        }
+
+        polylines.add(
+          Polyline(
+            points: points,
+            color: lineColor.withValues(alpha: 0.85),
+            strokeWidth: 3.2,
+          ),
+        );
       }
     }
+
+    // Fallback topology link
+    if (polylines.isEmpty) {
+      for (var n in nodesList) {
+        final parentId = n.raw['parent_node_id'];
+        if (parentId != null && nodeMap.containsKey(parentId)) {
+          final parent = nodeMap[parentId]!;
+          polylines.add(
+            Polyline(
+              points: [parent.latLng, n.latLng],
+              color: _cyan.withValues(alpha: 0.65),
+              strokeWidth: 2.2,
+            ),
+          );
+        }
+      }
+    }
+
+    return polylines;
+  }
+
+  void _focusNodeById(int id) {
+    final target = _parsedNodes.firstWhere(
+      (n) => n.id == id,
+      orElse: () => _parsedNodes.first,
+    );
+    _mapController.move(target.latLng, 17.0);
+    _showNodeDetailSheet(target);
   }
 
   void _fitAllNodes() {
-    final validNodes = _nodes.where((n) {
-      final lat = double.tryParse(n['latitude']?.toString() ?? '');
-      final lng = double.tryParse(n['longitude']?.toString() ?? '');
-      return lat != null && lng != null && lat != 0 && lng != 0;
-    }).toList();
+    if (_parsedNodes.isEmpty) return;
 
-    if (validNodes.isEmpty) return;
-
-    final points = validNodes.map((n) {
-      final lat = double.parse(n['latitude'].toString());
-      final lng = double.parse(n['longitude'].toString());
-      return LatLng(lat, lng);
-    }).toList();
-
+    final points = _parsedNodes.map((n) => n.latLng).toList();
     if (points.length == 1) {
       _mapController.move(points.first, 16.0);
       return;
@@ -168,7 +255,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
     _mapController.fitCamera(
       CameraFit.bounds(
         bounds: bounds,
-        padding: const EdgeInsets.all(45),
+        padding: const EdgeInsets.all(50),
       ),
     );
   }
@@ -214,12 +301,36 @@ class _GisMapScreenState extends State<GisMapScreen> {
     }
   }
 
-  void _openGoogleMaps(dynamic lat, dynamic lng) async {
-    if (lat == null || lng == null) return;
+  void _openGoogleMaps(double lat, double lng) async {
     final url = 'https://www.google.com/maps/search/?api=1&query=$lat,$lng';
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _openStreetView(double lat, double lng) async {
+    // 1. Coba buka Google Street View native panorama app intent
+    final nativeUri = Uri.parse('google.streetview:cbll=$lat,$lng');
+    final webUri = Uri.parse('https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=$lat,$lng');
+
+    try {
+      if (await canLaunchUrl(nativeUri)) {
+        await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    } catch (_) {}
+
+    if (await canLaunchUrl(webUri)) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak dapat membuka Google Street View pada perangkat.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -279,161 +390,113 @@ class _GisMapScreenState extends State<GisMapScreen> {
     }
   }
 
-  List<Polyline> _buildCablePolylines() {
-    if (!_showCables) return [];
-    final polylines = <Polyline>[];
-
-    // 1. From explicit cables array
-    for (var c in _cables) {
-      final rawCoords = c['route_coordinates'];
-      List<LatLng> points = [];
-
-      if (rawCoords is List) {
-        for (var pt in rawCoords) {
-          if (pt is List && pt.length >= 2) {
-            final lat = double.tryParse(pt[0].toString());
-            final lng = double.tryParse(pt[1].toString());
-            if (lat != null && lng != null) points.add(LatLng(lat, lng));
-          } else if (pt is Map && pt['lat'] != null && pt['lng'] != null) {
-            final lat = double.tryParse(pt['lat'].toString());
-            final lng = double.tryParse(pt['lng'].toString());
-            if (lat != null && lng != null) points.add(LatLng(lat, lng));
-          }
-        }
-      } else if (rawCoords is String && rawCoords.isNotEmpty) {
-        try {
-          final decoded = jsonDecode(rawCoords);
-          if (decoded is List) {
-            for (var pt in decoded) {
-              if (pt is List && pt.length >= 2) {
-                final lat = double.tryParse(pt[0].toString());
-                final lng = double.tryParse(pt[1].toString());
-                if (lat != null && lng != null) points.add(LatLng(lat, lng));
-              }
-            }
-          }
-        } catch (_) {}
-      }
-
-      // If no route coordinates, link from_node to to_node
-      if (points.length < 2 && c['from_node_id'] != null && c['to_node_id'] != null) {
-        final fromNode = _nodes.firstWhere((n) => n['id'] == c['from_node_id'], orElse: () => null);
-        final toNode = _nodes.firstWhere((n) => n['id'] == c['to_node_id'], orElse: () => null);
-        if (fromNode != null && toNode != null) {
-          final fLat = double.tryParse(fromNode['latitude']?.toString() ?? '');
-          final fLng = double.tryParse(fromNode['longitude']?.toString() ?? '');
-          final tLat = double.tryParse(toNode['latitude']?.toString() ?? '');
-          final tLng = double.tryParse(toNode['longitude']?.toString() ?? '');
-          if (fLat != null && fLng != null && tLat != null && tLng != null) {
-            points = [LatLng(fLat, fLng), LatLng(tLat, tLng)];
-          }
-        }
-      }
-
-      if (points.length >= 2) {
-        final rawColor = (c['cable_color'] ?? '').toString().toLowerCase();
-        Color lineColor = _cyan;
-        if (rawColor.contains('biru') || rawColor.contains('blue')) {
-          lineColor = _cyan;
-        } else if (rawColor.contains('orange') || rawColor.contains('oranye')) {
-          lineColor = const Color(0xFFF97316);
-        } else if (rawColor.contains('hijau') || rawColor.contains('green')) {
-          lineColor = const Color(0xFF10B981);
-        } else if (rawColor.contains('cokelat') || rawColor.contains('brown')) {
-          lineColor = const Color(0xFF78350F);
-        }
-
-        polylines.add(
-          Polyline(
-            points: points,
-            color: lineColor.withValues(alpha: 0.85),
-            strokeWidth: 3.5,
-          ),
-        );
-      }
-    }
-
-    // 2. Fallback parent-child links if no explicit cables
-    if (polylines.isEmpty) {
-      final nodeMap = {for (var n in _nodes) n['id']: n};
-      for (var n in _nodes) {
-        final parentId = n['parent_node_id'];
-        if (parentId != null && nodeMap.containsKey(parentId)) {
-          final parent = nodeMap[parentId];
-          final cLat = double.tryParse(n['latitude']?.toString() ?? '');
-          final cLng = double.tryParse(n['longitude']?.toString() ?? '');
-          final pLat = double.tryParse(parent['latitude']?.toString() ?? '');
-          final pLng = double.tryParse(parent['longitude']?.toString() ?? '');
-
-          if (cLat != null && cLng != null && pLat != null && pLng != null) {
-            polylines.add(
-              Polyline(
-                points: [LatLng(pLat, pLng), LatLng(cLat, cLng)],
-                color: _cyan.withValues(alpha: 0.65),
-                strokeWidth: 2.5,
-              ),
-            );
-          }
-        }
-      }
-    }
-
-    return polylines;
-  }
-
-  List<Marker> _buildMarkers(List<dynamic> filteredNodes) {
+  List<Marker> _buildOptimizedMarkers(List<_GisNode> filteredNodes) {
     final markers = <Marker>[];
+    final bool isZoomedOut = _currentZoom < 14.0;
+    final bool isMidZoom = _currentZoom >= 14.0 && _currentZoom < 15.8;
+    final bool isZoomedIn = _currentZoom >= 15.8;
+
+    // Viewport Culling with safety margin
+    final bounds = _visibleBounds;
 
     for (var n in filteredNodes) {
-      final lat = double.tryParse(n['latitude']?.toString() ?? '');
-      final lng = double.tryParse(n['longitude']?.toString() ?? '');
-      if (lat == null || lng == null || lat == 0 || lng == 0) continue;
-
-      final type = (n['node_type'] ?? 'ODP').toString().toUpperCase();
-      final status = (n['status'] ?? 'active').toString().toLowerCase();
-      final name = (n['name'] ?? '-').toString();
-      final isSelected = _selectedNode != null && _selectedNode!['id'] == n['id'];
-
-      final rxRange = (n['rx_power_range'] ?? '').toString();
-      final isLossTotal = n['is_loss_total'] == true || rxRange.toLowerCase().contains('loss total');
-      final hasLoss = n['loss_clients'] != null && (int.tryParse(n['loss_clients'].toString()) ?? 0) > 0;
-
-      // Color Coding (Matching Web Enterprise System & Data Node)
-      Color pinColor = _getNodeTypeColor(type);
-      IconData pinIcon = Icons.grid_view_rounded;
-
-      if (type == 'POP') {
-        pinColor = const Color(0xFF4F46E5);
-        pinIcon = Icons.dns_rounded;
-      } else if (type == 'ODC') {
-        pinColor = _cyan;
-        pinIcon = Icons.account_tree_rounded;
-      } else if (type == 'ODP') {
-        if (isLossTotal) {
-          pinColor = const Color(0xFFDC2626);
-          pinIcon = Icons.warning_amber_rounded;
-        } else if (hasLoss) {
-          pinColor = const Color(0xFFD97706);
-          pinIcon = Icons.sensors_rounded;
-        } else if (status == 'maintenance') {
-          pinColor = const Color(0xFFD97706);
-          pinIcon = Icons.settings_rounded;
-        } else if (status == 'inactive' || status == 'offline') {
-          pinColor = const Color(0xFF64748B);
-          pinIcon = Icons.power_off_rounded;
+      // If bounds available and not selected, cull off-screen markers to save FPS
+      if (bounds != null && (_selectedNode == null || _selectedNode!.id != n.id)) {
+        final lat = n.latLng.latitude;
+        final lng = n.latLng.longitude;
+        // 10% buffer
+        final latBuf = (bounds.north - bounds.south).abs() * 0.1;
+        final lngBuf = (bounds.east - bounds.west).abs() * 0.1;
+        if (lat > bounds.north + latBuf ||
+            lat < bounds.south - latBuf ||
+            lng > bounds.east + lngBuf ||
+            lng < bounds.west - lngBuf) {
+          continue;
         }
       }
 
+      final isSelected = _selectedNode != null && _selectedNode!.id == n.id;
+      final Color pinColor = n.isLossTotal
+          ? const Color(0xFFDC2626)
+          : n.hasLoss
+              ? const Color(0xFFD97706)
+              : _getNodeTypeColor(n.type);
+
+      IconData pinIcon = Icons.grid_view_rounded;
+      if (n.type == 'POP') pinIcon = Icons.dns_rounded;
+      if (n.type == 'ODC') pinIcon = Icons.account_tree_rounded;
+      if (n.isLossTotal) pinIcon = Icons.warning_amber_rounded;
+
+      // ULTRA LIGHTWEIGHT MODE (When Zoomed Out)
+      if (isZoomedOut && !isSelected) {
+        markers.add(
+          Marker(
+            point: n.latLng,
+            width: 14,
+            height: 14,
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _selectedNode = n);
+                _showNodeDetailSheet(n);
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: pinColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+              ),
+            ),
+          ),
+        );
+        continue;
+      }
+
+      // MID ZOOM MODE (Compact Circle with Icon)
+      if (isMidZoom && !isSelected) {
+        markers.add(
+          Marker(
+            point: n.latLng,
+            width: 26,
+            height: 26,
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _selectedNode = n);
+                _showNodeDetailSheet(n);
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: pinColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: pinColor.withValues(alpha: 0.35),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1.5),
+                    ),
+                  ],
+                ),
+                child: Icon(pinIcon, color: Colors.white, size: 13),
+              ),
+            ),
+          ),
+        );
+        continue;
+      }
+
+      // FULL DETAILED PIN (Zoomed in or Selected)
+      final showLabel = _showLabels && (isZoomedIn || isSelected);
       markers.add(
         Marker(
-          point: LatLng(lat, lng),
-          width: _showLabels ? 110 : 38,
-          height: _showLabels ? 60 : 38,
+          point: n.latLng,
+          width: showLabel ? 110 : 38,
+          height: showLabel ? 60 : 38,
           alignment: Alignment.topCenter,
           child: GestureDetector(
             onTap: () {
-              setState(() => _selectedNode = n as Map<String, dynamic>);
-              _showNodeDetailSheet(n as Map<String, dynamic>);
+              setState(() => _selectedNode = n);
+              _showNodeDetailSheet(n);
             },
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -460,7 +523,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
                   child: Icon(pinIcon, color: Colors.white, size: isSelected ? 19 : 16),
                 ),
                 // Text Label Pill
-                if (_showLabels)
+                if (showLabel)
                   Container(
                     margin: const EdgeInsets.only(top: 3),
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -477,7 +540,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
                       ],
                     ),
                     child: Text(
-                      name,
+                      n.name,
                       style: TextStyle(
                         color: _textDark,
                         fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
@@ -498,62 +561,9 @@ class _GisMapScreenState extends State<GisMapScreen> {
   }
 
   // ───────────────────────────── DETAIL MODAL SHEET ─────────────────────────────
-  void _showNodeDetailSheet(Map<String, dynamic> node) {
-    final String name = (node['name'] ?? 'Node').toString();
-    final String type = (node['node_type'] ?? 'ODP').toString().toUpperCase();
-    final String status = (node['status'] ?? 'active').toString().toLowerCase();
-    final String address = (node['address'] ?? '-').toString();
-    final dynamic lat = node['latitude'];
-    final dynamic lng = node['longitude'];
-
-    final rxRange = (node['rx_power_range'] ?? '').toString();
-    final isLossTotal = node['is_loss_total'] == true || rxRange.toLowerCase().contains('loss total');
-    final hasLoss = node['loss_clients'] != null && (int.tryParse(node['loss_clients'].toString()) ?? 0) > 0;
-
-    final Color statusColor = _getStatusColor(status, hasLoss: hasLoss, isLossTotal: isLossTotal);
-    final String statusLabel = _getStatusLabel(status, hasLoss: hasLoss, isLossTotal: isLossTotal);
-
-    final String oltName = node['olt_name']?.toString() ??
-        (node['olt_device'] is Map ? node['olt_device']['name']?.toString() : null) ??
-        '-';
-    final String interfaceRef = (node['olt_port_ref'] ??
-            node['interface_ref'] ??
-            node['olt_interface'] ??
-            node['interface'] ??
-            '-')
-        .toString();
-
-    final String tube = (node['tube_info'] ?? node['tube'] ?? '-').toString();
-    final String core = (node['core_color'] ?? node['core'] ?? '-').toString();
-    final String? corePower = node['core_power']?.toString();
-    final parentName = node['parent_node_name'] ?? (node['parent_node'] is Map ? node['parent_node']['name'] : null);
-    final splitterName = node['splitter_ratio'] ?? (node['splitter'] is Map ? node['splitter']['ratio'] : null);
-
-    final rawCap = node['total_ports'] ?? node['capacity'];
-    final int totalPorts = (rawCap is int ? rawCap : int.tryParse(rawCap?.toString() ?? '8')) ?? 8;
-
-    int usedPorts = 0;
-    if (node['used_ports'] is int) {
-      usedPorts = node['used_ports'];
-    } else if (node['ports_used'] is int) {
-      usedPorts = node['ports_used'];
-    } else if (node['active_ports'] is int) {
-      usedPorts = node['active_ports'];
-    } else if (node['ports'] is List) {
-      usedPorts = (node['ports'] as List)
-          .where((p) =>
-              (p['status'] ?? '').toString().toLowerCase() == 'active' ||
-              p['customer_name'] != null ||
-              p['customer_id'] != null)
-          .length;
-    } else if (node['used_ports'] != null) {
-      usedPorts = int.tryParse(node['used_ports'].toString()) ?? 0;
-    }
-
-    final percentage = totalPorts > 0 ? ((usedPorts / totalPorts) * 100).round() : 0;
-    final String notes = (node['notes'] ?? node['description'] ?? '').toString().trim();
-    final totalClients = node['total_clients']?.toString();
-    final onlineClients = node['online_clients']?.toString();
+  void _showNodeDetailSheet(_GisNode node) {
+    final Color statusColor = _getStatusColor(node.status, hasLoss: node.hasLoss, isLossTotal: node.isLossTotal);
+    final String statusLabel = _getStatusLabel(node.status, hasLoss: node.hasLoss, isLossTotal: node.isLossTotal);
 
     showModalBottomSheet(
       context: context,
@@ -597,7 +607,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        type,
+                        node.type,
                         style: const TextStyle(
                           color: _brandBlue,
                           fontWeight: FontWeight.w800,
@@ -608,7 +618,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        name,
+                        node.name,
                         style: const TextStyle(
                           color: _textDark,
                           fontSize: 16.5,
@@ -655,34 +665,89 @@ class _GisMapScreenState extends State<GisMapScreen> {
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                   children: [
-                    // Section 1: Lokasi & Alamat
+                    // Section 1: Lokasi & Alamat + Street View Banner
                     _buildSectionHeader(Icons.location_on_rounded, 'Lokasi & Alamat'),
                     _buildDetailCard([
-                      _buildDetailRow('Alamat', address),
-                      if (lat != null && lng != null)
-                        _buildDetailRow(
-                          'Koordinat GPS',
-                          '$lat, $lng',
-                          actionWidget: IconButton(
-                            constraints: const BoxConstraints(),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.copy_rounded, size: 15, color: _brandBlue),
-                            tooltip: 'Salin Koordinat',
-                            onPressed: () => _copyToClipboard('$lat, $lng', 'Koordinat GPS'),
-                          ),
+                      _buildDetailRow('Alamat', node.address),
+                      _buildDetailRow(
+                        'Koordinat GPS',
+                        '${node.latLng.latitude}, ${node.latLng.longitude}',
+                        actionWidget: IconButton(
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.copy_rounded, size: 15, color: _brandBlue),
+                          tooltip: 'Salin Koordinat',
+                          onPressed: () => _copyToClipboard('${node.latLng.latitude}, ${node.latLng.longitude}', 'Koordinat GPS'),
                         ),
+                      ),
                     ]),
+
+                    const SizedBox(height: 12),
+
+                    // Street View Quick Card Action
+                    InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _openStreetView(node.latLng.latitude, node.latLng.longitude);
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFBBF7D0)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF16A34A),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.streetview_rounded, color: Colors.white, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Buka Google Street View 360°',
+                                    style: TextStyle(
+                                      color: Color(0xFF166534),
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Lihat panorama visual tiang & lokasi langsung di lapangan',
+                                    style: TextStyle(
+                                      color: Color(0xFF15803D),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded, color: Color(0xFF16A34A), size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
 
                     const SizedBox(height: 16),
 
                     // Section 2: OLT & Jalur Distribusi
                     _buildSectionHeader(Icons.router_rounded, 'Uplink & Distribusi OLT'),
                     _buildDetailCard([
-                      _buildDetailRow('Perangkat OLT', oltName),
-                      _buildDetailRow('Interface PON', interfaceRef, isAccent: true),
-                      if (parentName != null) _buildDetailRow('Parent Node', parentName.toString()),
-                      if (splitterName != '-' && splitterName != null)
-                        _buildDetailRow('Splitter Ratio', splitterName.toString()),
+                      _buildDetailRow('Perangkat OLT', node.oltName),
+                      _buildDetailRow('Interface PON', node.interfaceRef, isAccent: true),
+                      if (node.parentName != null) _buildDetailRow('Parent Node', node.parentName!),
+                      if (node.splitterName != null && node.splitterName != '-')
+                        _buildDetailRow('Splitter Ratio', node.splitterName!),
                     ]),
 
                     const SizedBox(height: 16),
@@ -690,11 +755,11 @@ class _GisMapScreenState extends State<GisMapScreen> {
                     // Section 3: Serat Optik & Redaman
                     _buildSectionHeader(Icons.cable_rounded, 'Serat Optik & Redaman'),
                     _buildDetailCard([
-                      _buildDetailRow('Tube & Core', '$tube • $core'),
-                      if (corePower != null && corePower.isNotEmpty)
-                        _buildDetailRow('Core Power (Input)', '$corePower dBm'),
-                      if (rxRange.isNotEmpty)
-                        _buildDetailRow('Redaman Pelanggan', rxRange, isAccent: true),
+                      _buildDetailRow('Tube & Core', '${node.tube} • ${node.core}'),
+                      if (node.corePower != null && node.corePower!.isNotEmpty)
+                        _buildDetailRow('Core Power (Input)', '${node.corePower} dBm'),
+                      if (node.rxRange.isNotEmpty)
+                        _buildDetailRow('Redaman Pelanggan', node.rxRange, isAccent: true),
                     ]),
 
                     const SizedBox(height: 16),
@@ -702,29 +767,29 @@ class _GisMapScreenState extends State<GisMapScreen> {
                     // Section 4: Kapasitas & Utilisasi Port
                     _buildSectionHeader(Icons.grid_view_rounded, 'Kapasitas & Utilisasi Port'),
                     _buildDetailCard([
-                      _buildDetailRow('Port Terisi', '$usedPorts dari $totalPorts Port ($percentage%)'),
+                      _buildDetailRow('Port Terisi', '${node.usedPorts} dari ${node.totalPorts} Port (${node.percentage}%)'),
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
-                            value: totalPorts > 0 ? (usedPorts / totalPorts).clamp(0.0, 1.0) : 0,
+                            value: node.totalPorts > 0 ? (node.usedPorts / node.totalPorts).clamp(0.0, 1.0) : 0,
                             backgroundColor: _border,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              percentage > 85 ? AppColors.danger : _brandBlue,
+                              node.percentage > 85 ? AppColors.danger : _brandBlue,
                             ),
                             minHeight: 6,
                           ),
                         ),
                       ),
-                      if (totalClients != null && totalClients != '0')
+                      if (node.totalClients != null && node.totalClients != '0')
                         _buildDetailRow(
                           'Pelanggan Terhubung',
-                          '$onlineClients / $totalClients Online',
+                          '${node.onlineClients ?? '0'} / ${node.totalClients} Online',
                         ),
                     ]),
 
-                    if (notes.isNotEmpty) ...[
+                    if (node.notes.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       _buildSectionHeader(Icons.notes_rounded, 'Catatan / Konfigurasi'),
                       Container(
@@ -736,7 +801,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
                           border: Border.all(color: _border),
                         ),
                         child: Text(
-                          notes,
+                          node.notes,
                           style: const TextStyle(
                             color: _textDark,
                             fontSize: 13,
@@ -753,36 +818,56 @@ class _GisMapScreenState extends State<GisMapScreen> {
 
               // Bottom Persistent Actions
               Container(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   border: Border(top: BorderSide(color: _border)),
                 ),
                 child: Row(
                   children: [
-                    if (lat != null && lng != null) ...[
-                      Expanded(
-                        flex: 1,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: _cyan,
-                            side: const BorderSide(color: _cyan, width: 1.2),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _openGoogleMaps(lat, lng);
-                          },
-                          icon: const Icon(Icons.near_me_rounded, size: 16),
-                          label: const Text(
-                            'Maps',
-                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                          ),
+                    // Tombol Rute Maps
+                    Expanded(
+                      flex: 1,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _cyan,
+                          side: const BorderSide(color: _cyan, width: 1.2),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _openGoogleMaps(node.latLng.latitude, node.latLng.longitude);
+                        },
+                        icon: const Icon(Icons.near_me_rounded, size: 16),
+                        label: const Text(
+                          'Rute',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                    ],
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Tombol Street View
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF16A34A),
+                        side: const BorderSide(color: Color(0xFF16A34A), width: 1.2),
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _openStreetView(node.latLng.latitude, node.latLng.longitude);
+                      },
+                      icon: const Icon(Icons.streetview_rounded, size: 16),
+                      label: const Text(
+                        'Street View',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
                     // Shortcut Ukur OPM
                     IconButton(
                       tooltip: 'Ukur OPM Log',
@@ -797,16 +882,17 @@ class _GisMapScreenState extends State<GisMapScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (_) => OdpFormScreen(
-                              prefilledOdpCode: node['code']?.toString(),
-                              prefilledOdpName: name,
-                              prefilledOdpNodeId: node['id'],
+                              prefilledOdpCode: node.code,
+                              prefilledOdpName: node.name,
+                              prefilledOdpNodeId: node.id,
                             ),
                           ),
                         );
                       },
                       icon: const Icon(Icons.edit_note_rounded, color: _textBody, size: 20),
                     ),
-                    if (type == 'ODP') ...[
+
+                    if (node.type == 'ODP') ...[
                       const SizedBox(width: 8),
                       Expanded(
                         flex: 2,
@@ -820,16 +906,14 @@ class _GisMapScreenState extends State<GisMapScreen> {
                           ),
                           onPressed: () {
                             Navigator.pop(ctx);
-                            final rawId = node['id'];
-                            final nodeId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '0') ?? 0;
                             OdpPortMonitoringSheet.show(
                               context,
-                              nodeId: nodeId,
-                              nodeName: name,
-                              nodeType: type,
-                              totalPorts: totalPorts,
-                              oltName: oltName != '-' ? oltName : null,
-                              interfaceRef: interfaceRef != '-' ? interfaceRef : null,
+                              nodeId: node.id,
+                              nodeName: node.name,
+                              nodeType: node.type,
+                              totalPorts: node.totalPorts,
+                              oltName: node.oltName != '-' ? node.oltName : null,
+                              interfaceRef: node.interfaceRef != '-' ? node.interfaceRef : null,
                             );
                           },
                           icon: const Icon(Icons.speed_rounded, size: 16),
@@ -1081,50 +1165,28 @@ class _GisMapScreenState extends State<GisMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredNodes = _nodes.where((n) {
-      final type = (n['node_type'] ?? '').toString().toUpperCase();
-      final name = (n['name'] ?? '').toString().toLowerCase();
-      final code = (n['code'] ?? '').toString().toLowerCase();
-      final address = (n['address'] ?? '').toString().toLowerCase();
-      final olt = (n['olt_name'] ?? (n['olt_device'] is Map ? n['olt_device']['name'] : '')).toString();
-
-      final rxRange = (n['rx_power_range'] ?? '').toString();
-      final isLossTotal = n['is_loss_total'] == true || rxRange.toLowerCase().contains('loss total');
-      final hasLoss = n['loss_clients'] != null && (int.tryParse(n['loss_clients'].toString()) ?? 0) > 0;
-
+    final filteredNodes = _parsedNodes.where((n) {
       // Filter Type
-      if (_selectedFilter == 'ODP' && type != 'ODP') return false;
-      if (_selectedFilter == 'ODC' && type != 'ODC') return false;
-      if (_selectedFilter == 'POP' && type != 'POP') return false;
-      if (_selectedFilter == 'LOSS' && !isLossTotal && !hasLoss) return false;
+      if (_selectedFilter == 'ODP' && n.type != 'ODP') return false;
+      if (_selectedFilter == 'ODC' && n.type != 'ODC') return false;
+      if (_selectedFilter == 'POP' && n.type != 'POP') return false;
+      if (_selectedFilter == 'LOSS' && !n.isLossTotal && !n.hasLoss) return false;
 
       // Filter OLT
-      if (_selectedOlt != 'ALL' && olt != _selectedOlt) return false;
+      if (_selectedOlt != 'ALL' && n.oltName != _selectedOlt) return false;
 
       // Search Query
       if (_searchQuery.isNotEmpty) {
-        final q = _searchQuery.toLowerCase().trim();
-        final qClean = q.replaceAll(RegExp(r'[^a-z0-9]'), '');
-        final nameClean = name.replaceAll(RegExp(r'[^a-z0-9]'), '');
-        final codeClean = code.replaceAll(RegExp(r'[^a-z0-9]'), '');
-
-        final directMatch = name.contains(q) || code.contains(q) || address.contains(q);
-        final cleanMatch = qClean.isNotEmpty && (nameClean.contains(qClean) || codeClean.contains(qClean));
-        if (!directMatch && !cleanMatch) return false;
+        if (!n.searchIndex.contains(_searchQuery)) return false;
       }
 
       return true;
     }).toList();
 
-    final odpCount = _nodes.where((n) => (n['node_type'] ?? '').toString().toUpperCase() == 'ODP').length;
-    final odcCount = _nodes.where((n) => (n['node_type'] ?? '').toString().toUpperCase() == 'ODC').length;
-    final popCount = _nodes.where((n) => (n['node_type'] ?? '').toString().toUpperCase() == 'POP').length;
-    final lossCount = _nodes.where((n) {
-      final rxRange = (n['rx_power_range'] ?? '').toString();
-      final isLossTotal = n['is_loss_total'] == true || rxRange.toLowerCase().contains('loss total');
-      final hasLoss = n['loss_clients'] != null && (int.tryParse(n['loss_clients'].toString()) ?? 0) > 0;
-      return isLossTotal || hasLoss;
-    }).length;
+    final odpCount = _parsedNodes.where((n) => n.type == 'ODP').length;
+    final odcCount = _parsedNodes.where((n) => n.type == 'ODC').length;
+    final popCount = _parsedNodes.where((n) => n.type == 'POP').length;
+    final lossCount = _parsedNodes.where((n) => n.isLossTotal || n.hasLoss).length;
 
     return Scaffold(
       backgroundColor: _bg,
@@ -1160,19 +1222,36 @@ class _GisMapScreenState extends State<GisMapScreen> {
                     )
                   : FlutterMap(
                       mapController: _mapController,
-                      options: const MapOptions(
-                        initialCenter: LatLng(-0.789275, 100.65345), // Default Solok
+                      options: MapOptions(
+                        initialCenter: const LatLng(-0.789275, 100.65345), // Default Solok
                         initialZoom: 14.5,
                         minZoom: 3.0,
                         maxZoom: 19.0,
+                        onPositionChanged: (pos, hasGesture) {
+                          final newZoom = pos.zoom;
+                          final newBounds = pos.visibleBounds;
+                          if ((newZoom - _currentZoom).abs() > 0.4 || _visibleBounds == null) {
+                            _debounceTimer?.cancel();
+                            _debounceTimer = Timer(const Duration(milliseconds: 100), () {
+                              if (mounted) {
+                                setState(() {
+                                  _currentZoom = newZoom;
+                                  _visibleBounds = newBounds;
+                                });
+                              }
+                            });
+                          }
+                        },
                       ),
                       children: [
                         TileLayer(
                           urlTemplate: _tileLayers[_currentTileType] ?? _tileLayers['google_roadmap']!,
                           userAgentPackageName: 'com.fiberunms.app',
+                          keepBuffer: 3,
+                          panBuffer: 1,
                         ),
-                        PolylineLayer(polylines: _buildCablePolylines()),
-                        MarkerLayer(markers: _buildMarkers(filteredNodes)),
+                        if (_showCables) PolylineLayer(polylines: _cachedPolylines),
+                        MarkerLayer(markers: _buildOptimizedMarkers(filteredNodes)),
                         if (_currentPosition != null)
                           MarkerLayer(
                             markers: [
@@ -1234,7 +1313,13 @@ class _GisMapScreenState extends State<GisMapScreen> {
                         Expanded(
                           child: TextField(
                             controller: _searchCtrl,
-                            onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                            onChanged: (val) {
+                              final q = val.trim().toLowerCase();
+                              _debounceTimer?.cancel();
+                              _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+                                if (mounted) setState(() => _searchQuery = q);
+                              });
+                            },
                             style: const TextStyle(color: _textDark, fontSize: 13.5, fontWeight: FontWeight.w600),
                             decoration: const InputDecoration(
                               hintText: 'Cari nama, kode, OLT, atau alamat...',
@@ -1244,7 +1329,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
                             ),
                           ),
                         ),
-                        if (_searchQuery.isNotEmpty)
+                        if (_searchCtrl.text.isNotEmpty)
                           IconButton(
                             icon: const Icon(Icons.clear_rounded, color: _textMuted, size: 18),
                             onPressed: () {
@@ -1269,7 +1354,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
                     physics: const BouncingScrollPhysics(),
                     child: Row(
                       children: [
-                        _buildFilterPill('Semua (${_nodes.length})', 'ALL', _brandBlue),
+                        _buildFilterPill('Semua (${_parsedNodes.length})', 'ALL', _brandBlue),
                         const SizedBox(width: 6),
                         _buildFilterPill('ODP ($odpCount)', 'ODP', const Color(0xFF059669)),
                         const SizedBox(width: 6),
@@ -1394,6 +1479,153 @@ class _GisMapScreenState extends State<GisMapScreen> {
           child: Icon(icon, color: iconColor, size: 20),
         ),
       ),
+    );
+  }
+}
+
+/// Pre-parsed lightweight Node data class for high-performance rendering & searching
+class _GisNode {
+  final Map<String, dynamic> raw;
+  final int id;
+  final String name;
+  final String code;
+  final String type; // 'ODP', 'ODC', 'POP'
+  final String status;
+  final String address;
+  final LatLng latLng;
+  final String oltName;
+  final String interfaceRef;
+  final String tube;
+  final String core;
+  final String? corePower;
+  final String? parentName;
+  final String? splitterName;
+  final int totalPorts;
+  final int usedPorts;
+  final int percentage;
+  final String rxRange;
+  final bool isLossTotal;
+  final bool hasLoss;
+  final String notes;
+  final String? totalClients;
+  final String? onlineClients;
+  final String searchIndex;
+
+  _GisNode({
+    required this.raw,
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.type,
+    required this.status,
+    required this.address,
+    required this.latLng,
+    required this.oltName,
+    required this.interfaceRef,
+    required this.tube,
+    required this.core,
+    this.corePower,
+    this.parentName,
+    this.splitterName,
+    required this.totalPorts,
+    required this.usedPorts,
+    required this.percentage,
+    required this.rxRange,
+    required this.isLossTotal,
+    required this.hasLoss,
+    required this.notes,
+    this.totalClients,
+    this.onlineClients,
+    required this.searchIndex,
+  });
+
+  factory _GisNode.fromMap(Map<String, dynamic> n) {
+    final rawId = n['id'];
+    final id = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '0') ?? 0;
+    final name = (n['name'] ?? 'Node').toString();
+    final code = (n['code'] ?? '').toString();
+    final type = (n['node_type'] ?? 'ODP').toString().toUpperCase();
+    final status = (n['status'] ?? 'active').toString().toLowerCase();
+    final address = (n['address'] ?? '-').toString();
+
+    final lat = double.tryParse(n['latitude']?.toString() ?? '') ?? 0.0;
+    final lng = double.tryParse(n['longitude']?.toString() ?? '') ?? 0.0;
+
+    final oltName = n['olt_name']?.toString() ??
+        (n['olt_device'] is Map ? n['olt_device']['name']?.toString() : null) ??
+        '-';
+    final interfaceRef = (n['olt_port_ref'] ??
+            n['interface_ref'] ??
+            n['olt_interface'] ??
+            n['interface'] ??
+            '-')
+        .toString();
+
+    final tube = (n['tube_info'] ?? n['tube'] ?? '-').toString();
+    final core = (n['core_color'] ?? n['core'] ?? '-').toString();
+    final corePower = n['core_power']?.toString();
+    final parentName = n['parent_node_name']?.toString() ??
+        (n['parent_node'] is Map ? n['parent_node']['name']?.toString() : null);
+    final splitterName = n['splitter_ratio']?.toString() ??
+        (n['splitter'] is Map ? n['splitter']['ratio']?.toString() : null);
+
+    final rawCap = n['total_ports'] ?? n['capacity'];
+    final totalPorts = (rawCap is int ? rawCap : int.tryParse(rawCap?.toString() ?? '8')) ?? 8;
+
+    int usedPorts = 0;
+    if (n['used_ports'] is int) {
+      usedPorts = n['used_ports'];
+    } else if (n['ports_used'] is int) {
+      usedPorts = n['ports_used'];
+    } else if (n['active_ports'] is int) {
+      usedPorts = n['active_ports'];
+    } else if (n['ports'] is List) {
+      usedPorts = (n['ports'] as List)
+          .where((p) =>
+              (p['status'] ?? '').toString().toLowerCase() == 'active' ||
+              p['customer_name'] != null ||
+              p['customer_id'] != null)
+          .length;
+    } else if (n['used_ports'] != null) {
+      usedPorts = int.tryParse(n['used_ports'].toString()) ?? 0;
+    }
+
+    final percentage = totalPorts > 0 ? ((usedPorts / totalPorts) * 100).round() : 0;
+    final rxRange = (n['rx_power_range'] ?? '').toString();
+    final isLossTotal = n['is_loss_total'] == true || rxRange.toLowerCase().contains('loss total');
+    final hasLoss = n['loss_clients'] != null && (int.tryParse(n['loss_clients'].toString()) ?? 0) > 0;
+    final notes = (n['notes'] ?? n['description'] ?? '').toString().trim();
+    final totalClients = n['total_clients']?.toString();
+    final onlineClients = n['online_clients']?.toString();
+
+    final searchIndex = '$name $code $address $oltName $interfaceRef'.toLowerCase();
+
+    return _GisNode(
+      raw: n,
+      id: id,
+      name: name,
+      code: code,
+      type: type,
+      status: status,
+      address: address,
+      latLng: LatLng(lat, lng),
+      oltName: oltName,
+      interfaceRef: interfaceRef,
+      tube: tube,
+      core: core,
+      corePower: corePower,
+      parentName: parentName,
+      splitterName: splitterName,
+      totalPorts: totalPorts,
+      usedPorts: usedPorts,
+      percentage: percentage,
+      rxRange: rxRange,
+      isLossTotal: isLossTotal,
+      hasLoss: hasLoss,
+      notes: notes,
+      totalClients: totalClients,
+      onlineClients: onlineClients,
+      searchIndex: searchIndex,
     );
   }
 }
