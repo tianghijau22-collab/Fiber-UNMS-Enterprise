@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/api_constants.dart';
+import '../../core/constants/app_colors.dart';
 import '../../core/network/dio_client.dart';
 import '../infrastructure/odp_port_monitoring_sheet.dart';
 import '../odp/odp_form_screen.dart';
@@ -19,6 +21,16 @@ class GisMapScreen extends StatefulWidget {
 }
 
 class _GisMapScreenState extends State<GisMapScreen> {
+  // Palet selaras dengan Login, Home, dan Data Node (FONA / BRImo navy)
+  static const Color _navyDeep = Color(0xFF001B3A);
+  static const Color _brandBlue = Color(0xFF005BAA);
+  static const Color _cyan = Color(0xFF008ED6);
+  static const Color _bg = Color(0xFFF4F6F9);
+  static const Color _textDark = Color(0xFF0F172A);
+  static const Color _textBody = Color(0xFF475569);
+  static const Color _textMuted = Color(0xFF94A3B8);
+  static const Color _border = Color(0xFFE2E8F0);
+
   final MapController _mapController = MapController();
   List<dynamic> _nodes = [];
   List<dynamic> _cables = [];
@@ -211,6 +223,62 @@ class _GisMapScreenState extends State<GisMapScreen> {
     }
   }
 
+  void _copyToClipboard(String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$label berhasil disalin ke clipboard'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Color _getNodeTypeColor(String type) {
+    switch (type.toUpperCase()) {
+      case 'ODC':
+        return _cyan;
+      case 'POP':
+        return const Color(0xFF4F46E5);
+      case 'ODP':
+      default:
+        return const Color(0xFF059669);
+    }
+  }
+
+  Color _getStatusColor(String status, {bool hasLoss = false, bool isLossTotal = false}) {
+    if (isLossTotal) return const Color(0xFFDC2626);
+    if (hasLoss) return const Color(0xFFD97706);
+    switch (status.toLowerCase()) {
+      case 'active':
+      case 'online':
+        return const Color(0xFF059669);
+      case 'maintenance':
+        return const Color(0xFFD97706);
+      case 'inactive':
+      case 'offline':
+      default:
+        return const Color(0xFF64748B);
+    }
+  }
+
+  String _getStatusLabel(String status, {bool hasLoss = false, bool isLossTotal = false}) {
+    if (isLossTotal) return 'Loss Total';
+    if (hasLoss) return 'Ada Loss';
+    switch (status.toLowerCase()) {
+      case 'active':
+      case 'online':
+        return 'Aktif';
+      case 'maintenance':
+        return 'Maintenance';
+      case 'inactive':
+      case 'offline':
+        return 'Non-Aktif';
+      default:
+        return status.isNotEmpty ? status : 'Normal';
+    }
+  }
+
   List<Polyline> _buildCablePolylines() {
     if (!_showCables) return [];
     final polylines = <Polyline>[];
@@ -264,9 +332,9 @@ class _GisMapScreenState extends State<GisMapScreen> {
 
       if (points.length >= 2) {
         final rawColor = (c['cable_color'] ?? '').toString().toLowerCase();
-        Color lineColor = const Color(0xFF0284C7);
+        Color lineColor = _cyan;
         if (rawColor.contains('biru') || rawColor.contains('blue')) {
-          lineColor = const Color(0xFF0284C7);
+          lineColor = _cyan;
         } else if (rawColor.contains('orange') || rawColor.contains('oranye')) {
           lineColor = const Color(0xFFF97316);
         } else if (rawColor.contains('hijau') || rawColor.contains('green')) {
@@ -301,7 +369,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
             polylines.add(
               Polyline(
                 points: [LatLng(pLat, pLng), LatLng(cLat, cLng)],
-                color: const Color(0xFF00AAE0).withValues(alpha: 0.7),
+                color: _cyan.withValues(alpha: 0.65),
                 strokeWidth: 2.5,
               ),
             );
@@ -330,27 +398,27 @@ class _GisMapScreenState extends State<GisMapScreen> {
       final isLossTotal = n['is_loss_total'] == true || rxRange.toLowerCase().contains('loss total');
       final hasLoss = n['loss_clients'] != null && (int.tryParse(n['loss_clients'].toString()) ?? 0) > 0;
 
-      // Color Coding (Matching Web Enterprise System)
-      Color pinColor = const Color(0xFF059669); // Emerald Green
+      // Color Coding (Matching Web Enterprise System & Data Node)
+      Color pinColor = _getNodeTypeColor(type);
       IconData pinIcon = Icons.grid_view_rounded;
 
       if (type == 'POP') {
-        pinColor = const Color(0xFF4F46E5); // Indigo
+        pinColor = const Color(0xFF4F46E5);
         pinIcon = Icons.dns_rounded;
       } else if (type == 'ODC') {
-        pinColor = const Color(0xFF0284C7); // Sky Blue
+        pinColor = _cyan;
         pinIcon = Icons.account_tree_rounded;
       } else if (type == 'ODP') {
         if (isLossTotal) {
-          pinColor = const Color(0xFFEF4444); // Red Alert Loss
+          pinColor = const Color(0xFFDC2626);
           pinIcon = Icons.warning_amber_rounded;
         } else if (hasLoss) {
-          pinColor = const Color(0xFFF59E0B); // Amber Warning
+          pinColor = const Color(0xFFD97706);
           pinIcon = Icons.sensors_rounded;
         } else if (status == 'maintenance') {
           pinColor = const Color(0xFFD97706);
           pinIcon = Icons.settings_rounded;
-        } else if (status == 'inactive') {
+        } else if (status == 'inactive' || status == 'offline') {
           pinColor = const Color(0xFF64748B);
           pinIcon = Icons.power_off_rounded;
         }
@@ -359,8 +427,8 @@ class _GisMapScreenState extends State<GisMapScreen> {
       markers.add(
         Marker(
           point: LatLng(lat, lng),
-          width: _showLabels ? 100 : 36,
-          height: _showLabels ? 56 : 36,
+          width: _showLabels ? 110 : 38,
+          height: _showLabels ? 60 : 38,
           alignment: Alignment.topCenter,
           child: GestureDetector(
             onTap: () {
@@ -372,8 +440,8 @@ class _GisMapScreenState extends State<GisMapScreen> {
               children: [
                 // Pin Bubble
                 Container(
-                  width: isSelected ? 36 : 30,
-                  height: isSelected ? 36 : 30,
+                  width: isSelected ? 38 : 32,
+                  height: isSelected ? 38 : 32,
                   decoration: BoxDecoration(
                     color: pinColor,
                     shape: BoxShape.circle,
@@ -383,33 +451,37 @@ class _GisMapScreenState extends State<GisMapScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: pinColor.withValues(alpha: isSelected ? 0.6 : 0.35),
-                        blurRadius: isSelected ? 10 : 5,
+                        color: pinColor.withValues(alpha: isSelected ? 0.65 : 0.4),
+                        blurRadius: isSelected ? 12 : 6,
                         offset: const Offset(0, 2),
                       ),
                     ],
                   ),
-                  child: Icon(pinIcon, color: Colors.white, size: isSelected ? 18 : 15),
+                  child: Icon(pinIcon, color: Colors.white, size: isSelected ? 19 : 16),
                 ),
                 // Text Label Pill
                 if (_showLabels)
                   Container(
-                    margin: const EdgeInsets.only(top: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    margin: const EdgeInsets.only(top: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.95),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: pinColor.withValues(alpha: 0.5), width: 0.8),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black12, blurRadius: 3, offset: Offset(0, 1)),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: pinColor.withValues(alpha: 0.5), width: 0.9),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _navyDeep.withValues(alpha: 0.12),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1),
+                        ),
                       ],
                     ),
                     child: Text(
                       name,
                       style: TextStyle(
-                        color: const Color(0xFF0F172A),
+                        color: _textDark,
                         fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
-                        fontSize: 9.5,
+                        fontSize: 10,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -425,14 +497,21 @@ class _GisMapScreenState extends State<GisMapScreen> {
     return markers;
   }
 
+  // ───────────────────────────── DETAIL MODAL SHEET ─────────────────────────────
   void _showNodeDetailSheet(Map<String, dynamic> node) {
-    final String name = (node['name'] ?? 'ODP').toString();
+    final String name = (node['name'] ?? 'Node').toString();
     final String type = (node['node_type'] ?? 'ODP').toString().toUpperCase();
     final String status = (node['status'] ?? 'active').toString().toLowerCase();
-    final bool isActive = status == 'active' || status == 'online';
     final String address = (node['address'] ?? '-').toString();
     final dynamic lat = node['latitude'];
     final dynamic lng = node['longitude'];
+
+    final rxRange = (node['rx_power_range'] ?? '').toString();
+    final isLossTotal = node['is_loss_total'] == true || rxRange.toLowerCase().contains('loss total');
+    final hasLoss = node['loss_clients'] != null && (int.tryParse(node['loss_clients'].toString()) ?? 0) > 0;
+
+    final Color statusColor = _getStatusColor(status, hasLoss: hasLoss, isLossTotal: isLossTotal);
+    final String statusLabel = _getStatusLabel(status, hasLoss: hasLoss, isLossTotal: isLossTotal);
 
     final String oltName = node['olt_name']?.toString() ??
         (node['olt_device'] is Map ? node['olt_device']['name']?.toString() : null) ??
@@ -446,243 +525,344 @@ class _GisMapScreenState extends State<GisMapScreen> {
 
     final String tube = (node['tube_info'] ?? node['tube'] ?? '-').toString();
     final String core = (node['core_color'] ?? node['core'] ?? '-').toString();
-    
+    final String? corePower = node['core_power']?.toString();
+    final parentName = node['parent_node_name'] ?? (node['parent_node'] is Map ? node['parent_node']['name'] : null);
+    final splitterName = node['splitter_ratio'] ?? (node['splitter'] is Map ? node['splitter']['ratio'] : null);
+
     final rawCap = node['total_ports'] ?? node['capacity'];
     final int totalPorts = (rawCap is int ? rawCap : int.tryParse(rawCap?.toString() ?? '8')) ?? 8;
-    
-    final rawUsed = node['used_ports'] ?? node['ports_used'];
-    final int usedPorts = (rawUsed is int ? rawUsed : int.tryParse(rawUsed?.toString() ?? '0')) ?? 0;
-    
-    final String? rxRange = node['rx_power_range']?.toString();
+
+    int usedPorts = 0;
+    if (node['used_ports'] is int) {
+      usedPorts = node['used_ports'];
+    } else if (node['ports_used'] is int) {
+      usedPorts = node['ports_used'];
+    } else if (node['active_ports'] is int) {
+      usedPorts = node['active_ports'];
+    } else if (node['ports'] is List) {
+      usedPorts = (node['ports'] as List)
+          .where((p) =>
+              (p['status'] ?? '').toString().toLowerCase() == 'active' ||
+              p['customer_name'] != null ||
+              p['customer_id'] != null)
+          .length;
+    } else if (node['used_ports'] != null) {
+      usedPorts = int.tryParse(node['used_ports'].toString()) ?? 0;
+    }
+
+    final percentage = totalPorts > 0 ? ((usedPorts / totalPorts) * 100).round() : 0;
+    final String notes = (node['notes'] ?? node['description'] ?? '').toString().trim();
+    final totalClients = node['total_clients']?.toString();
+    final onlineClients = node['online_clients']?.toString();
 
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Grab Handle
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFCBD5E1),
-                  borderRadius: BorderRadius.circular(2),
+      useSafeArea: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (ctx, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              // Top Drag Handle
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4.5,
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
 
-            // Title Row
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00AAE0).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: const Color(0xFF00AAE0).withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    type,
-                    style: const TextStyle(
-                      color: Color(0xFF00AAE0),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    name,
-                    style: const TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: (isActive ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    isActive ? 'Aktif' : 'Non-Aktif',
-                    style: TextStyle(
-                      color: isActive ? const Color(0xFF059669) : const Color(0xFFDC2626),
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 10),
-            const Divider(color: Color(0xFFE2E8F0)),
-            const SizedBox(height: 8),
-
-            // Quick Info Grid
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSheetInfoItem('OLT Device', oltName, Icons.router_rounded),
-                ),
-                Expanded(
-                  child: _buildSheetInfoItem('Interface', interfaceRef, Icons.settings_ethernet_rounded),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSheetInfoItem('Tube & Core', '$tube • $core', Icons.cable_rounded),
-                ),
-                Expanded(
-                  child: _buildSheetInfoItem('Port Terisi', '$usedPorts/$totalPorts Port', Icons.grid_view_rounded),
-                ),
-              ],
-            ),
-
-            if (rxRange != null && rxRange.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _buildSheetInfoItem('Redaman Pelanggan', rxRange, Icons.speed_rounded, isAccent: true),
-            ],
-
-            if (address.isNotEmpty && address != '-') ...[
-              const SizedBox(height: 8),
-              _buildSheetInfoItem('Alamat', address, Icons.location_on_outlined),
-            ],
-
-            const SizedBox(height: 18),
-
-            // Action Buttons
-            Row(
-              children: [
-                // Maps Directions
-                Expanded(
-                  flex: 1,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF0284C7),
-                      side: const BorderSide(color: Color(0xFFBAE6FD)),
-                      backgroundColor: const Color(0xFFF0F9FF),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _openGoogleMaps(lat, lng);
-                    },
-                    icon: const Icon(Icons.near_me_rounded, size: 16),
-                    label: const Text('Rute Maps', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Form Ukur Shortcut
-                IconButton(
-                  tooltip: 'Ukur OPM Log',
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => OdpFormScreen(
-                          prefilledOdpCode: node['code']?.toString(),
-                          prefilledOdpName: name,
-                          prefilledOdpNodeId: node['id'],
+              // Header Title
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _brandBlue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        type,
+                        style: const TextStyle(
+                          color: _brandBlue,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
                         ),
                       ),
-                    );
-                  },
-                  icon: const Icon(Icons.edit_note_rounded, color: Color(0xFF475569)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                          color: _textDark,
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            statusLabel,
+                            style: TextStyle(
+                              color: statusColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                // Port Monitoring
-                if (type == 'ODP')
-                  Expanded(
-                    flex: 1,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00AAE0),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+
+              const Divider(color: _border, height: 1),
+
+              // Scrollable Body
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                  children: [
+                    // Section 1: Lokasi & Alamat
+                    _buildSectionHeader(Icons.location_on_rounded, 'Lokasi & Alamat'),
+                    _buildDetailCard([
+                      _buildDetailRow('Alamat', address),
+                      if (lat != null && lng != null)
+                        _buildDetailRow(
+                          'Koordinat GPS',
+                          '$lat, $lng',
+                          actionWidget: IconButton(
+                            constraints: const BoxConstraints(),
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.copy_rounded, size: 15, color: _brandBlue),
+                            tooltip: 'Salin Koordinat',
+                            onPressed: () => _copyToClipboard('$lat, $lng', 'Koordinat GPS'),
+                          ),
+                        ),
+                    ]),
+
+                    const SizedBox(height: 16),
+
+                    // Section 2: OLT & Jalur Distribusi
+                    _buildSectionHeader(Icons.router_rounded, 'Uplink & Distribusi OLT'),
+                    _buildDetailCard([
+                      _buildDetailRow('Perangkat OLT', oltName),
+                      _buildDetailRow('Interface PON', interfaceRef, isAccent: true),
+                      if (parentName != null) _buildDetailRow('Parent Node', parentName.toString()),
+                      if (splitterName != '-' && splitterName != null)
+                        _buildDetailRow('Splitter Ratio', splitterName.toString()),
+                    ]),
+
+                    const SizedBox(height: 16),
+
+                    // Section 3: Serat Optik & Redaman
+                    _buildSectionHeader(Icons.cable_rounded, 'Serat Optik & Redaman'),
+                    _buildDetailCard([
+                      _buildDetailRow('Tube & Core', '$tube • $core'),
+                      if (corePower != null && corePower.isNotEmpty)
+                        _buildDetailRow('Core Power (Input)', '$corePower dBm'),
+                      if (rxRange.isNotEmpty)
+                        _buildDetailRow('Redaman Pelanggan', rxRange, isAccent: true),
+                    ]),
+
+                    const SizedBox(height: 16),
+
+                    // Section 4: Kapasitas & Utilisasi Port
+                    _buildSectionHeader(Icons.grid_view_rounded, 'Kapasitas & Utilisasi Port'),
+                    _buildDetailCard([
+                      _buildDetailRow('Port Terisi', '$usedPorts dari $totalPorts Port ($percentage%)'),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: totalPorts > 0 ? (usedPorts / totalPorts).clamp(0.0, 1.0) : 0,
+                            backgroundColor: _border,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              percentage > 85 ? AppColors.danger : _brandBlue,
+                            ),
+                            minHeight: 6,
+                          ),
+                        ),
+                      ),
+                      if (totalClients != null && totalClients != '0')
+                        _buildDetailRow(
+                          'Pelanggan Terhubung',
+                          '$onlineClients / $totalClients Online',
+                        ),
+                    ]),
+
+                    if (notes.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      _buildSectionHeader(Icons.notes_rounded, 'Catatan / Konfigurasi'),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _border),
+                        ),
+                        child: Text(
+                          notes,
+                          style: const TextStyle(
+                            color: _textDark,
+                            fontSize: 13,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+
+              // Bottom Persistent Actions
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: _border)),
+                ),
+                child: Row(
+                  children: [
+                    if (lat != null && lng != null) ...[
+                      Expanded(
+                        flex: 1,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _cyan,
+                            side: const BorderSide(color: _cyan, width: 1.2),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _openGoogleMaps(lat, lng);
+                          },
+                          icon: const Icon(Icons.near_me_rounded, size: 16),
+                          label: const Text(
+                            'Maps',
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    // Shortcut Ukur OPM
+                    IconButton(
+                      tooltip: 'Ukur OPM Log',
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.all(12),
                       ),
                       onPressed: () {
                         Navigator.pop(ctx);
-                        final rawId = node['id'];
-                        final nodeId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '0') ?? 0;
-                        OdpPortMonitoringSheet.show(
+                        Navigator.push(
                           context,
-                          nodeId: nodeId,
-                          nodeName: name,
-                          nodeType: type,
-                          totalPorts: totalPorts,
-                          oltName: oltName != '-' ? oltName : null,
-                          interfaceRef: interfaceRef != '-' ? interfaceRef : null,
+                          MaterialPageRoute(
+                            builder: (_) => OdpFormScreen(
+                              prefilledOdpCode: node['code']?.toString(),
+                              prefilledOdpName: name,
+                              prefilledOdpNodeId: node['id'],
+                            ),
+                          ),
                         );
                       },
-                      icon: const Icon(Icons.speed_rounded, color: Colors.white, size: 16),
-                      label: const Text('Cek Port', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                      icon: const Icon(Icons.edit_note_rounded, color: _textBody, size: 20),
                     ),
-                  ),
-              ],
-            ),
-          ],
+                    if (type == 'ODP') ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _brandBlue,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            final rawId = node['id'];
+                            final nodeId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '0') ?? 0;
+                            OdpPortMonitoringSheet.show(
+                              context,
+                              nodeId: nodeId,
+                              nodeName: name,
+                              nodeType: type,
+                              totalPorts: totalPorts,
+                              oltName: oltName != '-' ? oltName : null,
+                              interfaceRef: interfaceRef != '-' ? interfaceRef : null,
+                            );
+                          },
+                          icon: const Icon(Icons.speed_rounded, size: 16),
+                          label: const Text(
+                            'Cek Port',
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSheetInfoItem(String label, String value, IconData icon, {bool isAccent = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      margin: const EdgeInsets.only(right: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
+  Widget _buildSectionHeader(IconData icon, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: isAccent ? const Color(0xFF00AAE0) : const Color(0xFF64748B)),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w500),
-                ),
-                Text(
-                  value,
-                  style: TextStyle(
-                    color: isAccent ? const Color(0xFF00AAE0) : const Color(0xFF0F172A),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+          Icon(icon, size: 16, color: _brandBlue),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              color: _textDark,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
             ),
           ),
         ],
@@ -690,16 +870,67 @@ class _GisMapScreenState extends State<GisMapScreen> {
     );
   }
 
+  Widget _buildDetailCard(List<Widget> children) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        children: children,
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {bool isAccent = false, Widget? actionWidget}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 125,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: _textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: isAccent ? _brandBlue : _textDark,
+                fontSize: 12.5,
+                fontWeight: isAccent ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+          ),
+          if (actionWidget != null) ...[
+            const SizedBox(width: 6),
+            actionWidget,
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ───────────────────────────── LAYERS & SETTINGS SHEET ─────────────────────────────
   void _showLayersBottomSheet() {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) => Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -707,23 +938,32 @@ class _GisMapScreenState extends State<GisMapScreen> {
             children: [
               Center(
                 child: Container(
-                  width: 40,
-                  height: 4,
+                  width: 44,
+                  height: 4.5,
                   decoration: BoxDecoration(
                     color: const Color(0xFFCBD5E1),
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(3),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Pengaturan Layer & Tampilan Peta',
-                style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16),
+              const Row(
+                children: [
+                  Icon(Icons.layers_rounded, color: _brandBlue, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Pengaturan Layer & Tampilan Peta',
+                    style: TextStyle(color: _textDark, fontWeight: FontWeight.w800, fontSize: 16),
+                  ),
+                ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
               // Tile Style
-              const Text('Tipe Peta (Base Map):', style: TextStyle(color: Color(0xFF64748B), fontSize: 12.5, fontWeight: FontWeight.w600)),
+              const Text(
+                'Tipe Base Map:',
+                style: TextStyle(color: _textBody, fontSize: 12.5, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -736,15 +976,15 @@ class _GisMapScreenState extends State<GisMapScreen> {
               ),
 
               const SizedBox(height: 16),
-              const Divider(color: Color(0xFFE2E8F0)),
+              const Divider(color: _border),
 
               // Toggles
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Tampilkan Jalur Kabel FO', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Garis koneksi kabel fiber antar node', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
+                title: const Text('Tampilkan Jalur Kabel FO', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _textDark)),
+                subtitle: const Text('Garis koneksi kabel fiber antar node', style: TextStyle(fontSize: 11.5, color: _textMuted)),
                 value: _showCables,
-                activeColor: const Color(0xFF00AAE0),
+                activeColor: _brandBlue,
                 onChanged: (val) {
                   setModalState(() => _showCables = val);
                   setState(() => _showCables = val);
@@ -752,10 +992,10 @@ class _GisMapScreenState extends State<GisMapScreen> {
               ),
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Tampilkan Label Nama ODP', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Teks nama di bawah pin marker', style: TextStyle(fontSize: 11.5, color: Color(0xFF64748B))),
+                title: const Text('Tampilkan Label Nama ODP', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _textDark)),
+                subtitle: const Text('Teks nama di bawah pin marker', style: TextStyle(fontSize: 11.5, color: _textMuted)),
                 value: _showLabels,
-                activeColor: const Color(0xFF00AAE0),
+                activeColor: _brandBlue,
                 onChanged: (val) {
                   setModalState(() => _showLabels = val);
                   setState(() => _showLabels = val);
@@ -764,23 +1004,34 @@ class _GisMapScreenState extends State<GisMapScreen> {
 
               if (_availableOlts.length > 1) ...[
                 const SizedBox(height: 10),
-                const Text('Filter OLT:', style: TextStyle(color: Color(0xFF64748B), fontSize: 12.5, fontWeight: FontWeight.w600)),
+                const Text('Filter Perangkat OLT:', style: TextStyle(color: _textBody, fontSize: 12.5, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  value: _selectedOlt,
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _border),
                   ),
-                  items: _availableOlts
-                      .map((olt) => DropdownMenuItem(value: olt, child: Text(olt == 'ALL' ? 'Semua OLT' : olt, style: const TextStyle(fontSize: 13))))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setModalState(() => _selectedOlt = val);
-                      setState(() => _selectedOlt = val);
-                    }
-                  },
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedOlt,
+                      isExpanded: true,
+                      style: const TextStyle(color: _textDark, fontSize: 13, fontWeight: FontWeight.w600),
+                      items: _availableOlts
+                          .map((olt) => DropdownMenuItem(
+                                value: olt,
+                                child: Text(olt == 'ALL' ? 'Semua Perangkat OLT' : olt),
+                              ))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setModalState(() => _selectedOlt = val);
+                          setState(() => _selectedOlt = val);
+                        }
+                      },
+                    ),
+                  ),
                 ),
               ],
             ],
@@ -798,27 +1049,27 @@ class _GisMapScreenState extends State<GisMapScreen> {
           setModalState(() => _currentTileType = type);
           setState(() => _currentTileType = type);
         },
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 11),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF00AAE0).withValues(alpha: 0.12) : const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(10),
+            color: isSelected ? _brandBlue.withValues(alpha: 0.1) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? const Color(0xFF00AAE0) : const Color(0xFFCBD5E1),
+              color: isSelected ? _brandBlue : _border,
               width: isSelected ? 1.8 : 1,
             ),
           ),
           child: Column(
             children: [
-              Icon(icon, color: isSelected ? const Color(0xFF00AAE0) : const Color(0xFF64748B), size: 20),
-              const SizedBox(height: 4),
+              Icon(icon, color: isSelected ? _brandBlue : _textBody, size: 20),
+              const SizedBox(height: 5),
               Text(
                 label,
                 style: TextStyle(
-                  color: isSelected ? const Color(0xFF00AAE0) : const Color(0xFF475569),
+                  color: isSelected ? _brandBlue : _textBody,
                   fontSize: 11.5,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
                 ),
               ),
             ],
@@ -865,15 +1116,25 @@ class _GisMapScreenState extends State<GisMapScreen> {
       return true;
     }).toList();
 
+    final odpCount = _nodes.where((n) => (n['node_type'] ?? '').toString().toUpperCase() == 'ODP').length;
+    final odcCount = _nodes.where((n) => (n['node_type'] ?? '').toString().toUpperCase() == 'ODC').length;
+    final popCount = _nodes.where((n) => (n['node_type'] ?? '').toString().toUpperCase() == 'POP').length;
+    final lossCount = _nodes.where((n) {
+      final rxRange = (n['rx_power_range'] ?? '').toString();
+      final isLossTotal = n['is_loss_total'] == true || rxRange.toLowerCase().contains('loss total');
+      final hasLoss = n['loss_clients'] != null && (int.tryParse(n['loss_clients'].toString()) ?? 0) > 0;
+      return isLossTotal || hasLoss;
+    }).length;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: _bg,
       body: Stack(
         children: [
           // ── 1. MAIN INTERACTIVE FLUTTER MAP ──
           _isLoading
               ? const Center(
                   child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00AAE0)),
+                    valueColor: AlwaysStoppedAnimation<Color>(_brandBlue),
                   ),
                 )
               : _errorMessage != null
@@ -881,14 +1142,18 @@ class _GisMapScreenState extends State<GisMapScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 48),
+                          const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 48),
                           const SizedBox(height: 12),
-                          Text(_errorMessage!, style: const TextStyle(color: Color(0xFF64748B))),
+                          Text(_errorMessage!, style: const TextStyle(color: _textBody)),
                           const SizedBox(height: 14),
                           ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00AAE0)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _brandBlue,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
                             onPressed: _fetchGisData,
-                            child: const Text('Coba Lagi', style: TextStyle(color: Colors.white)),
+                            child: const Text('Coba Lagi', style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
                         ],
                       ),
@@ -917,7 +1182,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
                                 height: 28,
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF00AAE0),
+                                    color: _brandBlue,
                                     shape: BoxShape.circle,
                                     border: Border.all(color: Colors.white, width: 2.5),
                                     boxShadow: const [
@@ -944,13 +1209,13 @@ class _GisMapScreenState extends State<GisMapScreen> {
                     height: 48,
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: _border),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.08),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
+                          color: _navyDeep.withValues(alpha: 0.1),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
@@ -958,22 +1223,22 @@ class _GisMapScreenState extends State<GisMapScreen> {
                       children: [
                         if (Navigator.canPop(context))
                           IconButton(
-                            icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF475569)),
+                            icon: const Icon(Icons.arrow_back_rounded, color: _textDark),
                             onPressed: () => Navigator.pop(context),
                           )
                         else
                           const Padding(
                             padding: EdgeInsets.only(left: 14, right: 8),
-                            child: Icon(Icons.explore_rounded, color: Color(0xFF005BAA), size: 22),
+                            child: Icon(Icons.explore_rounded, color: _brandBlue, size: 22),
                           ),
                         Expanded(
                           child: TextField(
                             controller: _searchCtrl,
                             onChanged: (val) => setState(() => _searchQuery = val.trim()),
-                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13.5),
+                            style: const TextStyle(color: _textDark, fontSize: 13.5, fontWeight: FontWeight.w600),
                             decoration: const InputDecoration(
-                              hintText: 'Cari ODP, ODC, POP, atau Wilayah...',
-                              hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5),
+                              hintText: 'Cari nama, kode, OLT, atau alamat...',
+                              hintStyle: TextStyle(color: _textMuted, fontSize: 12.5),
                               border: InputBorder.none,
                               contentPadding: EdgeInsets.symmetric(vertical: 13),
                             ),
@@ -981,14 +1246,14 @@ class _GisMapScreenState extends State<GisMapScreen> {
                         ),
                         if (_searchQuery.isNotEmpty)
                           IconButton(
-                            icon: const Icon(Icons.clear_rounded, color: Color(0xFF64748B), size: 18),
+                            icon: const Icon(Icons.clear_rounded, color: _textMuted, size: 18),
                             onPressed: () {
                               _searchCtrl.clear();
                               setState(() => _searchQuery = '');
                             },
                           ),
                         IconButton(
-                          icon: const Icon(Icons.refresh_rounded, color: Color(0xFF00AAE0)),
+                          icon: const Icon(Icons.refresh_rounded, color: _brandBlue),
                           tooltip: 'Refresh GIS',
                           onPressed: _fetchGisData,
                         ),
@@ -1001,29 +1266,28 @@ class _GisMapScreenState extends State<GisMapScreen> {
                   // Quick Filter Pill Bar
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
                     child: Row(
                       children: [
-                        _buildFilterPill('Semua (${_nodes.length})', 'ALL', const Color(0xFF0284C7)),
+                        _buildFilterPill('Semua (${_nodes.length})', 'ALL', _brandBlue),
                         const SizedBox(width: 6),
-                        _buildFilterPill(
-                          'ODP (${_nodes.where((n) => (n['node_type'] ?? '').toString().toUpperCase() == 'ODP').length})',
-                          'ODP',
-                          const Color(0xFF059669),
-                        ),
+                        _buildFilterPill('ODP ($odpCount)', 'ODP', const Color(0xFF059669)),
                         const SizedBox(width: 6),
-                        _buildFilterPill(
-                          'ODC (${_nodes.where((n) => (n['node_type'] ?? '').toString().toUpperCase() == 'ODC').length})',
-                          'ODC',
-                          const Color(0xFF0284C7),
-                        ),
+                        _buildFilterPill('ODC ($odcCount)', 'ODC', _cyan),
                         const SizedBox(width: 6),
-                        _buildFilterPill(
-                          'POP (${_nodes.where((n) => (n['node_type'] ?? '').toString().toUpperCase() == 'POP').length})',
-                          'POP',
-                          const Color(0xFF4F46E5),
-                        ),
+                        _buildFilterPill('POP ($popCount)', 'POP', const Color(0xFF4F46E5)),
                         const SizedBox(width: 6),
-                        _buildFilterPill('Gangguan / Loss', 'LOSS', const Color(0xFFEF4444)),
+                        _buildFilterPill('Loss / Gangguan ($lossCount)', 'LOSS', const Color(0xFFDC2626)),
+                        if (_selectedOlt != 'ALL') ...[
+                          const SizedBox(width: 6),
+                          ActionChip(
+                            avatar: const Icon(Icons.router_rounded, size: 14, color: _brandBlue),
+                            label: Text('OLT: $_selectedOlt', style: const TextStyle(color: _brandBlue, fontSize: 11, fontWeight: FontWeight.w800)),
+                            backgroundColor: _brandBlue.withValues(alpha: 0.1),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: _brandBlue)),
+                            onPressed: _showLayersBottomSheet,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1054,7 +1318,7 @@ class _GisMapScreenState extends State<GisMapScreen> {
                 _buildFloatingToolButton(
                   icon: Icons.my_location_rounded,
                   tooltip: 'Lokasi Saya (GPS)',
-                  iconColor: const Color(0xFF00AAE0),
+                  iconColor: _brandBlue,
                   onTap: _locateUser,
                 ),
               ],
@@ -1078,17 +1342,21 @@ class _GisMapScreenState extends State<GisMapScreen> {
             color: isSelected ? color : Colors.white.withValues(alpha: 0.95),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isSelected ? color : const Color(0xFFCBD5E1),
+              color: isSelected ? color : _border,
             ),
-            boxShadow: const [
-              BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 1)),
+            boxShadow: [
+              BoxShadow(
+                color: _navyDeep.withValues(alpha: 0.08),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
             ],
           ),
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? Colors.white : const Color(0xFF334155),
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+              color: isSelected ? Colors.white : _textDark,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
               fontSize: 11.5,
             ),
           ),
@@ -1101,24 +1369,24 @@ class _GisMapScreenState extends State<GisMapScreen> {
     required IconData icon,
     required String tooltip,
     required VoidCallback onTap,
-    Color iconColor = const Color(0xFF334155),
+    Color iconColor = _textDark,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           width: 44,
           height: 44,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0F172A).withValues(alpha: 0.12),
-                blurRadius: 8,
+                color: _navyDeep.withValues(alpha: 0.12),
+                blurRadius: 10,
                 offset: const Offset(0, 3),
               ),
             ],
