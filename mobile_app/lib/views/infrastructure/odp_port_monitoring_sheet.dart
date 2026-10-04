@@ -909,38 +909,25 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
 
           // ── Bottom Footer Bar ──
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
             decoration: const BoxDecoration(
               color: Colors.white,
               border: Border(top: BorderSide(color: _border)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.photo_camera_rounded, size: 16, color: _brandBlue),
-                  label: const Text('Screenshot Lengkap', style: TextStyle(color: _brandBlue, fontWeight: FontWeight.w800, fontSize: 12.5)),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: _brandBlue.withValues(alpha: 0.3)),
-                    backgroundColor: _brandBlue.withValues(alpha: 0.06),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: _isLoading ? null : _captureFullDocumentScreenshot,
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF1F5F9),
+                  foregroundColor: _textDark,
+                  elevation: 0,
+                  side: const BorderSide(color: _border),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    foregroundColor: _textDark,
-                    elevation: 0,
-                    side: const BorderSide(color: _border),
-                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Tutup', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                ),
-              ],
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Tutup', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+              ),
             ),
           ),
         ],
