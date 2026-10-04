@@ -66,10 +66,7 @@ class OdpPortMonitoringSheet extends StatefulWidget {
 class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
   // Palette selaras dengan Login, Home, Data Pelanggan, dan Data Node
   static const Color _navyDeep = Color(0xFF001B3A);
-  static const Color _navy = Color(0xFF003875);
   static const Color _brandBlue = Color(0xFF005BAA);
-  static const Color _cyan = Color(0xFF008ED6);
-  static const Color _neon = Color(0xFF00E5FF);
   static const Color _bg = Color(0xFFF4F6F9);
   static const Color _textDark = Color(0xFF0F172A);
   static const Color _textBody = Color(0xFF475569);
@@ -571,21 +568,17 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
       height: MediaQuery.of(context).size.height * 0.92,
       decoration: const BoxDecoration(
         color: _bg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         children: [
-          // ── Header Gradient Banner ──
+          // ── Header Solid Clean Section ──
           Container(
             padding: const EdgeInsets.fromLTRB(20, 12, 16, 16),
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [_navyDeep, _navy, _brandBlue, _cyan],
-                stops: [0.0, 0.35, 0.75, 1.0],
-              ),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              border: Border(bottom: BorderSide(color: _border)),
             ),
             child: Column(
               children: [
@@ -595,7 +588,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.3),
+                      color: const Color(0xFFCBD5E1),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -606,11 +599,11 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
+                        color: _brandBlue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                        border: Border.all(color: _brandBlue.withValues(alpha: 0.2)),
                       ),
-                      child: const Icon(Icons.hub_rounded, color: Colors.white, size: 22),
+                      child: const Icon(Icons.hub_rounded, color: _brandBlue, size: 22),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -620,34 +613,34 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                           Text(
                             widget.nodeName,
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: _textDark,
                               fontWeight: FontWeight.w800,
-                              fontSize: 17,
-                              letterSpacing: 0.2,
+                              fontSize: 16.5,
+                              letterSpacing: -0.2,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 3),
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: _neon.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(4),
+                                  color: _brandBlue.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   '$effectiveRatio ($usedCount/$totalPortsCount Terisi)',
-                                  style: const TextStyle(color: _neon, fontSize: 10.5, fontWeight: FontWeight.w700),
+                                  style: const TextStyle(color: _brandBlue, fontSize: 10.5, fontWeight: FontWeight.w700),
                                 ),
                               ),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
                                   effectiveInterface,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.8),
+                                  style: const TextStyle(
+                                    color: _textMuted,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -659,19 +652,19 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                         ],
                       ),
                     ),
-                    _glassHeaderButton(
+                    _headerIconButton(
                       icon: Icons.photo_camera_rounded,
                       tooltip: 'Screenshot',
                       onTap: _isLoading ? null : _captureFullDocumentScreenshot,
                     ),
                     const SizedBox(width: 6),
-                    _glassHeaderButton(
+                    _headerIconButton(
                       icon: _isProbingLive ? Icons.hourglass_top_rounded : Icons.refresh_rounded,
                       tooltip: 'Refresh',
                       onTap: _isProbingLive ? null : () => _fetchPortDetail(isRefresh: true),
                     ),
                     const SizedBox(width: 6),
-                    _glassHeaderButton(
+                    _headerIconButton(
                       icon: Icons.close_rounded,
                       tooltip: 'Tutup',
                       onTap: () => Navigator.pop(context),
@@ -935,24 +928,24 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     );
   }
 
-  Widget _glassHeaderButton({
+  Widget _headerIconButton({
     required IconData icon,
     required String tooltip,
     required VoidCallback? onTap,
   }) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.15),
+      color: const Color(0xFFF1F5F9),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+        side: const BorderSide(color: _border),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
         child: SizedBox(
-          width: 34,
-          height: 34,
-          child: Icon(icon, color: Colors.white, size: 17),
+          width: 36,
+          height: 36,
+          child: Icon(icon, color: _textDark, size: 18),
         ),
       ),
     );
