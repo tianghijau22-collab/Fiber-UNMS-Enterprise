@@ -318,7 +318,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                           Text(
-                            'Versi 1.0.0 (Build 2026)',
+                            'Versi 1.0.7 (Build 12)',
                             style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                           ),
                         ],
