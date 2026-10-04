@@ -803,7 +803,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ),
 
               // Spacer for the hero card height with comfortable, generous margin
-              const SizedBox(height: 100),
+              const SizedBox(height: 130),
 
               // ── 3. MAIN DASHBOARD BODY CONTENT ──
               Padding(
@@ -813,11 +813,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   children: [
                     // ── A. FEATURE GRID (4x2 BRImo Style Squircle Buttons) ──
                     _buildFeatureGrid(context),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 36),
 
                     // ── D. SLIDE BANNER DASHBOARD ──
                     _buildDashboardSlideBanner(),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
 
                     // ── E. ALERT & INFO TERKINI ──
                     Row(
