@@ -1,12 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/dio_client.dart';
 import '../../models/customer_model.dart';
-import 'swap_onu_screen.dart';
 import '../ont/ont_power_check_screen.dart';
 
 class CustomerListScreen extends StatefulWidget {
@@ -90,24 +88,6 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     }
   }
 
-  void _callCustomer(String? phone) async {
-    if (phone == null || phone.isEmpty) return;
-    final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    }
-  }
-
-  void _whatsappCustomer(String? phone) async {
-    if (phone == null || phone.isEmpty) return;
-    var p = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (p.startsWith('0')) p = '62${p.substring(1)}';
-    final uri = Uri.parse('https://wa.me/$p');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   String _initials(String name) {
     final parts = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
@@ -133,7 +113,6 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       if (q.isEmpty) return true;
       return c.name.toLowerCase().contains(q) ||
           c.customerNumber.toLowerCase().contains(q) ||
-          (c.phone ?? '').toLowerCase().contains(q) ||
           (c.address ?? '').toLowerCase().contains(q);
     }).toList();
 
@@ -261,19 +240,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                         const SizedBox(width: 12),
                       ],
                       const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Data Pelanggan',
-                              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.2),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Pantau status & kualitas sinyal pelanggan',
-                              style: TextStyle(color: Color(0xFFB9D7F2), fontSize: 12),
-                            ),
-                          ],
+                        child: Text(
+                          'Data Pelanggan',
+                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.2),
                         ),
                       ),
                       _glassIconButton(
@@ -438,7 +407,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         onChanged: (v) => setState(() => _localQuery = v.trim()),
         onSubmitted: (v) => _fetchCustomers(query: v.trim()),
         decoration: InputDecoration(
-          hintText: 'Cari nama, ID pelanggan, atau no. HP',
+          hintText: 'Cari nama, ID pelanggan, atau alamat',
           hintStyle: const TextStyle(color: _textMuted, fontSize: 13),
           prefixIcon: const Icon(Icons.search_rounded, color: _brandBlue, size: 22),
           suffixIcon: _localQuery.isNotEmpty
@@ -600,7 +569,6 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   // ───────────────────────────── CARD ─────────────────────────────
   Widget _buildCustomerCard(CustomerModel cust) {
     final statusColor = cust.isOnline ? AppColors.success : AppColors.danger;
-    final hasPhone = cust.phone != null && cust.phone!.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -741,35 +709,15 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                 ),
                 const SizedBox(height: 12),
                 // Aksi
-                Row(
-                  children: [
-                    if (hasPhone) ...[
-                      Expanded(
-                        child: _buildActionButton(
-                          icon: Icons.call_rounded,
-                          label: 'Hubungi',
-                          color: AppColors.success,
-                          onTap: () => _callCustomer(cust.phone),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: _buildActionButton(
-                        icon: Icons.speed_rounded,
-                        label: 'Cek Redaman',
-                        color: _brandBlue,
-                        filled: true,
-                        onTap: () => _openPowerCheck(cust),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildSquareAction(
-                      icon: Icons.swap_horiz_rounded,
-                      tooltip: 'Swap ONU',
-                      onTap: () => _openSwap(cust),
-                    ),
-                  ],
+                SizedBox(
+                  width: double.infinity,
+                  child: _buildActionButton(
+                    icon: Icons.speed_rounded,
+                    label: 'Cek Redaman',
+                    color: _brandBlue,
+                    filled: true,
+                    onTap: () => _openPowerCheck(cust),
+                  ),
                 ),
               ],
             ),
@@ -887,44 +835,20 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     );
   }
 
-  Widget _buildSquareAction({required IconData icon, required String tooltip, required VoidCallback onTap}) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: _navy.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: SizedBox(
-            width: 40,
-            height: 40,
-            child: Icon(icon, size: 20, color: _navy),
-          ),
+  void _openPowerCheck(CustomerModel cust) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OntPowerCheckScreen(
+          serialNumber: cust.onuSerial ?? cust.onuMac ?? cust.customerNumber,
+          customer: cust,
         ),
       ),
     );
   }
 
-  void _openPowerCheck(CustomerModel cust) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OntPowerCheckScreen(serialNumber: cust.onuSerial ?? cust.customerNumber),
-      ),
-    );
-  }
-
-  void _openSwap(CustomerModel cust) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => SwapOnuScreen(customer: cust)),
-    );
-  }
-
   // ───────────────────────────── DETAIL SHEET ─────────────────────────────
   void _showCustomerDetail(CustomerModel cust) {
-    final hasPhone = cust.phone != null && cust.phone!.isNotEmpty;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1014,9 +938,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _detailSection('Informasi Kontak', [
-                        _detailRow(Icons.phone_outlined, 'No. HP', cust.phone ?? '-'),
-                        _detailRow(Icons.email_outlined, 'Email', cust.email ?? '-'),
+                      _detailSection('Informasi Alamat', [
                         _detailRow(Icons.location_on_outlined, 'Alamat', cust.address ?? '-'),
                         if (cust.latitude != null && cust.longitude != null)
                           _detailRow(
@@ -1028,7 +950,6 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                       const SizedBox(height: 12),
                       _detailSection('Informasi Jaringan', [
                         _detailRow(Icons.router_outlined, 'SN ONU', cust.onuSn ?? '-', copyable: cust.onuSn != null),
-                        _detailRow(Icons.memory_rounded, 'MAC ONU', cust.onuMac ?? '-', copyable: cust.onuMac != null),
                         _detailRow(
                           Icons.hub_outlined,
                           'ODP / Port',
@@ -1042,57 +963,18 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                         ),
                       ]),
                       const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          if (hasPhone) ...[
-                            Expanded(
-                              child: _buildActionButton(
-                                icon: Icons.call_rounded,
-                                label: 'Telepon',
-                                color: AppColors.success,
-                                onTap: () => _callCustomer(cust.phone),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _buildActionButton(
-                                icon: Icons.chat_rounded,
-                                label: 'WhatsApp',
-                                color: const Color(0xFF16A34A),
-                                onTap: () => _whatsappCustomer(cust.phone),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      if (hasPhone) const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildActionButton(
-                              icon: Icons.speed_rounded,
-                              label: 'Cek Redaman',
-                              color: _brandBlue,
-                              filled: true,
-                              onTap: () {
-                                Navigator.pop(ctx);
-                                _openPowerCheck(cust);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildActionButton(
-                              icon: Icons.swap_horiz_rounded,
-                              label: 'Swap ONU',
-                              color: _navy,
-                              onTap: () {
-                                Navigator.pop(ctx);
-                                _openSwap(cust);
-                              },
-                            ),
-                          ),
-                        ],
+                      SizedBox(
+                        width: double.infinity,
+                        child: _buildActionButton(
+                          icon: Icons.speed_rounded,
+                          label: 'Cek Redaman',
+                          color: _brandBlue,
+                          filled: true,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _openPowerCheck(cust);
+                          },
+                        ),
                       ),
                       SizedBox(height: MediaQuery.of(ctx).padding.bottom + 8),
                     ],
