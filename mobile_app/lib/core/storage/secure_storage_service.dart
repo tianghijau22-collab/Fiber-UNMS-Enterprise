@@ -21,7 +21,11 @@ class StorageService {
   // --- Server Base URL ---
   Future<String> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(ApiConstants.keyServerUrl) ?? ApiConstants.defaultBaseUrl;
+    final saved = prefs.getString(ApiConstants.keyServerUrl);
+    if (saved == null || saved.isEmpty || (saved.contains('103.89.6.125') && !saved.contains('sslip.io'))) {
+      return ApiConstants.defaultBaseUrl;
+    }
+    return saved;
   }
 
   Future<void> setServerUrl(String url) async {
@@ -79,6 +83,8 @@ class StorageService {
     await _secureStorage.write(key: ApiConstants.keyAuthToken, value: token);
   }
 
+  static const String keyLastSavedUser = 'fona_last_saved_user';
+
   // --- User Profile ---
   Future<UserModel?> getUser() async {
     final userJson = await _secureStorage.read(key: ApiConstants.keyUserData);
@@ -95,6 +101,29 @@ class StorageService {
       key: ApiConstants.keyUserData,
       value: jsonEncode(user.toJson()),
     );
+    await saveLastSavedUser(user);
+  }
+
+  // --- Last Saved User for Quick Switch ---
+  Future<UserModel?> getLastSavedUser() async {
+    final userJson = await _secureStorage.read(key: keyLastSavedUser);
+    if (userJson == null) return null;
+    try {
+      return UserModel.fromJson(jsonDecode(userJson));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveLastSavedUser(UserModel user) async {
+    await _secureStorage.write(
+      key: keyLastSavedUser,
+      value: jsonEncode(user.toJson()),
+    );
+  }
+
+  Future<void> clearLastSavedUser() async {
+    await _secureStorage.delete(key: keyLastSavedUser);
   }
 
   // --- Clear Session ---

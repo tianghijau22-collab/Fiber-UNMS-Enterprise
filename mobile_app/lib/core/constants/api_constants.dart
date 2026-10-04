@@ -1,6 +1,6 @@
 class ApiConstants {
   // Default base URL for production server
-  static const String defaultBaseUrl = 'http://103.89.6.125/api'; 
+  static const String defaultBaseUrl = 'https://fiber-monitoring.103.89.6.125.sslip.io/api'; 
   
   // Storage Keys
   static const String keyServerUrl = 'server_base_url';

@@ -60,7 +60,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               controller: urlController,
               style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'http://103.89.6.125/api',
+                hintText: 'https://fiber-monitoring.103.89.6.125.sslip.io/api',
                 hintStyle: const TextStyle(color: AppColors.textMuted),
                 filled: true,
                 fillColor: AppColors.surfaceLight,
