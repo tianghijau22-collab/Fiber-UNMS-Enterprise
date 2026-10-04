@@ -956,10 +956,16 @@ class _GisMapScreenState extends State<GisMapScreen> {
                     ),
                     child: Row(
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF475569)),
-                          onPressed: () => Navigator.pop(context),
-                        ),
+                        if (Navigator.canPop(context))
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back_rounded, color: Color(0xFF475569)),
+                            onPressed: () => Navigator.pop(context),
+                          )
+                        else
+                          const Padding(
+                            padding: EdgeInsets.only(left: 14, right: 8),
+                            child: Icon(Icons.explore_rounded, color: Color(0xFF005BAA), size: 22),
+                          ),
                         Expanded(
                           child: TextField(
                             controller: _searchCtrl,
