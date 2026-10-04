@@ -109,11 +109,6 @@ class _OntPowerCheckScreenState extends State<OntPowerCheckScreen> {
     return v ?? widget.customer?.rxPower;
   }
 
-  double? get _tx {
-    final v = _num(_data?['tx_power_dbm']) ?? _num(_data?['tx_power']) ?? widget.customer?.txPowerDbm;
-    return (v != null && v != 0) ? v : null;
-  }
-
   bool get _usingFallback =>
       (_num(_data?['rx_power_dbm']) == null && _num(_data?['rx_power']) == null) && widget.customer?.rxPower != null;
 
@@ -138,19 +133,27 @@ class _OntPowerCheckScreenState extends State<OntPowerCheckScreen> {
   }
 
   String _qualityLabel(double? dbm) {
-    if (dbm == null) return 'TIDAK ADA SINYAL';
+    if (dbm == null) return 'TIDAK ADA SINYAL (LOS)';
     if (dbm >= -24.0 && dbm <= -14.0) return 'SINYAL BAIK';
     if (dbm > -14.0) return 'TERLALU KUAT';
     if (dbm > -27.0) return 'WASPADA';
-    return 'KRITIS';
+    return 'KRITIS (LOSS)';
   }
 
   String _qualityHint(double? dbm) {
-    if (dbm == null) return 'ONT tidak terbaca (LOS / mati). Periksa power modem, kabel drop, dan konektor.';
-    if (dbm >= -24.0 && dbm <= -14.0) return 'Redaman dalam batas standar. Tidak perlu tindakan.';
-    if (dbm > -14.0) return 'Daya terlalu tinggi, pertimbangkan pemasangan attenuator.';
-    if (dbm > -27.0) return 'Mendekati batas. Cek konektor, bending kabel, dan kebersihan patchcord.';
-    return 'Redaman melebihi batas. Periksa splice, konektor ODP, dan kabel drop.';
+    if (dbm == null) return 'ONT tidak terbaca (LOS / mati). Periksa power modem, kabel drop, dan konektor ODP.';
+    if (dbm >= -24.0 && dbm <= -14.0) return 'Redaman berada dalam batas standar (-14 s/d -24 dBm). Kualitas koneksi optimal.';
+    if (dbm > -14.0) return 'Daya optik terlalu tinggi (> -14 dBm). Pertimbangkan pemasangan optical attenuator.';
+    if (dbm > -27.0) return 'Sinyal mendekati ambang batas (-24 s/d -27 dBm). Periksa konektor dan kelengkungan kabel drop.';
+    return 'Redaman melebihi batas toleransi (< -27 dBm). Periksa sambungan splice, konektor ODP, atau redaman kabel.';
+  }
+
+  IconData _qualityIcon(double? dbm) {
+    if (dbm == null) return Icons.wifi_off_rounded;
+    if (dbm >= -24.0 && dbm <= -14.0) return Icons.check_circle_rounded;
+    if (dbm > -14.0) return Icons.warning_rounded;
+    if (dbm > -27.0) return Icons.error_outline_rounded;
+    return Icons.report_problem_rounded;
   }
 
   // ───────────────────────────── UI ─────────────────────────────
@@ -186,8 +189,6 @@ class _OntPowerCheckScreenState extends State<OntPowerCheckScreen> {
                         ),
                       if (_errorMessage != null || _usingFallback) _buildFallbackBanner(),
                       _buildGaugeCard(),
-                      const SizedBox(height: 14),
-                      _buildMetricGrid(),
                       const SizedBox(height: 14),
                       _buildDetailCard(),
                       const SizedBox(height: 14),
@@ -430,164 +431,222 @@ class _OntPowerCheckScreenState extends State<OntPowerCheckScreen> {
       padding: padding,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [BoxShadow(color: _navyDeep.withValues(alpha: 0.05), blurRadius: 14, offset: const Offset(0, 4))],
       ),
       child: child,
     );
   }
 
+  // ───────────────────────────── SPEEDOMETER CARD ─────────────────────────────
   Widget _buildGaugeCard() {
     final rx = _rx;
     final color = AppColors.getOpticalColor(rx);
 
     return _card(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
       child: Column(
         children: [
+          // Header Card
           Row(
             children: [
-              const Icon(Icons.settings_input_antenna_rounded, size: 16, color: _brandBlue),
-              const SizedBox(width: 6),
-              const Text('Rx Optical Power', style: TextStyle(color: _textDark, fontSize: 13.5, fontWeight: FontWeight.w800)),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: _brandBlue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.settings_input_antenna_rounded, size: 16, color: _brandBlue),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Rx Optical Power',
+                style: TextStyle(color: _textDark, fontSize: 14, fontWeight: FontWeight.w800),
+              ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: _bg, borderRadius: BorderRadius.circular(6)),
-                child: Text(_source, style: const TextStyle(color: _textBody, fontSize: 10, fontWeight: FontWeight.w700)),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _border),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: _usingFallback ? AppColors.warning : AppColors.success,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      _source,
+                      style: const TextStyle(color: _textBody, fontSize: 10.5, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 18),
+
+          // Speedometer Arc Display
           SizedBox(
-            height: 150,
+            width: double.infinity,
+            height: 175,
             child: Stack(
-              alignment: Alignment.bottomCenter,
+              alignment: Alignment.center,
               children: [
-                Positioned.fill(child: CustomPaint(painter: _GaugePainter(rx))),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
+                // Canvas Arc Gauge
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _ModernSpeedometerPainter(rx: rx),
+                  ),
+                ),
+
+                // Readout di dalam kubah Arc
+                Positioned(
+                  bottom: 12,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         rx != null ? rx.toStringAsFixed(2) : '--',
-                        style: TextStyle(color: color, fontSize: 38, fontWeight: FontWeight.w900, height: 1),
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 40,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
+                          height: 1.0,
+                        ),
                       ),
-                      const SizedBox(height: 2),
-                      const Text('dBm', style: TextStyle(color: _textMuted, fontSize: 12, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'dBm (Optical RX)',
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
           ),
+
+          // Skala Min / Max
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 6),
+            padding: EdgeInsets.symmetric(horizontal: 14),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('-35', style: TextStyle(color: _textMuted, fontSize: 10, fontWeight: FontWeight.w600)),
-                Text('-8', style: TextStyle(color: _textMuted, fontSize: 10, fontWeight: FontWeight.w600)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('-35 dBm', style: TextStyle(color: _textDark, fontSize: 11, fontWeight: FontWeight.w800)),
+                    Text('Batas Kritis', style: TextStyle(color: _textMuted, fontSize: 9.5, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('-8 dBm', style: TextStyle(color: _textDark, fontSize: 11, fontWeight: FontWeight.w800)),
+                    Text('Batas Maks', style: TextStyle(color: _textMuted, fontSize: 9.5, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Status Badge Pill
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: color.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(_qualityIcon(rx), size: 16, color: color),
+                const SizedBox(width: 7),
+                Text(
+                  _qualityLabel(rx),
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.5,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 12),
+
+          // Diagnostic Insight Box
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
-            child: Text(
-              _qualityLabel(rx),
-              style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.6),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _border),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            _qualityHint(rx),
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: _textBody, fontSize: 12.5, height: 1.4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.lightbulb_outline_rounded,
+                  size: 16,
+                  color: color,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _qualityHint(rx),
+                    style: const TextStyle(
+                      color: _textBody,
+                      fontSize: 12,
+                      height: 1.4,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMetricGrid() {
-    final tx = _tx;
-    final oltRx = _num(_data?['olt_rx_power_dbm']);
-    final distance = _num(_data?['distance_meters']) ?? widget.customer?.distanceMeters?.toDouble();
-    final temp = _num(_data?['temperature_c']);
-    final volt = _num(_data?['voltage_v']);
-    final bias = _num(_data?['bias_current_ma']);
-
-    String fmt(double? v, String unit, {int digits = 2}) => v == null ? '-' : '${v.toStringAsFixed(digits)} $unit';
-    String fmtDist(double? m) {
-      if (m == null || m <= 0) return '-';
-      return m >= 1000 ? '${(m / 1000).toStringAsFixed(2)} km' : '${m.toStringAsFixed(0)} m';
-    }
-
-    final items = [
-      _Metric(Icons.upload_rounded, 'Tx Power', fmt(tx, 'dBm'), const Color(0xFF0284C7)),
-      _Metric(Icons.download_rounded, 'OLT Rx', fmt(oltRx, 'dBm'), AppColors.getOpticalColor(oltRx)),
-      _Metric(Icons.straighten_rounded, 'Jarak Fiber', fmtDist(distance), const Color(0xFF7C3AED)),
-      _Metric(Icons.thermostat_rounded, 'Suhu', fmt(temp, '°C', digits: 1), const Color(0xFFD97706)),
-      _Metric(Icons.bolt_rounded, 'Tegangan', fmt(volt, 'V'), const Color(0xFF16A34A)),
-      _Metric(Icons.electric_meter_rounded, 'Bias Current', fmt(bias, 'mA', digits: 1), const Color(0xFFDB2777)),
-    ];
-
-    return GridView.builder(
-      shrinkWrap: true,
-      padding: EdgeInsets.zero,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 0.98,
-      ),
-      itemBuilder: (_, i) {
-        final m = items[i];
-        return _card(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: m.color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(9)),
-                child: Icon(m.icon, size: 15, color: m.color),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(m.value, style: const TextStyle(color: _textDark, fontSize: 13.5, fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(m.label, style: const TextStyle(color: _textMuted, fontSize: 10.5, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
+  // ───────────────────────────── DEVICE DETAIL ─────────────────────────────
   Widget _buildDetailCard() {
     final cust = widget.customer;
     final olt = _sub('olt');
     final dist = _sub('distribution');
 
-    final oltName = _clean(olt?['name']) ?? cust?.oltName ?? '-';
+    final oltName = _clean(olt?['name']) ?? cust?.oltName ?? 'OLT Utama';
     final port = _clean(_data?['port']) ?? cust?.gponInterface ?? '-';
     final onuId = _clean(_data?['onu_id']);
-    final model = _clean(_data?['vendor_model']) ?? cust?.onuType ?? '-';
-    final mac = _clean(_data?['mac_address']) ?? cust?.onuMac;
+    final model = _clean(_data?['vendor_model']) ?? cust?.onuType ?? 'HGU GPON/EPON';
     final odp = _clean(dist?['odp_name']) ?? cust?.odpName;
     final odpPort = _clean(dist?['odp_port']) ?? cust?.odpPort;
     final status = _clean(_data?['status']) ?? (_isOnline ? 'Online' : 'Offline');
@@ -602,7 +661,6 @@ class _OntPowerCheckScreenState extends State<OntPowerCheckScreen> {
           _infoRow(Icons.lan_rounded, 'Port PON', onuId != null ? '$port : $onuId' : port),
           _infoRow(Icons.hub_rounded, 'ODP / Port', odp != null ? '$odp${odpPort != null ? ' • Port $odpPort' : ''}' : 'Belum terpetakan'),
           _infoRow(Icons.router_outlined, 'Model ONT', model),
-          if (mac != null) _infoRow(Icons.memory_rounded, 'MAC Address', mac),
           _infoRow(
             Icons.wifi_tethering_rounded,
             'Status Koneksi',
@@ -660,13 +718,13 @@ class _OntPowerCheckScreenState extends State<OntPowerCheckScreen> {
         children: [
           const Text('Standar Redaman GPON', style: TextStyle(color: _textDark, fontSize: 13.5, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          row(AppColors.success, '-14 s/d -24 dBm', 'Baik'),
-          row(AppColors.warning, '-24 s/d -27 dBm', 'Waspada'),
-          row(AppColors.danger, '< -27 dBm / > -14 dBm', 'Kritis'),
+          row(AppColors.success, '-14 s/d -24 dBm', 'Baik (Optimal)'),
+          row(AppColors.warning, '-24 s/d -27 dBm', 'Waspada (Batas Wajar)'),
+          row(AppColors.danger, '< -27 dBm / > -14 dBm', 'Kritis (Periksa Jaringan)'),
           const SizedBox(height: 4),
           const Divider(color: _border, height: 16),
           const Text(
-            'Tarik layar ke bawah untuk memperbarui pembacaan.',
+            'Tarik layar ke bawah untuk memperbarui pembacaan secara live.',
             style: TextStyle(color: _textMuted, fontSize: 11),
           ),
         ],
@@ -675,79 +733,105 @@ class _OntPowerCheckScreenState extends State<OntPowerCheckScreen> {
   }
 }
 
-class _Metric {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-  const _Metric(this.icon, this.label, this.value, this.color);
-}
-
-/// Gauge setengah lingkaran: -35 dBm (kiri) → -8 dBm (kanan).
-class _GaugePainter extends CustomPainter {
+/// Speedometer Painter modern:
+/// Menggambar busur 180° yang lebar dengan zona warna standar GPON
+/// dan penanda nilai (knob pointer) yang meluncur rapi di lingkar luar.
+class _ModernSpeedometerPainter extends CustomPainter {
   final double? rx;
-  _GaugePainter(this.rx);
+  const _ModernSpeedometerPainter({this.rx});
 
-  static const double _min = -35;
-  static const double _max = -8;
+  static const double _min = -35.0;
+  static const double _max = -8.0;
 
   double _t(double v) => ((v - _min) / (_max - _min)).clamp(0.0, 1.0);
 
   @override
   void paint(Canvas canvas, Size size) {
-    const stroke = 14.0;
-    final radius = math.min(size.width / 2, size.height) - stroke;
-    final center = Offset(size.width / 2, size.height - 4);
+    const strokeWidth = 14.0;
+    // Radius busur yang pas di tengah kontainer
+    final radius = math.min((size.width - 40) / 2, size.height - 18) - strokeWidth / 2;
+    final center = Offset(size.width / 2, size.height - 10);
     final rect = Rect.fromCircle(center: center, radius: radius);
 
-    // Track
-    final track = Paint()
-      ..color = const Color(0xFFEFF3F8)
+    // 1. Gambar Base Track abu-abu lembut
+    final trackPaint = Paint()
+      ..color = const Color(0xFFEEF2F6)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
+      ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, math.pi, math.pi, false, track);
 
-    // Zona warna: kritis (-35..-27), waspada (-27..-24), baik (-24..-14), terlalu kuat (-14..-8)
-    void zone(double from, double to, Color c) {
-      final p = Paint()
-        ..color = c.withValues(alpha: 0.28)
+    canvas.drawArc(rect, math.pi, math.pi, false, trackPaint);
+
+    // 2. Gambar Zona Warna Segmen GPON
+    // Skala: -35 s/d -8 dBm (total range 27 dBm)
+    // -35 s/d -27 = 8 dBm  -> Kritis (Merah)
+    // -27 s/d -24 = 3 dBm  -> Waspada (Kuning/Oranye)
+    // -24 s/d -14 = 10 dBm -> Normal/Baik (Hijau)
+    // -14 s/d -8  = 6 dBm  -> Terlalu Kuat (Merah/Oranye)
+    void drawZone(double from, double to, Color color) {
+      final tFrom = _t(from);
+      final tTo = _t(to);
+      final start = math.pi + (math.pi * tFrom);
+      final sweep = math.pi * (tTo - tFrom);
+
+      final zonePaint = Paint()
+        ..color = color.withValues(alpha: 0.30)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke;
-      final s = math.pi + math.pi * _t(from);
-      final sweep = math.pi * (_t(to) - _t(from));
-      canvas.drawArc(rect, s, sweep, false, p);
+        ..strokeWidth = strokeWidth;
+
+      canvas.drawArc(rect, start, sweep, false, zonePaint);
     }
 
-    zone(-35, -27, AppColors.danger);
-    zone(-27, -24, AppColors.warning);
-    zone(-24, -14, AppColors.success);
-    zone(-14, -8, AppColors.danger);
+    drawZone(-35.0, -27.0, const Color(0xFFEF4444));
+    drawZone(-27.0, -24.0, const Color(0xFFF59E0B));
+    drawZone(-24.0, -14.0, const Color(0xFF10B981));
+    drawZone(-14.0, -8.0, const Color(0xFFEF4444));
 
     if (rx == null) return;
 
     final color = AppColors.getOpticalColor(rx);
     final t = _t(rx!);
 
-    // Progress
-    final prog = Paint()
-      ..shader = SweepGradient(
-        startAngle: math.pi,
-        endAngle: 2 * math.pi,
-        colors: [color.withValues(alpha: 0.55), color],
-      ).createShader(rect)
+    // 3. Gambar Progress Aktif sampai nilai RX saat ini
+    final activePaint = Paint()
+      ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
+      ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, math.pi, math.pi * t, false, prog);
 
-    // Penanda
-    final angle = math.pi + math.pi * t;
-    final knob = Offset(center.dx + radius * math.cos(angle), center.dy + radius * math.sin(angle));
-    canvas.drawCircle(knob, stroke / 2 + 4, Paint()..color = Colors.white);
-    canvas.drawCircle(knob, stroke / 2 + 1, Paint()..color = color);
+    canvas.drawArc(rect, math.pi, math.pi * t, false, activePaint);
+
+    // 4. Gambar Knob Pointer pada posisi saat ini
+    final angle = math.pi + (math.pi * t);
+    final knobCenter = Offset(
+      center.dx + radius * math.cos(angle),
+      center.dy + radius * math.sin(angle),
+    );
+
+    // Shadow knob
+    canvas.drawCircle(
+      knobCenter,
+      strokeWidth / 2 + 5,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.15)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+
+    // Lingkar luar putih
+    canvas.drawCircle(
+      knobCenter,
+      strokeWidth / 2 + 4,
+      Paint()..color = Colors.white,
+    );
+
+    // Lingkar dalam berwarna sesuai status
+    canvas.drawCircle(
+      knobCenter,
+      strokeWidth / 2 + 1,
+      Paint()..color = color,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _GaugePainter old) => old.rx != rx;
+  bool shouldRepaint(covariant _ModernSpeedometerPainter old) => old.rx != rx;
 }
