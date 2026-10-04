@@ -1038,30 +1038,32 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     final badge = banner['badge_text']?.toString();
                     final title = banner['title']?.toString() ?? '';
                     final subtitle = banner['subtitle']?.toString() ?? '';
+                    final bool hasText = title.isNotEmpty || subtitle.isNotEmpty || (badge != null && badge.isNotEmpty);
 
                     return InkWell(
                       onTap: () => _handleSlideBannerTap(banner),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          // Background Image / Gradient
+                          // Background Image / Clean Fallback
                           if (imgUrl != null && imgUrl.isNotEmpty)
                             CachedNetworkImage(
                               imageUrl: imgUrl,
                               fit: BoxFit.cover,
                               placeholder: (_, __) => Container(
-                                decoration: const BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [Color(0xFF002752), Color(0xFF005B9E)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
+                                color: const Color(0xFFF1F5F9),
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF005BAA)),
                                   ),
                                 ),
                               ),
                               errorWidget: (_, __, ___) => Container(
                                 decoration: const BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [Color(0xFF002752), Color(0xFF005B9E)],
+                                    colors: [Color(0xFF003875), Color(0xFF005B9E)],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
@@ -1072,110 +1074,97 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                             Container(
                               decoration: const BoxDecoration(
                                 gradient: LinearGradient(
-                                  colors: [Color(0xFF002752), Color(0xFF005B9E)],
+                                  colors: [Color(0xFF003875), Color(0xFF005B9E)],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
                               ),
                             ),
 
-                          // Subtle Cyber Fiber Glow
-                          Positioned(
-                            right: -20,
-                            top: -20,
-                            child: Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
-                              ),
-                            ),
-                          ),
-
-                          // Contrast Overlay
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                                colors: [
-                                  Colors.black.withValues(alpha: 0.88),
-                                  Colors.black.withValues(alpha: 0.65),
-                                  Colors.black.withValues(alpha: 0.15),
-                                ],
-                                stops: const [0.0, 0.6, 1.0],
-                              ),
-                            ),
-                          ),
-
-                          // Banner Text Content
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (badge != null && badge.isNotEmpty) ...[
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: brimoOrange,
-                                      borderRadius: BorderRadius.circular(6),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: brimoOrange.withValues(alpha: 0.5),
-                                          blurRadius: 6,
+                          // Banner Text Content (with subtle text shadow for clean legibility without darkening the image)
+                          if (hasText)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (badge != null && badge.isNotEmpty) ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: brimoOrange,
+                                        borderRadius: BorderRadius.circular(6),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.25),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 1),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Text(
+                                        badge.toUpperCase(),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.6,
                                         ),
-                                      ],
-                                    ),
-                                    child: Text(
-                                      badge.toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.6,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                ],
-                                ConstrainedBox(
-                                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
-                                  child: Text(
-                                    title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14.5,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.2,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                ),
-                                if (subtitle.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  ConstrainedBox(
-                                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.65),
-                                    child: Text(
-                                      subtitle,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.85),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.25,
+                                    const SizedBox(height: 6),
+                                  ],
+                                  if (title.isNotEmpty)
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+                                      child: Text(
+                                        title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14.5,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.2,
+                                          height: 1.2,
+                                          shadows: [
+                                            Shadow(
+                                              color: Colors.black87,
+                                              offset: Offset(0, 1.5),
+                                              blurRadius: 6,
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                  if (subtitle.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.70),
+                                      child: Text(
+                                        subtitle,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.95),
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.25,
+                                          shadows: const [
+                                            Shadow(
+                                              color: Colors.black87,
+                                              offset: Offset(0, 1.5),
+                                              blurRadius: 4,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     );

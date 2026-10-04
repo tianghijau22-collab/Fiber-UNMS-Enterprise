@@ -1107,21 +1107,18 @@ export default function MobileAppTesting() {
                                 />
                               ) : null}
 
-                              {/* Dark Gradient Overlay */}
-                              <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/65 to-black/20" />
-
-                              {/* Slide Content */}
+                              {/* Slide Content with Text Shadow */}
                               <div className="absolute inset-0 p-3 flex flex-col justify-center text-white">
                                 {currentSlide?.badge_text && (
-                                  <span className="self-start px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-orange-500 text-white mb-1 shadow-xs">
+                                  <span className="self-start px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-orange-500 text-white mb-1 shadow-md">
                                     {currentSlide.badge_text}
                                   </span>
                                 )}
-                                <h4 className="text-xs font-black line-clamp-2 leading-tight">
+                                <h4 className="text-xs font-black line-clamp-2 leading-tight drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.8)]">
                                   {currentSlide?.title || 'Judul Banner'}
                                 </h4>
                                 {currentSlide?.subtitle && (
-                                  <p className="text-[9px] text-white/80 line-clamp-2 mt-0.5">
+                                  <p className="text-[9px] text-white/95 font-medium line-clamp-2 mt-0.5 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                                     {currentSlide.subtitle}
                                   </p>
                                 )}
