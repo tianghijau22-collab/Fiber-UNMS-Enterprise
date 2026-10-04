@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/network/dio_client.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/notification_provider.dart';
@@ -27,7 +29,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   static const Color brimoOrange = Color(0xFFF37021);      // BRImo Warm Accent Orange
   static const Color brimoBg = Color(0xFFF4F6F9);          // Light grey background
 
-  bool _obscureMetrics = false;
+  // Slide Banners from Web Admin
+  List<Map<String, dynamic>> _slideBanners = [];
+  int _currentSlideIndex = 0;
+  late final PageController _slidePageController = PageController();
+  Timer? _slideTimer;
 
   // Dynamic Background Banner from Web Admin
   String? _customBannerUrl;
@@ -96,10 +102,237 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     }
   }
 
+  Future<void> _fetchSlideBanners() async {
+    try {
+      final res = await DioClient().dio.get('/app-testing/slider-banners/active');
+      if (res.data != null && res.data['status'] == 'success') {
+        final List<dynamic> data = res.data['data'] ?? [];
+        final serverBase = DioClient().dio.options.baseUrl;
+        final serverUri = Uri.tryParse(serverBase);
+
+        final List<Map<String, dynamic>> resolvedBanners = [];
+        for (final item in data) {
+          if (item is Map) {
+            final bannerMap = Map<String, dynamic>.from(item);
+            String? img = bannerMap['image_url_full']?.toString() ?? bannerMap['image_url']?.toString();
+            if (img != null && !img.startsWith('http') && !img.startsWith('data:') && serverUri != null) {
+              final imgUri = Uri.tryParse(img);
+              if (imgUri != null) {
+                img = imgUri.replace(
+                  scheme: serverUri.scheme,
+                  host: serverUri.host,
+                  port: serverUri.hasPort ? serverUri.port : null,
+                ).toString();
+              }
+            }
+            bannerMap['image_url_resolved'] = img;
+            resolvedBanners.add(bannerMap);
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _slideBanners = resolvedBanners;
+          });
+          _startSlideTimer();
+        }
+        return;
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        if (_slideBanners.isEmpty) {
+          _slideBanners = _getDefaultSlideBanners();
+        }
+      });
+      _startSlideTimer();
+    }
+  }
+
+  void _startSlideTimer() {
+    _slideTimer?.cancel();
+    if (_slideBanners.length > 1) {
+      _slideTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+        if (!mounted || !_slidePageController.hasClients) return;
+        final next = (_currentSlideIndex + 1) % _slideBanners.length;
+        _slidePageController.animateToPage(
+          next,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOutCubic,
+        );
+      });
+    }
+  }
+
+  List<Map<String, dynamic>> _getDefaultSlideBanners() {
+    return [
+      {
+        'id': -1,
+        'title': 'Promo Pasang Baru Fiber Optic FONA',
+        'subtitle': 'Nikmati koneksi internet ultra cepat & stabil hingga 1 Gbps dengan gratis aktivasi.',
+        'badge_text': 'PROMO BULAN INI',
+        'image_url_resolved': 'https://images.unsplash.com/photo-1544197150-b99a580bb7a8?auto=format&fit=crop&w=1200&q=80',
+        'action_type': 'none',
+      },
+      {
+        'id': -2,
+        'title': 'Monitoring Jaringan 24/7 Siaga Gangguan',
+        'subtitle': 'Pemantauan real-time status redaman OLT, ODP & trap alert otomatis demi kepuasan pelanggan.',
+        'badge_text': 'NETWORK 24/7',
+        'image_url_resolved': 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80',
+        'action_type': 'screen',
+        'action_url': 'gis_map',
+      },
+      {
+        'id': -3,
+        'title': 'FONA Mobile Enterprise v2.5',
+        'subtitle': 'Dukungan scan ONT instan, topologi peta kabel GIS interaktif & notifikasi gangguan.',
+        'badge_text': 'PEMBARUAN SISTEM',
+        'image_url_resolved': 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80',
+        'action_type': 'none',
+      },
+    ];
+  }
+
+  void _handleSlideBannerTap(Map<String, dynamic> banner) async {
+    final actionType = banner['action_type']?.toString() ?? 'none';
+    final actionUrl = banner['action_url']?.toString();
+
+    if (actionType == 'screen' && actionUrl != null && actionUrl.isNotEmpty) {
+      switch (actionUrl.toLowerCase()) {
+        case 'gis_map':
+        case 'gis':
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const GisMapScreen()));
+          return;
+        case 'olt':
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const OltListScreen()));
+          return;
+        case 'nodes':
+        case 'node':
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const NodesListScreen()));
+          return;
+        case 'customers':
+        case 'customer':
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen()));
+          return;
+        case 'tickets':
+        case 'ticket':
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const TicketListScreen()));
+          return;
+        case 'alerts':
+        case 'trap':
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemAlertScreen()));
+          return;
+      }
+    } else if (actionType == 'url' && actionUrl != null && actionUrl.isNotEmpty) {
+      final uri = Uri.tryParse(actionUrl);
+      if (uri != null) {
+        try {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          return;
+        } catch (_) {}
+      }
+    }
+
+    _showBannerDetailDialog(banner);
+  }
+
+  void _showBannerDetailDialog(Map<String, dynamic> banner) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (banner['image_url_resolved'] != null)
+              CachedNetworkImage(
+                imageUrl: banner['image_url_resolved'],
+                height: 160,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(
+                  height: 160,
+                  color: const Color(0xFF003875),
+                  child: const Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                ),
+                errorWidget: (_, __, ___) => Container(
+                  height: 160,
+                  color: const Color(0xFF003875),
+                  child: const Icon(Icons.broken_image_rounded, color: Colors.white70, size: 36),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (banner['badge_text'] != null && banner['badge_text'].toString().isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: brimoOrange.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        banner['badge_text'].toString().toUpperCase(),
+                        style: const TextStyle(
+                          color: brimoOrange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  Text(
+                    banner['title']?.toString() ?? 'Pengumuman FONA',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  if (banner['subtitle'] != null && banner['subtitle'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      banner['subtitle'].toString(),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF475569),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: TextButton.styleFrom(
+                        foregroundColor: brimoBlue,
+                        textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      child: const Text('Tutup'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     _fetchDashboardBanner();
+    _fetchSlideBanners();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final dp = Provider.of<DashboardProvider>(context, listen: false);
       dp.fetchDashboardData();
@@ -113,6 +346,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
   @override
   void dispose() {
+    _slideTimer?.cancel();
+    _slidePageController.dispose();
     Provider.of<DashboardProvider>(context, listen: false).stopAutoRefresh();
     Provider.of<NotificationProvider>(context, listen: false).stopAutoSync();
     super.dispose();
@@ -580,8 +815,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     _buildFeatureGrid(context),
                     const SizedBox(height: 24),
 
-                    // ── D. CATATAN KEUANGANMO (Metrik Jaringan) ──
-                    _buildFinancialNotesSection(onlineCustomers, offlineCustomers),
+                    // ── D. SLIDE BANNER DASHBOARD ──
+                    _buildDashboardSlideBanner(),
                     const SizedBox(height: 20),
 
                     // ── E. ALERT & INFO TERKINI ──
@@ -767,166 +1002,230 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     );
   }
 
-  /// Kesehatan Jaringanfona Section (Side-by-side green & red split cards)
-  Widget _buildFinancialNotesSection(int onlineCustomers, int offlineCustomers) {
+  /// Modern Interactive Slide Banner Carousel (Managed via Web Admin Panel)
+  Widget _buildDashboardSlideBanner() {
+    final banners = _slideBanners.isNotEmpty ? _slideBanners : _getDefaultSlideBanners();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            RichText(
-              text: const TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Kesehatan Jaringan',
-                    style: TextStyle(
-                      color: Color(0xFF0F172A),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  TextSpan(
-                    text: 'fona',
-                    style: TextStyle(
-                      color: brimoOrange,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
+        Container(
+          height: 145,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
               ),
-            ),
-            InkWell(
-              onTap: () => setState(() => _obscureMetrics = !_obscureMetrics),
-              child: Row(
-                children: [
-                  const Text(
-                    'Tampilkan',
-                    style: TextStyle(
-                      color: brimoBlue,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    _obscureMetrics ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                    color: brimoBlue,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 2),
-        const Text(
-          'Status Operasional Realtime 24/7',
-          style: TextStyle(
-            color: Color(0xFF94A3B8),
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
+            ],
           ),
-        ),
-        const SizedBox(height: 12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Stack(
+              children: [
+                // PageView Carousel
+                PageView.builder(
+                  controller: _slidePageController,
+                  onPageChanged: (index) {
+                    setState(() => _currentSlideIndex = index);
+                  },
+                  itemCount: banners.length,
+                  itemBuilder: (context, index) {
+                    final banner = banners[index];
+                    final imgUrl = banner['image_url_resolved']?.toString();
+                    final badge = banner['badge_text']?.toString();
+                    final title = banner['title']?.toString() ?? '';
+                    final subtitle = banner['subtitle']?.toString() ?? '';
 
-        // Split Cards: Pelanggan Online & Pelanggan Offline
-        Row(
-          children: [
-            // Left Card: Pelanggan Online
-            Expanded(
-              child: InkWell(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen(initialFilter: 'ONLINE'))),
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.02),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    return InkWell(
+                      onTap: () => _handleSlideBannerTap(banner),
+                      child: Stack(
+                        fit: StackFit.expand,
                         children: [
-                          Text(
-                            'Pelanggan Online',
-                            style: TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                          // Background Image / Gradient
+                          if (imgUrl != null && imgUrl.isNotEmpty)
+                            CachedNetworkImage(
+                              imageUrl: imgUrl,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) => Container(
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [Color(0xFF002752), Color(0xFF005B9E)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (_, __, ___) => Container(
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [Color(0xFF002752), Color(0xFF005B9E)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [Color(0xFF002752), Color(0xFF005B9E)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                            ),
+
+                          // Subtle Cyber Fiber Glow
+                          Positioned(
+                            right: -20,
+                            top: -20,
+                            child: Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
+                              ),
                             ),
                           ),
-                          Icon(Icons.wifi_rounded, color: Color(0xFF10B981), size: 16),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      _obscureMetrics
-                          ? const Text('● ● ● ● ● ●', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold))
-                          : Text('$onlineCustomers Online', style: const TextStyle(color: Color(0xFF10B981), fontSize: 13, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
 
-            // Right Card: Pelanggan Offline
-            Expanded(
-              child: InkWell(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen(initialFilter: 'OFFLINE'))),
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.02),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Pelanggan Offline',
-                            style: TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                          // Contrast Overlay
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: [
+                                  Colors.black.withValues(alpha: 0.88),
+                                  Colors.black.withValues(alpha: 0.65),
+                                  Colors.black.withValues(alpha: 0.15),
+                                ],
+                                stops: const [0.0, 0.6, 1.0],
+                              ),
                             ),
                           ),
-                          Icon(Icons.portable_wifi_off_rounded, color: Color(0xFFEF4444), size: 16),
+
+                          // Banner Text Content
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (badge != null && badge.isNotEmpty) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: brimoOrange,
+                                      borderRadius: BorderRadius.circular(6),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: brimoOrange.withValues(alpha: 0.5),
+                                          blurRadius: 6,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Text(
+                                      badge.toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                ],
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
+                                  child: Text(
+                                    title,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.2,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ),
+                                if (subtitle.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.65),
+                                    child: Text(
+                                      subtitle,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.85),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.25,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      _obscureMetrics
-                          ? const Text('● ● ● ● ● ●', style: TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.bold))
-                          : Text('$offlineCustomers Offline', style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-              ),
+
+                // Indicator Dots (Bottom Right)
+                if (banners.length > 1)
+                  Positioned(
+                    bottom: 10,
+                    right: 14,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.50),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.20),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(banners.length, (dotIdx) {
+                          final isActive = dotIdx == _currentSlideIndex;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                            width: isActive ? 16 : 5,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: isActive ? const Color(0xFF00E5FF) : Colors.white.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: isActive
+                                  ? [
+                                      BoxShadow(
+                                        color: const Color(0xFF00E5FF).withValues(alpha: 0.8),
+                                        blurRadius: 4,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-          ],
+          ),
         ),
       ],
     );

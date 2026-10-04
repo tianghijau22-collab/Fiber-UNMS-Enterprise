@@ -227,6 +227,16 @@ Route::post('app-testing/dashboard-banner', [\App\Http\Controllers\AppTestingCon
 Route::post('app-testing/dashboard-banner-config', [\App\Http\Controllers\AppTestingController::class, 'saveDashboardBannerConfig']);
 Route::delete('app-testing/dashboard-banner', [\App\Http\Controllers\AppTestingController::class, 'deleteDashboardBanner']);
 
+// Mobile Dashboard Slider Banners (Super Admin & Mobile Active Banners)
+Route::get('app-testing/slider-banners/active', [\App\Http\Controllers\MobileSliderBannerController::class, 'getActiveBanners']);
+Route::post('app-testing/slider-banners/upload-image', [\App\Http\Controllers\MobileSliderBannerController::class, 'uploadImage']);
+Route::get('app-testing/slider-banners', [\App\Http\Controllers\MobileSliderBannerController::class, 'index']);
+Route::post('app-testing/slider-banners', [\App\Http\Controllers\MobileSliderBannerController::class, 'store']);
+Route::get('app-testing/slider-banners/{id}', [\App\Http\Controllers\MobileSliderBannerController::class, 'show']);
+Route::put('app-testing/slider-banners/{id}', [\App\Http\Controllers\MobileSliderBannerController::class, 'update']);
+Route::patch('app-testing/slider-banners/{id}/toggle', [\App\Http\Controllers\MobileSliderBannerController::class, 'toggleActive']);
+Route::delete('app-testing/slider-banners/{id}', [\App\Http\Controllers\MobileSliderBannerController::class, 'destroy']);
+
 // Pop-up Alert Pemberitahuan untuk User (Super Admin & Public Active Alerts)
 Route::get('popup-alerts/active', [\App\Http\Controllers\PopupAlertController::class, 'getActiveAlerts']);
 Route::post('popup-alerts/upload-image', [\App\Http\Controllers\PopupAlertController::class, 'uploadImage']);

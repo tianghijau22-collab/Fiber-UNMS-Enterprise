@@ -13,8 +13,8 @@ export default function MobileAppTesting() {
   const [testingApi, setTestingApi] = useState(false);
   const [alertMsg, setAlertMsg] = useState(null);
 
-  // Mobile Background Banner States (Dashboard & Login)
-  const [activeBannerTab, setActiveBannerTab] = useState('dashboard'); // 'dashboard' | 'login'
+  // Mobile Background Banner States (Dashboard, Login, & Slider)
+  const [activeBannerTab, setActiveBannerTab] = useState('dashboard'); // 'dashboard' | 'login' | 'slider'
 
   const [loginBannerInfo, setLoginBannerInfo] = useState(null);
   const [loginBannerConfig, setLoginBannerConfig] = useState({
@@ -38,6 +38,26 @@ export default function MobileAppTesting() {
   const [bannerResetting, setBannerResetting] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
 
+  // Slide Banners State
+  const [sliderBanners, setSliderBanners] = useState([]);
+  const [loadingSliders, setLoadingSliders] = useState(false);
+  const [sliderModalOpen, setSliderModalOpen] = useState(false);
+  const [editingSlider, setEditingSlider] = useState(null);
+  const [sliderForm, setSliderForm] = useState({
+    title: '',
+    subtitle: '',
+    badge_text: '',
+    action_type: 'none',
+    action_url: '',
+    image_url: '',
+    sort_order: 1,
+    is_active: true,
+  });
+  const [sliderImageFile, setSliderImageFile] = useState(null);
+  const [sliderPreviewUrl, setSliderPreviewUrl] = useState('');
+  const [savingSlider, setSavingSlider] = useState(false);
+  const [previewSlideIndex, setPreviewSlideIndex] = useState(0);
+
   // Active banner helpers
   const isDashboard = activeBannerTab === 'dashboard';
   const currentBannerInfo = isDashboard ? dashBannerInfo : loginBannerInfo;
@@ -50,13 +70,28 @@ export default function MobileAppTesting() {
     }
   };
 
+  const fetchSliderBanners = async () => {
+    setLoadingSliders(true);
+    try {
+      const res = await axios.get('/api/app-testing/slider-banners');
+      if (res.data && res.data.status === 'success') {
+        setSliderBanners(res.data.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch slider banners:', err);
+    } finally {
+      setLoadingSliders(false);
+    }
+  };
+
   const fetchAppInfo = async () => {
     setLoading(true);
     try {
-      const [resApp, resLogin, resDash] = await Promise.all([
+      const [resApp, resLogin, resDash, resSliders] = await Promise.all([
         axios.get('/api/app-testing/info'),
         axios.get('/api/app-testing/login-banner'),
         axios.get('/api/app-testing/dashboard-banner'),
+        axios.get('/api/app-testing/slider-banners'),
       ]);
       if (resApp.data && resApp.data.status === 'success') {
         setAppInfo(resApp.data.data);
@@ -73,10 +108,157 @@ export default function MobileAppTesting() {
           setDashBannerConfig(resDash.data.data.config);
         }
       }
+      if (resSliders.data && resSliders.data.status === 'success') {
+        setSliderBanners(resSliders.data.data || []);
+      }
     } catch (err) {
       console.error('Failed to fetch mobile app info:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Preview Slide Timer
+  useEffect(() => {
+    if (activeBannerTab !== 'slider') return;
+    const activeSlides = sliderBanners.filter((b) => b.is_active);
+    if (activeSlides.length <= 1) return;
+
+    const timer = setInterval(() => {
+      setPreviewSlideIndex((prev) => (prev + 1) % activeSlides.length);
+    }, 3500);
+
+    return () => clearInterval(timer);
+  }, [activeBannerTab, sliderBanners]);
+
+  const handleOpenAddSlider = () => {
+    setEditingSlider(null);
+    setSliderForm({
+      title: '',
+      subtitle: '',
+      badge_text: '',
+      action_type: 'none',
+      action_url: '',
+      image_url: '',
+      sort_order: sliderBanners.length + 1,
+      is_active: true,
+    });
+    setSliderImageFile(null);
+    setSliderPreviewUrl('');
+    setSliderModalOpen(true);
+  };
+
+  const handleOpenEditSlider = (banner) => {
+    setEditingSlider(banner);
+    setSliderForm({
+      title: banner.title || '',
+      subtitle: banner.subtitle || '',
+      badge_text: banner.badge_text || '',
+      action_type: banner.action_type || 'none',
+      action_url: banner.action_url || '',
+      image_url: banner.image_url || '',
+      sort_order: banner.sort_order ?? 1,
+      is_active: Boolean(banner.is_active),
+    });
+    setSliderImageFile(null);
+    setSliderPreviewUrl(banner.image_url_full || banner.image_url || '');
+    setSliderModalOpen(true);
+  };
+
+  const handleSliderImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setAlertMsg({ type: 'error', text: 'Format gambar harus PNG, JPG, JPEG, atau WEBP.' });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAlertMsg({ type: 'error', text: 'Ukuran gambar maksimal 5MB.' });
+      return;
+    }
+
+    setSliderImageFile(file);
+    const objUrl = URL.createObjectURL(file);
+    setSliderPreviewUrl(objUrl);
+  };
+
+  const handleSaveSlider = async (e) => {
+    e.preventDefault();
+    if (!sliderImageFile && !sliderForm.image_url && !editingSlider?.image_url) {
+      setAlertMsg({ type: 'error', text: 'Gambar slide banner wajib diunggah atau diisi URL.' });
+      return;
+    }
+
+    setSavingSlider(true);
+    setAlertMsg(null);
+
+    const formData = new FormData();
+    if (sliderImageFile) {
+      formData.append('image', sliderImageFile);
+    }
+    if (sliderForm.image_url) {
+      formData.append('image_url', sliderForm.image_url);
+    }
+    formData.append('title', sliderForm.title || '');
+    formData.append('subtitle', sliderForm.subtitle || '');
+    formData.append('badge_text', sliderForm.badge_text || '');
+    formData.append('action_type', sliderForm.action_type || 'none');
+    formData.append('action_url', sliderForm.action_url || '');
+    formData.append('sort_order', sliderForm.sort_order ?? 1);
+    formData.append('is_active', sliderForm.is_active ? '1' : '0');
+
+    try {
+      let res;
+      if (editingSlider) {
+        formData.append('_method', 'PUT');
+        res = await axios.post(`/api/app-testing/slider-banners/${editingSlider.id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        res = await axios.post('/api/app-testing/slider-banners', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
+
+      if (res.data && res.data.status === 'success') {
+        setAlertMsg({ type: 'success', text: res.data.message });
+        setSliderModalOpen(false);
+        fetchSliderBanners();
+      }
+    } catch (err) {
+      setAlertMsg({
+        type: 'error',
+        text: err.response?.data?.message || 'Gagal menyimpan slide banner.',
+      });
+    } finally {
+      setSavingSlider(false);
+    }
+  };
+
+  const handleToggleSlider = async (id) => {
+    try {
+      const res = await axios.patch(`/api/app-testing/slider-banners/${id}/toggle`);
+      if (res.data && res.data.status === 'success') {
+        setAlertMsg({ type: 'success', text: res.data.message });
+        fetchSliderBanners();
+      }
+    } catch (err) {
+      setAlertMsg({ type: 'error', text: 'Gagal mengubah status slide banner.' });
+    }
+  };
+
+  const handleDeleteSlider = async (id, title) => {
+    if (!window.confirm(`Yakin ingin menghapus slide banner "${title || 'Tanpa Judul'}"?`)) return;
+    try {
+      const res = await axios.delete(`/api/app-testing/slider-banners/${id}`);
+      if (res.data && res.data.status === 'success') {
+        setAlertMsg({ type: 'success', text: res.data.message });
+        fetchSliderBanners();
+      }
+    } catch (err) {
+      setAlertMsg({ type: 'error', text: 'Gagal menghapus slide banner.' });
     }
   };
 
@@ -440,9 +622,29 @@ export default function MobileAppTesting() {
                   {loginBannerInfo?.is_custom ? 'Kustom Aktif' : 'Default Maskot'}
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveBannerTab('slider')}
+                className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition cursor-pointer ${
+                  activeBannerTab === 'slider'
+                    ? 'border-cyan-600 text-cyan-600 dark:text-cyan-400'
+                    : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Slide Banner Dashboard
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">
+                  {sliderBanners.filter((b) => b.is_active).length} Aktif
+                </span>
+              </button>
             </div>
 
-            {/* Header Description & Status */}
+            {activeBannerTab !== 'slider' ? (
+              <>
+                {/* Header Description & Status */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/15 dark:border-white/15 pb-3">
               <div>
                 <h2 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
@@ -848,6 +1050,239 @@ export default function MobileAppTesting() {
                 </div>
               </div>
             )}
+              </>
+            ) : (
+              <div className="space-y-5">
+                {/* Header & Add Button */}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-black/15 dark:border-white/15 pb-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
+                      <svg className="w-4 h-4 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Manajemen Slide Banner Mobile Dashboard
+                    </h2>
+                    <p className="text-[11px] text-black/60 dark:text-white/60 mt-0.5">
+                      Kelola daftar banner promosi, pengumuman, dan informasi penting yang berputar otomatis di dashboard aplikasi mobile FONA.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddSlider}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs rounded-md shadow-xs transition cursor-pointer self-start sm:self-auto shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Tambah Slide Banner
+                  </button>
+                </div>
+
+                {/* Grid Layout: Live Interactive Mockup & Slide List */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                  {/* Left Column: Live Interactive Mockup */}
+                  <div className="lg:col-span-5 flex flex-col items-center">
+                    <div className="w-full max-w-[300px] bg-slate-900 rounded-2xl border-2 border-slate-700 shadow-xl p-2.5 overflow-hidden">
+                      <div className="flex items-center justify-between px-2 py-1 text-[10px] text-white/70 font-mono border-b border-white/10 mb-2">
+                        <span className="flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                          Live Slide Preview
+                        </span>
+                        <span>{sliderBanners.filter((b) => b.is_active).length} Aktif</span>
+                      </div>
+
+                      {/* Mockup Slide Container */}
+                      {sliderBanners.filter((b) => b.is_active).length > 0 ? (
+                        (() => {
+                          const activeSlides = sliderBanners.filter((b) => b.is_active);
+                          const currentSlide = activeSlides[previewSlideIndex % activeSlides.length];
+                          return (
+                            <div className="relative w-full h-36 rounded-xl overflow-hidden shadow-lg border border-white/15 bg-gradient-to-br from-[#002752] to-[#005B9E]">
+                              {/* Background Image */}
+                              {currentSlide?.image_url_full || currentSlide?.image_url ? (
+                                <img
+                                  src={currentSlide.image_url_full || currentSlide.image_url}
+                                  alt="Slide Preview"
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : null}
+
+                              {/* Dark Gradient Overlay */}
+                              <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/65 to-black/20" />
+
+                              {/* Slide Content */}
+                              <div className="absolute inset-0 p-3 flex flex-col justify-center text-white">
+                                {currentSlide?.badge_text && (
+                                  <span className="self-start px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-orange-500 text-white mb-1 shadow-xs">
+                                    {currentSlide.badge_text}
+                                  </span>
+                                )}
+                                <h4 className="text-xs font-black line-clamp-2 leading-tight">
+                                  {currentSlide?.title || 'Judul Banner'}
+                                </h4>
+                                {currentSlide?.subtitle && (
+                                  <p className="text-[9px] text-white/80 line-clamp-2 mt-0.5">
+                                    {currentSlide.subtitle}
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* Dot Indicators */}
+                              {activeSlides.length > 1 && (
+                                <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-black/50 px-1.5 py-0.5 rounded-full border border-white/20">
+                                  {activeSlides.map((_, dotIdx) => (
+                                    <button
+                                      key={dotIdx}
+                                      type="button"
+                                      onClick={() => setPreviewSlideIndex(dotIdx)}
+                                      className={`h-1 rounded-full transition-all cursor-pointer ${
+                                        dotIdx === (previewSlideIndex % activeSlides.length)
+                                          ? 'w-3 bg-cyan-400'
+                                          : 'w-1 bg-white/40'
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="w-full h-36 rounded-xl border border-dashed border-white/20 flex flex-col items-center justify-center text-white/50 text-xs p-4 text-center">
+                          <svg className="w-8 h-8 mb-1 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span>Belum ada slide banner aktif</span>
+                        </div>
+                      )}
+
+                      <div className="mt-2 text-center text-[10px] text-white/50 font-mono">
+                        Tampilan otomatis berotasi di aplikasi mobile
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Slide Banners List */}
+                  <div className="lg:col-span-7 space-y-3">
+                    {loadingSliders ? (
+                      <div className="p-8 text-center text-xs text-black/50 dark:text-white/50">
+                        Memuat data slide banner...
+                      </div>
+                    ) : sliderBanners.length === 0 ? (
+                      <div className="p-8 text-center rounded-lg border border-dashed border-black/20 dark:border-white/20 text-xs space-y-3">
+                        <p className="text-black/60 dark:text-white/60">
+                          Belum ada slide banner yang terdaftar. Tambahkan slide banner kustom untuk promosi atau informasi jaringan Anda.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleOpenAddSlider}
+                          className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs rounded-md shadow-xs transition"
+                        >
+                          + Tambah Slide Banner Pertama
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {sliderBanners.map((banner) => (
+                          <div
+                            key={banner.id}
+                            className={`p-3 rounded-lg border transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                              banner.is_active
+                                ? 'bg-white dark:bg-black/40 border-black/20 dark:border-white/20'
+                                : 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10 opacity-70'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              {/* Thumbnail */}
+                              <div className="w-18 h-12 rounded-md overflow-hidden bg-slate-800 shrink-0 border border-black/10 dark:border-white/10 relative">
+                                {banner.image_url_full || banner.image_url ? (
+                                  <img
+                                    src={banner.image_url_full || banner.image_url}
+                                    alt={banner.title || 'Slide'}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-[9px] text-white/50">
+                                    No Image
+                                  </div>
+                                )}
+                                <span className="absolute bottom-0.5 right-0.5 px-1 py-0.2 bg-black/70 text-white font-mono text-[8px] rounded">
+                                  #{banner.sort_order}
+                                </span>
+                              </div>
+
+                              {/* Details */}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {banner.badge_text && (
+                                    <span className="px-1.5 py-0.2 bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded text-[9px] font-black uppercase">
+                                      {banner.badge_text}
+                                    </span>
+                                  )}
+                                  <h4 className="text-xs font-bold text-black dark:text-white truncate">
+                                    {banner.title || 'Tanpa Judul'}
+                                  </h4>
+                                </div>
+                                {banner.subtitle && (
+                                  <p className="text-[11px] text-black/60 dark:text-white/60 line-clamp-1 mt-0.5">
+                                    {banner.subtitle}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-2 mt-1 text-[10px] text-black/50 dark:text-white/50 font-mono">
+                                  <span>Aksi: {banner.action_type === 'screen' ? `Layar (${banner.action_url})` : banner.action_type === 'url' ? 'Buka URL' : 'Teks Saja'}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions & Switch */}
+                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                              {/* Active Switch Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSlider(banner.id)}
+                                title={banner.is_active ? 'Klik untuk nonaktifkan' : 'Klik untuk aktifkan'}
+                                className={`px-2 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer border ${
+                                  banner.is_active
+                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                                    : 'bg-black/5 dark:bg-white/10 text-black/50 dark:text-white/50 border-black/15 dark:border-white/15'
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${banner.is_active ? 'bg-emerald-500' : 'bg-gray-400'}`}></span>
+                                {banner.is_active ? 'Aktif' : 'Nonaktif'}
+                              </button>
+
+                              {/* Edit Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditSlider(banner)}
+                                className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 rounded border border-transparent hover:border-blue-500/30 transition cursor-pointer"
+                                title="Edit Slide Banner"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+
+                              {/* Delete Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSlider(banner.id, banner.title)}
+                                className="p-1.5 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 rounded border border-transparent hover:border-rose-500/30 transition cursor-pointer"
+                                title="Hapus Slide Banner"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Mobile API Diagnostics Card */}
@@ -937,6 +1372,207 @@ export default function MobileAppTesting() {
           </div>
         </div>
       </div>
+
+      {/* Modal Dialog Form Tambah / Edit Slide Banner */}
+      {sliderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-neutral-900 border border-black/30 dark:border-white/30 rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-black/15 dark:border-white/15 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-black dark:text-white flex items-center gap-2">
+                <svg className="w-4 h-4 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {editingSlider ? 'Edit Slide Banner Mobile' : 'Tambah Slide Banner Baru'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSliderModalOpen(false)}
+                className="text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white text-base cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSlider} className="p-5 overflow-y-auto space-y-4 text-xs">
+              {/* Image Upload & Preview */}
+              <div className="space-y-2">
+                <label className="font-bold text-black dark:text-white block">
+                  Gambar Slide Banner <span className="text-rose-500">*</span>
+                </label>
+                {sliderPreviewUrl && (
+                  <div className="w-full h-32 rounded-lg overflow-hidden border border-black/20 dark:border-white/20 bg-slate-900 relative mb-2">
+                    <img
+                      src={sliderPreviewUrl}
+                      alt="Banner Preview"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/60 rounded text-[9px] text-white font-mono">
+                      Preview Gambar
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <label className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-black dark:text-white font-semibold rounded-md border border-black/20 dark:border-white/20 cursor-pointer transition">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Pilih File Gambar (Maks 5MB)
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      onChange={handleSliderImageChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                <div className="text-[10px] text-black/50 dark:text-white/50">
+                  Atau isi URL gambar langsung:
+                </div>
+                <input
+                  type="text"
+                  placeholder="https://... (URL gambar)"
+                  value={sliderForm.image_url}
+                  onChange={(e) => {
+                    setSliderForm({ ...sliderForm, image_url: e.target.value });
+                    if (!sliderImageFile && e.target.value) {
+                      setSliderPreviewUrl(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-1.5 rounded-md border border-black/20 dark:border-white/20 bg-transparent text-black dark:text-white text-xs focus:ring-1 focus:ring-cyan-500"
+                />
+              </div>
+
+              {/* Title & Badge */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="font-bold text-black dark:text-white block">Judul Banner</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Promo Pasang Baru Fiber Optic"
+                    value={sliderForm.title}
+                    onChange={(e) => setSliderForm({ ...sliderForm, title: e.target.value })}
+                    maxLength={150}
+                    className="w-full px-3 py-1.5 rounded-md border border-black/20 dark:border-white/20 bg-transparent text-black dark:text-white text-xs focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-black dark:text-white block">Badge Teks</label>
+                  <input
+                    type="text"
+                    placeholder="PROMO / INFO"
+                    value={sliderForm.badge_text}
+                    onChange={(e) => setSliderForm({ ...sliderForm, badge_text: e.target.value })}
+                    maxLength={30}
+                    className="w-full px-3 py-1.5 rounded-md border border-black/20 dark:border-white/20 bg-transparent text-black dark:text-white text-xs focus:ring-1 focus:ring-cyan-500 uppercase font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Subtitle */}
+              <div className="space-y-1">
+                <label className="font-bold text-black dark:text-white block">Subjudul / Deskripsi Singkat</label>
+                <textarea
+                  placeholder="Deskripsi singkat yang tampil di bawah judul banner..."
+                  value={sliderForm.subtitle}
+                  onChange={(e) => setSliderForm({ ...sliderForm, subtitle: e.target.value })}
+                  rows={2}
+                  maxLength={300}
+                  className="w-full px-3 py-1.5 rounded-md border border-black/20 dark:border-white/20 bg-transparent text-black dark:text-white text-xs focus:ring-1 focus:ring-cyan-500"
+                />
+              </div>
+
+              {/* Action Type & Action Target */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-black dark:text-white block">Tipe Aksi Saat Diklik</label>
+                  <select
+                    value={sliderForm.action_type}
+                    onChange={(e) => setSliderForm({ ...sliderForm, action_type: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-md border border-black/20 dark:border-white/20 bg-white dark:bg-black text-black dark:text-white text-xs focus:ring-1 focus:ring-cyan-500"
+                  >
+                    <option value="none">Hanya Teks &amp; Informasi</option>
+                    <option value="screen">Buka Layar / Menu Mobile</option>
+                    <option value="url">Buka Tautan Eksternal / Web</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-black dark:text-white block">Target Aksi</label>
+                  {sliderForm.action_type === 'screen' ? (
+                    <select
+                      value={sliderForm.action_url}
+                      onChange={(e) => setSliderForm({ ...sliderForm, action_url: e.target.value })}
+                      className="w-full px-3 py-1.5 rounded-md border border-black/20 dark:border-white/20 bg-white dark:bg-black text-black dark:text-white text-xs focus:ring-1 focus:ring-cyan-500"
+                    >
+                      <option value="">-- Pilih Layar Tujuan --</option>
+                      <option value="gis_map">Topologi GIS &amp; Peta Kabel</option>
+                      <option value="olt">Daftar Data OLT</option>
+                      <option value="nodes">Daftar Data Node</option>
+                      <option value="customers">Daftar Data Pelanggan</option>
+                      <option value="tickets">Daftar Tiket Gangguan</option>
+                      <option value="alerts">Log Trap &amp; System Alert</option>
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      disabled={sliderForm.action_type === 'none'}
+                      placeholder={sliderForm.action_type === 'url' ? 'https://fona.id/promo' : '-'}
+                      value={sliderForm.action_url}
+                      onChange={(e) => setSliderForm({ ...sliderForm, action_url: e.target.value })}
+                      className="w-full px-3 py-1.5 rounded-md border border-black/20 dark:border-white/20 bg-transparent text-black dark:text-white text-xs focus:ring-1 focus:ring-cyan-500 disabled:opacity-50"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Sort Order & Is Active */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pt-1 border-t border-black/10 dark:border-white/10">
+                <div className="space-y-1">
+                  <label className="font-bold text-black dark:text-white block">Nomor Urutan Tampil</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={sliderForm.sort_order}
+                    onChange={(e) => setSliderForm({ ...sliderForm, sort_order: parseInt(e.target.value) || 1 })}
+                    className="w-full px-3 py-1.5 rounded-md border border-black/20 dark:border-white/20 bg-transparent text-black dark:text-white text-xs focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-4">
+                  <input
+                    type="checkbox"
+                    id="slider_active_checkbox"
+                    checked={sliderForm.is_active}
+                    onChange={(e) => setSliderForm({ ...sliderForm, is_active: e.target.checked })}
+                    className="w-4 h-4 accent-cyan-600 rounded cursor-pointer"
+                  />
+                  <label htmlFor="slider_active_checkbox" className="text-xs font-bold text-black dark:text-white cursor-pointer select-none">
+                    Aktifkan Slide Banner Ini
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-black/15 dark:border-white/15 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setSliderModalOpen(false)}
+                  className="px-4 py-2 bg-black/5 dark:bg-white/10 hover:bg-black/10 text-black dark:text-white rounded-md text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingSlider}
+                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-md text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  {savingSlider ? 'Menyimpan...' : (editingSlider ? 'Perbarui Slide Banner' : 'Simpan Slide Banner')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
