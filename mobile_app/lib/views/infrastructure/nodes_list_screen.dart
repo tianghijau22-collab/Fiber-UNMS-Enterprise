@@ -954,7 +954,6 @@ class _NodesListScreenState extends State<NodesListScreen> {
   // ───────────────────────────── NODE CARD ─────────────────────────────
   Widget _buildNodeCard(Map<String, dynamic> node) {
     final name = (node['name'] ?? '-').toString();
-    final code = (node['code'] ?? '-').toString();
     final address = (node['address'] ?? 'Alamat belum diisi').toString();
     final type = (node['node_type'] ?? 'ODP').toString().toUpperCase();
     final status = (node['status'] ?? 'active').toString();
@@ -1046,24 +1045,6 @@ class _NodesListScreenState extends State<NodesListScreen> {
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              const Icon(Icons.badge_outlined, size: 12, color: _brandBlue),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  code,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: _brandBlue,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 11.5,
-                                  ),
-                                ),
-                              ),
                               if (type != 'ODP') ...[
                                 const SizedBox(width: 6),
                                 Container(
@@ -1080,7 +1061,7 @@ class _NodesListScreenState extends State<NodesListScreen> {
                               ],
                             ],
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 4),
                           Row(
                             children: [
                               const Icon(Icons.location_on_outlined, size: 12, color: _textMuted),
@@ -1363,7 +1344,6 @@ class _NodesListScreenState extends State<NodesListScreen> {
   // ───────────────────────────── DETAIL MODAL ─────────────────────────────
   void _showDetailModal(Map<String, dynamic> node) {
     final name = (node['name'] ?? 'Node Infrastruktur').toString();
-    final code = (node['code'] ?? '-').toString();
     final type = (node['node_type'] ?? 'ODP').toString().toUpperCase();
     final status = (node['status'] ?? 'active').toString();
     final statusColor = _getStatusColor(status);
@@ -1489,37 +1469,14 @@ class _NodesListScreenState extends State<NodesListScreen> {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              color: _textDark,
-                              fontSize: 16.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              Text(
-                                code,
-                                style: const TextStyle(
-                                  color: _textMuted,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              IconButton(
-                                constraints: const BoxConstraints(),
-                                padding: const EdgeInsets.only(left: 6),
-                                icon: const Icon(Icons.copy_rounded, size: 13, color: _textMuted),
-                                onPressed: () => _copyToClipboard(code, 'Kode Node'),
-                              ),
-                            ],
-                          ),
-                        ],
+                      child: Text(
+                        name,
+                        style: const TextStyle(
+                          color: _textDark,
+                          fontSize: 16.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                        ),
                       ),
                     ),
                     Container(
