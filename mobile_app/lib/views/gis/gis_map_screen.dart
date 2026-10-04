@@ -12,6 +12,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/network/dio_client.dart';
 import '../infrastructure/odp_port_monitoring_sheet.dart';
 import '../odp/odp_form_screen.dart';
+import 'street_view_screen.dart';
 
 class GisMapScreen extends StatefulWidget {
   final int? highlightNodeId;
@@ -380,29 +381,15 @@ class _GisMapScreenState extends State<GisMapScreen> {
     }
   }
 
-  Future<void> _openStreetView(double lat, double lng) async {
-    // 1. Coba buka Google Street View native panorama app intent
-    final nativeUri = Uri.parse('google.streetview:cbll=$lat,$lng');
-    final webUri = Uri.parse('https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=$lat,$lng');
-
-    try {
-      if (await canLaunchUrl(nativeUri)) {
-        await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
-        return;
-      }
-    } catch (_) {}
-
-    if (await canLaunchUrl(webUri)) {
-      await launchUrl(webUri, mode: LaunchMode.externalApplication);
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tidak dapat membuka Google Street View pada perangkat.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+  void _openStreetView(double lat, double lng, {String? nodeName, String? nodeType, String? address}) {
+    InAppStreetViewScreen.show(
+      context,
+      latitude: lat,
+      longitude: lng,
+      nodeName: nodeName,
+      nodeType: nodeType,
+      address: address,
+    );
   }
 
   void _copyToClipboard(String text, String label) {
@@ -1143,7 +1130,13 @@ class _GisMapScreenState extends State<GisMapScreen> {
                     InkWell(
                       onTap: () {
                         Navigator.pop(ctx);
-                        _openStreetView(node.latLng.latitude, node.latLng.longitude);
+                        _openStreetView(
+                          node.latLng.latitude,
+                          node.latLng.longitude,
+                          nodeName: node.name,
+                          nodeType: node.type,
+                          address: node.address,
+                        );
                       },
                       borderRadius: BorderRadius.circular(14),
                       child: Container(
@@ -1313,7 +1306,13 @@ class _GisMapScreenState extends State<GisMapScreen> {
                       ),
                       onPressed: () {
                         Navigator.pop(ctx);
-                        _openStreetView(node.latLng.latitude, node.latLng.longitude);
+                        _openStreetView(
+                          node.latLng.latitude,
+                          node.latLng.longitude,
+                          nodeName: node.name,
+                          nodeType: node.type,
+                          address: node.address,
+                        );
                       },
                       icon: const Icon(Icons.streetview_rounded, size: 16),
                       label: const Text(

@@ -6,6 +6,7 @@ import '../../core/constants/api_constants.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/network/dio_client.dart';
 import 'odp_port_monitoring_sheet.dart';
+import '../gis/street_view_screen.dart';
 
 class NodesListScreen extends StatefulWidget {
   final String initialType;
@@ -1576,7 +1577,36 @@ class _NodesListScreenState extends State<NodesListScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF16A34A),
+                          side: const BorderSide(color: Color(0xFF16A34A), width: 1.2),
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          final dLat = double.tryParse(lat.toString()) ?? 0.0;
+                          final dLng = double.tryParse(lng.toString()) ?? 0.0;
+                          if (dLat != 0.0 && dLng != 0.0) {
+                            InAppStreetViewScreen.show(
+                              context,
+                              latitude: dLat,
+                              longitude: dLng,
+                              nodeName: name,
+                              nodeType: type,
+                              address: address,
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.streetview_rounded, size: 16),
+                        label: const Text(
+                          'Street View',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                     ],
                     if (type == 'ODP')
                       Expanded(

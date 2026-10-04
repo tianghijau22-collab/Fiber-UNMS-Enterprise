@@ -46,6 +46,7 @@ dependencies:
   # GIS Map & Topology
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
+  webview_flutter: ^4.10.0
 
 dev_dependencies:
   flutter_test:
