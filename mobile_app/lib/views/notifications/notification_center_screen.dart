@@ -21,7 +21,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
   final List<String> _categories = const [
     'Semua Notifikasi',
     'Info',
-    'Promo',
     'Gangguan',
     'Tiket NOC',
     'Pemeliharaan',
@@ -46,9 +45,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
 
       switch (_selectedCategory) {
         case 'Info':
-          return t == 'INFO' || t == 'ANNOUNCEMENT' || t == 'BROADCAST' || t == 'SYSTEM' || t == 'SYSTEM_ALERT' || t == 'NOC' || title.contains('info') || title.contains('pengumuman');
-        case 'Promo':
-          return t == 'PROMO' || title.contains('promo') || title.contains('bonus') || title.contains('diskon') || body.contains('promo');
+          return t == 'INFO' || t == 'ANNOUNCEMENT' || t == 'BROADCAST' || t == 'SYSTEM' || t == 'SYSTEM_ALERT' || t == 'NOC' || title.contains('info') || title.contains('pengumuman') || body.contains('pengumuman');
         case 'Gangguan':
           return t == 'MASS_OUTAGE' ||
               t == 'OUTAGE_INTERFACE' ||
