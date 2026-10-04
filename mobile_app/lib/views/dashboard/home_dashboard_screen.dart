@@ -294,186 +294,243 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                     ),
                   ),
 
-                  // ── 2. HERO CARD (Saldo Rekening Utama + 4 Quick Actions) ──
+                  // ── 2. HERO CARD (Status Jaringan & Pelanggan) ──
                   Positioned(
                     left: 16,
                     right: 16,
-                    top: topPadding + 76,
+                    top: topPadding + 148,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF003875),
+                            Color(0xFF00529E),
+                            Color(0xFF0064B8),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                         borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.22),
+                          width: 1.2,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
+                            color: const Color(0xFF001B3A).withValues(alpha: 0.35),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
                           ),
                         ],
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Upper Blue Header Card: Saldo Rekening Utama
-                          Container(
-                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Color(0xFF00529E),
-                                  Color(0xFF0064B8),
-                                ],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(20),
-                                topRight: Radius.circular(20),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Stack(
+                          children: [
+                            // Subtle ambient glow accent
+                            Positioned(
+                              top: -24,
+                              right: -24,
+                              child: Container(
+                                width: 96,
+                                height: 96,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                                ),
                               ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Title & Eye Toggle
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text(
-                                      'Status Jaringan & Pelanggan',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12.5,
-                                        fontWeight: FontWeight.w500,
-                                        letterSpacing: 0.1,
-                                      ),
-                                    ),
-                                    InkWell(
-                                      onTap: () => setState(() => _obscureBalance = !_obscureBalance),
-                                      child: Icon(
-                                        _obscureBalance ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                        color: Colors.white,
-                                        size: 19,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
 
-                                // Value
-                                _obscureBalance
-                                    ? const Row(
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Row 1: Title & Eye Toggle Capsule
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Row(
                                         children: [
-                                          Icon(Icons.circle, size: 8, color: Colors.white),
-                                          SizedBox(width: 5),
-                                          Icon(Icons.circle, size: 8, color: Colors.white),
-                                          SizedBox(width: 5),
-                                          Icon(Icons.circle, size: 8, color: Colors.white),
-                                          SizedBox(width: 5),
-                                          Icon(Icons.circle, size: 8, color: Colors.white),
-                                          SizedBox(width: 5),
-                                          Icon(Icons.circle, size: 8, color: Colors.white),
-                                          SizedBox(width: 5),
-                                          Icon(Icons.circle, size: 8, color: Colors.white),
-                                        ],
-                                      )
-                                    : Row(
-                                        children: [
-                                          Text(
-                                            '$totalCustomers Pelanggan',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: 0.2,
+                                          Container(
+                                            width: 7,
+                                            height: 7,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF00E5FF),
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: const Color(0xFF00E5FF).withValues(alpha: 0.7),
+                                                  blurRadius: 6,
+                                                ),
+                                              ],
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: Colors.white.withValues(alpha: 0.22),
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                            child: Text(
-                                              '${customerOnlinePct.toStringAsFixed(1)}% Online',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                              ),
+                                          const Text(
+                                            'Status Jaringan & Pelanggan',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 0.1,
                                             ),
                                           ),
                                         ],
                                       ),
-                                const SizedBox(height: 12),
-
-                                // Thin Divider
-                                Container(
-                                  height: 1,
-                                  color: Colors.white.withValues(alpha: 0.18),
-                                ),
-                                const SizedBox(height: 10),
-
-                                // Bottom Link: Semua Pelanggan & Node
-                                InkWell(
-                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen())),
-                                  child: const Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'Semua Pelanggan & Node',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
+                                      InkWell(
+                                        onTap: () => setState(() => _obscureBalance = !_obscureBalance),
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(alpha: 0.14),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: Colors.white.withValues(alpha: 0.20),
+                                              width: 0.8,
+                                            ),
+                                          ),
+                                          child: Icon(
+                                            _obscureBalance ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                            color: Colors.white,
+                                            size: 16,
+                                          ),
                                         ),
                                       ),
-                                      Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
                                     ],
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
+                                  const SizedBox(height: 8),
 
-                          // Lower White Section: 4 FONA Quick Actions (Alert, OLT GPON, Peta GIS, Data Node)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                _buildCardQuickAction(
-                                  label: 'Alert',
-                                  icon: Icons.notification_important_rounded,
-                                  iconBgColor: const Color(0xFFFEF2F2),
-                                  iconColor: const Color(0xFFEF4444),
-                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SystemAlertScreen())),
-                                ),
-                                _buildCardQuickAction(
-                                  label: 'OLT GPON',
-                                  icon: Icons.router_rounded,
-                                  iconBgColor: const Color(0xFFE0F2FE),
-                                  iconColor: const Color(0xFF0284C7),
-                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OltListScreen())),
-                                ),
-                                _buildCardQuickAction(
-                                  label: 'Peta GIS',
-                                  icon: Icons.map_rounded,
-                                  iconBgColor: const Color(0xFFE0F7FA),
-                                  iconColor: const Color(0xFF0D9488),
-                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GisMapScreen())),
-                                ),
-                                _buildCardQuickAction(
-                                  label: 'Data Node',
-                                  icon: Icons.hub_rounded,
-                                  iconBgColor: const Color(0xFFE8F5E9),
-                                  iconColor: const Color(0xFF10B981),
-                                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NodesListScreen())),
-                                ),
-                              ],
+                                  // Row 2: Customer Count & Online Status Chip
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      _obscureBalance
+                                          ? const Row(
+                                              children: [
+                                                Icon(Icons.circle, size: 8, color: Colors.white),
+                                                SizedBox(width: 5),
+                                                Icon(Icons.circle, size: 8, color: Colors.white),
+                                                SizedBox(width: 5),
+                                                Icon(Icons.circle, size: 8, color: Colors.white),
+                                                SizedBox(width: 5),
+                                                Icon(Icons.circle, size: 8, color: Colors.white),
+                                                SizedBox(width: 5),
+                                                Icon(Icons.circle, size: 8, color: Colors.white),
+                                                SizedBox(width: 5),
+                                                Icon(Icons.circle, size: 8, color: Colors.white),
+                                              ],
+                                            )
+                                          : Text(
+                                              '$totalCustomers Pelanggan',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.w900,
+                                                letterSpacing: -0.2,
+                                              ),
+                                            ),
+
+                                      // Modern Online Status Chip
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF052E16).withValues(alpha: 0.55),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: const Color(0xFF10B981).withValues(alpha: 0.45),
+                                            width: 0.8,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              width: 6,
+                                              height: 6,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF10B981),
+                                                shape: BoxShape.circle,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: const Color(0xFF10B981).withValues(alpha: 0.8),
+                                                    blurRadius: 6,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '${customerOnlinePct.toStringAsFixed(1)}% Online',
+                                              style: const TextStyle(
+                                                color: Color(0xFF34D399),
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.2,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  // Thin Gradient Divider
+                                  Container(
+                                    height: 1,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.white.withValues(alpha: 0.05),
+                                          Colors.white.withValues(alpha: 0.28),
+                                          Colors.white.withValues(alpha: 0.05),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+
+                                  // Row 3: Bottom Link: Semua Pelanggan & Node
+                                  InkWell(
+                                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen())),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(Icons.hub_outlined, color: const Color(0xFF00E5FF).withValues(alpha: 0.9), size: 16),
+                                            const SizedBox(width: 8),
+                                            const Text(
+                                              'Semua Pelanggan & Node',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(alpha: 0.12),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 14),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -481,7 +538,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ),
 
               // Spacer for the hero card height with comfortable margin
-              const SizedBox(height: 115),
+              const SizedBox(height: 72),
 
               // ── 3. MAIN DASHBOARD BODY CONTENT ──
               Padding(
@@ -531,45 +588,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  /// 4 Quick Action Item inside Hero Card (Transfer, BRIVA, PDAM, Pulsa/Data)
-  Widget _buildCardQuickAction({
-    required String label,
-    required IconData icon,
-    required Color iconBgColor,
-    required Color iconColor,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: iconBgColor,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Center(
-              child: Icon(icon, color: iconColor, size: 24),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF0F172A),
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
       ),
     );
   }

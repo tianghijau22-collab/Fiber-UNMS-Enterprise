@@ -543,20 +543,19 @@ export default function MobileAppTesting() {
                       </div>
 
                       {/* Mockup Preview of Hero Card ("Status Jaringan") Overlapping the Curve */}
-                      <div className="px-2.5 -mt-8 pb-3 z-10">
-                        <div className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
-                          <div className="bg-gradient-to-r from-[#00529E] to-[#0064B8] p-2 text-white">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[9px] font-bold">Status Jaringan &amp; Pelanggan</span>
-                              <span className="text-[8px] bg-white/20 px-1 rounded">Normal</span>
-                            </div>
-                            <div className="text-xs font-black mt-1">98.5% Online</div>
+                      <div className="px-3 -mt-6 pb-2.5 z-10">
+                        <div className="rounded-xl shadow-lg border border-white/20 overflow-hidden bg-gradient-to-r from-[#003875] via-[#00529E] to-[#0064B8] p-2.5 text-white">
+                          <div className="flex items-center justify-between text-[8px] text-white/90">
+                            <span className="font-semibold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                              Status Jaringan &amp; Pelanggan
+                            </span>
+                            <span className="bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-400/30">93.7% Online</span>
                           </div>
-                          <div className="grid grid-cols-4 gap-1 p-1.5 text-center text-[7px] text-slate-600 font-semibold bg-slate-50">
-                            <div>Alert</div>
-                            <div>OLT</div>
-                            <div>Peta GIS</div>
-                            <div>Data Node</div>
+                          <div className="text-xs font-black mt-1">1633 Pelanggan</div>
+                          <div className="mt-1.5 pt-1.5 border-t border-white/15 flex items-center justify-between text-[8px] text-cyan-200">
+                            <span>Semua Pelanggan &amp; Node</span>
+                            <span>→</span>
                           </div>
                         </div>
                       </div>
