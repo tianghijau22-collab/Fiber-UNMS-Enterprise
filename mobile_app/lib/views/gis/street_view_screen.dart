@@ -1,8 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import '../../core/constants/app_colors.dart';
 
 class InAppStreetViewScreen extends StatefulWidget {
   final double latitude;
@@ -20,6 +20,9 @@ class InAppStreetViewScreen extends StatefulWidget {
     this.address,
   });
 
+  /// Membuka Street View secara langsung di dalam aplikasi (In-App)
+  /// Menggunakan In-App Browser View (Chrome Custom Tabs / Safari View Controller)
+  /// sehingga 100% aman, tidak crash platform channel, dan mendukung visual 360° interaktif.
   static Future<void> show(
     BuildContext context, {
     required double latitude,
@@ -27,19 +30,47 @@ class InAppStreetViewScreen extends StatefulWidget {
     String? nodeName,
     String? nodeType,
     String? address,
-  }) {
-    return Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => InAppStreetViewScreen(
-          latitude: latitude,
-          longitude: longitude,
-          nodeName: nodeName,
-          nodeType: nodeType,
-          address: address,
+  }) async {
+    final streetViewUrl = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=$latitude,$longitude';
+    final uri = Uri.parse(streetViewUrl);
+
+    try {
+      // 1. Coba buka menggunakan In-App Browser View (Chrome Custom Tab di Android / Safari VC di iOS)
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.inAppBrowserView,
+      );
+      if (launched) return;
+    } catch (e) {
+      debugPrint('Launch inAppBrowserView error: $e');
+    }
+
+    try {
+      // 2. Coba buka menggunakan In-App WebView fallback
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.inAppWebView,
+      );
+      if (launched) return;
+    } catch (e) {
+      debugPrint('Launch inAppWebView error: $e');
+    }
+
+    // 3. Jika fallback ke widget screen internal
+    if (context.mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => InAppStreetViewScreen(
+            latitude: latitude,
+            longitude: longitude,
+            nodeName: nodeName,
+            nodeType: nodeType,
+            address: address,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
@@ -54,7 +85,7 @@ class _InAppStreetViewScreenState extends State<InAppStreetViewScreen> {
   static const Color _textDark = Color(0xFF0F172A);
   static const Color _textMuted = Color(0xFF94A3B8);
 
-  late final WebViewController _webViewController;
+  WebViewController? _webViewController;
   bool _isLoading = true;
   int _loadingProgress = 0;
   bool _hasError = false;
@@ -63,61 +94,84 @@ class _InAppStreetViewScreenState extends State<InAppStreetViewScreen> {
   @override
   void initState() {
     super.initState();
-    _initWebView();
+    _initWebViewSafe();
   }
 
-  void _initWebView() {
-    final streetViewUrl = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${widget.latitude},${widget.longitude}';
+  void _initWebViewSafe() {
+    try {
+      if (kIsWeb || WebViewPlatform.instance == null) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+          _errorMessage = 'Platform WebView native belum diaktifkan pada build ini. Silakan buka melalui browser in-app.';
+        });
+        return;
+      }
 
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0xFF0F172A))
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onProgress: (int progress) {
-            if (mounted) {
-              setState(() {
-                _loadingProgress = progress;
-                if (progress >= 90) {
+      final streetViewUrl = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${widget.latitude},${widget.longitude}';
+
+      _webViewController = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(const Color(0xFF0F172A))
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onProgress: (int progress) {
+              if (mounted) {
+                setState(() {
+                  _loadingProgress = progress;
+                  if (progress >= 90) {
+                    _isLoading = false;
+                  }
+                });
+              }
+            },
+            onPageStarted: (String url) {
+              if (mounted) {
+                setState(() {
+                  _isLoading = true;
+                  _hasError = false;
+                });
+              }
+            },
+            onPageFinished: (String url) {
+              if (mounted) {
+                setState(() {
                   _isLoading = false;
-                }
-              });
-            }
-          },
-          onPageStarted: (String url) {
-            if (mounted) {
-              setState(() {
-                _isLoading = true;
-                _hasError = false;
-              });
-            }
-          },
-          onPageFinished: (String url) {
-            if (mounted) {
-              setState(() {
-                _isLoading = false;
-              });
-            }
-          },
-          onWebResourceError: (WebResourceError error) {
-            if (mounted && error.isForMainFrame == true) {
-              setState(() {
-                _isLoading = false;
-                _hasError = true;
-                _errorMessage = error.description;
-              });
-            }
-          },
-        ),
-      )
-      ..setUserAgent('Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
-      ..loadRequest(Uri.parse(streetViewUrl));
+                });
+              }
+            },
+            onWebResourceError: (WebResourceError error) {
+              if (mounted && error.isForMainFrame == true) {
+                setState(() {
+                  _isLoading = false;
+                  _hasError = true;
+                  _errorMessage = error.description;
+                });
+              }
+            },
+          ),
+        )
+        ..setUserAgent('Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
+        ..loadRequest(Uri.parse(streetViewUrl));
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+          _errorMessage = 'Gagal memuat engine WebView: $e';
+        });
+      }
+    }
   }
 
-  void _openInExternalMaps() async {
+  void _openInBrowserSheet() async {
     final url = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${widget.latitude},${widget.longitude}';
     final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      }
+    } catch (_) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
@@ -197,17 +251,21 @@ class _InAppStreetViewScreenState extends State<InAppStreetViewScreen> {
             icon: const Icon(Icons.refresh_rounded, color: _brandBlue, size: 22),
             tooltip: 'Muat Ulang Street View',
             onPressed: () {
-              setState(() {
-                _isLoading = true;
-                _hasError = false;
-              });
-              _webViewController.reload();
+              if (_webViewController != null) {
+                setState(() {
+                  _isLoading = true;
+                  _hasError = false;
+                });
+                _webViewController!.reload();
+              } else {
+                _initWebViewSafe();
+              }
             },
           ),
           IconButton(
-            icon: const Icon(Icons.open_in_new_rounded, color: _textDark, size: 20),
-            tooltip: 'Buka di Aplikasi Maps Eksternal',
-            onPressed: _openInExternalMaps,
+            icon: const Icon(Icons.open_in_browser_rounded, color: _textDark, size: 20),
+            tooltip: 'Buka Street View di Browser',
+            onPressed: _openInBrowserSheet,
           ),
           const SizedBox(width: 4),
         ],
@@ -219,8 +277,8 @@ class _InAppStreetViewScreenState extends State<InAppStreetViewScreen> {
       body: Stack(
         children: [
           // ── 1. EMBEDDED STREET VIEW WEBVIEW ──
-          if (!_hasError)
-            WebViewWidget(controller: _webViewController)
+          if (!_hasError && _webViewController != null)
+            WebViewWidget(controller: _webViewController!)
           else
             Center(
               child: Padding(
@@ -228,52 +286,29 @@ class _InAppStreetViewScreenState extends State<InAppStreetViewScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.streetview_rounded, color: AppColors.danger, size: 56),
+                    const Icon(Icons.streetview_rounded, color: Color(0xFF16A34A), size: 56),
                     const SizedBox(height: 16),
                     const Text(
-                      'Gagal Memuat Street View',
+                      'Buka Panorama Street View 360°',
                       style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _errorMessage ?? 'Pastikan koneksi internet aktif dan koordinat memiliki cakupan Google Street View.',
+                      _errorMessage ?? 'Ketuk tombol di bawah untuk membuka Google Street View 360° secara langsung di dalam aplikasi.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
                     ),
                     const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white38),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isLoading = true;
-                              _hasError = false;
-                            });
-                            _webViewController.reload();
-                          },
-                          icon: const Icon(Icons.refresh_rounded, size: 18),
-                          label: const Text('Coba Lagi'),
-                        ),
-                        const SizedBox(width: 10),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _brandBlue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          onPressed: _openInExternalMaps,
-                          icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                          label: const Text('Buka di Maps'),
-                        ),
-                      ],
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _openInBrowserSheet,
+                      icon: const Icon(Icons.streetview_rounded, size: 20),
+                      label: const Text('Buka Street View Sekarang', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
                     ),
                   ],
                 ),
@@ -281,7 +316,7 @@ class _InAppStreetViewScreenState extends State<InAppStreetViewScreen> {
             ),
 
           // ── 2. LOADING PROGRESS OVERLAY ──
-          if (_isLoading)
+          if (_isLoading && _webViewController != null)
             Positioned(
               top: 0,
               left: 0,
