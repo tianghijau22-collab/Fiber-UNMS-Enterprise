@@ -50,6 +50,14 @@ class _GisMapScreenState extends State<GisMapScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
 
+  // Fitur Cek Titik Koordinat Lokasi
+  LatLng? _searchedCoordinate;
+
+  // Fitur Ukur Jarak (Measurement Tool)
+  bool _isMeasuring = false;
+  final List<LatLng> _measurePoints = [];
+  static const Distance _distanceCalculator = Distance();
+
   bool _showCables = true;
   bool _showLabels = true;
   String _currentTileType = 'google_roadmap'; // 'google_roadmap', 'satellite', 'osm', 'dark'
@@ -233,6 +241,69 @@ class _GisMapScreenState extends State<GisMapScreen> {
     return polylines;
   }
 
+  /// Deteksi format koordinat dari input search bar
+  LatLng? _parseCoordinates(String text) {
+    final clean = text.trim();
+    if (clean.isEmpty) return null;
+
+    // Pattern 1: "-0.789275, 100.65345" atau "-0.789275 100.65345"
+    final reg = RegExp(r'^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$');
+    final match = reg.firstMatch(clean);
+    if (match != null) {
+      final lat = double.tryParse(match.group(1)!);
+      final lng = double.tryParse(match.group(2)!);
+      if (lat != null && lng != null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return LatLng(lat, lng);
+      }
+    }
+
+    // Pattern 2: "lat: -0.789275, lng: 100.65345"
+    final labelReg = RegExp(r'lat[:\s]*(-?\d+(?:\.\d+)?)[,\s]+lng[:\s]*(-?\d+(?:\.\d+)?)', caseSensitive: false);
+    final labelMatch = labelReg.firstMatch(clean);
+    if (labelMatch != null) {
+      final lat = double.tryParse(labelMatch.group(1)!);
+      final lng = double.tryParse(labelMatch.group(2)!);
+      if (lat != null && lng != null && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return LatLng(lat, lng);
+      }
+    }
+
+    return null;
+  }
+
+  void _onSearchInputChanged(String val) {
+    final q = val.trim();
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+      if (!mounted) return;
+
+      final parsedCoord = _parseCoordinates(q);
+      if (parsedCoord != null) {
+        setState(() {
+          _searchedCoordinate = parsedCoord;
+          _searchQuery = '';
+        });
+        _mapController.move(parsedCoord, 17.5);
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Titik koordinat ditemukan: ${parsedCoord.latitude}, ${parsedCoord.longitude}'),
+            backgroundColor: _brandBlue,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        setState(() {
+          _searchQuery = q.toLowerCase();
+          if (q.isEmpty) {
+            _searchedCoordinate = null;
+          }
+        });
+      }
+    });
+  }
+
   void _focusNodeById(int id) {
     final target = _parsedNodes.firstWhere(
       (n) => n.id == id,
@@ -390,6 +461,23 @@ class _GisMapScreenState extends State<GisMapScreen> {
     }
   }
 
+  String _formatDistance(double meters) {
+    if (meters < 1000) {
+      return '${meters.toStringAsFixed(1)} m';
+    } else {
+      return '${(meters / 1000).toStringAsFixed(2)} km';
+    }
+  }
+
+  double _calculateTotalMeasureDistance() {
+    if (_measurePoints.length < 2) return 0.0;
+    double total = 0.0;
+    for (int i = 0; i < _measurePoints.length - 1; i++) {
+      total += _distanceCalculator.as(LengthUnit.Meter, _measurePoints[i], _measurePoints[i + 1]);
+    }
+    return total;
+  }
+
   List<Marker> _buildOptimizedMarkers(List<_GisNode> filteredNodes) {
     final markers = <Marker>[];
     final bool isZoomedOut = _currentZoom < 14.0;
@@ -404,7 +492,6 @@ class _GisMapScreenState extends State<GisMapScreen> {
       if (bounds != null && (_selectedNode == null || _selectedNode!.id != n.id)) {
         final lat = n.latLng.latitude;
         final lng = n.latLng.longitude;
-        // 10% buffer
         final latBuf = (bounds.north - bounds.south).abs() * 0.1;
         final lngBuf = (bounds.east - bounds.west).abs() * 0.1;
         if (lat > bounds.north + latBuf ||
@@ -436,6 +523,10 @@ class _GisMapScreenState extends State<GisMapScreen> {
             height: 14,
             child: GestureDetector(
               onTap: () {
+                if (_isMeasuring) {
+                  _addMeasurePoint(n.latLng);
+                  return;
+                }
                 setState(() => _selectedNode = n);
                 _showNodeDetailSheet(n);
               },
@@ -461,6 +552,10 @@ class _GisMapScreenState extends State<GisMapScreen> {
             height: 26,
             child: GestureDetector(
               onTap: () {
+                if (_isMeasuring) {
+                  _addMeasurePoint(n.latLng);
+                  return;
+                }
                 setState(() => _selectedNode = n);
                 _showNodeDetailSheet(n);
               },
@@ -495,6 +590,10 @@ class _GisMapScreenState extends State<GisMapScreen> {
           alignment: Alignment.topCenter,
           child: GestureDetector(
             onTap: () {
+              if (_isMeasuring) {
+                _addMeasurePoint(n.latLng);
+                return;
+              }
               setState(() => _selectedNode = n);
               _showNodeDetailSheet(n);
             },
@@ -557,7 +656,363 @@ class _GisMapScreenState extends State<GisMapScreen> {
       );
     }
 
+    // ── FITUR TITIK KOORDINAT HASIL SEARCH ──
+    if (_searchedCoordinate != null) {
+      markers.add(
+        Marker(
+          point: _searchedCoordinate!,
+          width: 140,
+          height: 70,
+          alignment: Alignment.topCenter,
+          child: GestureDetector(
+            onTap: () => _showSearchedCoordinateSheet(_searchedCoordinate!),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDC2626),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 3),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFDC2626).withValues(alpha: 0.5),
+                        blurRadius: 14,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.location_pin, color: Colors.white, size: 24),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(top: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: _navyDeep,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+                    ],
+                  ),
+                  child: const Text(
+                    'Titik Koordinat',
+                    style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // ── FITUR MARKERS UKUR JARAK ──
+    if (_isMeasuring && _measurePoints.isNotEmpty) {
+      for (int i = 0; i < _measurePoints.length; i++) {
+        final pt = _measurePoints[i];
+        final isFirst = i == 0;
+        final isLast = i == _measurePoints.length - 1 && _measurePoints.length > 1;
+
+        markers.add(
+          Marker(
+            point: pt,
+            width: 34,
+            height: 34,
+            child: Container(
+              decoration: BoxDecoration(
+                color: isFirst ? const Color(0xFF16A34A) : (isLast ? const Color(0xFFEA580C) : _brandBlue),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2.5),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 5, offset: Offset(0, 2)),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  isFirst ? 'A' : (isLast ? 'B' : '${i + 1}'),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
     return markers;
+  }
+
+  void _addMeasurePoint(LatLng point) {
+    setState(() {
+      _measurePoints.add(point);
+    });
+  }
+
+  void _undoMeasurePoint() {
+    if (_measurePoints.isNotEmpty) {
+      setState(() {
+        _measurePoints.removeLast();
+      });
+    }
+  }
+
+  void _clearMeasure() {
+    setState(() {
+      _measurePoints.clear();
+    });
+  }
+
+  void _toggleMeasureMode() {
+    setState(() {
+      _isMeasuring = !_isMeasuring;
+      if (!_isMeasuring) {
+        _measurePoints.clear();
+      }
+    });
+
+    if (_isMeasuring) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.straighten_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Mode Ukur Jarak Aktif: Ketuk pada peta atau node untuk mengukur jarak.',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Color(0xFF001B3A),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  // ───────────────────────────── SEARCHED COORDINATE SHEET ─────────────────────────────
+  void _showSearchedCoordinateSheet(LatLng coord) {
+    // Cari 3 ODP / Node terdekat dari koordinat ini
+    final sortedNodes = List<_GisNode>.from(_parsedNodes)
+      ..sort((a, b) {
+        final distA = _distanceCalculator.as(LengthUnit.Meter, coord, a.latLng);
+        final distB = _distanceCalculator.as(LengthUnit.Meter, coord, b.latLng);
+        return distA.compareTo(distB);
+      });
+
+    final nearest = sortedNodes.take(3).toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 4.5,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Title
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDC2626).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.location_pin, color: Color(0xFFDC2626), size: 20),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Titik Koordinat Lokasi',
+                        style: TextStyle(color: _textDark, fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        'Ditemukan dari pencarian koordinat GPS',
+                        style: TextStyle(color: _textMuted, fontSize: 11.5),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: _textMuted),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+            const Divider(color: _border),
+            const SizedBox(height: 8),
+
+            // Koordinat Card
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.gps_fixed_rounded, color: _brandBlue, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Koordinat Latitude, Longitude', style: TextStyle(color: _textMuted, fontSize: 10.5, fontWeight: FontWeight.w600)),
+                        Text(
+                          '${coord.latitude}, ${coord.longitude}',
+                          style: const TextStyle(color: _textDark, fontSize: 13, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy_rounded, color: _brandBlue, size: 18),
+                    tooltip: 'Salin',
+                    onPressed: () => _copyToClipboard('${coord.latitude}, ${coord.longitude}', 'Koordinat GPS'),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Node ODP Terdekat Section
+            if (nearest.isNotEmpty) ...[
+              const Text(
+                'Infrastruktur ODP / Node Terdekat:',
+                style: TextStyle(color: _textDark, fontSize: 12.5, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              ...nearest.map((node) {
+                final dist = _distanceCalculator.as(LengthUnit.Meter, coord, node.latLng);
+                return InkWell(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _focusNodeById(node.id);
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _border),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: _getNodeTypeColor(node.type).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(Icons.grid_view_rounded, size: 14, color: _getNodeTypeColor(node.type)),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            node.name,
+                            style: const TextStyle(color: _textDark, fontWeight: FontWeight.w700, fontSize: 12.5),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _formatDistance(dist),
+                            style: const TextStyle(color: _brandBlue, fontSize: 11, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right_rounded, color: _textMuted, size: 18),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ],
+
+            const SizedBox(height: 16),
+
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _cyan,
+                      side: const BorderSide(color: _cyan, width: 1.2),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _openGoogleMaps(coord.latitude, coord.longitude);
+                    },
+                    icon: const Icon(Icons.near_me_rounded, size: 16),
+                    label: const Text('Rute Maps', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _openStreetView(coord.latitude, coord.longitude);
+                    },
+                    icon: const Icon(Icons.streetview_rounded, size: 16),
+                    label: const Text('Street View', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ───────────────────────────── DETAIL MODAL SHEET ─────────────────────────────
@@ -1188,6 +1643,8 @@ class _GisMapScreenState extends State<GisMapScreen> {
     final popCount = _parsedNodes.where((n) => n.type == 'POP').length;
     final lossCount = _parsedNodes.where((n) => n.isLossTotal || n.hasLoss).length;
 
+    final totalMeasureDistance = _calculateTotalMeasureDistance();
+
     return Scaffold(
       backgroundColor: _bg,
       body: Stack(
@@ -1227,6 +1684,11 @@ class _GisMapScreenState extends State<GisMapScreen> {
                         initialZoom: 14.5,
                         minZoom: 3.0,
                         maxZoom: 19.0,
+                        onTap: (tapPosition, point) {
+                          if (_isMeasuring) {
+                            _addMeasurePoint(point);
+                          }
+                        },
                         onPositionChanged: (pos, hasGesture) {
                           final newZoom = pos.zoom;
                           final newBounds = pos.visibleBounds;
@@ -1251,7 +1713,24 @@ class _GisMapScreenState extends State<GisMapScreen> {
                           panBuffer: 1,
                         ),
                         if (_showCables) PolylineLayer(polylines: _cachedPolylines),
+
+                        // Layer Polylines Pengukuran Jarak
+                        if (_isMeasuring && _measurePoints.length >= 2)
+                          PolylineLayer(
+                            polylines: [
+                              Polyline(
+                                points: _measurePoints,
+                                color: const Color(0xFFEA580C),
+                                strokeWidth: 3.5,
+                                pattern: StrokePattern.dashed(segments: const [8, 4]),
+                                borderColor: Colors.white,
+                                borderStrokeWidth: 1.0,
+                              ),
+                            ],
+                          ),
+
                         MarkerLayer(markers: _buildOptimizedMarkers(filteredNodes)),
+
                         if (_currentPosition != null)
                           MarkerLayer(
                             markers: [
@@ -1276,118 +1755,196 @@ class _GisMapScreenState extends State<GisMapScreen> {
                       ],
                     ),
 
-          // ── 2. TOP FLOATING SEARCH & CONTROLS ──
+          // ── 2. TOP FLOATING SEARCH & CONTROLS / MEASURE BANNER ──
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Search Bar Card
-                  Container(
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: _border),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _navyDeep.withValues(alpha: 0.1),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        if (Navigator.canPop(context))
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back_rounded, color: _textDark),
-                            onPressed: () => Navigator.pop(context),
-                          )
-                        else
-                          const Padding(
-                            padding: EdgeInsets.only(left: 14, right: 8),
-                            child: Icon(Icons.explore_rounded, color: _brandBlue, size: 22),
-                          ),
-                        Expanded(
-                          child: TextField(
-                            controller: _searchCtrl,
-                            onChanged: (val) {
-                              final q = val.trim().toLowerCase();
-                              _debounceTimer?.cancel();
-                              _debounceTimer = Timer(const Duration(milliseconds: 150), () {
-                                if (mounted) setState(() => _searchQuery = q);
-                              });
-                            },
-                            style: const TextStyle(color: _textDark, fontSize: 13.5, fontWeight: FontWeight.w600),
-                            decoration: const InputDecoration(
-                              hintText: 'Cari nama, kode, OLT, atau alamat...',
-                              hintStyle: TextStyle(color: _textMuted, fontSize: 12.5),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(vertical: 13),
-                            ),
-                          ),
-                        ),
-                        if (_searchCtrl.text.isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.clear_rounded, color: _textMuted, size: 18),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.refresh_rounded, color: _brandBlue),
-                          tooltip: 'Refresh GIS',
-                          onPressed: _fetchGisData,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Quick Filter Pill Bar
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: Row(
-                      children: [
-                        _buildFilterPill('Semua (${_parsedNodes.length})', 'ALL', _brandBlue),
-                        const SizedBox(width: 6),
-                        _buildFilterPill('ODP ($odpCount)', 'ODP', const Color(0xFF059669)),
-                        const SizedBox(width: 6),
-                        _buildFilterPill('ODC ($odcCount)', 'ODC', _cyan),
-                        const SizedBox(width: 6),
-                        _buildFilterPill('POP ($popCount)', 'POP', const Color(0xFF4F46E5)),
-                        const SizedBox(width: 6),
-                        _buildFilterPill('Loss / Gangguan ($lossCount)', 'LOSS', const Color(0xFFDC2626)),
-                        if (_selectedOlt != 'ALL') ...[
-                          const SizedBox(width: 6),
-                          ActionChip(
-                            avatar: const Icon(Icons.router_rounded, size: 14, color: _brandBlue),
-                            label: Text('OLT: $_selectedOlt', style: const TextStyle(color: _brandBlue, fontSize: 11, fontWeight: FontWeight.w800)),
-                            backgroundColor: _brandBlue.withValues(alpha: 0.1),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: _brandBlue)),
-                            onPressed: _showLayersBottomSheet,
+                  // Jika Mode Ukur Jarak Aktif, tampilkan Top Banner Pengukuran
+                  if (_isMeasuring)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _navyDeep,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
                           ),
                         ],
-                      ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEA580C).withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.straighten_rounded, color: Color(0xFFFB923C), size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'PENGUKURAN JARAK',
+                                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  _measurePoints.length < 2
+                                      ? 'Ketuk peta (${_measurePoints.length} Titik)'
+                                      : _formatDistance(totalMeasureDistance),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_measurePoints.isNotEmpty) ...[
+                            IconButton(
+                              icon: const Icon(Icons.undo_rounded, color: Colors.white, size: 20),
+                              tooltip: 'Undo Titik Terakhir',
+                              onPressed: _undoMeasurePoint,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFF87171), size: 20),
+                              tooltip: 'Reset',
+                              onPressed: _clearMeasure,
+                            ),
+                          ],
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: Colors.white, size: 22),
+                            tooltip: 'Keluar Mode Ukur',
+                            onPressed: _toggleMeasureMode,
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    // Search Bar Card Normal
+                    Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: _border),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _navyDeep.withValues(alpha: 0.1),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          if (Navigator.canPop(context))
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back_rounded, color: _textDark),
+                              onPressed: () => Navigator.pop(context),
+                            )
+                          else
+                            const Padding(
+                              padding: EdgeInsets.only(left: 14, right: 8),
+                              child: Icon(Icons.explore_rounded, color: _brandBlue, size: 22),
+                            ),
+                          Expanded(
+                            child: TextField(
+                              controller: _searchCtrl,
+                              onChanged: _onSearchInputChanged,
+                              style: const TextStyle(color: _textDark, fontSize: 13.5, fontWeight: FontWeight.w600),
+                              decoration: const InputDecoration(
+                                hintText: 'Cari nama, OLT, atau koordinat (lat, lng)...',
+                                hintStyle: TextStyle(color: _textMuted, fontSize: 12),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.symmetric(vertical: 13),
+                              ),
+                            ),
+                          ),
+                          if (_searchCtrl.text.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(Icons.clear_rounded, color: _textMuted, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() {
+                                  _searchQuery = '';
+                                  _searchedCoordinate = null;
+                                });
+                              },
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh_rounded, color: _brandBlue),
+                            tooltip: 'Refresh GIS',
+                            onPressed: _fetchGisData,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+
+                    const SizedBox(height: 8),
+
+                    // Quick Filter Pill Bar
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: [
+                          _buildFilterPill('Semua (${_parsedNodes.length})', 'ALL', _brandBlue),
+                          const SizedBox(width: 6),
+                          _buildFilterPill('ODP ($odpCount)', 'ODP', const Color(0xFF059669)),
+                          const SizedBox(width: 6),
+                          _buildFilterPill('ODC ($odcCount)', 'ODC', _cyan),
+                          const SizedBox(width: 6),
+                          _buildFilterPill('POP ($popCount)', 'POP', const Color(0xFF4F46E5)),
+                          const SizedBox(width: 6),
+                          _buildFilterPill('Loss / Gangguan ($lossCount)', 'LOSS', const Color(0xFFDC2626)),
+                          if (_selectedOlt != 'ALL') ...[
+                            const SizedBox(width: 6),
+                            ActionChip(
+                              avatar: const Icon(Icons.router_rounded, size: 14, color: _brandBlue),
+                              label: Text('OLT: $_selectedOlt', style: const TextStyle(color: _brandBlue, fontSize: 11, fontWeight: FontWeight.w800)),
+                              backgroundColor: _brandBlue.withValues(alpha: 0.1),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: _brandBlue)),
+                              onPressed: _showLayersBottomSheet,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
 
-          // ── 3. RIGHT FLOATING MAP TOOLS (Locate, Layers, Fit All) ──
+          // ── 3. RIGHT FLOATING MAP TOOLS ──
           Positioned(
             right: 14,
             bottom: 30,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Tombol Mode Ukur Jarak
+                _buildFloatingToolButton(
+                  icon: Icons.straighten_rounded,
+                  tooltip: _isMeasuring ? 'Matikan Ukur Jarak' : 'Ukur Jarak Antar Titik',
+                  isActive: _isMeasuring,
+                  activeColor: const Color(0xFFEA580C),
+                  iconColor: _isMeasuring ? Colors.white : const Color(0xFFEA580C),
+                  onTap: _toggleMeasureMode,
+                ),
+                const SizedBox(height: 10),
                 _buildFloatingToolButton(
                   icon: Icons.layers_rounded,
                   tooltip: 'Layer & Tampilan',
@@ -1455,6 +2012,8 @@ class _GisMapScreenState extends State<GisMapScreen> {
     required String tooltip,
     required VoidCallback onTap,
     Color iconColor = _textDark,
+    bool isActive = false,
+    Color activeColor = _brandBlue,
   }) {
     return Material(
       color: Colors.transparent,
@@ -1465,12 +2024,12 @@ class _GisMapScreenState extends State<GisMapScreen> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isActive ? activeColor : Colors.white,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
+            border: Border.all(color: isActive ? activeColor : _border),
             boxShadow: [
               BoxShadow(
-                color: _navyDeep.withValues(alpha: 0.12),
+                color: isActive ? activeColor.withValues(alpha: 0.35) : _navyDeep.withValues(alpha: 0.12),
                 blurRadius: 10,
                 offset: const Offset(0, 3),
               ),
