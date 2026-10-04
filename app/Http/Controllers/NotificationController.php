@@ -185,21 +185,35 @@ class NotificationController extends Controller
         $request->validate([
             'title'       => 'required|string|max:255',
             'body'        => 'required|string',
-            'type'        => 'required|string|in:NOC,SECURITY,BILLING,PROVISIONING,MAINTENANCE,BROADCAST,ALARM,TICKET,INFO,WARNING',
+            'type'        => 'required|string|in:NOC,SECURITY,BILLING,PROVISIONING,MAINTENANCE,BROADCAST,ALARM,TICKET,INFO,WARNING,PROMO',
             'target_role' => 'required|string',
             'url'         => 'nullable|string|max:255',
+            'image'       => 'nullable|file|image|max:10240',
+            'image_url'   => 'nullable|string|max:1000',
         ]);
 
         $senderName = Auth::user()?->name ?: 'Administrator';
         $targetRole = $request->target_role;
         $url        = $request->url ?: '/dashboard';
 
+        $imageUrl = null;
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('notifications', 'public');
+            $imageUrl = asset('storage/' . $path);
+        } elseif ($request->filled('image_url')) {
+            $imageUrl = $request->image_url;
+        }
+
         if ($targetRole === 'ALL') {
             $notif = AppNotification::notifyAll(
                 $request->title,
                 $request->body,
                 $request->type,
-                $url
+                $url,
+                null,
+                true,
+                null,
+                $imageUrl
             );
             $targetCount = \App\Models\User::count();
         } else {
@@ -212,7 +226,11 @@ class NotificationController extends Controller
                     $request->title,
                     $request->body,
                     $request->type,
-                    $url
+                    $url,
+                    null,
+                    true,
+                    null,
+                    $imageUrl
                 );
                 $targetCount = \App\Models\User::count();
             } else {
@@ -222,7 +240,10 @@ class NotificationController extends Controller
                         $request->title,
                         $request->body,
                         $request->type,
-                        $url
+                        $url,
+                        null,
+                        null,
+                        $imageUrl
                     );
                 }
             }

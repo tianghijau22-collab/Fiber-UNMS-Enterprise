@@ -213,6 +213,7 @@ class NotificationProvider extends ChangeNotifier {
     required String type,
     String targetRole = 'ALL',
     String? url,
+    String? imageUrl,
   }) async {
     try {
       final response = await DioClient().dio.post(
@@ -223,6 +224,7 @@ class NotificationProvider extends ChangeNotifier {
           'type': type,
           'target_role': targetRole,
           'url': url ?? '/dashboard',
+          if (imageUrl != null && imageUrl.trim().isNotEmpty) 'image_url': imageUrl.trim(),
         },
       );
 

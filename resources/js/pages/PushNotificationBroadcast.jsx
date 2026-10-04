@@ -214,6 +214,7 @@ export default function PushNotificationBroadcast() {
     type: 'NOC',
     target_role: 'ALL',
     url: '/tickets',
+    image_url: '',
   });
   const [loadingBroadcast, setLoadingBroadcast] = useState(false);
   const [broadcastSuccess, setBroadcastSuccess] = useState(null);
@@ -1065,6 +1066,20 @@ export default function PushNotificationBroadcast() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    URL Gambar Poster / Banner (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={form.image_url}
+                    onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+                    placeholder="Contoh: https://domain.com/banner-promo.jpg"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Mendukung poster banner di aplikasi mobile FONA & Push Notification.</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
                     URL Tautan (Opsional)
                   </label>
                   <input
@@ -1128,6 +1143,33 @@ export default function PushNotificationBroadcast() {
                 <div className="font-bold text-slate-800 dark:text-slate-100 text-xs">{form.title || 'Judul Notifikasi'}</div>
                 <div className="text-slate-600 dark:text-slate-400 text-xs line-clamp-2">{form.body || 'Isi notifikasi...'}</div>
                 <div className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">Baru saja • Target: {form.target_role}</div>
+              </div>
+            </div>
+
+            {/* Mobile App FONA Mockup (BRImo Style) */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
+              <div className="flex items-center gap-2 text-xs font-bold text-sky-600 dark:text-sky-400 mb-3">
+                <IconBell />
+                <span>Tampilan di Aplikasi Mobile FONA:</span>
+              </div>
+              <div className="bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 flex gap-3 items-start">
+                <div className="flex-1 space-y-1">
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Baru saja</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-100 text-xs line-clamp-2">{form.title || 'Judul Notifikasi'}</div>
+                  <div className="text-slate-600 dark:text-slate-400 text-xs line-clamp-2">{form.body || 'Isi notifikasi...'}</div>
+                </div>
+                {form.image_url ? (
+                  <img
+                    src={form.image_url}
+                    alt="Poster"
+                    className="w-14 h-18 object-cover rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                ) : (
+                  <div className="w-14 h-18 bg-gradient-to-br from-sky-500 to-blue-700 rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-xs">
+                    FONA
+                  </div>
+                )}
               </div>
             </div>
           </div>

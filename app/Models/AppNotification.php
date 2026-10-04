@@ -19,6 +19,7 @@ class AppNotification extends Model
         'body',
         'url',
         'icon',
+        'image_url',
         'is_read',
         'read_at',
     ];
@@ -27,6 +28,17 @@ class AppNotification extends Model
         'is_read' => 'boolean',
         'read_at' => 'datetime',
     ];
+
+    public function getImageUrlAttribute($value)
+    {
+        if (!$value) {
+            return null;
+        }
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
+            return $value;
+        }
+        return url(ltrim($value, '/'));
+    }
 
     public function user()
     {
@@ -43,7 +55,8 @@ class AppNotification extends Model
         ?string $url = null,
         ?string $icon = null,
         bool $sendTelegram = true,
-        ?string $source = null
+        ?string $source = null,
+        ?string $imageUrl = null
     ): self {
         if (!$source) {
             $cmd = implode(' ', $_SERVER['argv'] ?? []);
@@ -59,13 +72,14 @@ class AppNotification extends Model
         $icon = $icon ?: $source;
 
         $notif = self::create([
-            'user_id' => null, // null = broadcast ke seluruh user
-            'type'    => $type,
-            'title'   => $title,
-            'body'    => $body,
-            'url'     => $url,
-            'icon'    => $icon,
-            'is_read' => false,
+            'user_id'   => null, // null = broadcast ke seluruh user
+            'type'      => $type,
+            'title'     => $title,
+            'body'      => $body,
+            'url'       => $url,
+            'icon'      => $icon,
+            'image_url' => $imageUrl,
+            'is_read'   => false,
         ]);
 
         // Otomatis sinkronisasi kirim ke Telegram Bot jika diaktifkan
@@ -80,7 +94,9 @@ class AppNotification extends Model
                 $title,
                 strip_tags(preg_replace('/<[^>]*>/', ' ', $body)),
                 $type,
-                $url
+                $url,
+                [],
+                $imageUrl
             );
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning("FCM Broadcast Warning: " . $e->getMessage());
@@ -99,7 +115,8 @@ class AppNotification extends Model
         string $type = 'NOC',
         ?string $url = null,
         ?string $icon = null,
-        ?string $source = null
+        ?string $source = null,
+        ?string $imageUrl = null
     ): self {
         if (!$source) {
             $source = 'SYSTEM';
@@ -107,13 +124,14 @@ class AppNotification extends Model
         $icon = $icon ?: $source;
 
         $notif = self::create([
-            'user_id' => $userId,
-            'type'    => $type,
-            'title'   => $title,
-            'body'    => $body,
-            'url'     => $url,
-            'icon'    => $icon,
-            'is_read' => false,
+            'user_id'   => $userId,
+            'type'      => $type,
+            'title'     => $title,
+            'body'      => $body,
+            'url'       => $url,
+            'icon'      => $icon,
+            'image_url' => $imageUrl,
+            'is_read'   => false,
         ]);
 
         // Otomatis sinkronisasi kirim ke Telegram Bot jika diaktifkan
@@ -130,7 +148,9 @@ class AppNotification extends Model
                         $title,
                         strip_tags(preg_replace('/<[^>]*>/', ' ', $body)),
                         $type,
-                        $url
+                        $url,
+                        [],
+                        $imageUrl
                     );
                 }
             }

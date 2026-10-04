@@ -103,7 +103,8 @@ class FcmService
         string $body,
         string $type = 'BROADCAST',
         ?string $url = null,
-        array $extraData = []
+        array $extraData = [],
+        ?string $imageUrl = null
     ): array {
         $token = self::getAccessToken();
         $projectId = self::getProjectId();
@@ -117,30 +118,46 @@ class FcmService
 
         $cleanTopic = str_replace('/topics/', '', $topic);
 
+        $notificationData = [
+            'title' => $title,
+            'body'  => $body,
+        ];
+        if (!empty($imageUrl)) {
+            $notificationData['image'] = $imageUrl;
+        }
+
+        $androidNotification = [
+            'channel_id'   => 'fona_custom_alerts_v1',
+            'sound'        => 'fona_alert',
+            'icon'         => '@mipmap/ic_launcher',
+            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+            'default_vibrate_timings' => true,
+        ];
+        if (!empty($imageUrl)) {
+            $androidNotification['image'] = $imageUrl;
+        }
+
+        $dataPayload = array_merge([
+            'title'        => $title,
+            'body'         => $body,
+            'type'         => $type,
+            'url'          => $url ?? '/dashboard',
+            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+            'sent_time'    => now()->toIso8601String(),
+        ], array_map('strval', $extraData));
+
+        if (!empty($imageUrl)) {
+            $dataPayload['image_url'] = $imageUrl;
+        }
+
         $payload = [
             'message' => [
                 'topic' => $cleanTopic,
-                'notification' => [
-                    'title' => $title,
-                    'body'  => $body,
-                ],
-                'data' => array_merge([
-                    'title'        => $title,
-                    'body'         => $body,
-                    'type'         => $type,
-                    'url'          => $url ?? '/dashboard',
-                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-                    'sent_time'    => now()->toIso8601String(),
-                ], array_map('strval', $extraData)),
+                'notification' => $notificationData,
+                'data' => $dataPayload,
                 'android' => [
                     'priority' => 'HIGH',
-                    'notification' => [
-                        'channel_id'   => 'fona_custom_alerts_v1',
-                        'sound'        => 'fona_alert',
-                        'icon'         => '@mipmap/ic_launcher',
-                        'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-                        'default_vibrate_timings' => true,
-                    ],
+                    'notification' => $androidNotification,
                 ],
             ],
         ];
@@ -181,7 +198,8 @@ class FcmService
         string $body,
         string $type = 'NOC',
         ?string $url = null,
-        array $extraData = []
+        array $extraData = [],
+        ?string $imageUrl = null
     ): array {
         $token = self::getAccessToken();
         $projectId = self::getProjectId();
@@ -193,29 +211,45 @@ class FcmService
             ];
         }
 
+        $notificationData = [
+            'title' => $title,
+            'body'  => $body,
+        ];
+        if (!empty($imageUrl)) {
+            $notificationData['image'] = $imageUrl;
+        }
+
+        $androidNotification = [
+            'channel_id'   => 'fona_custom_alerts_v1',
+            'sound'        => 'fona_alert',
+            'icon'         => '@mipmap/ic_launcher',
+            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+        ];
+        if (!empty($imageUrl)) {
+            $androidNotification['image'] = $imageUrl;
+        }
+
+        $dataPayload = array_merge([
+            'title'        => $title,
+            'body'         => $body,
+            'type'         => $type,
+            'url'          => $url ?? '/dashboard',
+            'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
+            'sent_time'    => now()->toIso8601String(),
+        ], array_map('strval', $extraData));
+
+        if (!empty($imageUrl)) {
+            $dataPayload['image_url'] = $imageUrl;
+        }
+
         $payload = [
             'message' => [
                 'token' => $deviceToken,
-                'notification' => [
-                    'title' => $title,
-                    'body'  => $body,
-                ],
-                'data' => array_merge([
-                    'title'        => $title,
-                    'body'         => $body,
-                    'type'         => $type,
-                    'url'          => $url ?? '/dashboard',
-                    'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-                    'sent_time'    => now()->toIso8601String(),
-                ], array_map('strval', $extraData)),
+                'notification' => $notificationData,
+                'data' => $dataPayload,
                 'android' => [
                     'priority' => 'HIGH',
-                    'notification' => [
-                        'channel_id'   => 'fona_custom_alerts_v1',
-                        'sound'        => 'fona_alert',
-                        'icon'         => '@mipmap/ic_launcher',
-                        'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
-                    ],
+                    'notification' => $androidNotification,
                 ],
             ],
         ];

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../core/constants/api_constants.dart';
 import '../core/constants/app_colors.dart';
 
 class NotificationModel {
@@ -10,6 +11,7 @@ class NotificationModel {
   final String body;
   final String? url;
   final String? icon;
+  final String? imageUrl;
   final bool isRead;
   final DateTime? readAt;
   final DateTime createdAt;
@@ -22,6 +24,7 @@ class NotificationModel {
     required this.body,
     this.url,
     this.icon,
+    this.imageUrl,
     required this.isRead,
     this.readAt,
     required this.createdAt,
@@ -45,10 +48,22 @@ class NotificationModel {
       body: json['body'] ?? '',
       url: json['url']?.toString(),
       icon: json['icon']?.toString(),
+      imageUrl: json['image_url']?.toString(),
       isRead: json['is_read'] == true || json['is_read'] == 1,
       readAt: json['read_at'] != null ? parseDate(json['read_at']) : null,
       createdAt: parseDate(json['created_at']),
     );
+  }
+
+  String? get fullImageUrl {
+    if (imageUrl == null || imageUrl!.trim().isEmpty) return null;
+    final clean = imageUrl!.trim();
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      return clean;
+    }
+    // ApiConstants.defaultBaseUrl is typically 'https://.../api'
+    final host = ApiConstants.defaultBaseUrl.replaceAll('/api', '');
+    return '$host${clean.startsWith('/') ? '' : '/'}$clean';
   }
 
   String get cleanTitle {
