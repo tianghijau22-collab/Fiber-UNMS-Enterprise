@@ -64,6 +64,18 @@ class OdpPortMonitoringSheet extends StatefulWidget {
 }
 
 class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
+  // Palette selaras dengan Login, Home, Data Pelanggan, dan Data Node
+  static const Color _navyDeep = Color(0xFF001B3A);
+  static const Color _navy = Color(0xFF003875);
+  static const Color _brandBlue = Color(0xFF005BAA);
+  static const Color _cyan = Color(0xFF008ED6);
+  static const Color _neon = Color(0xFF00E5FF);
+  static const Color _bg = Color(0xFFF4F6F9);
+  static const Color _textDark = Color(0xFF0F172A);
+  static const Color _textBody = Color(0xFF475569);
+  static const Color _textMuted = Color(0xFF94A3B8);
+  static const Color _border = Color(0xFFE2E8F0);
+
   bool _isLoading = true;
   bool _isProbingLive = false;
   String? _errorMessage;
@@ -152,7 +164,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
               child: Text(
                 title,
                 style: const TextStyle(
-                  color: AppColors.textPrimary,
+                  color: _textDark,
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                 ),
@@ -163,7 +175,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
         content: Text(
           message,
           style: const TextStyle(
-            color: AppColors.textSecondary,
+            color: _textBody,
             fontSize: 13,
             height: 1.4,
           ),
@@ -171,7 +183,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: isSuccess ? AppColors.primary : AppColors.danger,
+              backgroundColor: isSuccess ? _brandBlue : AppColors.danger,
               elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
@@ -188,7 +200,6 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     final fileName = 'Monitoring_Redaman_${cleanNodeName}_${DateTime.now().millisecondsSinceEpoch}.png';
 
     try {
-      // Primary method: XFile.fromData (zero dependency on local file system)
       final xFile = XFile.fromData(
         pngBytes,
         name: fileName,
@@ -206,7 +217,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
         _showInModalAlert(
           modalCtx,
           title: 'Info Berbagi Gambar',
-          message: 'Silakan Stop & Run ulang aplikasi (Full Rebuild) agar plugin share native aktif.\nDetail: $e',
+          message: 'Silakan jalankan ulang aplikasi agar plugin share native aktif.\nDetail: $e',
           isSuccess: false,
         );
       }
@@ -238,7 +249,6 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
         return;
       }
 
-      // Mobile / Desktop file saving
       Directory? targetDir;
       if (defaultTargetPlatform == TargetPlatform.android) {
         final downloadDir = Directory('/storage/emulated/0/Download');
@@ -323,19 +333,18 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
             height: MediaQuery.of(modalCtx).size.height * 0.94,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: const BoxDecoration(
-              color: AppColors.surface,
+              color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
             child: Column(
               children: [
-                // Handle bar
                 Center(
                   child: Container(
                     width: 38,
                     height: 4,
                     margin: const EdgeInsets.only(bottom: 10),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceBorder,
+                      color: const Color(0xFFCBD5E1),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -345,12 +354,12 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.photo_camera_rounded, color: AppColors.primary, size: 22),
+                        Icon(Icons.photo_camera_rounded, color: _brandBlue, size: 20),
                         SizedBox(width: 8),
                         Text(
-                          'Laporan Lengkap Seluruh Port',
+                          'Laporan Lengkap Port',
                           style: TextStyle(
-                            color: AppColors.textPrimary,
+                            color: _textDark,
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
                           ),
@@ -358,19 +367,18 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                       ],
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary, size: 22),
+                      icon: const Icon(Icons.close_rounded, color: _textMuted, size: 22),
                       onPressed: () => Navigator.pop(modalCtx),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                // Rendered Document View (100% visible on screen, right-side up, full resolution)
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: _bg,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.surfaceBorder),
+                      border: Border.all(color: _border),
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(14),
@@ -392,7 +400,6 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Action Buttons (Tutup, Unduh, Bagikan)
                 Row(
                   children: [
                     Expanded(
@@ -400,11 +407,11 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 13),
-                          side: const BorderSide(color: AppColors.surfaceBorder),
+                          side: const BorderSide(color: _border),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: isProcessing ? null : () => Navigator.pop(modalCtx),
-                        child: const Text('Tutup', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+                        child: const Text('Tutup', style: TextStyle(color: _textBody, fontWeight: FontWeight.w700)),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -412,13 +419,13 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                       flex: 3,
                       child: OutlinedButton.icon(
                         icon: isProcessing
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
-                            : const Icon(Icons.download_rounded, size: 18, color: AppColors.primary),
-                        label: const Text('Unduh', style: TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w800)),
+                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: _brandBlue))
+                            : const Icon(Icons.download_rounded, size: 18, color: _brandBlue),
+                        label: const Text('Unduh', style: TextStyle(color: _brandBlue, fontWeight: FontWeight.w800)),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 13),
-                          backgroundColor: AppColors.primaryLight.withValues(alpha: 0.5),
-                          side: const BorderSide(color: AppColors.primaryLight),
+                          backgroundColor: _brandBlue.withValues(alpha: 0.08),
+                          side: BorderSide(color: _brandBlue.withValues(alpha: 0.2)),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: isProcessing
@@ -451,7 +458,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                             : const Icon(Icons.share_rounded, size: 18, color: Colors.white),
                         label: const Text('Bagikan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: _brandBlue,
                           padding: const EdgeInsets.symmetric(vertical: 13),
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -479,7 +486,6 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
               ],
             ),
           );
@@ -491,16 +497,16 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
   Color _getRxTextColor(dynamic rxVal) {
     if (rxVal == null) return AppColors.danger;
     final numVal = (rxVal is num) ? rxVal.toDouble() : double.tryParse(rxVal.toString());
-    if (numVal == null) return AppColors.danger;
-    if (numVal >= -24.0) return const Color(0xFF059669); // Emerald
-    if (numVal >= -27.0) return const Color(0xFFD97706); // Amber
-    return const Color(0xFFDC2626); // Red
+    if (numVal == null || numVal < -38.0) return AppColors.danger;
+    if (numVal >= -24.0) return const Color(0xFF059669);
+    if (numVal >= -27.0) return const Color(0xFFD97706);
+    return const Color(0xFFDC2626);
   }
 
   Color _getRxBgColor(dynamic rxVal) {
     if (rxVal == null) return const Color(0xFFFEF2F2);
     final numVal = (rxVal is num) ? rxVal.toDouble() : double.tryParse(rxVal.toString());
-    if (numVal == null) return const Color(0xFFFEF2F2);
+    if (numVal == null || numVal < -38.0) return const Color(0xFFFEF2F2);
     if (numVal >= -24.0) return const Color(0xFFECFDF5);
     if (numVal >= -27.0) return const Color(0xFFFFFBEB);
     return const Color(0xFFFEF2F2);
@@ -509,7 +515,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
   Color _getRxBorderColor(dynamic rxVal) {
     if (rxVal == null) return const Color(0xFFFECACA);
     final numVal = (rxVal is num) ? rxVal.toDouble() : double.tryParse(rxVal.toString());
-    if (numVal == null) return const Color(0xFFFECACA);
+    if (numVal == null || numVal < -38.0) return const Color(0xFFFECACA);
     if (numVal >= -24.0) return const Color(0xFFA7F3D0);
     if (numVal >= -27.0) return const Color(0xFFFDE68A);
     return const Color(0xFFFECACA);
@@ -542,582 +548,399 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
 
     final totalPortsCount = _nodeData?['total_ports'] ?? widget.totalPorts;
 
+    // Hitung statistik port terisi
+    final portMap = <int, Map<String, dynamic>>{};
+    for (final p in _ports) {
+      if (p is Map) {
+        final portNum = int.tryParse(p['port_number']?.toString() ?? '') ?? 0;
+        if (portNum > 0) {
+          portMap[portNum] = Map<String, dynamic>.from(p);
+        }
+      }
+    }
+    final usedCount = portMap.values.where((port) {
+      return port['customer_name'] != null ||
+          port['customer_id'] != null ||
+          port['customer_service_id'] != null ||
+          port['customer_name_cache'] != null ||
+          (port['onu_serial'] != null && port['onu_serial'].toString().isNotEmpty) ||
+          port['status'] == 'used';
+    }).length;
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.92,
       decoration: const BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        color: _bg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
-            children: [
-              // Header Card Section
-              Container(
-                padding: const EdgeInsets.only(top: 12, bottom: 12),
-                decoration: const BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                  border: Border(bottom: BorderSide(color: AppColors.surfaceBorder)),
-                ),
-                child: Column(
-                  children: [
-                    // Drag Handle
-                    Center(
-                      child: Container(
-                        width: 38,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceBorder,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
+        children: [
+          // ── Header Gradient Banner ──
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 12, 16, 16),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [_navyDeep, _navy, _brandBlue, _cyan],
+                stops: [0.0, 0.35, 0.75, 1.0],
+              ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            child: Column(
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
                     ),
-
-                    // Header Title & Actions
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
+                  ),
+                ),
+                Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                      ),
+                      child: const Icon(Icons.hub_rounded, color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryLight,
-                              borderRadius: BorderRadius.circular(10),
+                          Text(
+                            widget.nodeName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 17,
+                              letterSpacing: 0.2,
                             ),
-                            child: const Icon(Icons.grid_view_rounded, color: AppColors.primary, size: 20),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.nodeName,
-                                  style: const TextStyle(
-                                    color: AppColors.textPrimary,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15.5,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    Text(
-                                      '$effectiveRatio Port',
-                                      style: const TextStyle(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const Text(' · ', style: TextStyle(color: AppColors.textMuted)),
-                                    Expanded(
-                                      child: Text(
-                                        effectiveInterface,
-                                        style: const TextStyle(
-                                          color: AppColors.secondary,
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w700,
-                                          fontFamily: 'monospace',
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Screenshot Action Button
-                          IconButton(
-                            tooltip: 'Screenshot / Tangkap Layar Laporan Lengkap',
-                            icon: const Icon(Icons.photo_camera_rounded, color: AppColors.textSecondary, size: 20),
-                            onPressed: _isLoading ? null : _captureFullDocumentScreenshot,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          // Refresh Action Button
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: _isProbingLive ? null : () => _fetchPortDetail(isRefresh: true),
-                              borderRadius: BorderRadius.circular(10),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6.5),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                                 decoration: BoxDecoration(
-                                  color: _isProbingLive ? AppColors.successLight : AppColors.primaryLight,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: _isProbingLive ? AppColors.success.withValues(alpha: 0.3) : AppColors.primary.withValues(alpha: 0.3),
-                                  ),
+                                  color: _neon.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    _isProbingLive
-                                        ? const SizedBox(
-                                            width: 12,
-                                            height: 12,
-                                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.success),
-                                          )
-                                        : const Icon(Icons.refresh_rounded, color: AppColors.primaryDark, size: 15),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      _isProbingLive ? 'Merefresh...' : 'Refresh',
-                                      style: TextStyle(
-                                        color: _isProbingLive ? AppColors.success : AppColors.primaryDark,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
+                                child: Text(
+                                  '$effectiveRatio ($usedCount/$totalPortsCount Terisi)',
+                                  style: const TextStyle(color: _neon, fontSize: 10.5, fontWeight: FontWeight.w700),
                                 ),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary, size: 21),
-                            onPressed: () => Navigator.pop(context),
-                            visualDensity: VisualDensity.compact,
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  effectiveInterface,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
+                    _glassHeaderButton(
+                      icon: Icons.photo_camera_rounded,
+                      tooltip: 'Screenshot',
+                      onTap: _isLoading ? null : _captureFullDocumentScreenshot,
+                    ),
+                    const SizedBox(width: 6),
+                    _glassHeaderButton(
+                      icon: _isProbingLive ? Icons.hourglass_top_rounded : Icons.refresh_rounded,
+                      tooltip: 'Refresh',
+                      onTap: _isProbingLive ? null : () => _fetchPortDetail(isRefresh: true),
+                    ),
+                    const SizedBox(width: 6),
+                    _glassHeaderButton(
+                      icon: Icons.close_rounded,
+                      tooltip: 'Tutup',
+                      onTap: () => Navigator.pop(context),
+                    ),
                   ],
                 ),
-              ),
+              ],
+            ),
+          ),
 
-              // Body Content
-              Expanded(
-                child: _isLoading
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(color: AppColors.primary),
-                            SizedBox(height: 16),
-                            Text(
-                              'Mengambil data port & telemetri redaman...',
-                              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                            ),
-                          ],
+          // ── Body Content ──
+          Expanded(
+            child: _isLoading
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: _brandBlue),
+                        SizedBox(height: 16),
+                        Text(
+                          'Mengambil data port & telemetri redaman...',
+                          style: TextStyle(color: _textBody, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  )
+                : _errorMessage != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 48),
+                              const SizedBox(height: 12),
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: _textBody, fontSize: 13),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _brandBlue,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onPressed: () => _fetchPortDetail(isRefresh: false),
+                                child: const Text('Coba Lagi', style: TextStyle(fontWeight: FontWeight.w700)),
+                              ),
+                            ],
+                          ),
                         ),
                       )
-                    : _errorMessage != null
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 48),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    _errorMessage!,
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.primary,
-                                      elevation: 0,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    ),
-                                    onPressed: () => _fetchPortDetail(isRefresh: false),
-                                    child: const Text('Coba Lagi', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                        : ListView(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            children: [
-                              // OLT Connection Banner Card
-                              Container(
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surface,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: AppColors.surfaceBorder),
-                                  boxShadow: AppColors.cardShadow,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surfaceLight,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: const Icon(Icons.router_rounded, color: AppColors.secondary, size: 20),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      flex: 6,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'OLT TERHUBUNG',
-                                            style: TextStyle(
-                                              color: AppColors.textMuted,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            effectiveOltName,
-                                            style: const TextStyle(
-                                              color: AppColors.textPrimary,
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 13.5,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Container(
-                                      width: 1,
-                                      height: 32,
-                                      color: AppColors.surfaceBorder,
-                                      margin: const EdgeInsets.symmetric(horizontal: 10),
-                                    ),
-                                    Expanded(
-                                      flex: 5,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'Interface OLT:',
-                                            style: TextStyle(
-                                              color: AppColors.textMuted,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            effectiveInterface,
-                                            style: const TextStyle(
-                                              color: AppColors.secondary,
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 12.5,
-                                              fontFamily: 'monospace',
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              // Optical Statistics Bar (Min / Avg / Max)
-                              if (_statsData != null && _statsData?['avg_rx_power'] != null) ...[
-                                const SizedBox(height: 10),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surface,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: AppColors.surfaceBorder),
-                                    boxShadow: AppColors.cardShadow,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                    children: [
-                                      _buildStatItem('Min (Terkecil)', '${_statsData?['min_rx_power'] ?? '—'} dBm', const Color(0xFFDC2626)),
-                                      Container(width: 1, height: 24, color: AppColors.surfaceBorder),
-                                      _buildStatItem('Rata-rata', '${_statsData?['avg_rx_power'] ?? '—'} dBm', AppColors.secondary),
-                                      Container(width: 1, height: 24, color: AppColors.surfaceBorder),
-                                      _buildStatItem('Max (Tertinggi)', '${_statsData?['max_rx_power'] ?? '—'} dBm', const Color(0xFF059669)),
-                                    ],
-                                  ),
-                                ),
+                    : ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        children: [
+                          // OLT Connection Banner Card
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: _border),
+                              boxShadow: [
+                                BoxShadow(color: _navyDeep.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 3)),
                               ],
-                              const SizedBox(height: 16),
-
-                              // Section Title
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: _brandBlue.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(Icons.router_rounded, color: _brandBlue, size: 20),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 6,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       const Text(
-                                        'DETAIL PER-PORT',
+                                        'OLT TERHUBUNG',
                                         style: TextStyle(
-                                          color: AppColors.textPrimary,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 12.5,
+                                          color: _textMuted,
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
                                           letterSpacing: 0.5,
                                         ),
                                       ),
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primaryLight,
-                                          borderRadius: BorderRadius.circular(10),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        effectiveOltName,
+                                        style: const TextStyle(
+                                          color: _textDark,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13,
                                         ),
-                                        child: Text(
-                                          '$totalPortsCount Port',
-                                          style: const TextStyle(
-                                            color: AppColors.primaryDark,
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ],
                                   ),
-                                  if (_isProbingLive)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.successLight,
-                                        borderRadius: BorderRadius.circular(8),
+                                ),
+                                Container(
+                                  width: 1,
+                                  height: 28,
+                                  color: _border,
+                                  margin: const EdgeInsets.symmetric(horizontal: 10),
+                                ),
+                                Expanded(
+                                  flex: 5,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'INTERFACE PON',
+                                        style: TextStyle(
+                                          color: _textMuted,
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
-                                      child: const Row(
-                                        children: [
-                                          SizedBox(
-                                            width: 10,
-                                            height: 10,
-                                            child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.success),
-                                          ),
-                                          SizedBox(width: 5),
-                                          Text(
-                                            'Merefresh data...',
-                                            style: TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.bold),
-                                          ),
-                                        ],
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        effectiveInterface,
+                                        style: const TextStyle(
+                                          color: _brandBlue,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-
-                              // Ports Grid
-                              _buildPortsGrid(totalPortsCount, effectiveInterface),
-                            ],
-                          ),
-              ),
-
-              // Bottom Footer Bar
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: const BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border(top: BorderSide(color: AppColors.surfaceBorder)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.photo_camera_rounded, size: 16, color: AppColors.primary),
-                      label: const Text('Screenshot Lengkap', style: TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w700, fontSize: 12.5)),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.primaryLight),
-                        backgroundColor: AppColors.primaryLight.withValues(alpha: 0.5),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: _isLoading ? null : _captureFullDocumentScreenshot,
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.surfaceLight,
-                        foregroundColor: AppColors.textPrimary,
-                        elevation: 0,
-                        side: const BorderSide(color: AppColors.surfaceBorder),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Tutup', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-  }
-
-  /// Builds the full, unclipped document layout for High-Resolution Screenshot export
-  Widget _buildFullReportCanvas(
-    String effectiveOltName,
-    String effectiveInterface,
-    String effectiveRatio,
-    int totalPortsCount,
-  ) {
-    final nowFormatted = DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
-
-    return Container(
-      width: 520,
-      padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Enterprise Header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.surfaceBorder),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.grid_view_rounded, color: AppColors.primary, size: 26),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'FONA MOBILE',
-                            style: TextStyle(
-                              color: AppColors.primaryDark,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 11,
-                              letterSpacing: 1.2,
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          Text(
-                            nowFormatted,
-                            style: const TextStyle(color: AppColors.textMuted, fontSize: 10.5, fontWeight: FontWeight.w600),
+
+                          // Optical Statistics Bar
+                          if (_statsData != null && _statsData?['avg_rx_power'] != null) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: _border),
+                                boxShadow: [
+                                  BoxShadow(color: _navyDeep.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2)),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                children: [
+                                  _buildStatItem('Min (Terkecil)', '${_statsData?['min_rx_power'] ?? '—'} dBm', const Color(0xFFDC2626)),
+                                  Container(width: 1, height: 24, color: _border),
+                                  _buildStatItem('Rata-rata', '${_statsData?['avg_rx_power'] ?? '—'} dBm', _brandBlue),
+                                  Container(width: 1, height: 24, color: _border),
+                                  _buildStatItem('Max (Tertinggi)', '${_statsData?['max_rx_power'] ?? '—'} dBm', const Color(0xFF059669)),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+
+                          // Section Title
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    'Daftar Port ODP',
+                                    style: TextStyle(
+                                      color: _textDark,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14.5,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: _brandBlue.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      '$totalPortsCount Port',
+                                      style: const TextStyle(
+                                        color: _brandBlue,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (_isProbingLive)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.success.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 10,
+                                        height: 10,
+                                        child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.success),
+                                      ),
+                                      SizedBox(width: 5),
+                                      Text(
+                                        'Merefresh data...',
+                                        style: TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
+                          const SizedBox(height: 10),
+
+                          // Ports Grid
+                          _buildPortsGrid(totalPortsCount, effectiveInterface),
                         ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Laporan Redaman — ${widget.nodeName}',
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Kapasitas: $effectiveRatio ($totalPortsCount Port) · IF: $effectiveInterface',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11.5, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
           ),
-          const SizedBox(height: 12),
 
-          // OLT Info Card
+          // ── Bottom Footer Bar ──
           Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.surfaceBorder),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: _border)),
             ),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Icon(Icons.router_rounded, color: AppColors.secondary, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('OLT INDUK', style: TextStyle(color: AppColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.w700)),
-                      Text(effectiveOltName, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800, fontSize: 13)),
-                    ],
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.photo_camera_rounded, size: 16, color: _brandBlue),
+                  label: const Text('Screenshot Lengkap', style: TextStyle(color: _brandBlue, fontWeight: FontWeight.w800, fontSize: 12.5)),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: _brandBlue.withValues(alpha: 0.3)),
+                    backgroundColor: _brandBlue.withValues(alpha: 0.06),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
+                  onPressed: _isLoading ? null : _captureFullDocumentScreenshot,
                 ),
-                Container(width: 1, height: 28, color: AppColors.surfaceBorder, margin: const EdgeInsets.symmetric(horizontal: 10)),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('INTERFACE OLT', style: TextStyle(color: AppColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.w700)),
-                      Text(effectiveInterface, style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w800, fontSize: 12.5, fontFamily: 'monospace')),
-                    ],
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    foregroundColor: _textDark,
+                    elevation: 0,
+                    side: const BorderSide(color: _border),
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Tutup', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                 ),
               ],
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Optical Statistics Bar
-          if (_statsData != null && _statsData?['avg_rx_power'] != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.surfaceBorder),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStatItem('Min (Terkecil)', '${_statsData?['min_rx_power'] ?? '—'} dBm', const Color(0xFFDC2626)),
-                  Container(width: 1, height: 24, color: AppColors.surfaceBorder),
-                  _buildStatItem('Rata-rata', '${_statsData?['avg_rx_power'] ?? '—'} dBm', AppColors.secondary),
-                  Container(width: 1, height: 24, color: AppColors.surfaceBorder),
-                  _buildStatItem('Max (Tertinggi)', '${_statsData?['max_rx_power'] ?? '—'} dBm', const Color(0xFF059669)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Section Title
-          Row(
-            children: [
-              const Text(
-                'STATUS SELURUH PORT',
-                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 0.5),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(6)),
-                child: Text('$totalPortsCount Port Total', style: const TextStyle(color: AppColors.primaryDark, fontSize: 10, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // All Ports Grid (Fully rendered without scrollview)
-          _buildPortsGrid(totalPortsCount, effectiveInterface),
-
-          const SizedBox(height: 16),
-          // Footer watermark
-          Center(
-            child: Text(
-              'Dokumen telemetri resmi ini digenerate oleh FONA Mobile · Tanggal: $nowFormatted',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.w500),
             ),
           ),
         ],
@@ -1125,8 +948,30 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     );
   }
 
+  Widget _glassHeaderButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.15),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(icon, color: Colors.white, size: 17),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPortsGrid(int totalPortsCount, String defaultInterface) {
-    // Generate map of existing ports by port_number
     final portMap = <int, Map<String, dynamic>>{};
     for (final p in _ports) {
       if (p is Map) {
@@ -1146,7 +991,7 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
         crossAxisCount: 2,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        mainAxisExtent: 190,
+        mainAxisExtent: 185,
       ),
       itemCount: numPortsToRender,
       itemBuilder: (ctx, idx) {
@@ -1170,7 +1015,6 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
   }
 
   Widget _buildOccupiedPortCard(int portNum, Map<String, dynamic> port, String defaultInterface) {
-    final custNumber = port['customer_number'] ?? port['service_number'] ?? 'CMN${portNum.toString().padLeft(4, '0')}';
     final custName = port['customer_name'] ?? port['customer_name_cache'] ?? 'Pelanggan Port $portNum';
     final sn = port['onu_serial'] ?? '-';
     final iface = port['olt_port_name'] ?? defaultInterface;
@@ -1185,10 +1029,12 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.surfaceBorder),
-        boxShadow: AppColors.cardShadow,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+        boxShadow: [
+          BoxShadow(color: _navyDeep.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 3)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1198,47 +1044,35 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'P$portNum',
-                      style: const TextStyle(color: AppColors.primaryDark, fontWeight: FontWeight.w800, fontSize: 11),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Container(
-                    width: 4,
-                    height: 4,
-                    decoration: const BoxDecoration(color: AppColors.success, shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'Terisi',
-                    style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w700, fontSize: 10.5),
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _brandBlue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'Port $portNum',
+                  style: const TextStyle(color: _brandBlue, fontWeight: FontWeight.w800, fontSize: 11),
+                ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isBlocked ? AppColors.dangerLight : AppColors.successLight,
-                  borderRadius: BorderRadius.circular(4),
+                  color: isBlocked ? AppColors.danger.withValues(alpha: 0.1) : AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      isBlocked ? Icons.close_rounded : Icons.check_rounded,
-                      size: 10,
-                      color: isBlocked ? AppColors.danger : AppColors.success,
+                    Container(
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: isBlocked ? AppColors.danger : AppColors.success,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 4),
                     Text(
                       status,
                       style: TextStyle(
@@ -1252,20 +1086,15 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
 
-          // Customer ID & Name
-          Text(
-            custNumber,
-            style: const TextStyle(color: AppColors.secondary, fontSize: 10, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 2),
+          // Customer Name
           Text(
             custName,
             style: const TextStyle(
-              color: AppColors.textPrimary,
+              color: _textDark,
               fontWeight: FontWeight.w800,
-              fontSize: 12,
+              fontSize: 13,
               height: 1.2,
             ),
             maxLines: 2,
@@ -1276,11 +1105,11 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
           // SN & IF
           Row(
             children: [
-              const Text('SN: ', style: TextStyle(color: AppColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.w600)),
+              const Text('SN: ', style: TextStyle(color: _textMuted, fontSize: 9.5, fontWeight: FontWeight.w600)),
               Expanded(
                 child: Text(
                   sn,
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 9.5, fontWeight: FontWeight.w700),
+                  style: const TextStyle(color: _textBody, fontSize: 9.5, fontWeight: FontWeight.w700),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1288,15 +1117,14 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
           ),
           Row(
             children: [
-              const Text('IF: ', style: TextStyle(color: AppColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.w600)),
+              const Text('IF: ', style: TextStyle(color: _textMuted, fontSize: 9.5, fontWeight: FontWeight.w600)),
               Expanded(
                 child: Text(
                   iface,
                   style: const TextStyle(
-                    color: AppColors.secondary,
+                    color: _brandBlue,
                     fontSize: 9.5,
                     fontWeight: FontWeight.w700,
-                    fontFamily: 'monospace',
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1307,10 +1135,10 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
 
           // Redaman Rx Container
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: rxBgColor,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: rxBorderColor),
             ),
             child: Row(
@@ -1318,11 +1146,11 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
               children: [
                 const Text(
                   'Redaman Rx:',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 9.5, fontWeight: FontWeight.w500),
+                  style: TextStyle(color: _textBody, fontSize: 9.5, fontWeight: FontWeight.w500),
                 ),
                 Text(
                   _formatRxPower(rxVal),
-                  style: TextStyle(color: rxTextColor, fontWeight: FontWeight.w800, fontSize: 10),
+                  style: TextStyle(color: rxTextColor, fontWeight: FontWeight.w800, fontSize: 10.5),
                 ),
               ],
             ),
@@ -1336,9 +1164,9 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.surfaceBorder),
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1347,20 +1175,20 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: AppColors.surfaceBorder),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: _border),
                 ),
                 child: Text(
-                  'P$portNum',
-                  style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w700, fontSize: 10.5),
+                  'Port $portNum',
+                  style: const TextStyle(color: _textMuted, fontWeight: FontWeight.w700, fontSize: 10.5),
                 ),
               ),
               const Text(
-                'SC_APC',
-                style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600, fontSize: 9.5),
+                'SC-APC',
+                style: TextStyle(color: _textMuted, fontWeight: FontWeight.w600, fontSize: 9.5),
               ),
             ],
           ),
@@ -1368,16 +1196,16 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: Colors.white,
               shape: BoxShape.circle,
-              border: Border.all(color: AppColors.surfaceBorder),
+              border: Border.all(color: _border),
             ),
-            child: const Icon(Icons.add_rounded, color: AppColors.textMuted, size: 16),
+            child: const Icon(Icons.add_rounded, color: _textMuted, size: 18),
           ),
           const SizedBox(height: 6),
           const Text(
             'Port Tersedia',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+            style: TextStyle(color: _textBody, fontSize: 11, fontWeight: FontWeight.w600),
           ),
           const Spacer(),
         ],
@@ -1388,10 +1216,178 @@ class _OdpPortMonitoringSheetState extends State<OdpPortMonitoringSheet> {
   Widget _buildStatItem(String label, String value, Color valueColor) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.w600)),
+        Text(label, style: const TextStyle(color: _textMuted, fontSize: 10, fontWeight: FontWeight.w600)),
         const SizedBox(height: 2),
         Text(value, style: TextStyle(color: valueColor, fontSize: 12, fontWeight: FontWeight.w800)),
       ],
+    );
+  }
+
+  /// Builds the full, unclipped document layout for High-Resolution Screenshot export
+  Widget _buildFullReportCanvas(
+    String effectiveOltName,
+    String effectiveInterface,
+    String effectiveRatio,
+    int totalPortsCount,
+  ) {
+    final nowFormatted = DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
+
+    return Container(
+      width: 520,
+      padding: const EdgeInsets.all(24),
+      decoration: const BoxDecoration(
+        color: _bg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _brandBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.hub_rounded, color: _brandBlue, size: 26),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'FONA MOBILE',
+                            style: TextStyle(
+                              color: _brandBlue,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          Text(
+                            nowFormatted,
+                            style: const TextStyle(color: _textMuted, fontSize: 10.5, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Laporan Redaman — ${widget.nodeName}',
+                        style: const TextStyle(
+                          color: _textDark,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Kapasitas: $effectiveRatio ($totalPortsCount Port) · IF: $effectiveInterface',
+                        style: const TextStyle(color: _textBody, fontSize: 11.5, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _border),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.router_rounded, color: _brandBlue, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('OLT INDUK', style: TextStyle(color: _textMuted, fontSize: 9.5, fontWeight: FontWeight.w700)),
+                      Text(effectiveOltName, style: const TextStyle(color: _textDark, fontWeight: FontWeight.w800, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                Container(width: 1, height: 28, color: _border, margin: const EdgeInsets.symmetric(horizontal: 10)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('INTERFACE OLT', style: TextStyle(color: _textMuted, fontSize: 9.5, fontWeight: FontWeight.w700)),
+                      Text(effectiveInterface, style: const TextStyle(color: _brandBlue, fontWeight: FontWeight.w800, fontSize: 12.5)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          if (_statsData != null && _statsData?['avg_rx_power'] != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatItem('Min (Terkecil)', '${_statsData?['min_rx_power'] ?? '—'} dBm', const Color(0xFFDC2626)),
+                  Container(width: 1, height: 24, color: _border),
+                  _buildStatItem('Rata-rata', '${_statsData?['avg_rx_power'] ?? '—'} dBm', _brandBlue),
+                  Container(width: 1, height: 24, color: _border),
+                  _buildStatItem('Max (Tertinggi)', '${_statsData?['max_rx_power'] ?? '—'} dBm', const Color(0xFF059669)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          Row(
+            children: [
+              const Text(
+                'STATUS SELURUH PORT',
+                style: TextStyle(color: _textDark, fontWeight: FontWeight.w800, fontSize: 12, letterSpacing: 0.5),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: _brandBlue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+                child: Text('$totalPortsCount Port Total', style: const TextStyle(color: _brandBlue, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          _buildPortsGrid(totalPortsCount, effectiveInterface),
+
+          const SizedBox(height: 16),
+          Center(
+            child: Text(
+              'Dokumen telemetri resmi ini digenerate oleh FONA Mobile · Tanggal: $nowFormatted',
+              style: const TextStyle(color: _textMuted, fontSize: 10, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
