@@ -27,7 +27,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
   static const Color brimoOrange = Color(0xFFF37021);      // BRImo Warm Accent Orange
   static const Color brimoBg = Color(0xFFF4F6F9);          // Light grey background
 
-  bool _obscureBalance = false;
   bool _obscureMetrics = false;
 
   // Dynamic Background Banner from Web Admin
@@ -380,26 +379,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                                           ),
                                         ],
                                       ),
-                                      InkWell(
-                                        onTap: () => setState(() => _obscureBalance = !_obscureBalance),
-                                        borderRadius: BorderRadius.circular(14),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withValues(alpha: 0.14),
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: Colors.white.withValues(alpha: 0.20),
-                                              width: 0.8,
-                                            ),
-                                          ),
-                                          child: Icon(
-                                            _obscureBalance ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
@@ -409,31 +388,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
-                                      _obscureBalance
-                                          ? const Row(
-                                              children: [
-                                                Icon(Icons.circle, size: 8, color: Colors.white),
-                                                SizedBox(width: 5),
-                                                Icon(Icons.circle, size: 8, color: Colors.white),
-                                                SizedBox(width: 5),
-                                                Icon(Icons.circle, size: 8, color: Colors.white),
-                                                SizedBox(width: 5),
-                                                Icon(Icons.circle, size: 8, color: Colors.white),
-                                                SizedBox(width: 5),
-                                                Icon(Icons.circle, size: 8, color: Colors.white),
-                                                SizedBox(width: 5),
-                                                Icon(Icons.circle, size: 8, color: Colors.white),
-                                              ],
-                                            )
-                                          : Text(
-                                              '$totalCustomers Pelanggan',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w900,
-                                                letterSpacing: -0.2,
-                                              ),
-                                            ),
+                                      Text(
+                                        '$totalCustomers Pelanggan',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: -0.2,
+                                        ),
+                                      ),
 
                                       // Modern Online Status Chip
                                       Container(
@@ -520,17 +483,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                                                       ),
                                                     ),
                                                     const SizedBox(height: 1),
-                                                    _obscureBalance
-                                                        ? const Text('••••', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold))
-                                                        : Text(
-                                                            '$onlineCustomers',
-                                                            style: const TextStyle(
-                                                              color: Color(0xFF34D399),
-                                                              fontSize: 14,
-                                                              fontWeight: FontWeight.w800,
-                                                              letterSpacing: -0.2,
-                                                            ),
-                                                          ),
+                                                    Text(
+                                                      '$onlineCustomers',
+                                                      style: const TextStyle(
+                                                        color: Color(0xFF34D399),
+                                                        fontSize: 14,
+                                                        fontWeight: FontWeight.w800,
+                                                        letterSpacing: -0.2,
+                                                      ),
+                                                    ),
                                                   ],
                                                 ),
                                               ),
@@ -577,17 +538,15 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                                                       ),
                                                     ),
                                                     const SizedBox(height: 1),
-                                                    _obscureBalance
-                                                        ? const Text('••••', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold))
-                                                        : Text(
-                                                            '$offlineCustomers',
-                                                            style: const TextStyle(
-                                                              color: Color(0xFFF87171),
-                                                              fontSize: 14,
-                                                              fontWeight: FontWeight.w800,
-                                                              letterSpacing: -0.2,
-                                                             ),
-                                                          ),
+                                                    Text(
+                                                      '$offlineCustomers',
+                                                      style: const TextStyle(
+                                                        color: Color(0xFFF87171),
+                                                        fontSize: 14,
+                                                        fontWeight: FontWeight.w800,
+                                                        letterSpacing: -0.2,
+                                                      ),
+                                                    ),
                                                   ],
                                                 ),
                                               ),
@@ -596,54 +555,6 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                                         ),
                                       ),
                                     ],
-                                  ),
-                                  const SizedBox(height: 10),
-
-                                  // Thin Gradient Divider
-                                  Container(
-                                    height: 1,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Colors.white.withValues(alpha: 0.05),
-                                          Colors.white.withValues(alpha: 0.25),
-                                          Colors.white.withValues(alpha: 0.05),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-
-                                  // Row 3: Bottom Link: Semua Pelanggan & Node
-                                  InkWell(
-                                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerListScreen())),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Icon(Icons.hub_outlined, color: const Color(0xFF00E5FF).withValues(alpha: 0.9), size: 16),
-                                            const SizedBox(width: 8),
-                                            const Text(
-                                              'Semua Pelanggan & Node',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withValues(alpha: 0.12),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 14),
-                                        ),
-                                      ],
-                                    ),
                                   ),
                                 ],
                               ),
@@ -657,7 +568,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ),
 
               // Spacer for the hero card height with comfortable, generous margin
-              const SizedBox(height: 142),
+              const SizedBox(height: 100),
 
               // ── 3. MAIN DASHBOARD BODY CONTENT ──
               Padding(
