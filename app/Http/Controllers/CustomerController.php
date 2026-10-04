@@ -19,7 +19,7 @@ class CustomerController extends Controller
 {
     public static function clearCustomerCache()
     {
-        Cache::forget('customers_index_payload_v4');
+        Cache::forget('customers_index_payload_v5');
         Cache::forget('sobok_service_status_meta');
     }
 
@@ -28,7 +28,7 @@ class CustomerController extends Controller
      */
     public function index()
     {
-        return Cache::remember('customers_index_payload_v4', 8, function () {
+        return Cache::remember('customers_index_payload_v5', 8, function () {
             // Build real-time optical power & status map from OLT live database snapshots
             $liveOnuMap = [];
             $oltDevices = OltDevice::whereNotNull('last_telemetry_snapshot')->get(['id', 'name', 'last_telemetry_snapshot']);
@@ -87,18 +87,30 @@ class CustomerController extends Controller
                 }
             }
 
+            $ontStatus = strtolower($ont?->status ?? '');
+            $ontRx = ($ont?->rx_power !== null && is_numeric($ont?->rx_power)) ? (float)$ont->rx_power : -40.0;
+            $ontIsOnline = ($ontStatus === 'active' || $ontStatus === 'online') && $ontRx > -38.0;
+
             $isOnline = false;
             $rxPower = -40.00;
             if ($liveData) {
                 $st = strtolower($liveData['status'] ?? '');
                 $rawRx = $liveData['rx_power'] ?? null;
-                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                $rxPower = $isOnline ? (float)$rawRx : -40.00;
-            } elseif ($ont) {
-                $st = strtolower($ont->status ?? '');
-                $rawRx = $ont->rx_power;
-                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                $rxPower = $isOnline ? (float)$rawRx : -40.00;
+                $liveIsOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
+
+                if ($liveIsOnline) {
+                    $isOnline = true;
+                    $rxPower = (float)$rawRx;
+                } elseif ($ontIsOnline) {
+                    $isOnline = true;
+                    $rxPower = $ontRx;
+                } else {
+                    $isOnline = false;
+                    $rxPower = -40.00;
+                }
+            } else {
+                $isOnline = $ontIsOnline;
+                $rxPower = $isOnline ? $ontRx : -40.00;
             }
             $txPower = $isOnline ? (float)($liveData['tx_power'] ?? ($ont?->tx_power ?? 1.95)) : 0.0;
             $distance = $isOnline ? ($liveData['distance_meters'] ?? ($ont?->distance_meters ?? 650)) : 0;
