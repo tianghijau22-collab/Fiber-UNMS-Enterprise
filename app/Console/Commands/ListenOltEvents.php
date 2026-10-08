@@ -770,22 +770,7 @@ class ListenOltEvents extends Command
                      "<b>• Status:</b> {$statusLine}\n" .
                      "<b>• Event OLT:</b> <code>{$eventLabel}</code>";
 
-        // Rekam ke AppNotification dengan sendTelegram = false (Opsi B: Telegram hening, Web UI aktif perorangan)
-        try {
-            AppNotification::notifyAll(
-                $indivTitle,
-                $indivBody,
-                'TRAP_INDIVIDUAL',
-                '/customers',
-                'SNMP_TRAP',
-                false, // STRICTLY FALSE: Telegram HANYA untuk Gangguan Massal!
-                'SNMP_TRAP'
-            );
-            $this->line("   ⚡ [TRAP INDIVIDUAL RECORDED] Alert perorangan {$targetName} ({$targetSn}) dicatat ke Web UI (Telegram: OFF).");
-        } catch (\Throwable $e) {
-            $this->warn("   ⚠️ Gagal mencatat notifikasi perorangan: " . $e->getMessage());
-        }
-
+        $this->line("   ℹ️ [TRAP INDIVIDUAL] Event perorangan {$targetName} ({$targetSn}) diproses (Notifikasi Massal Only: Push OFF).");
         return;
     }
 

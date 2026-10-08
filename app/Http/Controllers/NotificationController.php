@@ -23,10 +23,12 @@ class NotificationController extends Controller
                 ->orWhere('user_id', $userId);
             })
             // Exclude noise telemetri individual & alarm modem individual mentah
-            ->whereNotIn('type', ['TRAP_INDIVIDUAL', 'POLL', 'SNMP'])
+            ->whereNotIn('type', ['TRAP_INDIVIDUAL', 'POLL', 'SNMP', 'INDIVIDUAL'])
             ->where('title', 'not like', '%SNMP TRAP%')
             ->where('title', 'not like', '%Modem %')
-            ->where('title', 'not like', '%ONU %');
+            ->where('title', 'not like', '%ONU %')
+            ->where('title', 'not like', '%SUDDEN LOSS%')
+            ->where('title', 'not like', '%FLAPPING%');
 
         $notifications = (clone $baseQuery)
             ->orderBy('created_at', 'desc')

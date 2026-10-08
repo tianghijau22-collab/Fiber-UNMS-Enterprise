@@ -47,6 +47,11 @@ class AppNotification extends Model
 
     /**
      * Kirim notifikasi siaran (Broadcast) ke SELURUH USER di sistem
+     * ATURAN KETAT: Notifikasi siaran / Push FCM / Telegram HANYA diizinkan untuk:
+     * 1. Notifikasi Massal (BROADCAST / ANNOUNCEMENT / MAINTENANCE)
+     * 2. Gangguan Interface Massal (MASS_OUTAGE / MASS_RECOVERY Interface)
+     * 3. Gangguan ODP Massal (MASS_OUTAGE / MASS_RECOVERY ODP)
+     * Notifikasi perorangan / modem individual / flap individual DITOLAK.
      */
     public static function notifyAll(
         string $title,
@@ -57,7 +62,37 @@ class AppNotification extends Model
         bool $sendTelegram = true,
         ?string $source = null,
         ?string $imageUrl = null
-    ): self {
+    ): ?self {
+        $upperType = strtoupper($type);
+        $upperTitle = strtoupper($title);
+
+        // Filter Penolak Notifikasi Individual / Modem Tunggal
+        $isIndividualReject = in_array($upperType, ['TRAP_INDIVIDUAL', 'INDIVIDUAL', 'POLL', 'SNMP'])
+            || str_contains($upperTitle, 'SUDDEN LOSS: MODEM')
+            || str_contains($upperTitle, 'RECOVERY: MODEM')
+            || str_contains($upperTitle, 'FLAPPING: MODEM')
+            || str_contains($upperTitle, 'ALARM GANGGUAN: MODEM')
+            || str_contains($upperTitle, 'PEMULIHAN LAYANAN: MODEM')
+            || str_contains($upperTitle, 'MODEM PELANGGAN');
+
+        if ($isIndividualReject) {
+            \Illuminate\Support\Facades\Log::info("AppNotification::notifyAll ditolak karena merupakan notifikasi perorangan: {$title}");
+            return null;
+        }
+
+        // Whitelist Notifikasi yang Diizinkan
+        $isAllowed = in_array($upperType, ['MASS_OUTAGE', 'MASS_RECOVERY', 'BROADCAST', 'ANNOUNCEMENT', 'MAINTENANCE', 'SYSTEM_MAINTENANCE', 'GLOBAL'])
+            || str_contains($upperTitle, 'GANGGUAN MASSAL')
+            || str_contains($upperTitle, 'PEMULIHAN GANGGUAN MASSAL')
+            || str_contains($upperTitle, 'PEMELIHARAAN')
+            || str_contains($upperTitle, 'SIARAN')
+            || str_contains($upperTitle, 'DISPATCH TIM MAINTENANCE OTDR');
+
+        if (!$isAllowed) {
+            \Illuminate\Support\Facades\Log::info("AppNotification::notifyAll ditolak karena bukan tipe gangguan massal / siaran: [{$type}] {$title}");
+            return null;
+        }
+
         if (!$source) {
             $cmd = implode(' ', $_SERVER['argv'] ?? []);
             if (str_contains($cmd, 'olt:listen-events') || str_contains($cmd, 'ListenOltEvents') || str_contains($body, 'via SNMP Trap')) {
@@ -82,7 +117,7 @@ class AppNotification extends Model
             'is_read'   => false,
         ]);
 
-        // Otomatis sinkronisasi kirim ke Telegram Bot jika diaktifkan
+        // Otomatis sinkronisasi kirim ke Telegram Bot jika diaktifkan (Eksklusif Gangguan Massal)
         if ($sendTelegram) {
             \App\Services\TelegramService::send($title, $body, $type, $url, $source);
         }

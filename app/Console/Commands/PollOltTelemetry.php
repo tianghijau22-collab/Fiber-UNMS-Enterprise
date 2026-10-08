@@ -582,42 +582,8 @@ class PollOltTelemetry extends Command
 
                                 if ($oldStatus === 'active' && $newStatus === 'inactive') {
                                     \App\Models\AuditLog::record('ALARM_SUDDEN_LOS', 'Monitoring OLT', "🚨 SUDDEN LOSS: Modem {$custName} ({$sn}) putus / LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => -40.00]);
-                                    $isPortMassOutage = !empty($massDownPorts[$portName]) || Cache::has("interface_in_mass_outage_{$device->id}_{$portName}");
-                                    if (!$isPortMassOutage) {
-                                        \App\Models\AppNotification::notifyAll(
-                                            "🚨 SUDDEN LOSS: Modem {$custName} Putus!",
-                                            "Modem {$custName} (SN: {$sn}) pada port {$portName} mengalami kehilangan sinyal (LOS).",
-                                            'NOC',
-                                            '/customers',
-                                            null,
-                                            false
-                                        );
-                                        TelegramService::send(
-                                            "🚨 SUDDEN LOSS: Modem {$custName} Putus!",
-                                            "Modem {$custName} (SN: {$sn}) pada port {$portName} mengalami kehilangan sinyal (LOS).",
-                                            'NOC',
-                                            '/customers'
-                                        );
-                                    }
                                 } elseif ($oldStatus === 'inactive' && $newStatus === 'active') {
                                     \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "✨ RECOVERY: Modem {$custName} ({$sn}) kembali ONLINE pada {$portName} (Rx: {$newRx} dBm)", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => $newRx]);
-                                    $isPortMassOutage = !empty($massDownPorts[$portName]) || Cache::has("interface_in_mass_outage_{$device->id}_{$portName}");
-                                    if (!$isPortMassOutage) {
-                                        \App\Models\AppNotification::notifyAll(
-                                            "✨ RECOVERY: Modem {$custName} Online Kembali",
-                                            "Modem {$custName} (SN: {$sn}) pada port {$portName} telah kembali aktif (Rx: {$newRx} dBm).",
-                                            'NOC',
-                                            '/customers',
-                                            null,
-                                            false
-                                        );
-                                        TelegramService::send(
-                                            "✨ RECOVERY: Modem {$custName} Online Kembali",
-                                            "Modem {$custName} (SN: {$sn}) pada port {$portName} telah kembali aktif (Rx: {$newRx} dBm).",
-                                            'NOC',
-                                            '/customers'
-                                        );
-                                    }
                                 }
                             }
                         }
@@ -1018,14 +984,6 @@ class PollOltTelemetry extends Command
                                 if (!Cache::has($notifiedKey)) {
                                     Cache::put($notifiedKey, true, 1800);
                                     \App\Models\AuditLog::record('ALARM_FLAPPING', 'Monitoring OLT', "⚠️ FLAPPING: Modem {$custName} ({$sn}) mengalami status naik-turun berulang kali (" . count($flaps) . "x / 15 mnt).", null, ['serial_number' => $sn, 'port' => $portName]);
-                                    \App\Models\AppNotification::notifyAll(
-                                        "⚠️ PERINGATAN FLAPPING: Modem {$custName} Tidak Stabil!",
-                                        "Modem {$custName} (SN: {$sn}) pada port {$portName} mengalami status putus-nyambung berulang kali. Notifikasi diredam selama 30 menit.",
-                                        'NOC',
-                                        '/customers',
-                                        null,
-                                        false
-                                    );
                                 }
                             }
 
@@ -1039,33 +997,11 @@ class PollOltTelemetry extends Command
                                 // Sudden Loss
                                 if ($oldStatus === 'active' && $newStatus === 'inactive') {
                                     \App\Models\AuditLog::record('ALARM_SUDDEN_LOS', 'Monitoring OLT', "🚨 SUDDEN LOSS: Modem {$custName} ({$sn}) putus / LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => -40.00]);
-                                    $isPortMassOutage = !empty($massDownPorts[$portName]) || Cache::has("interface_in_mass_outage_{$device->id}_{$portName}");
-                                    if (!$isPortMassOutage) {
-                                        \App\Models\AppNotification::notifyAll(
-                                            "🚨 ALARM GANGGUAN: Modem {$custName} Putus / LOS!",
-                                            "Modem pelanggan {$custName} (SN: {$sn}) pada port {$portName} mengalami putus sinyal mendadak (redaman jatuh ke -40.00 dBm).",
-                                            'NOC',
-                                            '/customers',
-                                            null,
-                                            false
-                                        );
-                                    }
                                 }
 
                                 // Recovery
                                 if ($oldStatus === 'inactive' && $newStatus === 'active') {
                                     \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) pulih normal pada {$portName} (Rx: {$newRx} dBm)", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => $newRx]);
-                                    $isPortMassOutage = !empty($massDownPorts[$portName]) || Cache::has("interface_in_mass_outage_{$device->id}_{$portName}");
-                                    if (!$isPortMassOutage) {
-                                        \App\Models\AppNotification::notifyAll(
-                                            "🟢 PEMULIHAN LAYANAN: Modem {$custName} Online Kembali!",
-                                            "Koneksi optik pelanggan {$custName} (SN: {$sn}) pada port {$portName} telah kembali pulih dengan redaman sehat {$newRx} dBm.",
-                                            'NOC',
-                                            '/customers',
-                                            null,
-                                            false
-                                        );
-                                    }
                                 }
                             }
 
@@ -1462,14 +1398,6 @@ class PollOltTelemetry extends Command
                                 if (!Cache::has($notifiedKey)) {
                                     Cache::put($notifiedKey, true, 1800);
                                     \App\Models\AuditLog::record('ALARM_FLAPPING', 'Monitoring OLT', "⚠️ FLAPPING: Modem {$custName} ({$sn}) mengalami status naik-turun berulang kali (" . count($flaps) . "x / 15 mnt). Notifikasi diredam 30 menit.", null, ['serial_number' => $sn, 'port' => $portName]);
-                                    \App\Models\AppNotification::notifyAll(
-                                        "⚠️ PERINGATAN FLAPPING: Modem {$custName} Tidak Stabil!",
-                                        "Modem {$custName} (SN: {$sn}) pada port {$portName} mengalami status putus-nyambung berulang kali. Notifikasi peringatan untuk modem ini otomatis diredam selama 30 menit demi mencegah spam.",
-                                        'NOC',
-                                        '/customers',
-                                        null,
-                                        false
-                                    );
                                 }
                             }
 
@@ -1485,26 +1413,6 @@ class PollOltTelemetry extends Command
                                 if ($oldStatus === 'active' && $newStatus === 'inactive') {
                                     \App\Models\AuditLog::record('ALARM_SUDDEN_LOS', 'Monitoring OLT', "🚨 SUDDEN LOSS: Modem {$custName} ({$sn}) tiba-tiba putus / LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => -40.00]);
 
-                                    // REDAM ALERT INDIVIDUAL JIKA PORT SEDANG GANGGUAN MASSAL!
-                                    // Notifikasi difokuskan pada ALARM GANGGUAN MASSAL INTERFACE agar tidak spamming puluhan alert per modem
-                                    $isPortMassOutage = !empty($massDownPorts[$portName]) 
-                                        || !empty($massDownPorts[str_replace('gpon-olt_', '', $portName)])
-                                        || !empty($massDownPorts[$p])
-                                        || !empty($massDownPorts[str_replace('gpon-olt_', '', $p)])
-                                        || Cache::has("interface_in_mass_outage_{$device->id}_{$portName}")
-                                        || Cache::has("interface_in_mass_outage_{$device->id}_" . str_replace('gpon-olt_', '', $portName));
-
-                                    if (!$isPortMassOutage) {
-                                        \App\Models\AppNotification::notifyAll(
-                                            "🚨 ALARM GANGGUAN: Modem {$custName} Putus / LOS!",
-                                            "Modem pelanggan {$custName} (SN: {$sn}) pada port {$portName} mengalami putus sinyal mendadak (redaman jatuh ke -40.00 dBm). Port otomatis dimasukkan ke Jalur Prioritas Cepat.",
-                                            'NOC',
-                                            '/customers',
-                                            null,
-                                            false
-                                        );
-                                    }
-
                                     // Masukkan port ini ke antrean prioritas cepat
                                     if (!in_array($portName, $activePriorityPorts)) {
                                         $activePriorityPorts[] = $portName;
@@ -1514,24 +1422,6 @@ class PollOltTelemetry extends Command
                                 // 🟢 ALARM INSTANT RECOVERY: Modem terdeteksi pulih kembali online!
                                 if ($oldStatus === 'inactive' && $newStatus === 'active') {
                                     \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) pulih normal pada {$portName} (Rx: {$newRx} dBm)", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => $newRx]);
-
-                                    $isPortMassOutage = !empty($massDownPorts[$portName]) 
-                                        || !empty($massDownPorts[str_replace('gpon-olt_', '', $portName)])
-                                        || !empty($massDownPorts[$p])
-                                        || !empty($massDownPorts[str_replace('gpon-olt_', '', $p)])
-                                        || Cache::has("interface_in_mass_outage_{$device->id}_{$portName}")
-                                        || Cache::has("interface_in_mass_outage_{$device->id}_" . str_replace('gpon-olt_', '', $portName));
-
-                                    if (!$isPortMassOutage) {
-                                        \App\Models\AppNotification::notifyAll(
-                                            "🟢 PEMULIHAN LAYANAN: Modem {$custName} Online Kembali!",
-                                            "Koneksi optik pelanggan {$custName} (SN: {$sn}) pada port {$portName} telah kembali pulih dengan redaman sehat {$newRx} dBm.",
-                                            'NOC',
-                                            '/customers',
-                                            null,
-                                            false
-                                        );
-                                    }
                                 }
                             }
                         }
