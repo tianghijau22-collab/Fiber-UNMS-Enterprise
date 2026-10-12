@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Models\OltDevice;
 use App\Models\AuditLog;
@@ -14,6 +15,7 @@ use App\Services\SnmpTrapDecoder;
 use App\Services\TelegramService;
 use App\Services\Olt\SnmpConnector;
 use App\Services\Olt\FastOpticalProbeService;
+use App\Services\Olt\OdpTopologyCache;
 
 class ListenOltEvents extends Command
 {
@@ -123,23 +125,37 @@ class ListenOltEvents extends Command
                 $bytes = @socket_recvfrom($sock, $buf, 4096, 0, $fromIp, $fromPort);
 
                 if ($bytes > 0 && !empty($buf)) {
-                    // Proteksi Total: Tangkap segala Exception/Error agar service Listener TIDAK PERNAH crash loop
-                    try {
-                        $this->processIncomingPacket($buf, $fromIp, $sock === $trapSocket ? 'TRAP' : 'SYSLOG');
-                    } catch (\Throwable $packetEx) {
-                        $this->error("⚠️  [LISTENER SAFETY CATCH] Error memproses paket dari {$fromIp}: " . $packetEx->getMessage() . " (" . basename($packetEx->getFile()) . ":" . $packetEx->getLine() . ")");
-                        Log::error("ListenOltEvents packet error: " . $packetEx->getMessage(), [
-                            'from_ip' => $fromIp,
-                            'file'    => $packetEx->getFile(),
-                            'line'    => $packetEx->getLine(),
-                            'trace'   => $packetEx->getTraceAsString(),
-                        ]);
-                    }
+                    $this->processPacketSafely($buf, $fromIp, $sock === $trapSocket ? 'TRAP' : 'SYSLOG');
                 }
             }
         }
 
         return 0;
+    }
+
+    protected function processPacketSafely(string $rawMsg, string $fromIp, string $sourceType): void
+    {
+        try {
+            $this->processIncomingPacket($rawMsg, $fromIp, $sourceType);
+        } catch (\Throwable $packetEx) {
+            // Diagnostics must not terminate the receiver if either output or logging fails.
+            try {
+                $this->error('Listener packet processing failed: '.get_class($packetEx));
+            } catch (\Throwable) {
+                // Continue receiving; the application logger is attempted separately below.
+            }
+            try {
+                Log::error('ListenOltEvents packet error', [
+                    'from_ip' => $fromIp,
+                    'source_type' => $sourceType,
+                    'exception_class' => get_class($packetEx),
+                    'file' => $packetEx->getFile(),
+                    'line' => $packetEx->getLine(),
+                ]);
+            } catch (\Throwable) {
+                // A failed logger must not turn one bad packet into a listener outage.
+            }
+        }
     }
 
     protected function processIncomingPacket(string $rawMsg, string $fromIp, string $sourceType)
@@ -1399,38 +1415,8 @@ class ListenOltEvents extends Command
     ): void {
         $massKey = "notif_mass_down_{$odpId}";
 
-        // 1. Ambil seluruh ONU pada ODP ini (Cache 30 detik agar jika ada rentetan trap datang dalam 1 detik, query DB hanya 1x)
-        $odpCacheKey = "odp_onus_topology_{$odpId}";
-        $onus = Cache::remember($odpCacheKey, 30, function () use ($odpId) {
-            return DB::table('ont_registrations')
-                ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
-                ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
-                ->join('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
-                ->join('network_nodes as odp', 'odp.id', '=', 'network_ports.node_id')
-                ->leftJoin('network_nodes as odc', 'odc.id', '=', 'odp.parent_node_id')
-                ->leftJoin('olt_devices', 'olt_devices.id', '=', 'odp.olt_device_id')
-                ->where('odp.id', $odpId)
-                ->select([
-                    'odp.id as odp_id',
-                    'odp.name as odp_name',
-                    'odp.code as odp_code',
-                    'odp.olt_port_ref',
-                    'odc.name as odc_name',
-                    'olt_devices.name as olt_name',
-                    'ont_registrations.id as ont_id',
-                    'ont_registrations.onu_serial',
-                    'ont_registrations.onu_mac',
-                    'ont_registrations.status',
-                    'ont_registrations.rx_power',
-                    'customers.id as customer_id',
-                    'customers.customer_number',
-                    'customers.name as customer_name',
-                ])
-                ->get()
-                ->toArray();
-        });
-
-        $onus = collect($onus);
+        // Cache only scalar arrays so warm reads work with serializable_classes=false.
+        $onus = app(OdpTopologyCache::class)->get($odpId);
         $totalOnus = $onus->count();
         if ($totalOnus < 2) {
             return;
@@ -1484,9 +1470,9 @@ class ListenOltEvents extends Command
 
                 $first = $onus->first();
                 $cleanOdpTitle = preg_match('/^odp/i', $odpName) ? $odpName : "ODP {$odpName}";
-                $odcName = $first->odc_name ?: 'ODC Induk';
-                $oltName = $first->olt_name ?: ($olt->name ?? 'OLT');
-                $portRef = $first->olt_port_ref ?: ($standardPort ?? 'PON Port');
+                $odcName = $first['odc_name'] ?: 'ODC Induk';
+                $oltName = $first['olt_name'] ?: ($olt->name ?? 'OLT');
+                $portRef = $first['olt_port_ref'] ?: ($standardPort ?? 'PON Port');
                 $pctVal = $totalOnus > 0 ? round(($downCount / $totalOnus) * 100.0, 1) : 100.0;
                 $onlineCount = max(0, $totalOnus - $downCount);
 
@@ -1495,18 +1481,18 @@ class ListenOltEvents extends Command
                 $onlineSerials = [];
                 $idx = 1;
                 foreach ($onus as $onu) {
-                    $cName = $onu->customer_name ?: "Pelanggan #{$onu->ont_id}";
-                    $cId = $onu->customer_number ?: ($onu->customer_id ? "ID-{$onu->customer_id}" : "ID-{$onu->ont_id}");
-                    $sn = strtoupper(trim((string)($onu->onu_serial ?: ($onu->onu_mac ?: '—'))));
+                    $cName = $onu['customer_name'] ?: "Pelanggan #{$onu['ont_id']}";
+                    $cId = $onu['customer_number'] ?: ($onu['customer_id'] ? "ID-{$onu['customer_id']}" : "ID-{$onu['ont_id']}");
+                    $sn = strtoupper(trim((string)($onu['onu_serial'] ?: ($onu['onu_mac'] ?: '—'))));
                     
                     $isDown = true;
                     $rxVal = -40.00;
                     if (isset($probeStates[$sn])) {
                         $isDown = !$probeStates[$sn]['is_online'];
-                        $rxVal = $probeStates[$sn]['rx_power'] ?? ($isDown ? -40.00 : (float)$onu->rx_power);
+                        $rxVal = $probeStates[$sn]['rx_power'] ?? ($isDown ? -40.00 : (float)$onu['rx_power']);
                     } else {
-                        $isDown = ($onu->status !== 'active' || (is_numeric($onu->rx_power) && (float)$onu->rx_power <= -32.0));
-                        $rxVal = $isDown ? -40.00 : (float)$onu->rx_power;
+                        $isDown = ($onu['status'] !== 'active' || (is_numeric($onu['rx_power']) && (float)$onu['rx_power'] <= -32.0));
+                        $rxVal = $isDown ? -40.00 : (float)$onu['rx_power'];
                     }
 
                     if ($isDown) {
@@ -1587,15 +1573,15 @@ class ListenOltEvents extends Command
 
                     $first = $onus->first();
                     $cleanOdpTitle = preg_match('/^odp/i', $odpName) ? $odpName : "ODP {$odpName}";
-                    $odcName = $first->odc_name ?: 'ODC Induk';
-                    $portRef = $first->olt_port_ref ?: ($standardPort ?? 'PON Port');
+                    $odcName = $first['odc_name'] ?: 'ODC Induk';
+                    $portRef = $first['olt_port_ref'] ?: ($standardPort ?? 'PON Port');
 
                     $clientRecoveryLines = [];
                     $idx = 1;
                     foreach ($onus as $onu) {
-                        $cName = $onu->customer_name ?: "Pelanggan #{$onu->ont_id}";
-                        $cId = $onu->customer_number ?: ($onu->customer_id ? "ID-{$onu->customer_id}" : "");
-                        $sn = strtoupper(trim((string)($onu->onu_serial ?: ($onu->onu_mac ?: '—'))));
+                        $cName = $onu['customer_name'] ?: "Pelanggan #{$onu['ont_id']}";
+                        $cId = $onu['customer_number'] ?: ($onu['customer_id'] ? "ID-{$onu['customer_id']}" : "");
+                        $sn = strtoupper(trim((string)($onu['onu_serial'] ?: ($onu['onu_mac'] ?: '—'))));
                         
                         $isUp = true;
                         $rxVal = null;

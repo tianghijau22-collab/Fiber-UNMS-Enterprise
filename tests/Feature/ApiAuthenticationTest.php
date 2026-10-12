@@ -72,10 +72,15 @@ class ApiAuthenticationTest extends TestCase
 
     public function test_every_private_api_route_rejects_anonymous_requests_before_any_controller_runs(): void
     {
-        $public = ['api/auth/login', 'api/public/tickets/{ticketNumber}', 'api/app-testing/login-banner'];
+        $public = [
+            'api/auth/login' => ['POST'],
+            'api/public/tickets/{ticketNumber}' => ['GET', 'HEAD'],
+            'api/app-testing/login-banner' => ['GET', 'HEAD'],
+        ];
         $count = 0;
         foreach (Route::getRoutes() as $route) {
-            if (!str_starts_with($route->uri(), 'api/') || in_array($route->uri(), $public, true)) continue;
+            if (!str_starts_with($route->uri(), 'api/')) continue;
+            if (isset($public[$route->uri()]) && !array_diff($route->methods(), $public[$route->uri()])) continue;
             $this->assertContains('auth:sanctum', $route->gatherMiddleware(), $route->uri());
             $this->assertContains(AuthorizeApiAccess::class, $route->gatherMiddleware(), $route->uri());
             $this->assertNotNull(app(ApiAccessPolicy::class)->ruleFor($route), $route->uri());
@@ -85,7 +90,7 @@ class ApiAuthenticationTest extends TestCase
             ], ['X-User-Id' => '1', 'X-User-Role' => 'Super Administrator'])->assertUnauthorized();
             $count++;
         }
-        $this->assertGreaterThan(150, $count);
+        $this->assertSame(208, $count);
         $this->assertDatabaseCount('users', 0);
         $this->assertDatabaseCount('audit_logs', 0);
     }
