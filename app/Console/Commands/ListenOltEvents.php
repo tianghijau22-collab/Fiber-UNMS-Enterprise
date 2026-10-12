@@ -16,6 +16,7 @@ use App\Services\TelegramService;
 use App\Services\Olt\SnmpConnector;
 use App\Services\Olt\FastOpticalProbeService;
 use App\Services\Olt\OdpTopologyCache;
+use App\Services\Olt\OltAlarmSourceResolver;
 
 class ListenOltEvents extends Command
 {
@@ -26,6 +27,11 @@ class ListenOltEvents extends Command
     {
         $syslogPort = (int)$this->option('syslog-port');
         $trapPort   = (int)$this->option('trap-port');
+        $bindAddress = config('olt_events.bind_address');
+        if (!is_string($bindAddress) || !filter_var($bindAddress, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) || $bindAddress === '0.0.0.0') {
+            $this->error('Configure an explicit IPv4 alarm listener address.');
+            return 1;
+        }
 
         $this->info("══════════════════════════════════════════════════════════════════");
         $this->info("🛰️  FIBER UNMS EVENT LISTENER DAEMON (SUB-SECOND DETECTOR)");
@@ -37,13 +43,13 @@ class ListenOltEvents extends Command
         $syslogSocket = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
         if ($syslogSocket) {
             socket_set_option($syslogSocket, SOL_SOCKET, SO_REUSEADDR, 1);
-            if (!@socket_bind($syslogSocket, '0.0.0.0', $syslogPort)) {
+            if (!@socket_bind($syslogSocket, $bindAddress, $syslogPort)) {
                 $err = socket_strerror(socket_last_error($syslogSocket));
                 $this->warn("⚠️  Gagal bind Syslog port {$syslogPort}: {$err}");
                 $syslogSocket = null;
             } else {
                 socket_set_nonblock($syslogSocket);
-                $this->info("✅ Syslog UDP listener aktif pada 0.0.0.0:{$syslogPort}");
+                $this->info("✅ Syslog UDP listener aktif pada {$bindAddress}:{$syslogPort}");
             }
         }
 
@@ -51,13 +57,13 @@ class ListenOltEvents extends Command
         $trapSocket = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
         if ($trapSocket) {
             socket_set_option($trapSocket, SOL_SOCKET, SO_REUSEADDR, 1);
-            if (!@socket_bind($trapSocket, '0.0.0.0', $trapPort)) {
+            if (!@socket_bind($trapSocket, $bindAddress, $trapPort)) {
                 $err = socket_strerror(socket_last_error($trapSocket));
                 $this->warn("⚠️  Gagal bind Trap port {$trapPort}: {$err}");
                 $trapSocket = null;
             } else {
                 socket_set_nonblock($trapSocket);
-                $this->info("✅ SNMP Trap UDP listener aktif pada 0.0.0.0:{$trapPort}");
+                $this->info("✅ SNMP Trap UDP listener aktif pada {$bindAddress}:{$trapPort}");
             }
         }
 
@@ -75,6 +81,7 @@ class ListenOltEvents extends Command
             'started_at'    => now()->toIso8601String(),
             'trap_active'   => (bool)$trapSocket,
             'syslog_active' => (bool)$syslogSocket,
+            'bind_address' => $bindAddress,
         ], 86400 * 30);
 
         $lastHeartbeat = 0;
@@ -167,6 +174,17 @@ class ListenOltEvents extends Command
         $todayKey = 'snmp_trap_packets_today_' . now()->toDateString();
         Cache::increment($todayKey);
 
+        // Resolve the sender before decoding an event or touching customer state.
+        $source = app(OltAlarmSourceResolver::class)->resolve($rawMsg, $fromIp, $sourceType);
+        $decision = $source['accepted'] ? 'accepted' : 'rejected';
+        Cache::increment('olt_alarm_source_'.$decision.'_'.now()->toDateString());
+        Cache::put('olt_alarm_source_last_'.$decision, [
+            'at' => now()->toIso8601String(), 'source_type' => $sourceType,
+            'reason' => $source['reason'], 'olt_id' => $source['accepted'] ? $source['olt']->id : null,
+        ], 86400);
+        if (!$source['accepted']) return;
+        $olt = $source['olt'];
+
         // 1. Coba decode via SnmpTrapDecoder (ZTE Trap OIDs, Community Headers, dsb)
         $decoded = SnmpTrapDecoder::decode($rawMsg, $fromIp);
 
@@ -180,7 +198,7 @@ class ListenOltEvents extends Command
         $onuId           = null;
 
         if ($decoded) {
-            $serialNumber    = $decoded['serial_number'] ?? null;
+            $serialNumber    = $source['serial_number'];
             $eventType       = $decoded['event_type'] ?? null;
             $eventLabel      = $decoded['event_label'] ?? '';
             $isAlarmLoss     = (bool)($decoded['is_loss'] ?? false) || in_array($eventType, ['PORT_DOWN', 'LOS', 'DYING_GASP']);
@@ -188,6 +206,9 @@ class ListenOltEvents extends Command
             $portRef         = $decoded['port_ref'] ?? null;
             $onuId           = $decoded['onu_id'] ?? null;
         }
+
+        // Never obtain customer identity from heuristic matches in the community/header.
+        $serialNumber = $source['serial_number'];
 
         // 2. Fallback Regex Syslog / Legacy Text jika belum terdeteksi
         if (!$isAlarmLoss && !$isAlarmRecovery) {
@@ -258,6 +279,7 @@ class ListenOltEvents extends Command
                 ->leftJoin('customers', 'customers.id', '=', 'customer_services.customer_id')
                 ->leftJoin('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
                 ->leftJoin('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
+                ->where('network_nodes.olt_device_id', $olt->id)
                 ->where(function ($q) use ($serialNumber) {
                     $q->where('ont_registrations.onu_serial', $serialNumber)
                       ->orWhere('ont_registrations.onu_mac', $serialNumber);
@@ -279,56 +301,19 @@ class ListenOltEvents extends Command
                 ->first();
         }
 
-        // 4. Resolusi Perangkat OLT Pengirim
-        $olt = null;
-        if ($reg && !empty($reg->olt_device_id)) {
-            $olt = OltDevice::find($reg->olt_device_id);
-        }
-
-        if (!$olt && $fromIp) {
-            $olt = OltDevice::where('ip_address', $fromIp)->first();
-        }
-
-        // Jika trap lewat NAT / MikroTik Gateway atau IP tidak langsung match
+        // 4. The source guard selected exactly one OLT. Search only that inventory.
         $targetOnt = null;
         if ($serialNumber) {
-            $devicesWithSnap = OltDevice::whereNotNull('last_telemetry_snapshot')->get();
-            foreach ($devicesWithSnap as $dev) {
-                $snap = $dev->last_telemetry_snapshot ?? [];
-                $allOnus = array_merge($snap['onu_list'] ?? [], $snap['unconfigured_onus'] ?? []);
-                foreach ($allOnus as $so) {
-                    if (strcasecmp($so['serial_number'] ?? '', $serialNumber) === 0 || strcasecmp($so['onu_mac'] ?? '', $serialNumber) === 0) {
-                        if (!$olt) {
-                            $olt = $dev;
-                        }
-                        $targetOnt = $so;
-                        break 2;
-                    }
+            $snapshot = $olt->last_telemetry_snapshot ?? [];
+            foreach (array_merge($snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []) as $so) {
+                if (strcasecmp($so['serial_number'] ?? '', $serialNumber) === 0 || strcasecmp($so['onu_mac'] ?? '', $serialNumber) === 0) {
+                    $targetOnt = $so;
+                    break;
                 }
             }
         }
-
-        // Resolusi OLT via portRef jika belum match (penting untuk trap port down/up yang tidak memiliki serial)
-        if (!$olt && $portRef) {
-            $devicesWithSnap = OltDevice::whereNotNull('last_telemetry_snapshot')->get();
-            foreach ($devicesWithSnap as $dev) {
-                $ponPorts = $dev->last_telemetry_snapshot['pon_ports'] ?? [];
-                foreach ($ponPorts as $pp) {
-                    $ppId = strtolower(trim((string)($pp['port_id'] ?? '')));
-                    if ($ppId === strtolower(trim($portRef))) {
-                        $olt = $dev;
-                        break 2;
-                    }
-                }
-            }
-        }
-
-        if (!$olt) {
-            $olt = OltDevice::where('status', 'active')->first();
-        }
-
-        $oltName = $olt ? $olt->name : "OLT ({$fromIp})";
-        $oltId   = $olt ? $olt->id : null;
+        $oltName = $olt->name;
+        $oltId = $olt->id;
 
         // 5. Standarisasi Format Port OLT Secara Presisi (Slot & Subrack Aware)
         $standardPort = null;
