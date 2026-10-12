@@ -83,7 +83,9 @@ class NotificationController extends Controller
 
     public function destroy($id)
     {
-        $notification = AppNotification::findOrFail($id);
+        $notification = AppNotification::where(function ($query) {
+            $query->whereNull('user_id')->orWhere('user_id', Auth::id());
+        })->findOrFail($id);
         $notification->delete();
 
         return response()->json([

@@ -19,14 +19,7 @@ class PopupAlertController extends Controller
     private function checkSuperAdmin(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
-            $userId = $request->input('user_id') ?: $request->header('X-User-Id');
-            if ($userId) {
-                $user = User::find($userId);
-            }
-        }
-
-        if ($user && !in_array($user->role, ['Super Administrator', 'super_admin', 'Admin'])) {
+        if (!$user || $user->role !== 'Super Administrator') {
             abort(response()->json([
                 'status'  => 'error',
                 'message' => 'Akses Ditolak: Hanya Super Administrator yang diizinkan mengelola Pop-up Pemberitahuan.'
@@ -225,7 +218,7 @@ class PopupAlertController extends Controller
     public function getActiveAlerts(Request $request)
     {
         $now = Carbon::now();
-        $userRole = $request->query('role') ?: ($request->user() ? $request->user()->role : 'all');
+        $userRole = $request->user()->role;
 
         $alerts = PopupAlert::where('is_active', true)
             ->where(function ($q) use ($now) {

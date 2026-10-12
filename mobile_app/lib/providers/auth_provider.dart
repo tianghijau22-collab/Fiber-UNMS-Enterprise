@@ -6,6 +6,22 @@ import '../core/storage/secure_storage_service.dart';
 import '../models/user_model.dart';
 
 class AuthProvider extends ChangeNotifier {
+  AuthProvider() {
+    DioClient().sessionExpired.addListener(_handleSessionExpired);
+  }
+
+  void _handleSessionExpired() {
+    _currentUser = null;
+    _errorMessage = 'Sesi telah berakhir. Silakan login kembali.';
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    DioClient().sessionExpired.removeListener(_handleSessionExpired);
+    super.dispose();
+  }
+
   UserModel? _currentUser;
   bool _isLoading = false;
   String? _errorMessage;
@@ -23,16 +39,10 @@ class AuthProvider extends ChangeNotifier {
     try {
       final token = await StorageService().getToken();
       if (token != null && token.isNotEmpty) {
-        final savedUser = await StorageService().getUser();
-        if (savedUser != null) {
-          _currentUser = savedUser;
-        } else {
-          // Fetch fresh user profile from API
-          await fetchProfile();
-        }
+        // Cached identity is displayed only after the server verifies its token.
+        await fetchProfile();
       }
     } catch (_) {
-      await StorageService().clearSession();
       _currentUser = null;
     } finally {
       _isLoading = false;
@@ -104,7 +114,14 @@ class AuthProvider extends ChangeNotifier {
         await StorageService().saveUser(user);
         notifyListeners();
       }
-    } catch (_) {}
+    } on DioException catch (e) {
+      if (_currentUser == null) {
+        _errorMessage = e.response?.statusCode == 401
+            ? 'Sesi telah berakhir. Silakan login kembali.'
+            : 'Sesi belum dapat diverifikasi. Periksa koneksi server.';
+        notifyListeners();
+      }
+    }
   }
 
   // Logout

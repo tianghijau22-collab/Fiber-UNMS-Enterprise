@@ -10,11 +10,16 @@ use Carbon\Carbon;
 class CallController extends Controller
 {
     /**
-     * Get current user (either from auth or fallback to first user for dev/testing)
+     * Resolve the caller from the authenticated session only.
      */
     private function getCurrentUser(Request $request)
     {
-        return auth()->user() ?? User::find($request->input('current_user_id', 1)) ?? User::first();
+        return $request->user();
+    }
+
+    private function authorizeParticipant(Request $request, VoiceCall $call): void
+    {
+        abort_unless(in_array((int) $request->user()->id, [(int) $call->caller_id, (int) $call->receiver_id], true), 403);
     }
 
     /**
@@ -130,6 +135,7 @@ class CallController extends Controller
         ]);
 
         $call = VoiceCall::findOrFail($id);
+        abort_unless((int) $call->receiver_id === (int) $request->user()->id, 403);
         if ($call->status !== 'ringing') {
             return response()->json(['message' => 'Panggilan sudah tidak aktif.'], 400);
         }
@@ -153,11 +159,12 @@ class CallController extends Controller
     {
         $request->validate([
             'candidate' => 'required',
-            'role' => 'required|in:caller,receiver',
+            'role' => 'sometimes|in:caller,receiver',
         ]);
 
         $call = VoiceCall::findOrFail($id);
-        $field = $request->role === 'caller' ? 'caller_ice' : 'receiver_ice';
+        $this->authorizeParticipant($request, $call);
+        $field = (int) $request->user()->id === (int) $call->caller_id ? 'caller_ice' : 'receiver_ice';
         
         $current = $call->$field ?? [];
         $current[] = $request->candidate;
@@ -178,6 +185,7 @@ class CallController extends Controller
         if (!$call) {
             return response()->json(['status' => 'ended', 'call' => null]);
         }
+        $this->authorizeParticipant($request, $call);
 
         return response()->json([
             'status' => $call->status,
@@ -199,6 +207,8 @@ class CallController extends Controller
         if (!$call) {
             return response()->json(['status' => 'ended']);
         }
+        $this->authorizeParticipant($request, $call);
+        $request->validate(['action' => 'sometimes|in:ended,rejected,missed']);
 
         $targetStatus = $request->input('action', 'ended'); // ended, rejected, missed
         $duration = 0;

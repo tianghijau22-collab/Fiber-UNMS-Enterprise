@@ -34,6 +34,12 @@ use App\Http\Controllers\TelemetryEventStreamController;
 */
 
 // Notification Center & Web Push
+Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::get('public/tickets/{ticketNumber}', [TicketController::class, 'publicTrack'])->middleware('throttle:60,1');
+Route::get('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'getLoginBanner']);
+
+Route::middleware(['auth:sanctum', \App\Http\Middleware\AuthorizeApiAccess::class])->group(function () {
+
 Route::get('/notifications', [NotificationController::class, 'index']);
 Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
 Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
@@ -163,7 +169,6 @@ Route::apiResource('customers', CustomerController::class);
 Route::get('tickets/reference-data', [TicketController::class, 'referenceData']);
 Route::post('tickets/{id}/dispatch-telegram', [TicketController::class, 'dispatchTelegram']);
 Route::post('tickets/{id}/add-progress', [TicketController::class, 'addProgress']);
-Route::get('public/tickets/{ticketNumber}', [TicketController::class, 'publicTrack']);
 Route::apiResource('tickets', TicketController::class);
 Route::get('inventory', [InventoryController::class, 'index']);
 // User Management & RBAC Dynamic Page Access Permissions
@@ -178,7 +183,6 @@ Route::post('audit-logs/retention-settings', [AuditLogController::class, 'saveRe
 Route::post('audit-logs/clear-all', [AuditLogController::class, 'clearAll']);
 
 // Authentication Routes
-Route::post('auth/login', [AuthController::class, 'login']);
 Route::post('auth/logout', [AuthController::class, 'logout']);
 Route::get('auth/me', [AuthController::class, 'me']);
 Route::put('auth/profile', [AuthController::class, 'updateProfile']);
@@ -218,7 +222,6 @@ Route::post('app-testing/upload-apk', [\App\Http\Controllers\AppTestingControlle
 Route::post('app-testing/test-api', [\App\Http\Controllers\AppTestingController::class, 'testEndpoints']);
 Route::post('app-testing/trigger-build', [\App\Http\Controllers\AppTestingController::class, 'triggerBuild']);
 Route::get('app-testing/build-status', [\App\Http\Controllers\AppTestingController::class, 'buildStatus']);
-Route::get('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'getLoginBanner']);
 Route::post('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'uploadLoginBanner']);
 Route::post('app-testing/login-banner-config', [\App\Http\Controllers\AppTestingController::class, 'saveLoginBannerConfig']);
 Route::delete('app-testing/login-banner', [\App\Http\Controllers\AppTestingController::class, 'deleteLoginBanner']);
@@ -246,5 +249,7 @@ Route::get('popup-alerts/{id}', [\App\Http\Controllers\PopupAlertController::cla
 Route::put('popup-alerts/{id}', [\App\Http\Controllers\PopupAlertController::class, 'update']);
 Route::patch('popup-alerts/{id}/toggle', [\App\Http\Controllers\PopupAlertController::class, 'toggleActive']);
 Route::delete('popup-alerts/{id}', [\App\Http\Controllers\PopupAlertController::class, 'destroy']);
+
+});
 
 

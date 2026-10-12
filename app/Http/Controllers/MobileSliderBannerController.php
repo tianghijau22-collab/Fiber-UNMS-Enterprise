@@ -18,14 +18,7 @@ class MobileSliderBannerController extends Controller
     private function checkAdmin(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
-            $userId = $request->input('user_id') ?: $request->header('X-User-Id');
-            if ($userId) {
-                $user = User::find($userId);
-            }
-        }
-
-        if ($user && !in_array($user->role, ['Super Administrator', 'super_admin', 'Admin'])) {
+        if (!$user || $user->role !== 'Super Administrator') {
             abort(response()->json([
                 'status'  => 'error',
                 'message' => 'Akses Ditolak: Hanya Administrator yang diizinkan mengelola Slide Banner.'

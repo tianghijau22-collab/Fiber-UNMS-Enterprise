@@ -6,6 +6,10 @@ use App\Models\User;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Support\Carbon;
 
 class AuthController extends Controller
@@ -58,6 +62,16 @@ class AuthController extends Controller
         // Update last login timestamp
         $user->update(['last_login_at' => Carbon::now()]);
 
+        $token = null;
+        if ($request->hasSession()) {
+            Auth::guard('web')->login($user);
+            $request->session()->regenerate();
+            $request->session()->put('password_hash_web', Auth::guard('web')->hashPasswordForCookie($user->getAuthPassword()));
+        } else {
+            $token = $user->createToken('mobile', ['*'], now()->addDays(7))->plainTextToken;
+        }
+        Auth::setUser($user);
+
         // Record successful login in Audit Logs & notify Telegram
         AuditLog::record(
             'LOGIN',
@@ -75,15 +89,24 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Login berhasil! Selamat datang kembali, ' . $user->name . '.',
             'user'    => $user,
-            'token'   => 'session_' . md5($user->id . time()),
-        ]);
+            'token'   => $token,
+        ])->header('Cache-Control', 'no-store, private');
     }
 
     public function logout(Request $request)
     {
-        $userId = $request->input('user_id');
         $reason = $request->input('reason');
-        $user = $userId ? User::find($userId) : null;
+        $user = $request->user();
+
+        $accessToken = $user->currentAccessToken();
+        if ($accessToken instanceof PersonalAccessToken) {
+            $accessToken->delete();
+        }
+        if ($request->hasSession()) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
 
         $description = $user
             ? ($reason === 'timeout'
@@ -104,23 +127,12 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        $userId = $request->input('user_id');
-        if (!$userId) {
-            return response()->json(['user' => null]);
-        }
-
-        $user = User::find($userId);
-        return response()->json(['user' => $user]);
+        return response()->json(['user' => $request->user()]);
     }
 
     public function updateProfile(Request $request)
     {
-        $userId = $request->input('user_id');
-        $user = $userId ? User::find($userId) : auth()->user();
-
-        if (!$user) {
-            return response()->json(['message' => 'Pengguna tidak ditemukan.'], 404);
-        }
+        $user = $request->user();
 
         $oldData = $user->only(['name', 'email', 'phone', 'username']);
 
@@ -130,12 +142,12 @@ class AuthController extends Controller
             'username'     => "sometimes|required|string|max:255|unique:users,username,{$user->id}",
             'phone'        => 'nullable|string|max:30',
             'password'     => 'nullable|string|min:6',
-            'old_password' => 'nullable|string',
+            'old_password' => 'required_with:password|nullable|string',
         ]);
 
         if (!empty($validated['password'])) {
-            if (!empty($validated['old_password']) && !Hash::check($validated['old_password'], $user->password)) {
-                return response()->json(['message' => 'Password lama yang Anda masukkan salah.'], 422);
+            if (!Hash::check($validated['old_password'], $user->password)) {
+                throw ValidationException::withMessages(['old_password' => 'Password lama yang Anda masukkan salah.']);
             }
             $validated['password'] = Hash::make($validated['password']);
         } else {
@@ -143,7 +155,18 @@ class AuthController extends Controller
         }
         unset($validated['old_password']);
 
-        $user->update($validated);
+        DB::transaction(function () use ($user, $validated) {
+            $user->update($validated);
+            if (!empty($validated['password'])) {
+                $user->tokens()->delete();
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+            }
+        });
+        if (!empty($validated['password']) && $request->hasSession()) {
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
         $newData = $user->only(['name', 'email', 'phone', 'username']);
 
         AuditLog::create([

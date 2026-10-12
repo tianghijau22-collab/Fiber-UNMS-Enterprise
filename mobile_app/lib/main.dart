@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,19 +11,10 @@ import 'providers/odp_provider.dart';
 import 'providers/ticket_provider.dart';
 import 'views/splash/splash_screen.dart';
 
-class CustomHttpOverrides extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) {
-    return super.createHttpClient(context)
-      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
-  }
-}
-
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  HttpOverrides.global = CustomHttpOverrides();
 
   // Set Status Bar color to Modern Clean Professional Style (PLN Mobile look)
   SystemChrome.setSystemUIOverlayStyle(

@@ -1,47 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
+import { installApiClient } from './lib/apiClient.js';
 
-// Intercept global fetch to automatically inject user identification headers (X-User-Id, X-User-Name, X-User-Role)
-const originalFetch = window.fetch;
-window.fetch = async function (url, config = {}) {
-  try {
-    const rawUser = localStorage.getItem('unms_user') || localStorage.getItem('fiber_user');
-    if (rawUser) {
-      const user = JSON.parse(rawUser);
-      if (user && user.name) {
-        config = config || {};
-        config.headers = {
-          ...(config.headers || {}),
-          'X-User-Id': String(user.id || ''),
-          'X-User-Name': String(user.name || ''),
-          'X-User-Role': String(user.role || ''),
-        };
-      }
-    }
-  } catch (e) {
-    // Ignore JSON parse errors
-  }
-
-  const response = await originalFetch.call(this, url, config);
-
-  try {
-    const method = String(config?.method || 'GET').toUpperCase();
-    if (response.ok && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-      const urlStr = String(url);
-      // Kecualikan endpoint tes koneksi / polling murni
-      if (!urlStr.includes('/test') && !urlStr.includes('/auth/me')) {
-        window.dispatchEvent(new CustomEvent('unms:data-mutated', {
-          detail: { url: urlStr, method, timestamp: Date.now() }
-        }));
-      }
-    }
-  } catch (e) {
-    // Ignore mutation event error
-  }
-
-  return response;
-};
+installApiClient();
 
 class ErrorBoundary extends React.Component {
   constructor(props) {

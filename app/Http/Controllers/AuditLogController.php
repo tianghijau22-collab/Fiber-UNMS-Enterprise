@@ -294,19 +294,10 @@ class AuditLogController extends Controller
      */
     public function clearAll(Request $request)
     {
-        $userId   = $request->input('user_id')   ?? $request->header('X-User-Id');
-        $userRole = $request->input('user_role') ?? $request->header('X-User-Role');
-        $userName = $request->input('user_name') ?? $request->header('X-User-Name');
+        $user = $request->user();
+        $name = $user?->name;
 
-        $user = auth()->user();
-        if (!$user && $userId) {
-            $user = \App\Models\User::find($userId);
-        }
-
-        $role = $user ? $user->role : ($userRole ?: 'Super Administrator');
-        $name = $user ? $user->name : ($userName ?: 'Super Administrator');
-
-        if ($role !== 'Super Administrator') {
+        if (!$user || $user->role !== 'Super Administrator') {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Akses ditolak. Hanya Super Administrator yang memiliki izin mengosongkan seluruh log.',

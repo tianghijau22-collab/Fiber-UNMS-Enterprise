@@ -39,17 +39,9 @@ class AuditLog extends Model
     {
         $user = auth()->user();
 
-        $headerUserId   = request()->header('X-User-Id');
-        $headerUserName = request()->header('X-User-Name');
-        $headerUserRole = request()->header('X-User-Role');
-
-        if (!$user && $headerUserId) {
-            $user = User::find($headerUserId);
-        }
-
-        $userName = $user ? $user->name : ($headerUserName ?: 'Super Administrator');
-        $userRole = $user ? $user->role : ($headerUserRole ?: 'Super Administrator');
-        $userId   = $user ? $user->id   : ($headerUserId ? (int)$headerUserId : null);
+        $userName = $user?->name ?? 'System';
+        $userRole = $user?->role ?? 'System';
+        $userId = $user?->id;
         $ip       = request()->ip() ?? '127.0.0.1';
 
         $log = static::create([

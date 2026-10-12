@@ -22,7 +22,10 @@ class StorageService {
   Future<String> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(ApiConstants.keyServerUrl);
-    if (saved == null || saved.isEmpty || (saved.contains('103.89.6.125') && !saved.contains('sslip.io'))) {
+    final host = Uri.tryParse(saved != null && !saved.contains('://') ? 'https://$saved' : saved ?? '')?.host;
+    if (saved == null || saved.isEmpty ||
+        ['103.89.6.125', 'fiber-monitoring.103.89.6.125.sslip.io',
+          'unms.103.89.6.125.sslip.io'].contains(host)) {
       return ApiConstants.defaultBaseUrl;
     }
     return saved;

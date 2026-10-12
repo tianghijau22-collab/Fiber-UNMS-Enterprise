@@ -16,26 +16,8 @@ const recordUserActivity = () => {
 };
 
 export function AuthProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('fiber_user');
-      const lastAct = localStorage.getItem('fiber_last_activity');
-      if (saved) {
-        if (lastAct && (Date.now() - parseInt(lastAct, 10) > INACTIVITY_TIMEOUT_MS)) {
-          localStorage.removeItem('fiber_user');
-          localStorage.removeItem('fiber_last_activity');
-          return null;
-        }
-        return JSON.parse(saved);
-      }
-      return null;
-    } catch (err) {
-      console.error('Error loading user session:', err);
-      localStorage.removeItem('fiber_user');
-      localStorage.removeItem('fiber_last_activity');
-      return null;
-    }
-  });
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
   const [routePermissions, setRoutePermissions] = useState(DEFAULT_ROUTE_ROLES);
   const [loading, setLoading] = useState(false);
@@ -53,7 +35,45 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    fetchRoutePermissions();
+    let cancelled = false;
+    const clearLocalSession = () => {
+      localStorage.removeItem('fiber_user');
+      localStorage.removeItem('fiber_last_activity');
+      localStorage.removeItem('unms_user');
+      setCurrentUser(null);
+      setRoutePermissions(DEFAULT_ROUTE_ROLES);
+    };
+    const restoreSession = async () => {
+      try {
+        const lastActivity = Number(localStorage.getItem('fiber_last_activity') || 0);
+        if (lastActivity && Date.now() - lastActivity > INACTIVITY_TIMEOUT_MS) {
+          await fetch('/sanctum/csrf-cookie');
+          await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'timeout' }) });
+          if (!cancelled) clearLocalSession();
+          return;
+        }
+        const res = await fetch('/api/auth/me');
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok && data.user) {
+          localStorage.setItem('fiber_user', JSON.stringify(data.user));
+          setCurrentUser(data.user);
+          await fetchRoutePermissions();
+        } else {
+          clearLocalSession();
+        }
+      } catch {
+        if (!cancelled) clearLocalSession();
+      } finally {
+        if (!cancelled) setAuthReady(true);
+      }
+    };
+    window.addEventListener('fona:session-expired', clearLocalSession);
+    restoreSession();
+    return () => {
+      cancelled = true;
+      window.removeEventListener('fona:session-expired', clearLocalSession);
+    };
   }, [fetchRoutePermissions]);
 
   const logout = useCallback(async (reason = 'manual') => {
@@ -149,6 +169,8 @@ export function AuthProvider({ children }) {
   const login = async (username, password, deferCommit = false) => {
     setLoading(true);
     try {
+      const csrf = await fetch('/sanctum/csrf-cookie');
+      if (!csrf.ok) throw new Error('Tidak dapat menyiapkan sesi login. Silakan coba lagi.');
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -240,7 +262,7 @@ export function AuthProvider({ children }) {
       setRoutePermissions,
       fetchRoutePermissions
     }}>
-      {children}
+      {authReady ? children : <div role="status" className="p-6 text-center">Memeriksa sesi...</div>}
     </AuthContext.Provider>
   );
 }

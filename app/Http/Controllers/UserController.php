@@ -6,13 +6,14 @@ use App\Models\User;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 class UserController extends Controller
 {
     private function checkSuperAdmin()
     {
         $user = auth()->user();
-        if ($user && $user->role !== 'Super Administrator') {
+        if (!$user || $user->role !== 'Super Administrator') {
             abort(response()->json(['message' => 'Akses Ditolak: Hanya Super Administrator yang diizinkan mengelola akun pengguna.'], 403));
         }
     }
@@ -109,7 +110,13 @@ class UserController extends Controller
             unset($validated['password']);
         }
 
-        $user->update($validated);
+        DB::transaction(function () use ($user, $validated) {
+            $user->update($validated);
+            if (isset($validated['password']) || (isset($validated['status']) && $validated['status'] !== 'Active')) {
+                $user->tokens()->delete();
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+            }
+        });
         $newData = $user->only(['name', 'username', 'email', 'role', 'division', 'phone', 'status']);
 
         AuditLog::record(
@@ -137,7 +144,11 @@ class UserController extends Controller
         }
 
         $deletedUser = $user->only(['id', 'name', 'email', 'role', 'division']);
-        $user->delete();
+        DB::transaction(function () use ($user) {
+            $user->tokens()->delete();
+            DB::table('sessions')->where('user_id', $user->id)->delete();
+            $user->delete();
+        });
 
         AuditLog::record(
             'DELETE',
@@ -175,13 +186,14 @@ class UserController extends Controller
             '/audit-logs' => ['Super Administrator', 'Operator Jaringan'],
             '/database-backup' => ['Super Administrator'],
             '/broadcast-notifications' => ['Super Administrator', 'Operator Jaringan'],
+            '/mobile-app-testing' => ['Super Administrator'],
+            '/popup-alerts' => ['Super Administrator'],
         ];
     }
 
     public function getRoutePermissions()
     {
-        $raw = \App\Models\SystemSetting::get('rbac_route_permissions');
-        $permissions = $raw ? json_decode($raw, true) : self::getDefaultRoutePermissions();
+        $permissions = app(\App\Services\ApiAccessPolicy::class)->permissions();
 
         // Always guarantee Super Administrator is included for all routes
         foreach ($permissions as $route => &$roles) {
@@ -203,6 +215,8 @@ class UserController extends Controller
 
         $validated = $request->validate([
             'permissions' => 'required|array',
+            'permissions.*' => 'array',
+            'permissions.*.*' => 'string',
         ]);
 
         $permissions = $validated['permissions'];
