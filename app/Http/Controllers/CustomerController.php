@@ -8,6 +8,7 @@ use App\Models\NetworkNode;
 use App\Models\NetworkPort;
 use App\Models\OntRegistration;
 use App\Models\OltDevice;
+use App\Services\Olt\OnuTelemetryView;
 use App\Models\ServicePackage;
 use App\Models\AuditLog;
 use App\Http\Controllers\OltController;
@@ -32,24 +33,8 @@ class CustomerController extends Controller
             self::clearCustomerCache();
         }
 
-        $result = Cache::remember('customers_index_payload_v5', 120, function () {
-            // Build real-time optical power & status map from OLT live database snapshots
-            $liveOnuMap = [];
-            $oltDevices = OltDevice::whereNotNull('last_telemetry_snapshot')->get(['id', 'name', 'last_telemetry_snapshot']);
-            foreach ($oltDevices as $dev) {
-                $snapOnus = array_merge(
-                    $dev->last_telemetry_snapshot['onu_list'] ?? [],
-                    $dev->last_telemetry_snapshot['unconfigured_onus'] ?? []
-                );
-                foreach ($snapOnus as $so) {
-                    $snKey = strtolower(trim($so['serial_number'] ?? ''));
-                    $macKey = strtolower(trim($so['mac_address'] ?? ($so['onu_mac'] ?? '')));
-                    $so['_olt_id'] = $dev->id;
-                    $so['_olt_name'] = $dev->name;
-                    if ($snKey) $liveOnuMap[$snKey] = $so;
-                    if ($macKey) $liveOnuMap[$macKey] = $so;
-                }
-            }
+        $result = Cache::remember('customers_index_payload_v5', 15, function () {
+            $telemetry = OnuTelemetryView::load();
 
             $customers = Customer::with([
                 'services.servicePackage',
@@ -60,7 +45,7 @@ class CustomerController extends Controller
             ->orderBy('id', 'desc')
             ->get();
 
-        $formatted = $customers->map(function ($c) use ($liveOnuMap, $oltDevices) {
+        $formatted = $customers->map(function ($c) use ($telemetry) {
             $primaryService = $c->services->first();
             $port = $primaryService?->networkPort;
             $odpNode = $port?->node;
@@ -69,56 +54,15 @@ class CustomerController extends Controller
 
             $snKey = strtolower(trim($ont?->onu_serial ?: ($primaryService?->onu_serial ?: '')));
             $macKey = strtolower(trim($ont?->onu_mac ?: ''));
-            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
-
-            // 1. Resolve OLT Device (prioritas dari live snapshot OLT tempat modem terdeteksi, fallback ke ODP/ODC)
-            $oltDevice = $odpNode?->oltDevice ?: ($odcNode?->oltDevice ?: ($odcNode?->parent?->oltDevice ?: null));
-            $oltName = $liveData['_olt_name'] ?? ($oltDevice?->name ?: ($oltDevices->first()?->name ?: 'OLT'));
-            $oltId = $liveData['_olt_id'] ?? ($oltDevice?->id ?: $oltDevices->first()?->id);
-
-            // 2. Resolve Interface dari Live OLT port atau ODP/ODC/ONT port
-            $livePort = $liveData ? ($liveData['port'] ?? ($liveData['detected_port'] ?? ($liveData['interface'] ?? null))) : null;
-            if ($livePort && $livePort !== 'none' && $livePort !== '—' && $livePort !== 'gpon-olt_1/1/1') {
-                $cleanPort = str_replace(['gpon_olt_', 'gpon_'], 'gpon-olt_', $livePort);
-                $interfaceDisplay = explode(',', $cleanPort)[0] ?? $livePort;
-            } else {
-                $rawPortRef = $odpNode?->olt_port_ref ?: ($odcNode?->olt_port_ref ?: ($ont?->oltPort?->node?->olt_port_ref ?: null));
-                if ($rawPortRef && $rawPortRef !== 'none' && $rawPortRef !== 'gpon-olt_1/1/1') {
-                    $cleanInterface = str_replace(['gpon_olt_', 'gpon_'], 'gpon-olt_', $rawPortRef);
-                    $interfaceDisplay = explode(',', $cleanInterface)[0] ?? $rawPortRef;
-                } else {
-                    $interfaceDisplay = '—';
-                }
-            }
-
-            $ontStatus = strtolower($ont?->status ?? '');
-            $ontRx = ($ont?->rx_power !== null && is_numeric($ont?->rx_power)) ? (float)$ont->rx_power : -40.0;
-            $ontIsOnline = ($ontStatus === 'active' || $ontStatus === 'online') && $ontRx > -38.0;
-
-            $isOnline = false;
-            $rxPower = -40.00;
-            if ($liveData) {
-                $st = strtolower($liveData['status'] ?? '');
-                $rawRx = $liveData['rx_power'] ?? null;
-                $liveIsOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-
-                if ($liveIsOnline) {
-                    $isOnline = true;
-                    $rxPower = (float)$rawRx;
-                } elseif ($ontIsOnline) {
-                    $isOnline = true;
-                    $rxPower = $ontRx;
-                } else {
-                    $isOnline = false;
-                    $rxPower = -40.00;
-                }
-            } else {
-                $isOnline = $ontIsOnline;
-                $rxPower = $isOnline ? $ontRx : -40.00;
-            }
-            $txPower = $isOnline ? (float)($liveData['tx_power'] ?? ($ont?->tx_power ?? 1.95)) : 0.0;
-            $distance = $isOnline ? ($liveData['distance_meters'] ?? ($ont?->distance_meters ?? 650)) : 0;
-            $realtimeStatus = $isOnline ? 'Online' : 'Offline / LOS';
+            $view = $telemetry->forNode($odpNode, $snKey, $macKey);
+            $oltId = $view['olt_id'];
+            $oltName = $view['olt_name'];
+            $interfaceDisplay = $view['gpon_interface'];
+            $isOnline = $view['is_online'];
+            $rxPower = $view['rx_power'];
+            $txPower = null;
+            $distance = null;
+            $realtimeStatus = $view['onu_status'];
 
             $sobokServiceStatus = strtoupper($primaryService?->sobok_service_status ?: 'OPEN');
             $isSobokBlocked = ($sobokServiceStatus === 'BLOKIR');
@@ -126,13 +70,16 @@ class CustomerController extends Controller
             $sobokSyncAt = $primaryService?->sobok_sync_at;
 
             // Intelligent Loss / Operation Analysis for Field Technicians:
-            if (!$isOnline) {
+            if ($isOnline === null) {
+                $lossReason = 'unverified';
+                $lossReasonLabel = 'Status perangkat belum terverifikasi';
+            } elseif (!$isOnline) {
                 if ($isSobokBlocked) {
                     $lossReason = 'blocked';
                     $lossReasonLabel = 'Layanan Terblokir (Isolir)';
                 } else {
                     $lossReason = 'physical_loss';
-                    $lossReasonLabel = 'Potensi Gangguan Fisik / LOS';
+                    $lossReasonLabel = 'Perangkat Offline (penyebab belum pasti)';
                 }
             } else {
                 if ($isSobokBlocked) {
@@ -166,7 +113,7 @@ class CustomerController extends Controller
                 'service_package_id'   => $primaryService?->service_package_id,
                 'package_name'         => $primaryService?->servicePackage?->name ?? 'Paket Internet',
                 'package_speed'        => $primaryService?->servicePackage?->speed_mbps ?? 20,
-                'ip_address'           => $primaryService?->ip_address ?: '10.20.' . rand(10, 50) . '.' . rand(2, 250),
+                'ip_address'           => $primaryService?->ip_address,
                 'olt_id'               => $oltId,
                 'olt_name'             => $oltName,
                 'odc_id'               => $odcNode?->id,
@@ -181,10 +128,11 @@ class CustomerController extends Controller
                 'onu_serial'           => $ont?->onu_serial ?? $primaryService?->onu_serial,
                 'onu_mac'              => $ont?->onu_mac,
                 'onu_type'             => $ont?->onu_type ?: 'HGU GPON/EPON',
-                'rx_power'             => $rxPower !== null ? number_format((float)$rxPower, 2, '.', '') : '-40.00',
-                'tx_power'             => $txPower !== null ? number_format((float)$txPower, 2, '.', '') : '0.00',
+                'rx_power'             => $rxPower,
+                'tx_power'             => $txPower,
                 'distance_meters'      => $distance,
                 'created_at'           => $c->created_at,
+                ...$view,
             ];
         });
 
@@ -839,76 +787,18 @@ class CustomerController extends Controller
         $sn = strtoupper(trim((string)($ont?->onu_serial ?: ($service?->onu_serial ?: ''))));
         $mac = strtoupper(trim((string)($ont?->onu_mac ?: '')));
 
-        // 1. Ambil data telemetri live dari seluruh snapshot OLT
-        $liveOnu = null;
-        $matchedOlt = null;
-        $allOlts = OltDevice::whereNotNull('last_telemetry_snapshot')->get();
-        foreach ($allOlts as $dev) {
-            $allOnus = array_merge(
-                $dev->last_telemetry_snapshot['onu_list'] ?? [],
-                $dev->last_telemetry_snapshot['unconfigured_onus'] ?? []
-            );
-            foreach ($allOnus as $o) {
-                $oSn = strtoupper(trim((string)($o['serial_number'] ?? '')));
-                $oMac = strtoupper(trim((string)($o['mac_address'] ?? ($o['onu_mac'] ?? ''))));
-                if (($sn && $oSn === $sn) || ($mac && $oMac === $mac)) {
-                    $liveOnu = $o;
-                    $matchedOlt = $dev;
-                    break 2;
-                }
-            }
-        }
+        $view = OnuTelemetryView::load()->forNode($odpNode, $sn, $mac);
+        $gponInterface = $view['gpon_interface'];
+        $rxPower = $view['rx_power'];
+        $txPower = null;
+        $status = $view['onu_status'];
+        $distance = null;
 
-        $oltDevice = $matchedOlt ?: ($odpNode?->oltDevice ?: ($odcNode?->oltDevice ?: ($odcNode?->parent?->oltDevice ?: $allOlts->first())));
-        $livePort = $liveOnu ? ($liveOnu['port'] ?? ($liveOnu['detected_port'] ?? ($liveOnu['interface'] ?? null))) : null;
-        $gponInterface = ($livePort && $livePort !== 'gpon-olt_1/1/1') ? $livePort : (($odpNode?->olt_port_ref && $odpNode->olt_port_ref !== 'gpon-olt_1/1/1') ? $odpNode->olt_port_ref : (($odcNode?->olt_port_ref && $odcNode->olt_port_ref !== 'gpon-olt_1/1/1') ? $odcNode->olt_port_ref : '—'));
+        $quality = $view['is_online'] === false ? 'Perangkat Offline' : ($rxPower === null ? 'Belum tersedia'
+            : ($rxPower >= -25 ? 'Good (Normal)' : ($rxPower >= -28 ? 'Warning (Perlu Diperiksa)' : 'Critical (Redaman Tinggi)')));
 
-        $rxPower = $liveOnu ? (float)$liveOnu['rx_power'] : ($ont?->rx_power !== null ? (float)$ont->rx_power : -18.52);
-        $txPower = $liveOnu ? (float)($liveOnu['tx_power'] ?? 2.15) : ($ont?->tx_power !== null ? (float)$ont->tx_power : 2.15);
-        $status  = $liveOnu ? $liveOnu['status'] : ($ont?->status === 'active' ? 'Online' : 'Offline');
-        $distance = $liveOnu['distance_meters'] ?? ($ont?->distance_meters ?? 720);
-
-        // Kategori Kualitas Sinyal
-        $quality = 'Good';
-        if ($status !== 'Online' || $rxPower <= -40) {
-            $quality = 'LOS (Loss of Signal)';
-        } elseif ($rxPower >= -19.0) {
-            $quality = 'Excellent (Sangat Baik)';
-        } elseif ($rxPower >= -23.0) {
-            $quality = 'Good (Normal)';
-        } elseif ($rxPower >= -27.0) {
-            $quality = 'Warning (Perlu Diperiksa)';
-        } else {
-            $quality = 'Critical (Redaman Tinggi)';
-        }
-
-        // 2. Buat data riwayat redaman optik (24 Jam Terakhir)
+        // This endpoint has no persisted optical history or customer ICMP measurement.
         $history = [];
-        $hours = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Sekarang'];
-        $baseRx = $rxPower;
-        foreach ($hours as $idx => $hr) {
-            $jitter = ($idx === count($hours) - 1) ? 0 : (sin($idx * 1.5) * 0.35);
-            $hRx = round($baseRx + $jitter, 2);
-            $history[] = [
-                'time'     => $hr,
-                'rx_power' => $hRx,
-                'tx_power' => round($txPower + ($jitter * 0.1), 2),
-                'status'   => ($hRx <= -35) ? 'Offline' : 'Online',
-            ];
-        }
-
-        // 3. Uji Ping & Latensi (Live ICMP / Fast Connector Ping)
-        $targetIp = $service?->ip_address ?: '10.20.' . rand(10, 50) . '.' . rand(2, 250);
-        $pingMs = 2.45;
-        $isOnline = ($status === 'Online');
-
-        if ($oltDevice && $oltDevice->ip_address) {
-            $conn = new \App\Services\Olt\SnmpConnector(ip: $oltDevice->ip_address, timeout: 1);
-            $testMs = $conn->pingTest();
-            if ($testMs >= 0) {
-                $pingMs = round($testMs + 1.2, 2);
-            }
-        }
 
         return response()->json([
             'status'   => 'success',
@@ -926,27 +816,24 @@ class CustomerController extends Controller
                 'status'              => $status,
                 'quality'             => $quality,
                 'distance_meters'     => $distance,
-                'attenuation_loss_db' => abs(round(7.8 - $rxPower, 2)),
+                'attenuation_loss_db' => null,
+                ...$view,
                 'history'             => $history,
             ],
             'ping' => [
-                'target_ip'        => $targetIp,
-                'online'           => $isOnline,
-                'latency_ms'       => $isOnline ? $pingMs : null,
-                'packet_loss_pct'  => $isOnline ? 0 : 100,
-                'jitter_ms'        => $isOnline ? round($pingMs * 0.15, 2) : null,
-                'packets_sent'     => 4,
-                'packets_received' => $isOnline ? 4 : 0,
-                'tested_at'        => now()->toIso8601String(),
+                'target_ip' => $service?->ip_address,
+                'online' => null, 'latency_ms' => null, 'packet_loss_pct' => null,
+                'jitter_ms' => null, 'packets_sent' => 0, 'packets_received' => null,
+                'tested_at' => null, 'available' => false,
             ],
             'topology' => [
-                'olt_name'       => $oltDevice?->name ?: 'OLT Solok',
+                'olt_name'       => $view['olt_name'],
                 'gpon_interface' => $gponInterface,
-                'odc_name'       => $odcNode?->name ?: 'ODC Utama',
-                'odc_code'       => $odcNode?->code ?: 'ODC-01',
-                'odp_name'       => $odpNode?->name ?: 'ODP Pelanggan',
-                'odp_code'       => $odpNode?->code ?: 'ODP-01',
-                'odp_port'       => $port?->port_number ?: '1',
+                'odc_name'       => $odcNode?->name,
+                'odc_code'       => $odcNode?->code,
+                'odp_name'       => $odpNode?->name,
+                'odp_code'       => $odpNode?->code,
+                'odp_port'       => $port?->port_number,
                 'onu_serial'     => $sn ?: '—',
                 'onu_mac'        => $mac ?: '—',
                 'onu_type'       => $ont?->onu_type ?: 'HGU GPON/EPON',

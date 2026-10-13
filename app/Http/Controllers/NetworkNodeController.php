@@ -13,6 +13,7 @@ use App\Http\Requests\StoreNetworkNodeRequest;
 use App\Http\Requests\UpdateNetworkNodeRequest;
 use App\Http\Resources\NetworkNodeResource;
 use App\Services\Olt\FastOpticalProbeService;
+use App\Services\Olt\OnuTelemetryView;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -62,31 +63,22 @@ class NetworkNodeController extends Controller
         ->orderByRaw("NULLIF(substring(name from '\d+'), '')::bigint ASC NULLS LAST, name ASC")
         ->get();
 
+        $nodesById = $nodes->keyBy('id');
+        foreach ($nodes as $node) $node->setRelation('parent', $nodesById->get($node->parent_node_id));
+
         $nodeIds = $nodes->pluck('id')->toArray();
 
-        // 2. Pre-load Live OLT Telemetry Snapshot in Memory (O(1) dictionary)
-        $liveOnuMap = [];
-        $devices = OltDevice::whereNotNull('last_telemetry_snapshot')->get(['id', 'name', 'last_telemetry_snapshot']);
-        foreach ($devices as $dev) {
-            $snap = $dev->last_telemetry_snapshot;
-            $snapOnus = array_merge(
-                $snap['onu_list'] ?? [],
-                $snap['unconfigured_onus'] ?? []
-            );
-            foreach ($snapOnus as $so) {
-                $snKey = strtolower(trim($so['serial_number'] ?? ''));
-                $macKey = strtolower(trim($so['mac_address'] ?? ($so['onu_mac'] ?? '')));
-                $so['_olt_id'] = $dev->id;
-                $so['_olt_name'] = $dev->name;
-                if ($snKey) $liveOnuMap[$snKey] = $so;
-                if ($macKey) $liveOnuMap[$macKey] = $so;
-            }
-        }
+        $telemetry = OnuTelemetryView::load();
 
         // 3. Batch Query: Semua ONT registrations yang terhubung ke node_id
         $ontsByNode = DB::table('ont_registrations')
+            ->join('customer_services as telemetry_services', 'telemetry_services.id', '=', 'ont_registrations.customer_service_id')
+            ->join('customers as telemetry_customers', 'telemetry_customers.id', '=', 'telemetry_services.customer_id')
+            ->whereNull('telemetry_services.deleted_at')
+            ->whereNull('telemetry_customers.deleted_at')
             ->join('network_ports', 'network_ports.customer_service_id', '=', 'ont_registrations.customer_service_id')
             ->whereIn('network_ports.node_id', $nodeIds)
+            ->whereNull('ont_registrations.deleted_at')
             ->select('network_ports.node_id', 'ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'ont_registrations.status', 'ont_registrations.rx_power')
             ->get()
             ->groupBy('node_id');
@@ -101,8 +93,12 @@ class NetworkNodeController extends Controller
         // 4. Batch Query untuk Customer Services (Auto-detected interface)
         $custServicesByNode = DB::table('network_ports')
             ->join('customer_services', 'customer_services.id', '=', 'network_ports.customer_service_id')
+            ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
+            ->whereNull('customer_services.deleted_at')
+            ->whereNull('customers.deleted_at')
             ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
             ->whereIn('network_ports.node_id', $nodeIds)
+            ->whereNull('ont_registrations.deleted_at')
             ->select('network_ports.node_id', 'ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'customer_services.onu_serial as svc_serial')
             ->get()
             ->groupBy('node_id');
@@ -115,73 +111,23 @@ class NetworkNodeController extends Controller
             $nodeOnts = $ontsByNode->get($node->id) ?? collect();
             $nodePorts = $portsByNode->get($node->id) ?? collect();
 
-            $usedPortCount = $nodePorts->filter(function ($p) {
-                return !empty($p->customer_service_id) || $p->status === 'used' || !empty($p->customer_name_cache);
-            })->count();
+            $usedPortCount = OnuTelemetryView::occupiedPortCount($nodePorts);
+            $totalClients = max($nodeOnts->count(), $usedPortCount);
 
-            $totalClients = $nodeOnts->isNotEmpty()
-                ? max($nodeOnts->count(), $usedPortCount)
-                : max($usedPortCount, (int)($node->used_ports ?? 0));
-
-            $powers = [];
-            $hasLoss = false;
-            $onlineClients = 0;
-            $lossClients = 0;
-            $isLossTotal = false;
-
-            if ($node->node_type === 'ODP' && $nodeOnts->isNotEmpty()) {
-                foreach ($nodeOnts as $ont) {
-                    $snKey = strtolower(trim($ont->onu_serial ?? ''));
-                    $macKey = strtolower(trim($ont->onu_mac ?? ''));
-                    $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
-
-                    $isOnline = false;
-                    $rxPower = -40.0;
-                    if ($liveData) {
-                        $st = strtolower($liveData['status'] ?? '');
-                        $rawRx = $liveData['rx_power'] ?? null;
-                        $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                        $rxPower = $isOnline ? (float)$rawRx : -40.00;
-                    } else {
-                        $st = strtolower($ont->status ?? '');
-                        $rawRx = $ont->rx_power;
-                        $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                        $rxPower = $isOnline ? (float)$rawRx : -40.00;
-                    }
-
-                    if ($isOnline) {
-                        $powers[] = $rxPower;
-                        $onlineClients++;
-                    } else {
-                        $hasLoss = true;
-                        $lossClients++;
-                    }
-                }
-
-                if ($totalClients > 0 && $onlineClients === 0) {
-                    $isLossTotal = true;
-                }
+            $views = [];
+            foreach ($nodeOnts as $ont) {
+                $views[] = $telemetry->forNode($node, $ont->onu_serial, $ont->onu_mac);
             }
-
-            $bestPower = !empty($powers) ? max($powers) : null;
-            $worstPower = !empty($powers) ? min($powers) : null;
+            $summary = OnuTelemetryView::summarize($views, $totalClients);
+            $powers = $summary['powers'];
+            $hasLoss = $summary['has_loss'];
+            $onlineClients = $summary['online_clients'];
+            $lossClients = $summary['loss_clients'];
+            $isLossTotal = $summary['is_loss_total'];
+            $bestPower = $summary['best_rx_power'];
+            $worstPower = $summary['worst_rx_power'];
             $opticalDbm = $worstPower;
-
-            $rangeStr = null;
-            if ($node->node_type === 'ODP') {
-                if ($totalClients === 0) {
-                    $rangeStr = "Belum ada pelanggan";
-                } elseif ($isLossTotal || empty($powers)) {
-                    $rangeStr = "Loss Total";
-                    $isLossTotal = true;
-                } elseif ($hasLoss) {
-                    $rangeStr = "{$bestPower} dBm (Ada LOS)";
-                } elseif ($bestPower === $worstPower) {
-                    $rangeStr = "{$bestPower} dBm";
-                } else {
-                    $rangeStr = "{$bestPower} s/d {$worstPower} dBm";
-                }
-            }
+            $rangeStr = $summary['rx_power_range'];
 
             // Auto detected interface
             $autoPort = null;
@@ -191,7 +137,8 @@ class NetworkNodeController extends Controller
                 foreach ($services as $cs) {
                     $sn = strtolower(trim($cs->onu_serial ?: $cs->svc_serial ?: ''));
                     $mac = strtolower(trim($cs->onu_mac ?: ''));
-                    $live = ($sn && isset($liveOnuMap[$sn])) ? $liveOnuMap[$sn] : (($mac && isset($liveOnuMap[$mac])) ? $liveOnuMap[$mac] : null);
+                    $v = $telemetry->forNode($node, $sn, $mac);
+                    $live = $v['identity_status'] === 'resolved' ? ['port'=>$v['gpon_interface'], '_olt_id'=>$v['olt_id'], '_olt_name'=>$v['olt_name']] : null;
                     if ($live) {
                         $p = $live['port'] ?? ($live['detected_port'] ?? ($live['interface'] ?? null));
                         if ($p && $p !== 'none' && $p !== '—') {
@@ -220,7 +167,8 @@ class NetworkNodeController extends Controller
                     foreach ($services as $cs) {
                         $sn = strtolower(trim($cs->onu_serial ?: $cs->svc_serial ?: ''));
                         $mac = strtolower(trim($cs->onu_mac ?: ''));
-                        $live = ($sn && isset($liveOnuMap[$sn])) ? $liveOnuMap[$sn] : (($mac && isset($liveOnuMap[$mac])) ? $liveOnuMap[$mac] : null);
+                        $v = $telemetry->forNode($child, $sn, $mac);
+                    $live = $v['identity_status'] === 'resolved' ? ['port'=>$v['gpon_interface'], '_olt_id'=>$v['olt_id'], '_olt_name'=>$v['olt_name']] : null;
                         if ($live) {
                             $p = $live['port'] ?? ($live['detected_port'] ?? ($live['interface'] ?? null));
                             if ($p && $p !== 'none' && $p !== '—') {
@@ -306,6 +254,9 @@ class NetworkNodeController extends Controller
                 'optical_power_dbm'      => $opticalDbm,
                 'best_rx_power'          => $bestPower,
                 'worst_rx_power'         => $worstPower,
+                'unknown_clients'       => $summary['unknown_clients'],
+                'telemetry_contract'     => 1,
+                'signal_status'          => $summary['signal_status'],
                 'rx_power_range'         => $rangeStr,
                 'total_clients'          => $totalClients,
                 'online_clients'         => $onlineClients,
@@ -403,11 +354,16 @@ class NetworkNodeController extends Controller
         // Pre-batch ONT and Auto-detect queries for this page's nodes (Eliminates 200+ N+1 queries)
         $pageNodeIds = $nodes->pluck('id')->toArray();
         if (!empty($pageNodeIds)) {
-            $liveOnuMap = NetworkNode::getLiveOnuTelemetryMap();
+            $telemetry = OnuTelemetryView::load();
 
             $allOnts = DB::table('ont_registrations')
+            ->join('customer_services as telemetry_services', 'telemetry_services.id', '=', 'ont_registrations.customer_service_id')
+            ->join('customers as telemetry_customers', 'telemetry_customers.id', '=', 'telemetry_services.customer_id')
+            ->whereNull('telemetry_services.deleted_at')
+            ->whereNull('telemetry_customers.deleted_at')
                 ->join('network_ports', 'network_ports.customer_service_id', '=', 'ont_registrations.customer_service_id')
                 ->whereIn('network_ports.node_id', $pageNodeIds)
+            ->whereNull('ont_registrations.deleted_at')
                 ->select(
                     'network_ports.node_id',
                     'ont_registrations.onu_serial',
@@ -420,8 +376,12 @@ class NetworkNodeController extends Controller
 
             $allCustServices = DB::table('network_ports')
                 ->join('customer_services', 'customer_services.id', '=', 'network_ports.customer_service_id')
+            ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
+            ->whereNull('customer_services.deleted_at')
+            ->whereNull('customers.deleted_at')
                 ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
                 ->whereIn('network_ports.node_id', $pageNodeIds)
+            ->whereNull('ont_registrations.deleted_at')
                 ->select(
                     'network_ports.node_id',
                     'ont_registrations.onu_serial',
@@ -431,41 +391,17 @@ class NetworkNodeController extends Controller
                 ->get()
                 ->groupBy('node_id');
 
+            $allUsedPorts = DB::table('network_ports')->whereIn('node_id', $pageNodeIds)
+                ->select('node_id', 'customer_service_id', 'status', 'customer_name_cache')->get()->groupBy('node_id');
+
             foreach ($nodes as $node) {
                 if ($node->node_type === 'ODP') {
                     $nodeOnts = $allOnts->get($node->id) ?? collect();
-                    $powers = [];
-                    $hasLoss = false;
+                    $views = [];
                     foreach ($nodeOnts as $ont) {
-                        $snKey = strtolower(trim($ont->onu_serial ?? ''));
-                        $macKey = strtolower(trim($ont->onu_mac ?? ''));
-                        $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
-
-                        $isOnline = false;
-                        $rxPower = -40.0;
-                        if ($liveData) {
-                            $st = strtolower($liveData['status'] ?? '');
-                            $rawRx = $liveData['rx_power'] ?? null;
-                            $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                            $rxPower = $isOnline ? (float)$rawRx : -40.00;
-                        } else {
-                            $st = strtolower($ont->status ?? '');
-                            $rawRx = $ont->rx_power;
-                            $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                            $rxPower = $isOnline ? (float)$rawRx : -40.00;
-                        }
-
-                        if ($isOnline) {
-                            $powers[] = $rxPower;
-                        } else {
-                            $hasLoss = true;
-                        }
+                        $views[] = $telemetry->forNode($node, $ont->onu_serial, $ont->onu_mac);
                     }
-                    $node->preloaded_client_rx_powers = [
-                        'powers'   => $powers,
-                        'total'    => $nodeOnts->count(),
-                        'has_loss' => $hasLoss,
-                    ];
+                    $node->preloaded_client_rx_powers = OnuTelemetryView::summarize($views, OnuTelemetryView::occupiedPortCount($allUsedPorts->get($node->id) ?? []));
 
                     $detectedPorts = [];
                     $detectedOlt = null;
@@ -473,7 +409,8 @@ class NetworkNodeController extends Controller
                     foreach ($nodeCs as $cs) {
                         $sn = strtolower(trim($cs->onu_serial ?: $cs->svc_serial ?: ''));
                         $mac = strtolower(trim($cs->onu_mac ?: ''));
-                        $live = ($sn && isset($liveOnuMap[$sn])) ? $liveOnuMap[$sn] : (($mac && isset($liveOnuMap[$mac])) ? $liveOnuMap[$mac] : null);
+                        $v = $telemetry->forNode($node, $sn, $mac);
+                        $live = $v['identity_status'] === 'resolved' ? ['port'=>$v['gpon_interface'], '_olt_id'=>$v['olt_id'], '_olt_name'=>$v['olt_name']] : null;
                         if ($live) {
                             $p = $live['port'] ?? ($live['detected_port'] ?? ($live['interface'] ?? null));
                             if ($p && $p !== 'none' && $p !== '—') {
@@ -746,23 +683,10 @@ class NetworkNodeController extends Controller
 
         $odcs = $query->orderBy('code')->get();
 
-        // 1. Build real-time optical power & status map from OLT snapshots
-        $liveOnuMap = [];
-        foreach (OltDevice::whereNotNull('last_telemetry_snapshot')->get() as $dev) {
-            $snapOnus = array_merge(
-                $dev->last_telemetry_snapshot['onu_list'] ?? [],
-                $dev->last_telemetry_snapshot['unconfigured_onus'] ?? []
-            );
-            foreach ($snapOnus as $so) {
-                $snKey = strtolower(trim($so['serial_number'] ?? ''));
-                $macKey = strtolower(trim($so['mac_address'] ?? ($so['onu_mac'] ?? '')));
-                if ($snKey) $liveOnuMap[$snKey] = $so;
-                if ($macKey) $liveOnuMap[$macKey] = $so;
-            }
-        }
+        $telemetry = OnuTelemetryView::load();
 
         // 2. Fetch customers and map by ODP node id
-        $allCustomers = Customer::with(['services.networkPort', 'services.ontRegistration'])->get();
+        $allCustomers = Customer::with(['services.networkPort.node.parent', 'services.ontRegistration'])->get();
         $custByOdp = [];
         foreach ($allCustomers as $c) {
             $odpId = $c->odp_node_id ?: ($c->services->first()?->networkPort?->node_id);
@@ -771,27 +695,16 @@ class NetworkNodeController extends Controller
             $ont = $c->services->first()?->ontRegistration;
             $snKey = strtolower(trim($ont?->onu_serial ?: ($c->services->first()?->onu_serial ?: '')));
             $macKey = strtolower(trim($ont?->onu_mac ?: ''));
-            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
-
-            $isOnline = false;
-            $rx = -40.00;
-            if ($liveData) {
-                $st = strtolower($liveData['status'] ?? '');
-                $rawRx = $liveData['rx_power'] ?? null;
-                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                $rx = $isOnline ? (float)$rawRx : -40.00;
-            } elseif ($ont) {
-                $st = strtolower($ont->status ?? '');
-                $rawRx = $ont->rx_power;
-                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                $rx = $isOnline ? (float)$rawRx : -40.00;
-            }
+            $v = $telemetry->forNode($c->services->first()?->networkPort?->node, $snKey, $macKey);
+            $isOnline = $v['is_online'];
+            $rx = $v['rx_power'];
 
             $custByOdp[$odpId][] = [
                 'name'      => $c->name,
                 'rx'        => $rx,
                 'is_online' => $isOnline,
-                'status'    => $isOnline ? 'Online' : 'Offline / LOS',
+                'status'    => $v['onu_status'],
+                ...$v,
             ];
         }
 
@@ -827,23 +740,14 @@ class NetworkNodeController extends Controller
 
                     $custs = $custByOdp[$o->id] ?? [];
                     $custCount = count($custs);
-                    $onlineCusts = count(array_filter($custs, fn($c) => $c['is_online']));
-                    $validRx = array_filter(array_column(array_filter($custs, fn($c) => $c['is_online']), 'rx'), fn($r) => $r !== null && is_numeric($r));
-                    
-                    if ($custCount > 0) {
-                        if ($onlineCusts > 0) {
-                            $computedStatus = 'ONLINE';
-                            $avgRx = count($validRx) > 0 ? number_format(array_sum($validRx) / count($validRx), 2, '.', '') : null;
-                        } else {
-                            $computedStatus = 'OFFLINE';
-                            $avgRx = '-40.00';
-                        }
-                    } else {
-                        $computedStatus = in_array(strtolower($o->status), ['active', 'online']) ? 'ONLINE' : 'OFFLINE';
-                        $avgRx = null;
-                    }
+                    $summary = OnuTelemetryView::summarize($custs);
+                    $onlineCusts = $summary['online_clients'];
+                    $computedStatus = $summary['unknown_clients'] ? 'UNKNOWN' : ($summary['is_loss_total'] ? 'OFFLINE' : 'ONLINE');
+                    $avgRx = $summary['avg_rx_power'];
 
                     return [
+                        'unknown_clients'        => $summary['unknown_clients'],
+                        'telemetry_contract'     => 1,
                         'id'                     => $o->id,
                         'name'                   => $o->name,
                         'code'                   => $o->code,
@@ -881,16 +785,14 @@ class NetworkNodeController extends Controller
             $liveProbeResult = FastOpticalProbeService::probeOdpLiveOptical($networkNode->id);
         }
 
-        $this->syncPhysicalPorts($networkNode);
-        NetworkPort::recalculateNodeUsedPorts($networkNode->id);
         $node = $networkNode->load(['splitterType', 'oltDevice', 'parent']);
 
         // Ambil semua port pada ODP ini, join ke customer_services, customers, service_packages, dan ont_registrations
         $ports = DB::table('network_ports')
-            ->leftJoin('customer_services', 'network_ports.customer_service_id', '=', 'customer_services.id')
-            ->leftJoin('customers', 'customer_services.customer_id', '=', 'customers.id')
+            ->leftJoin('customer_services', fn($join) => $join->on('network_ports.customer_service_id', '=', 'customer_services.id')->whereNull('customer_services.deleted_at'))
+            ->leftJoin('customers', fn($join) => $join->on('customer_services.customer_id', '=', 'customers.id')->whereNull('customers.deleted_at'))
             ->leftJoin('service_packages', 'customer_services.service_package_id', '=', 'service_packages.id')
-            ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
+            ->leftJoin('ont_registrations', fn($join) => $join->on('ont_registrations.customer_service_id', '=', 'customer_services.id')->whereNull('ont_registrations.deleted_at'))
             ->leftJoin('network_ports as olt_ports', 'ont_registrations.olt_port_id', '=', 'olt_ports.id')
             ->where('network_ports.node_id', $networkNode->id)
             ->orderByRaw('CAST(network_ports.port_number AS integer) ASC NULLS LAST')
@@ -912,6 +814,7 @@ class NetworkNodeController extends Controller
                 'customer_services.sobok_service_status',
                 'customer_services.sobok_profile',
                 'service_packages.name as package_name',
+                'ont_registrations.id as ont_id',
                 'ont_registrations.onu_serial',
                 'ont_registrations.onu_mac',
                 'ont_registrations.onu_type',
@@ -924,7 +827,7 @@ class NetworkNodeController extends Controller
             ->get();
 
         // Enrich port data with live ONU telemetry and normalized Sobok service status
-        $liveOnuMap = NetworkNode::getLiveOnuTelemetryMap();
+        $telemetry = OnuTelemetryView::load();
         foreach ($ports as $port) {
             $rawStatus = strtoupper($port->sobok_service_status ?: ($port->service_status ?: 'OPEN'));
             if (in_array($rawStatus, ['BLOKIR', 'ISOLIR', 'SUSPEND', 'SUSPENDED', 'DISABLED'])) {
@@ -933,38 +836,15 @@ class NetworkNodeController extends Controller
                 $port->sobok_service_status = 'OPEN';
             }
 
-            $snKey = strtolower(trim($port->onu_serial ?? ''));
-            $macKey = strtolower(trim($port->onu_mac ?? ''));
-            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
-            if ($liveData) {
-                if (isset($liveData['rx_power']) && is_numeric($liveData['rx_power'])) {
-                    $port->rx_power = (float)$liveData['rx_power'];
-                }
-                if (isset($liveData['status'])) {
-                    $port->ont_status = $liveData['status'];
-                }
+            $view = $telemetry->forNode($node, $port->customer_id ? $port->onu_serial : null, $port->customer_id ? $port->onu_mac : null);
+            $sn = strtoupper(trim((string)($port->onu_serial ?: $port->onu_mac)));
+            $point = $liveProbeResult['probed_states'][$sn] ?? null;
+            if ($point && (int)($point['ont_id'] ?? 0) === (int)$port->ont_id) {
+                $view = OnuTelemetryView::withPoint($view, $point, now()->toIso8601String());
             }
-
-            // Normalisasi Rx power & status offline/loss:
-            $rxVal = $port->rx_power !== null ? (float)$port->rx_power : null;
-            $ontSt = strtolower(trim((string)$port->ont_status));
-            if ($ontSt === 'inactive' || $ontSt === 'offline' || $ontSt === 'los' || $ontSt === 'down' || ($rxVal !== null && $rxVal <= -38.0) || $rxVal === 0.0) {
-                $port->rx_power = -40.00;
-                $port->ont_status = 'inactive';
-            }
-        }
-
-        // Jika live probe ODP dijalankan, timpa port dengan data hasil probe terkini
-        if ($liveProbeResult && !empty($liveProbeResult['probed_states'])) {
-            $liveStates = $liveProbeResult['probed_states'];
-            foreach ($ports as $port) {
-                $sn = strtoupper(trim((string)$port->onu_serial));
-                if ($sn && isset($liveStates[$sn])) {
-                    $st = $liveStates[$sn];
-                    $port->rx_power = $st['rx_power'];
-                    $port->ont_status = $st['is_online'] ? 'active' : 'inactive';
-                }
-            }
+            foreach ($view as $key => $value) $port->{$key} = $value;
+            $port->ont_status = $view['onu_status'];
+            $port->olt_port_name = $view['gpon_interface'];
         }
 
         // 1. Auto-detect Interface OLT & Device
@@ -984,38 +864,9 @@ class NetworkNodeController extends Controller
 
         // 2. Hitung statistik redaman (optical power) dari pelanggan yang terkoneksi
         $connectedPorts = $ports->filter(fn($p) => !empty($p->customer_id) || !empty($p->customer_service_id) || $p->status === 'used' || !empty($p->customer_name_cache) || !empty($p->destination_label));
-        $validRxPowers = $ports->pluck('rx_power')->filter(fn($val) => $val !== null && is_numeric($val))->map(fn($v) => (float) $v);
-        $onlineRxPowers = $ports->filter(function ($p) {
-            $isDown = in_array(strtolower($p->ont_status ?? ''), ['offline', 'los', 'down', 'inactive', 'poweroff']) || (is_numeric($p->rx_power) && (float)$p->rx_power <= -35.0);
-            return !$isDown && is_numeric($p->rx_power);
-        })->pluck('rx_power')->map(fn($v) => (float)$v);
-
-        $avgRx = $onlineRxPowers->isNotEmpty() ? round($onlineRxPowers->avg(), 2) : ($validRxPowers->isNotEmpty() ? round($validRxPowers->avg(), 2) : null);
-        $minRx = $validRxPowers->isNotEmpty() ? round($validRxPowers->min(), 2) : null;
-        $maxRx = $validRxPowers->isNotEmpty() ? round($validRxPowers->max(), 2) : null;
-
-        // Tentukan status kesehatan optik ODP
-        // Good: -8 dBm s/d -25 dBm
-        // Warning: -25.01 dBm s/d -28 dBm (Redaman tinggi)
-        // Critical: < -28 dBm atau ada ONT Offline/LOS
-        $signalStatus = 'no_customer';
-        $hasLossOnt = $ports->contains(function ($p) {
-            $isUsed = !empty($p->customer_id) || !empty($p->customer_service_id) || $p->status === 'used';
-            if (!$isUsed) return false;
-            return in_array(strtolower($p->ont_status ?? ''), ['offline', 'los', 'down', 'inactive', 'poweroff']) || (is_numeric($p->rx_power) && (float)$p->rx_power <= -35.0);
-        });
-
-        if ($validRxPowers->isNotEmpty() || $connectedPorts->isNotEmpty()) {
-            if ($hasLossOnt || ($minRx !== null && $minRx < -28.0)) {
-                $signalStatus = 'critical';
-            } elseif ($minRx !== null && $minRx < -25.0) {
-                $signalStatus = 'warning';
-            } else {
-                $signalStatus = 'good';
-            }
-        } elseif ($connectedPorts->isNotEmpty()) {
-            $signalStatus = 'unknown';
-        }
+        $usedViews = $connectedPorts->map(fn($p) => (array)$p)->all();
+        $summary = OnuTelemetryView::summarize($usedViews);
+        $node->preloaded_client_rx_powers = $summary;
 
         return response()->json([
             'node'              => new NetworkNodeResource($node),
@@ -1025,10 +876,13 @@ class NetworkNodeController extends Controller
             'live_probe'        => $liveProbeResult,
             'attenuation'       => [
                 'connected_count' => $connectedPorts->count(),
-                'avg_rx_power'    => $avgRx,
-                'min_rx_power'    => $minRx,
-                'max_rx_power'    => $maxRx,
-                'signal_status'   => $signalStatus,
+                'online_count' => $summary['online_clients'],
+                'down_count' => $summary['loss_clients'],
+                'unknown_count' => $summary['unknown_clients'],
+                'avg_rx_power' => $summary['avg_rx_power'],
+                'min_rx_power' => $summary['worst_rx_power'],
+                'max_rx_power' => $summary['best_rx_power'],
+                'signal_status' => $summary['signal_status'],
             ]
         ]);
     }
@@ -1131,8 +985,6 @@ class NetworkNodeController extends Controller
             }
         }
 
-        $this->syncPhysicalPorts($networkNode);
-        NetworkPort::recalculateNodeUsedPorts($networkNode->id);
 
         AuditLog::record(
             'UPDATE',
@@ -1187,8 +1039,6 @@ class NetworkNodeController extends Controller
         $networkNode->save();
 
         // Generate port fisik baru
-        $this->syncPhysicalPorts($networkNode);
-        NetworkPort::recalculateNodeUsedPorts($networkNode->id);
 
         // Hapus cache GIS & metrics
         Cache::forget('gis_map_data_payload_v2');

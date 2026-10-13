@@ -1,3 +1,5 @@
+import { onuPresentation } from '../lib/onuTelemetry.js';
+import { OnuStatus, TelemetryStamp } from '../components/OnuTelemetry.jsx';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
@@ -841,7 +843,7 @@ export default function CustomerManagement() {
       customer_number: c.customer_number ?? '',
       name: c.name ?? '',
       address: c.address ?? '',
-      status: (c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0)) ? 'Online' : 'Offline / LOS',
+      status: (onuPresentation(c).online === true) ? 'Online' : 'Offline / LOS',
       odp_id: c.odp_id ?? '',
       odp_port_number: c.odp_port_number ?? '',
       onu_serial: c.onu_serial ?? '',
@@ -1137,7 +1139,8 @@ export default function CustomerManagement() {
   const statusOptions = useMemo(() => [
     { value: 'all', label: 'Semua Perangkat' },
     { value: 'Online', label: 'Online' },
-    { value: 'Offline / LOS', label: 'Offline / LOS' },
+    { value: 'Offline / LOS', label: 'Offline' },
+    { value: 'Unknown', label: 'Belum terverifikasi / Data lama' },
   ], []);
 
   const serviceStatusOptions = useMemo(() => [
@@ -1178,17 +1181,19 @@ export default function CustomerManagement() {
         c.onu_serial?.toLowerCase().includes(q) ||
         c.ip_address?.toLowerCase().includes(q);
 
-      const matchStatus = filterStatus === 'all' || 
-        (filterStatus === 'Online' && (c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0))) ||
-        (filterStatus === 'Offline / LOS' && (c.status !== 'Online' && (c.rx_power === null || parseFloat(c.rx_power) <= -38.0)));
+      const clientOnline = onuPresentation(c).online;
+      const matchStatus = filterStatus === 'all' ||
+        (filterStatus === 'Online' && clientOnline === true) ||
+        (filterStatus === 'Offline / LOS' && clientOnline === false) ||
+        (filterStatus === 'Unknown' && clientOnline === null);
 
       const cServiceStatus = (c.service_status || 'OPEN').toUpperCase();
-      const isClientOnline = c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0);
+      const isClientOnline = onuPresentation(c).online === true;
       const matchService = filterServiceStatus === 'all' ||
         (filterServiceStatus === 'OPEN' && cServiceStatus === 'OPEN') ||
         (filterServiceStatus === 'BLOKIR' && cServiceStatus === 'BLOKIR') ||
-        (filterServiceStatus === 'LOSS_PHYSICAL' && !isClientOnline && cServiceStatus === 'OPEN') ||
-        (filterServiceStatus === 'LOSS_BLOCKED' && !isClientOnline && cServiceStatus === 'BLOKIR');
+        (filterServiceStatus === 'LOSS_PHYSICAL' && clientOnline === false && cServiceStatus === 'OPEN') ||
+        (filterServiceStatus === 'LOSS_BLOCKED' && clientOnline === false && cServiceStatus === 'BLOKIR');
 
       const matchOlt = filterOlt === 'all' || String(c.olt_id) === String(filterOlt) || c.olt_name === filterOlt;
       const matchInterface = filterInterface === 'all' || isSamePort(c.gpon_interface, filterInterface);
@@ -1477,26 +1482,9 @@ export default function CustomerManagement() {
                 </thead>
                 <tbody className="divide-y divide-black/15 dark:divide-white/15 font-sans">
                   {paginated.map(c => {
-                    const isClientOnline = c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0);
-                    const rx = !isClientOnline ? null : (c.rx_power != null ? parseFloat(c.rx_power) : null);
-                    let rxLabel = '—';
-                    let rxColorClass = 'text-black/50 dark:text-white/50';
-
-                    if (!isClientOnline) {
-                      rxLabel = 'Offline (-40.00 dBm)';
-                      rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
-                    } else if (rx !== null) {
-                      rxLabel = `${rx.toFixed(2)} dBm`;
-                      if (rx >= -19.0) {
-                        rxColorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
-                      } else if (rx >= -24.0) {
-                        rxColorClass = 'text-teal-600 dark:text-teal-400 font-bold';
-                      } else if (rx >= -27.0) {
-                        rxColorClass = 'text-amber-600 dark:text-amber-400 font-bold';
-                      } else {
-                        rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
-                      }
-                    }
+                    const display = onuPresentation(c);
+                    const rxLabel = display.rxLabel;
+                    const rxColorClass = display.rxColor;
 
                     return (
                       <tr key={c.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
@@ -1537,9 +1525,8 @@ export default function CustomerManagement() {
                         {/* 4. OLT & Interface */}
                         <td className="px-4 py-3.5 text-black dark:text-white">
                           <span>{c.olt_name || '—'}</span>
-                          {c.gpon_interface && c.gpon_interface !== '—' && (
-                            <span className="text-black/60 dark:text-white/60 font-mono text-[11px] ml-1">({c.gpon_interface})</span>
-                          )}
+                          <span className="block font-mono text-[11px]">{display.interfaceLabel}{c.onu_id ? ` · ONU ${c.onu_id}` : ''}</span>
+                          <TelemetryStamp value={c} />
                         </td>
 
                         {/* 5. Serial (SN) & Sinyal Rx */}
@@ -1551,19 +1538,7 @@ export default function CustomerManagement() {
                         </td>
 
                         {/* 6. Perangkat ONU */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          {isClientOnline ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 font-sans">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                              Online
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 font-sans">
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                              Offline / LOS
-                            </span>
-                          )}
-                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap"><OnuStatus value={c} /></td>
 
                         {/* 7. Status */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
@@ -1643,26 +1618,9 @@ export default function CustomerManagement() {
           <div className="block md:hidden space-y-4">
             {paginated.map((c, idx) => {
               const globalIndex = (currentPage - 1) * perPage + idx + 1;
-              const isClientOnline = c.status === 'Online' || (c.rx_power !== null && parseFloat(c.rx_power) > -38.0);
-              const rx = !isClientOnline ? null : (c.rx_power != null ? parseFloat(c.rx_power) : null);
-              let rxLabel = '—';
-              let rxColorClass = 'text-slate-400';
-
-              if (!isClientOnline) {
-                rxLabel = 'Offline (-40.00 dBm)';
-                rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
-              } else if (rx !== null) {
-                rxLabel = `${rx.toFixed(2)} dBm`;
-                if (rx >= -19.0) {
-                  rxColorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
-                } else if (rx >= -24.0) {
-                  rxColorClass = 'text-teal-600 dark:text-teal-400 font-bold';
-                } else if (rx >= -27.0) {
-                  rxColorClass = 'text-amber-600 dark:text-amber-400 font-bold';
-                } else {
-                  rxColorClass = 'text-rose-600 dark:text-rose-400 font-bold';
-                }
-              }
+              const display = onuPresentation(c);
+              const rxLabel = display.rxLabel;
+              const rxColorClass = display.rxColor;
 
               return (
                 <div key={c.id} className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-xs overflow-hidden">
@@ -1671,12 +1629,7 @@ export default function CustomerManagement() {
                     <div className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-black">
                       <span className="text-black/70 dark:text-white/70 font-semibold">#{globalIndex} • {c.customer_number || `CMN ${c.id}`}</span>
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center gap-1 text-[11px] font-bold ${
-                          isClientOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${isClientOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
-                          {isClientOnline ? 'Online' : 'Offline'}
-                        </span>
+                        <OnuStatus value={c} />
                         <span className="text-black/30 dark:text-white/30">|</span>
                         {(c.service_status || '').toUpperCase() === 'BLOKIR' ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 tracking-wide">
@@ -1725,10 +1678,11 @@ export default function CustomerManagement() {
 
                     {/* Row 4: OLT & Interface */}
                     <div className="px-4 py-2.5 grid grid-cols-3 gap-2 items-center">
-                      <span className="text-black/70 dark:text-white/70">OLT / Interface</span>
-                      <span className="col-span-2 text-black dark:text-white font-medium">
-                        {c.olt_name || '—'} {c.gpon_interface && c.gpon_interface !== '—' ? <span className="font-mono text-[11px] text-black/60 dark:text-white/60">({c.gpon_interface})</span> : ''}
-                      </span>
+                      <span>OLT / Interface</span>
+                      <div className="col-span-2"><span>{c.olt_name || '—'}</span>
+                        <span className="block font-mono text-[11px]">{display.interfaceLabel}{c.onu_id ? ` · ONU ${c.onu_id}` : ''}</span>
+                        <TelemetryStamp value={c} />
+                      </div>
                     </div>
 
                     {/* Row 5: Serial & Rx */}

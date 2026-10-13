@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\DB;
+use App\Services\Olt\OnuTelemetryView;
 
 class NetworkNodeResource extends JsonResource
 {
@@ -19,18 +20,7 @@ class NetworkNodeResource extends JsonResource
         $worstPower = !empty($opticalData['powers']) ? min($opticalData['powers']) : null;
         $opticalDbm = $worstPower;
 
-        $rangeStr = null;
-        if (!empty($opticalData['total'])) {
-            if (empty($opticalData['powers'])) {
-                $rangeStr = "Loss (-∞ dBm)";
-            } elseif ($opticalData['has_loss']) {
-                $rangeStr = "{$bestPower} dBm (Ada LOS)";
-            } elseif ($bestPower === $worstPower) {
-                $rangeStr = "{$bestPower} dBm";
-            } else {
-                $rangeStr = "{$bestPower} s/d {$worstPower} dBm";
-            }
-        }
+        $rangeStr = $opticalData['rx_power_range'] ?? null;
 
         $autoData = $this->preloaded_auto_detected ?? $this->getAutoDetectedInterfaceAndOlt();
         $autoPort = $autoData['port_ref'];
@@ -105,6 +95,13 @@ class NetworkNodeResource extends JsonResource
             'best_rx_power'          => $bestPower,
             'worst_rx_power'         => $worstPower,
             'rx_power_range'         => $rangeStr,
+            'telemetry_contract'     => 1,
+            'total_clients'          => $opticalData['total'] ?? 0,
+            'online_clients'         => $opticalData['online_clients'] ?? 0,
+            'loss_clients'           => $opticalData['loss_clients'] ?? 0,
+            'unknown_clients'        => $opticalData['unknown_clients'] ?? 0,
+            'is_loss_total'          => $opticalData['is_loss_total'] ?? false,
+            'signal_status'          => $opticalData['signal_status'] ?? 'unknown',
         ];
     }
 
@@ -118,66 +115,25 @@ class NetworkNodeResource extends JsonResource
             return $this->_cachedClientRxPowers = ['powers' => [], 'total' => 0, 'has_loss' => false];
         }
 
-        static $liveOnuMap = null;
-        if ($liveOnuMap === null) {
-            $liveOnuMap = [];
-            foreach (\App\Models\OltDevice::whereNotNull('last_telemetry_snapshot')->get() as $dev) {
-                $snapOnus = array_merge(
-                    $dev->last_telemetry_snapshot['onu_list'] ?? [],
-                    $dev->last_telemetry_snapshot['unconfigured_onus'] ?? []
-                );
-                foreach ($snapOnus as $so) {
-                    $snKey = strtolower(trim($so['serial_number'] ?? ''));
-                    $macKey = strtolower(trim($so['mac_address'] ?? ($so['onu_mac'] ?? '')));
-                    if ($snKey) $liveOnuMap[$snKey] = $so;
-                    if ($macKey) $liveOnuMap[$macKey] = $so;
-                }
-            }
-        }
+        $telemetry = OnuTelemetryView::forRequest();
 
         // Optimized query joining ports & ont_registrations
         $onts = DB::table('ont_registrations')
+            ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
+            ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
+            ->whereNull('customer_services.deleted_at')
+            ->whereNull('customers.deleted_at')
             ->join('network_ports', 'network_ports.customer_service_id', '=', 'ont_registrations.customer_service_id')
             ->where('network_ports.node_id', $this->id)
+            ->whereNull('ont_registrations.deleted_at')
             ->select('ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'ont_registrations.status', 'ont_registrations.rx_power')
             ->get();
 
-        if ($onts->isEmpty()) {
-            return $this->_cachedClientRxPowers = ['powers' => [], 'total' => 0, 'has_loss' => false];
-        }
-
-        $powers = [];
-        $hasLoss = false;
+        $views = [];
         foreach ($onts as $ont) {
-            $snKey = strtolower(trim($ont->onu_serial ?? ''));
-            $macKey = strtolower(trim($ont->onu_mac ?? ''));
-            $liveData = ($snKey && isset($liveOnuMap[$snKey])) ? $liveOnuMap[$snKey] : (($macKey && isset($liveOnuMap[$macKey])) ? $liveOnuMap[$macKey] : null);
-
-            $isOnline = false;
-            $rxPower = -40.0;
-            if ($liveData) {
-                $st = strtolower($liveData['status'] ?? '');
-                $rawRx = $liveData['rx_power'] ?? null;
-                $isOnline = ($st === 'online' || $st === 'active') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                $rxPower = $isOnline ? (float)$rawRx : -40.00;
-            } else {
-                $st = strtolower($ont->status ?? '');
-                $rawRx = $ont->rx_power;
-                $isOnline = ($st === 'active' || $st === 'online') && $rawRx !== null && is_numeric($rawRx) && (float)$rawRx > -38.0;
-                $rxPower = $isOnline ? (float)$rawRx : -40.00;
-            }
-
-            if ($isOnline) {
-                $powers[] = $rxPower;
-            } else {
-                $hasLoss = true;
-            }
+            $views[] = $telemetry->forNode($this->resource, $ont->onu_serial, $ont->onu_mac);
         }
-
-        return $this->_cachedClientRxPowers = [
-            'powers'   => $powers,
-            'total'    => $onts->count(),
-            'has_loss' => $hasLoss
-        ];
+        $ports = DB::table('network_ports')->where('node_id', $this->id)->get(['customer_service_id','status','customer_name_cache']);
+        return $this->_cachedClientRxPowers = OnuTelemetryView::summarize($views, OnuTelemetryView::occupiedPortCount($ports));
     }
 }

@@ -1,0 +1,105 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\NetworkNodeController;
+use App\Models\NetworkNode;
+use App\Services\Olt\ZteOnuIdentityMap as Identity;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
+use Tests\TestCase;
+
+class OnuTelemetryPresentationTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->assertSame('sqlite',config('database.default'));$this->assertSame(':memory:',config('database.connections.sqlite.database'));
+        Http::fake();Http::preventStrayRequests();
+        Schema::create('olt_devices',function(Blueprint $t){$t->id();foreach(['name','vendor_key','connection_mode','status','ip_address','code'] as $f)$t->string($f)->nullable();$t->text('last_telemetry_snapshot')->nullable();});
+        Schema::create('customers',function(Blueprint $t){$t->id();$t->string('name');$t->string('customer_number');$t->string('phone')->nullable();$t->timestamps();$t->softDeletes();});
+        Schema::create('customer_services',function(Blueprint $t){$t->id();$t->integer('customer_id');$t->integer('service_package_id')->nullable();foreach(['service_number','status','sobok_service_status','sobok_profile','ip_address','onu_serial'] as $f)$t->string($f)->nullable();$t->timestamp('sobok_sync_at')->nullable();$t->softDeletes();});
+        Schema::create('service_packages',function(Blueprint $t){$t->id();$t->string('name')->nullable();});
+        Schema::create('splitter_types',function(Blueprint $t){$t->id();$t->string('name')->nullable();$t->string('ratio')->nullable();$t->integer('output_ports')->nullable();});
+        Schema::create('network_nodes',function(Blueprint $t){$t->id();foreach(['name','node_type','status','code','olt_port_ref'] as $f)$t->string($f)->nullable();foreach(['parent_node_id','olt_device_id','splitter_type_id','total_ports','used_ports'] as $f)$t->integer($f)->nullable();$t->timestamps();$t->softDeletes();});
+        Schema::create('network_ports',function(Blueprint $t){$t->id();$t->integer('node_id');$t->integer('customer_service_id')->nullable();foreach(['port_number','port_type','status','customer_name_cache','notes','destination_label'] as $f)$t->string($f)->nullable();});
+        Schema::create('ont_registrations',function(Blueprint $t){$t->id();$t->integer('customer_service_id');$t->integer('olt_port_id')->nullable();foreach(['onu_serial','onu_mac','onu_type','status'] as $f)$t->string($f)->nullable();$t->float('rx_power')->nullable();$t->float('tx_power')->nullable();$t->timestamp('last_online_at')->nullable();$t->timestamps();$t->softDeletes();});
+        DB::table('network_nodes')->insert(['id'=>1,'name'=>'Fixture ODP','node_type'=>'ODP','status'=>'active','olt_device_id'=>1,'olt_port_ref'=>'gpon-olt_1/1/15','total_ports'=>3,'used_ports'=>2]);
+        foreach([1,2] as $id){
+            DB::table('customers')->insert(['id'=>$id,'name'=>'Fixture '.$id,'customer_number'=>'FIX-'.$id]);
+            DB::table('customer_services')->insert(['id'=>$id,'customer_id'=>$id,'sobok_service_status'=>'OPEN']);
+            DB::table('network_ports')->insert(['id'=>$id,'node_id'=>1,'customer_service_id'=>$id,'port_number'=>$id,'status'=>'used']);
+            DB::table('ont_registrations')->insert(['id'=>1700+$id,'customer_service_id'=>$id,'onu_serial'=>'TEST0000000'.$id,'status'=>'active','rx_power'=>0]);
+        }
+        DB::table('network_ports')->insert(['id'=>3,'node_id'=>1,'port_number'=>3,'status'=>'available']);
+        $row=['serial_number'=>'TEST00000001','port'=>'gpon-olt_1/1/16','onu_id'=>'1','status'=>'Online','rx_power'=>-26.2,'_source'=>'live_snmp','identity_source'=>Identity::SOURCE,'identity_observed_at'=>date(DATE_ATOM)];
+        foreach([1,2] as $id){
+            $r=$row;if($id===2){$r['port']='gpon-olt_1/1/3';$r['rx_power']=-20;}
+            DB::table('olt_devices')->insert(['id'=>$id,'name'=>'Fixture OLT '.$id,'vendor_key'=>'zte-c320','connection_mode'=>'live','status'=>'active','last_telemetry_snapshot'=>json_encode(['polled_at'=>date(DATE_ATOM),'onu_list'=>[$r]])]);
+        }
+    }
+
+    private function customers(): array
+    {
+        return app(CustomerController::class)->index(Request::create('/api/customers'))->getData(true)['data'];
+    }
+
+    public function test_customer_list_and_odp_ports_use_the_same_scoped_identity_and_unknown_contract(): void
+    {
+        $list=collect($this->customers())->keyBy('id');
+        DB::enableQueryLog();DB::flushQueryLog();
+        $response=app(NetworkNodeController::class)->portDetail(Request::create('/api/node/1/ports','GET',['skip_live'=>1]),NetworkNode::findOrFail(1));
+        $detail=$response->getData(true);$ports=collect($detail['ports'])->keyBy('customer_id');
+        foreach([1,2] as $id)foreach(['gpon_interface','onu_id','identity_status','is_online','rx_power','rx_available','telemetry_source','sampled_at'] as $f)$this->assertSame($list[$id][$f],$ports[$id][$f],$f);
+        $this->assertSame('gpon-olt_1/1/16',$ports[1]['gpon_interface']);$this->assertSame(-26.2,$ports[1]['rx_power']);
+        $this->assertNull($ports[2]['is_online']);$this->assertNull($ports[2]['rx_power']);$this->assertNull($ports[2]['gpon_interface']);
+        $this->assertCount(3,$detail['ports']);$this->assertSame(1,$detail['attenuation']['unknown_count']);$this->assertSame('unknown',$detail['attenuation']['signal_status']);
+        $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|delete|insert)\b/i',$q['query']))));
+    }
+
+    public function test_missing_optical_value_is_null_on_both_pages_without_database_zero_fallback(): void
+    {
+        $snap=json_decode(DB::table('olt_devices')->where('id',1)->value('last_telemetry_snapshot'),true);$snap['onu_list'][0]['rx_power']=null;
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode($snap)]);
+        $list=collect($this->customers())->keyBy('id');$this->assertTrue($list[1]['is_online']);$this->assertNull($list[1]['rx_power']);
+        $detail=app(NetworkNodeController::class)->portDetail(Request::create('/ports','GET',['skip_live'=>1]),NetworkNode::findOrFail(1))->getData(true);
+        $port=collect($detail['ports'])->firstWhere('customer_id',1);$this->assertTrue($port['is_online']);$this->assertNull($port['rx_power']);
+    }
+
+    public function test_diagnostics_return_unavailable_history_and_icmp_instead_of_fabricated_samples(): void
+    {
+        $out=app(CustomerController::class)->diagnostics(2)->getData(true);
+        $this->assertNull($out['optical']['rx_power']);$this->assertSame([],$out['optical']['history']);
+        $this->assertNull($out['optical']['attenuation_loss_db']);$this->assertNull($out['ping']['latency_ms']);
+        $this->assertFalse($out['ping']['available']);$this->assertSame(0,$out['ping']['packets_sent']);$this->assertNull($out['ping']['tested_at']);
+    }
+
+    public function test_stale_snapshot_does_not_restore_online_from_active_registration(): void
+    {
+        $snap=json_decode(DB::table('olt_devices')->where('id',1)->value('last_telemetry_snapshot'),true);$snap['polled_at']=date(DATE_ATOM,time()-300);
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode($snap)]);
+        $c=collect($this->customers())->firstWhere('id',1);$this->assertSame('stale',$c['telemetry_freshness']);$this->assertNull($c['is_online']);$this->assertNull($c['rx_power']);
+    }
+
+    public function test_deleted_customer_does_not_supply_live_telemetry_to_its_occupied_port(): void
+    {
+        DB::table('customers')->where('id',1)->update(['deleted_at'=>now()]);
+        $out=app(NetworkNodeController::class)->portDetail(Request::create('/ports','GET',['skip_live'=>1]),NetworkNode::findOrFail(1))->getData(true);
+        $port=collect($out['ports'])->firstWhere('id',1);
+        $this->assertNull($port['customer_id']);$this->assertNull($port['is_online']);$this->assertNull($port['gpon_interface']);$this->assertNull($port['rx_power']);
+        $this->assertCount(3,$out['ports']);
+    }
+
+    public function test_node_summary_uses_occupied_ports_instead_of_a_stale_stored_counter(): void
+    {
+        DB::table('network_nodes')->where('id',1)->update(['used_ports'=>99]);
+        $node=NetworkNode::findOrFail(1);
+        $data=(new \App\Http\Resources\NetworkNodeResource($node))->resolve(Request::create('/node'));
+        $this->assertSame(2,$data['total_clients']);$this->assertSame(1,$data['unknown_clients']);$this->assertFalse($data['is_loss_total']);
+    }
+}

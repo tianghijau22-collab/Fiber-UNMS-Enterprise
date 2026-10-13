@@ -1,3 +1,5 @@
+import { onuPresentation } from '../lib/onuTelemetry.js';
+import { OnuStatus, TelemetryStamp } from '../components/OnuTelemetry.jsx';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, Link } from 'react-router-dom';
@@ -4599,13 +4601,18 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                   </p>
                 </div>
                 <div className="pt-2 sm:pt-0 sm:pl-4 border-t sm:border-t-0 sm:border-l border-black/20 dark:border-white/20">
-                  <span className="text-[10px] text-black/60 dark:text-white/60 block font-medium">Interface OLT Otomatis:</span>
+                  <span className="text-[10px] text-black/60 dark:text-white/60 block font-medium">Uplink topologi ODP:</span>
                   <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 break-all block mt-0.5">
                     {odpDetailData?.display_olt_ref || displayInterface(selectedOdp.olt_port_ref)}
                   </span>
                 </div>
               </div>
 
+              {odpDetailData?.live_probe && odpDetailData.live_probe.success === false && (
+                <p className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2 text-amber-700 dark:text-amber-300">
+                  Pembacaan langsung belum lengkap. Perhatikan waktu pembaruan; sebagian kartu dapat memakai data tersimpan.
+                </p>
+              )}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-xs font-bold text-black dark:text-white uppercase tracking-wider">
@@ -4633,22 +4640,10 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-3.5">
                     {portsData.map(port => {
                       const isUsed = !!(port.customer_id || port.customer_service_id || port.status === 'used');
-                      const parsedRx = port.rx_power != null ? parseFloat(port.rx_power) : null;
-                      const rx = (parsedRx !== null && isFinite(parsedRx) && parsedRx !== 0) ? parsedRx : null;
-                      const ontStatusRaw = (port.ont_status || '').toLowerCase().trim();
-                      const isOfflineOrLoss = ontStatusRaw === 'offline' || ontStatusRaw === 'los' || ontStatusRaw === 'down' || ontStatusRaw === 'inactive' || ontStatusRaw === 'poweroff' || (parsedRx !== null && (parsedRx <= -35.0 || parsedRx === 0));
-
-                      let rxText = '—';
-                      let rxTextColor = 'text-black/50 dark:text-white/50 font-medium';
-                      if (isOfflineOrLoss) {
-                        rxText = (rx !== null && rx <= -35.0) || parsedRx === 0 ? `Loss (${(rx || -40.0).toFixed(2)} dBm)` : 'Loss / Offline';
-                        rxTextColor = 'text-rose-600 dark:text-rose-400 font-bold';
-                      } else if (rx !== null) {
-                        rxText = `${rx.toFixed(2)} dBm`;
-                        if (rx >= -25.0) rxTextColor = 'text-emerald-600 dark:text-emerald-400 font-bold';
-                        else if (rx >= -28.0) rxTextColor = 'text-amber-600 dark:text-amber-400 font-bold';
-                        else rxTextColor = 'text-rose-600 dark:text-rose-400 font-bold animate-pulse';
-                      }
+                      const display = onuPresentation(port);
+                      const isOfflineOrLoss = display.online === false;
+                      const rxText = display.rxLabel;
+                      const rxTextColor = display.rxColor;
 
                       const custId = port.customer_number && port.customer_number !== '—'
                         ? port.customer_number
@@ -4665,22 +4660,10 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                               {/* Port Header */}
                               <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-black/20 dark:border-white/20">
                                 <div className="flex items-center gap-2">
-                                  <span className={`text-xs font-bold font-mono ${isUsed ? (isOfflineOrLoss ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400') : 'text-black/50 dark:text-white/50'}`}>
+                                  <span className={`text-xs font-bold font-mono ${isUsed ? display.color : 'text-black/50 dark:text-white/50'}`}>
                                     P{port.port_number}
                                   </span>
-                                  {isUsed && (
-                                    isOfflineOrLoss ? (
-                                      <span className="inline-flex items-center text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900/60">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1 animate-pulse"></span>
-                                        Loss / Offline
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-900/50">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1"></span>
-                                        Online
-                                      </span>
-                                    )
-                                  )}
+                                  {isUsed && <OnuStatus value={port} />}
                                 </div>
                                 {isUsed ? (
                                   (port.sobok_service_status || port.service_status || 'OPEN').toUpperCase() === 'BLOKIR' ? (
@@ -4732,13 +4715,12 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                                     <div className="flex items-baseline gap-1 break-all">
                                       <span className="text-black/60 dark:text-white/60 shrink-0 text-[10px]">IF:</span>
                                       <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                                        {port.olt_port_name
-                                          ? (port.olt_port_name.startsWith('gpon') ? port.olt_port_name : `gpon_olt_${port.olt_port_name}`)
-                                          : (odpDetailData?.display_olt_ref && odpDetailData.display_olt_ref !== '—' ? odpDetailData.display_olt_ref : 'gpon_olt_1/1/1')}
+                                        {display.interfaceLabel}{port.onu_id ? ` · ONU ${port.onu_id}` : ''}
                                       </span>
                                     </div>
                                   </div>
 
+                                  <TelemetryStamp value={port} />
                                   {/* 3. Redaman Optik */}
                                   <div className="pt-2 border-t border-black/20 dark:border-white/20 flex items-center justify-between">
                                     <span className="text-[10px] text-black/70 dark:text-white/70 font-medium">Redaman Rx:</span>

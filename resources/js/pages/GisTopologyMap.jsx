@@ -1,3 +1,4 @@
+import { nodeTelemetryState } from '../lib/onuTelemetry.js';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
@@ -136,18 +137,25 @@ const getNodeEffectiveStatus = (node) => {
     };
   }
 
+  if (nodeTelemetryState(node) === 'unknown') {
+    return {
+      key: 'unknown', label: 'Sebagian data belum terverifikasi',
+      badge: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600',
+      color: '#64748b', pinBg: '#64748b', nameBorder: '#94a3b8', nameText: '#475569',
+      isLoss: false, isTotalLoss: false, isInactive: false, hasRadar: false, hasNoClients: false,
+    };
+  }
+
   // 4. Deteksi LOSS TOTAL (Seluruh Pelanggan pada ODP Loss)
   const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
   const hasGenuineSignal = effectivePower != null && !isNaN(parseFloat(effectivePower)) && parseFloat(effectivePower) > -35.0;
   const isLossKeyword = lowerRange.includes('loss') || lowerRange.includes('los') || lowerRange.includes('rusak');
-  const isPartialLoss = lowerRange.includes('ada los') || lowerRange.includes('sebagian');
+  const isPartialLoss = nodeTelemetryState(node) === 'partial' || lowerRange.includes('ada los') || lowerRange.includes('sebagian');
 
-  const isTotalLoss = isOdp && !hasNoClients && (
-    node.is_loss_total === true ||
-    (node.total_clients > 0 && node.online_clients === 0) ||
-    node.status === 'damaged' ||
-    (isLossKeyword && !isPartialLoss && !hasGenuineSignal)
-  );
+  const isTotalLoss = isOdp && !hasNoClients && (node.telemetry_contract === 1
+    ? nodeTelemetryState(node) === 'offline'
+    : (node.is_loss_total === true || (node.total_clients > 0 && node.online_clients === 0)
+      || node.status === 'damaged' || (isLossKeyword && !isPartialLoss && !hasGenuineSignal)));
 
   // Status LOSS TOTAL (Merah Menyala dengan Radar Ping)
   if (isTotalLoss) {

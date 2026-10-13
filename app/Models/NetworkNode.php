@@ -185,14 +185,17 @@ class NetworkNode extends Model
      */
     public function getAutoDetectedInterfaceAndOlt(): array
     {
-        $liveMap = self::getLiveOnuTelemetryMap();
+        $telemetry = \App\Services\Olt\OnuTelemetryView::forRequest();
         $detectedPorts = [];
         $detectedOlt = null;
 
         if ($this->node_type === 'ODP') {
             $custServices = \Illuminate\Support\Facades\DB::table('network_ports')
                 ->join('customer_services', 'customer_services.id', '=', 'network_ports.customer_service_id')
-                ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
+                ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
+                ->whereNull('customers.deleted_at')
+                ->whereNull('customer_services.deleted_at')
+                ->leftJoin('ont_registrations', fn($join) => $join->on('ont_registrations.customer_service_id', '=', 'customer_services.id')->whereNull('ont_registrations.deleted_at'))
                 ->where('network_ports.node_id', $this->id)
                 ->select('ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'customer_services.onu_serial as svc_serial')
                 ->get();
@@ -200,7 +203,8 @@ class NetworkNode extends Model
             foreach ($custServices as $cs) {
                 $sn = strtolower(trim($cs->onu_serial ?: $cs->svc_serial ?: ''));
                 $mac = strtolower(trim($cs->onu_mac ?: ''));
-                $live = ($sn && isset($liveMap[$sn])) ? $liveMap[$sn] : (($mac && isset($liveMap[$mac])) ? $liveMap[$mac] : null);
+                $view = $telemetry->forNode($this, $sn, $mac);
+                $live = $view['identity_status'] === 'resolved' ? ['port'=>$view['gpon_interface'], '_olt_id'=>$view['olt_id'], '_olt_name'=>$view['olt_name']] : null;
                 if ($live) {
                     $p = $live['port'] ?? ($live['detected_port'] ?? ($live['interface'] ?? null));
                     if ($p && $p !== 'none' && $p !== '—') {
@@ -235,17 +239,22 @@ class NetworkNode extends Model
                 ->toArray();
 
             if (!empty($childIds)) {
+                $children = self::with('parent')->whereIn('id', $childIds)->get()->keyBy('id');
                 $custServices = \Illuminate\Support\Facades\DB::table('network_ports')
                     ->join('customer_services', 'customer_services.id', '=', 'network_ports.customer_service_id')
-                    ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
+                ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
+                ->whereNull('customers.deleted_at')
+                ->whereNull('customer_services.deleted_at')
+                    ->leftJoin('ont_registrations', fn($join) => $join->on('ont_registrations.customer_service_id', '=', 'customer_services.id')->whereNull('ont_registrations.deleted_at'))
                     ->whereIn('network_ports.node_id', $childIds)
-                    ->select('ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'customer_services.onu_serial as svc_serial')
+                    ->select('network_ports.node_id', 'ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'customer_services.onu_serial as svc_serial')
                     ->get();
 
                 foreach ($custServices as $cs) {
                     $sn = strtolower(trim($cs->onu_serial ?: $cs->svc_serial ?: ''));
                     $mac = strtolower(trim($cs->onu_mac ?: ''));
-                    $live = ($sn && isset($liveMap[$sn])) ? $liveMap[$sn] : (($mac && isset($liveMap[$mac])) ? $liveMap[$mac] : null);
+                    $view = $telemetry->forNode($children->get($cs->node_id), $sn, $mac);
+                    $live = $view['identity_status'] === 'resolved' ? ['port'=>$view['gpon_interface'], '_olt_id'=>$view['olt_id'], '_olt_name'=>$view['olt_name']] : null;
                     if ($live) {
                         $p = $live['port'] ?? ($live['detected_port'] ?? ($live['interface'] ?? null));
                         if ($p && $p !== 'none' && $p !== '—') {
