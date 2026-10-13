@@ -236,6 +236,9 @@ class OpticalFaultLocalizationService
                     // JANGAN langsung kirim pemulihan jika hanya 1-2 pelanggan yang pulih!
                     // Wajib verifikasi via SNMP ke OLT bahwa minimal 70% pelanggan sudah ON
                     $probeRec = \App\Services\Olt\FastOpticalProbeService::probeOdpStatus($odpId, null, null, true);
+                    if (empty($probeRec['success'])) {
+                        continue;
+                    }
                     $probeOnline = $probeRec['online_count'] ?? $onlineCount;
                     $probeStates = $probeRec['onu_states'] ?? [];
 

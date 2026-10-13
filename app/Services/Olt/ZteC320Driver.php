@@ -185,22 +185,9 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
         if ($this->snmp && $this->isLive) {
             try {
-                // 1. Port mapping dari ifNames
-                $ifNames = $this->getIfNames();
-                $portMap = [];
-                if (!empty($ifNames)) {
-                    foreach ($ifNames as $oid => $val) {
-                        $idx = substr($oid, strrpos($oid, '.') + 1);
-                        $name = SnmpConnector::parseValue((string)$val);
-                        $portMap[$idx] = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $name);
-                    }
-                }
-
-                // 2. Query tabel ONU GPON ZTE V2.x
-                $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.3') ?: [];
-                if (empty($snHexList)) {
-                    $snHexList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.28.1.1.5') ?: [];
-                }
+                $snPrimary = $this->snmp->walk(ZteOnuIdentityMap::PRIMARY) ?: [];
+                $snSecondary = $this->snmp->walk(ZteOnuIdentityMap::SECONDARY) ?: [];
+                $snHexList = ZteOnuIdentityMap::fromTables($snPrimary, $snSecondary);
 
                 $stateList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.4') ?: [];
                 $modelList = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.2.1.9') ?: [];
@@ -254,25 +241,9 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
                 if (!empty($snHexList)) {
                     $onus = [];
-                    $seenSns = [];
-                    foreach ($snHexList as $oid => $hexVal) {
-                        $parts = explode('.', $oid);
-                        $onuId = end($parts);
-                        $portIfIndex = $parts[count($parts) - 2] ?? '1';
-                        $compositeKey = "{$portIfIndex}_{$onuId}";
-
-                        $sn = $this->parseZteSerialNumber((string)$hexVal);
-                        if (empty($sn) || $sn === '00000000' || $sn === '0000000000000000' || strlen($sn) < 6 || preg_match('/^0+$/', $sn)) {
-                            continue;
-                        }
-
-                        // Deduplikasi Serial Number agar tidak ganda
-                        if (isset($seenSns[$sn])) {
-                            continue;
-                        }
-                        $seenSns[$sn] = true;
-
-                        $portName = $portMap[$portIfIndex] ?? $this->parseIfIndexToPortName($portIfIndex);
+                    foreach ($snHexList as $compositeKey => $sn) {
+                        [$portIfIndex, $onuId] = explode('_', $compositeKey);
+                        $portName = ZteOnuIdentityMap::portFromIfIndex((int)$portIfIndex);
                         $stateCode = $stateMap[$compositeKey] ?? 3;
                         $model = $modelMap[$compositeKey] ?? 'F670L';
                         $desc  = $descMap[$compositeKey] ?? "ONU {$sn}";
@@ -291,6 +262,8 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
                         $onus[] = [
                             '_source'         => 'live_snmp',
+                            'identity_source' => ZteOnuIdentityMap::SOURCE,
+                            'identity_observed_at' => now()->toIso8601String(),
                             'onu_id'          => $onuId,
                             'port'            => $portName,
                             'customer_name'   => $desc,
@@ -367,36 +340,15 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     public function getOnuListByPort(string $portId): array
     {
-        $cleanPortId = strtolower(trim($portId));
-        $normalizedPort = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $cleanPortId);
-
-        // Ekstrak slot dan port number
-        $rawPortStr = str_replace(['gpon-olt_', 'epon-olt_'], '', $normalizedPort);
-        $portParts = explode('/', $rawPortStr);
-        $slotNum = (int)($portParts[1] ?? 1);
-        $portNum = (int)($portParts[2] ?? 1);
+        $ifIndex = ZteOnuIdentityMap::ifIndexFromPort($portId);
+        if ($ifIndex === null) return [];
+        $normalizedPort = ZteOnuIdentityMap::portFromIfIndex($ifIndex);
 
         if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
-                $ifIndex = (0x10 << 24) | ($slotNum << 16) | ($portNum << 8);
-
-                // Gabungkan kedua OID SN resmi ZTE (Utamakan 3.28.1.1.5 yang memuat 100% SN asli)
-                $snHexList1 = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.3.{$ifIndex}") ?: [];
-                $snHexList2 = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.28.1.1.5.{$ifIndex}") ?: [];
-
-                $snHexList = [];
-                foreach ($snHexList2 as $oid => $val) {
-                    $parts = explode('.', $oid);
-                    $onuId = end($parts);
-                    $snHexList[$onuId] = $val;
-                }
-                foreach ($snHexList1 as $oid => $val) {
-                    $parts = explode('.', $oid);
-                    $onuId = end($parts);
-                    if (!isset($snHexList[$onuId])) {
-                        $snHexList[$onuId] = $val;
-                    }
-                }
+                $snPrimary = $this->snmp->walk(ZteOnuIdentityMap::PRIMARY.".{$ifIndex}") ?: [];
+                $snSecondary = $this->snmp->walk(ZteOnuIdentityMap::SECONDARY.".{$ifIndex}") ?: [];
+                $snHexList = ZteOnuIdentityMap::fromTables($snPrimary, $snSecondary);
 
                 if (!empty($snHexList)) {
                     $stateList = $this->snmp->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.{$ifIndex}") ?: [];
@@ -431,12 +383,9 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     }
 
                     $onus = [];
-                    foreach ($snHexList as $onuId => $hexVal) {
-                        $sn = $this->parseZteSerialNumber((string)$hexVal);
-                        if (empty($sn) || $sn === '00000000' || strlen($sn) < 6 || preg_match('/^0+$/', $sn)) {
-                            continue;
-                        }
-
+                    foreach ($snHexList as $key => $sn) {
+                        [$portIfIndex, $onuId] = explode('_', $key);
+                        if ((int)$portIfIndex !== $ifIndex) continue;
                         $stateCode = $stateMap[$onuId] ?? 3;
                         $model = $modelMap[$onuId] ?? 'F670L';
                         $rxRaw = $rxMap[$onuId] ?? null;
@@ -453,6 +402,8 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
                         $onus[] = [
                             '_source'         => 'live_snmp',
+                            'identity_source' => ZteOnuIdentityMap::SOURCE,
+                            'identity_observed_at' => now()->toIso8601String(),
                             'onu_id'          => $onuId,
                             'port'            => $normalizedPort,
                             'customer_name'   => "ONU {$sn}",

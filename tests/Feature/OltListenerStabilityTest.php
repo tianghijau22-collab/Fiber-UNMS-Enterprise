@@ -169,6 +169,26 @@ class OltListenerStabilityTest extends TestCase
         Http::assertNothingSent();
         $this->assertDatabaseCount('ont_registrations', 2);
     }
+
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function test_incomplete_probe_cannot_use_stale_database_to_raise_or_clear_mass_alarm(): void
+    {
+        $fast = \Mockery::mock('alias:App\\Services\\Olt\\FastOpticalProbeService');
+        $fast->shouldReceive('probeOdpStatus')->twice()->andReturn(['success'=>false,'complete'=>false,'unknown_count'=>1,'online_count'=>1,'is_odp_down'=>false]);
+        $fast->shouldNotReceive('instantBulkDbSync');
+        $notifications=\Mockery::mock('alias:App\\Models\\AppNotification');$notifications->shouldNotReceive('notifyAll');
+        app(OdpTopologyCache::class)->get(2);
+        $listener=$this->listener();
+        DB::table('ont_registrations')->update(['status'=>'inactive','rx_power'=>-40]);
+        $listener->correlate(true,false);
+        $this->assertFalse(Cache::has('notif_mass_down_2'));
+        Cache::put('notif_mass_down_2',true,600);
+        DB::table('ont_registrations')->update(['status'=>'active','rx_power'=>-25]);
+        $listener->correlate(false,true);
+        $this->assertTrue(Cache::has('notif_mass_down_2'));
+        Http::assertNothingSent();
+    }
 }
 
 class ListenerStabilityHarness extends ListenOltEvents

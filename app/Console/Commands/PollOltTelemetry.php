@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use App\Services\TelegramService;
 use App\Models\AppNotification;
 use App\Services\Olt\FastOpticalProbeService;
+use App\Services\Olt\ZteOnuIdentityMap;
 use Symfony\Component\Process\Process;
 
 class PollOltTelemetry extends Command
@@ -329,56 +330,15 @@ class PollOltTelemetry extends Command
 
             $walkDuration = round((microtime(true) - $walkStart) * 1000, 1);
 
-            // 4. Cache & Discover Serial Numbers (Diperbarui berkala setiap 24 jam agar tidak membebani walk)
-            $snCacheKey = "olt_bulk_sn_map_{$device->id}";
-            $snMap = Cache::get($snCacheKey, []);
-
-            if (empty($snMap) || count($snMap) < (count($rawStates) * 0.5)) {
-                $parallelSn = FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
-                    'sn1' => "1.3.6.1.4.1.3902.1012.3.50.11.2.1.3",
-                    'sn2' => "1.3.6.1.4.1.3902.1012.3.28.1.1.5",
-                ]);
-                $rawSn1 = $parallelSn['sn1'] ?? [];
-                $rawSn2 = $parallelSn['sn2'] ?? [];
-
-                $snMap = [];
-                foreach ($rawSn2 as $oid => $val) {
-                    $parts = explode('.', $oid);
-                    $onuId = (int)end($parts);
-                    $ifIdx = (int)$parts[count($parts) - 2];
-                    $cleanSn = FastOpticalProbeService::parseZteSerialNumber((string)$val);
-                    if ($cleanSn && strlen($cleanSn) >= 6) {
-                        $snMap["{$ifIdx}_{$onuId}"] = $cleanSn;
-                    }
-                }
-                foreach ($rawSn1 as $oid => $val) {
-                    $parts = explode('.', $oid);
-                    $onuId = (int)end($parts);
-                    $ifIdx = (int)$parts[count($parts) - 2];
-                    if (!isset($snMap["{$ifIdx}_{$onuId}"])) {
-                        $cleanSn = FastOpticalProbeService::parseZteSerialNumber((string)$val);
-                        if ($cleanSn && strlen($cleanSn) >= 6) {
-                            $snMap["{$ifIdx}_{$onuId}"] = $cleanSn;
-                        }
-                    }
-                }
-
-                // Tambahkan serial dari snapshot database sebelumnya jika ada yang belum terbaca
-                $prevSnapshotOnus = $existingSnapshot['onu_list'] ?? [];
-                foreach ($prevSnapshotOnus as $so) {
-                    $soSn = strtoupper(trim((string)($so['serial_number'] ?? ($so['onu_mac'] ?? ''))));
-                    $soPort = $so['port'] ?? '';
-                    $soId = (int)($so['onu_id'] ?? 0);
-                    if ($soSn && $soPort && $soId > 0) {
-                        $soIfIndex = FastOpticalProbeService::calculateIfIndex($soPort);
-                        if (!isset($snMap["{$soIfIndex}_{$soId}"])) {
-                            $snMap["{$soIfIndex}_{$soId}"] = $soSn;
-                        }
-                    }
-                }
-
-                Cache::put($snCacheKey, $snMap, 600); // 10 menit TTL
-            }
+            // Hardware-only identity cache; previous snapshots cannot seed ONU IDs.
+            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() =>
+                FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
+                    'sn1' => ZteOnuIdentityMap::PRIMARY,
+                    'sn2' => ZteOnuIdentityMap::SECONDARY,
+                ])
+            );
+            $snMap = $snCache['entries'];
+            $snObservedAt = $snCache['observed_at'];
 
             // 5. Normalisasi Data Status & Redaman
             $stateMap = [];
@@ -482,6 +442,8 @@ class PollOltTelemetry extends Command
 
                 $onuItem = [
                     '_source'         => 'live_snmp',
+                    'identity_source' => ZteOnuIdentityMap::SOURCE,
+                    'identity_observed_at' => $snObservedAt,
                     'onu_id'          => (string)$onuId,
                     'port'            => $portName,
                     'customer_name'   => "ONU {$sn}",
@@ -733,57 +695,15 @@ class PollOltTelemetry extends Command
 
             $walkDuration = round((microtime(true) - $walkStart) * 1000, 1);
 
-            // 4. Cache & Discover Serial Numbers (Diperbarui berkala setiap 24 jam agar tidak membebani walk)
-            $snCacheKey = "olt_bulk_sn_map_{$device->id}";
-            $snMap = Cache::get($snCacheKey, []);
-
-            // Jika cache SN kosong atau perlu refresh, lakukan SNMP bulk walk pada subtree Serial Number
-            if (empty($snMap) || count($snMap) < (count($rawStates) * 0.5)) {
-                $parallelSn = FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
-                    'sn1' => "1.3.6.1.4.1.3902.1012.3.50.11.2.1.3",
-                    'sn2' => "1.3.6.1.4.1.3902.1012.3.28.1.1.5",
-                ], 50, 12);
-                $rawSn1 = $parallelSn['sn1'] ?? [];
-                $rawSn2 = $parallelSn['sn2'] ?? [];
-
-                $snMap = [];
-                foreach ($rawSn2 as $oid => $val) {
-                    $parts = explode('.', $oid);
-                    $onuId = (int)end($parts);
-                    $ifIdx = (int)$parts[count($parts) - 2];
-                    $cleanSn = FastOpticalProbeService::parseZteSerialNumber((string)$val);
-                    if ($cleanSn && strlen($cleanSn) >= 6) {
-                        $snMap["{$ifIdx}_{$onuId}"] = $cleanSn;
-                    }
-                }
-                foreach ($rawSn1 as $oid => $val) {
-                    $parts = explode('.', $oid);
-                    $onuId = (int)end($parts);
-                    $ifIdx = (int)$parts[count($parts) - 2];
-                    if (!isset($snMap["{$ifIdx}_{$onuId}"])) {
-                        $cleanSn = FastOpticalProbeService::parseZteSerialNumber((string)$val);
-                        if ($cleanSn && strlen($cleanSn) >= 6) {
-                            $snMap["{$ifIdx}_{$onuId}"] = $cleanSn;
-                        }
-                    }
-                }
-
-                // Tambahkan serial dari snapshot database sebelumnya jika ada yang belum terbaca
-                $prevSnapshotOnus = $existingSnapshot['onu_list'] ?? [];
-                foreach ($prevSnapshotOnus as $so) {
-                    $soSn = strtoupper(trim((string)($so['serial_number'] ?? ($so['onu_mac'] ?? ''))));
-                    $soPort = $so['port'] ?? '';
-                    $soId = (int)($so['onu_id'] ?? 0);
-                    if ($soSn && $soPort && $soId > 0) {
-                        $soIfIndex = FastOpticalProbeService::calculateIfIndex($soPort);
-                        if (!isset($snMap["{$soIfIndex}_{$soId}"])) {
-                            $snMap["{$soIfIndex}_{$soId}"] = $soSn;
-                        }
-                    }
-                }
-
-                Cache::put($snCacheKey, $snMap, 600); // 10 menit TTL
-            }
+            // Hardware-only identity cache; previous snapshots cannot seed ONU IDs.
+            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() =>
+                FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
+                    'sn1' => ZteOnuIdentityMap::PRIMARY,
+                    'sn2' => ZteOnuIdentityMap::SECONDARY,
+                ], 50, 12)
+            );
+            $snMap = $snCache['entries'];
+            $snObservedAt = $snCache['observed_at'];
 
             // 5. Normalisasi Data Status, Rx Power, dan Tx Power
             $stateMap = [];
@@ -889,6 +809,8 @@ class PollOltTelemetry extends Command
 
                 $onuItem = [
                     '_source'         => 'live_snmp',
+                    'identity_source' => ZteOnuIdentityMap::SOURCE,
+                    'identity_observed_at' => $snObservedAt,
                     'onu_id'          => (string)$onuId,
                     'port'            => $portName,
                     'customer_name'   => "ONU {$sn}",

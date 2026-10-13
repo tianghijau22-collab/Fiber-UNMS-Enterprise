@@ -12,6 +12,7 @@ use App\Models\CustomerService;
 use App\Models\AuditLog;
 use App\Services\Olt\ZteC300Driver;
 use App\Services\Olt\ZteC320Driver;
+use App\Services\Olt\ZteOnuIdentityMap;
 use App\Services\Olt\HuaweiDriver;
 use App\Services\Olt\VsolDriver;
 use App\Services\Olt\HiosoDriver;
@@ -492,9 +493,12 @@ class OltController extends Controller
         $unregisteredOnus = [];
         $matchedOntIds    = [];
 
-        // Buat map pencarian live SNMP berdasarkan Serial Number & MAC Address
+        // ZTE GPON hardware identity is separate from the customer/ODP topology.
+        $usesZteIdentity = $device && $device->connection_mode === 'live'
+            && str_contains(strtolower((string)($device->vendor_key ?: $device->vendor)), 'zte');
+        $identityRows = $usesZteIdentity ? array_values(ZteOnuIdentityMap::uniqueRows($driverOnuList)) : $driverOnuList;
         $driverOnuMap = [];
-        foreach ($driverOnuList as $onu) {
+        foreach ($identityRows as $onu) {
             $sn  = strtoupper(trim((string)($onu['serial_number'] ?? '')));
             $mac = strtoupper(trim((string)($onu['mac_address'] ?? ($onu['onu_mac'] ?? ''))));
             if (!empty($sn)) $driverOnuMap[$sn] = $onu;
@@ -517,17 +521,10 @@ class OltController extends Controller
             $customerName = $ont->customerService?->customer?->name ?: ('Pelanggan #' . $ont->id);
             $customerCode = $ont->customerService?->customer?->customer_number ?: ('CUST-' . $ont->id);
 
-            // Prioritas resolusi port:
-            // 1. Live port dari OLT driver SNMP ($liveOnu['port'])
-            // 2. Port ODP node ($odpNode->olt_port_ref)
-            // 3. Port Parent ODC node ($odpNode->parent->olt_port_ref)
-            // 4. Ont oltPort ($ont->oltPort->node->olt_port_ref)
-            // 5. Default null (JANGAN pernah 'gpon-olt_1/1/1'!)
-            $odpNode  = $ont->customerService?->networkPort?->node;
-            $nodePort = $liveOnu['port'] ?? ($odpNode?->olt_port_ref ?: ($odpNode?->parent?->olt_port_ref ?: ($ont->oltPort?->node?->olt_port_ref ?: null)));
-            if ($nodePort === 'gpon-olt_1/1/1') {
-                $nodePort = null;
-            }
+            $odpNode = $ont->customerService?->networkPort?->node;
+            $topologyPort = $odpNode?->olt_port_ref ?: ($odpNode?->parent?->olt_port_ref ?: ($ont->oltPort?->node?->olt_port_ref ?: null));
+            // An ODP may contain customers on different PONs. Its uplink is not an ONU identity.
+            $nodePort = $liveOnu['port'] ?? ($usesZteIdentity ? null : $topologyPort);
             $portClean = $nodePort ? str_replace('gpon_olt_', 'gpon-olt_', $nodePort) : null;
             $finalPort = $portClean ? (explode(',', $portClean)[0] ?? $portClean) : null;
 
@@ -550,7 +547,11 @@ class OltController extends Controller
             $registeredOnus[] = [
                 '_source'         => $liveOnu ? 'live_snmp' : 'database',
                 'ont_id'          => $ont->id,
-                'onu_id'          => $liveOnu['onu_id'] ?? ($liveOnu['onu_index'] ?? (string)$ont->id),
+                'onu_id'          => $liveOnu['onu_id'] ?? ($liveOnu['onu_index'] ?? null),
+                'identity_source' => $liveOnu['identity_source'] ?? null,
+                'identity_observed_at' => $liveOnu['identity_observed_at'] ?? null,
+                'identity_status' => $liveOnu ? 'resolved' : 'unresolved',
+                'topology_port'   => $topologyPort,
                 'port'            => $finalPort,
                 'customer_id'     => $ont->customerService?->customer?->id,
                 'customer_name'   => $customerName,
@@ -568,7 +569,7 @@ class OltController extends Controller
 
         // Kategori 2: ONU Fisik dari OLT driver yang BELUM ada di DB UNMS
         $seenUnregSns = [];
-        foreach ($driverOnuList as $onu) {
+        foreach ($identityRows as $onu) {
             $sn  = strtoupper(trim((string)($onu['serial_number'] ?? '')));
             $mac = strtoupper(trim((string)($onu['mac_address'] ?? ($onu['onu_mac'] ?? ''))));
 
@@ -584,15 +585,16 @@ class OltController extends Controller
             if (!$isRegistered) {
                 $seenUnregSns[$sn] = true;
                 $unregPort = $onu['port'] ?? ($onu['detected_port'] ?? null);
-                if ($unregPort === 'gpon-olt_1/1/1') $unregPort = null;
                 $unregisteredOnus[] = [
                     '_source'                  => 'live_snmp',
+                    'identity_source'          => $onu['identity_source'] ?? null,
+                    'identity_observed_at'     => $onu['identity_observed_at'] ?? null,
                     'onu_name'                 => $onu['onu_name'] ?? ($onu['customer_name'] ?? ('ONU ' . ($onu['serial_number'] ?? ''))),
                     'serial_number'            => $onu['serial_number'] ?? null,
                     'mac_address'              => $onu['mac_address'] ?? ($onu['onu_mac'] ?? ($onu['serial_number'] ?? null)),
                     'detected_port'            => $unregPort,
-                    'onu_index'                => $onu['onu_id'] ?? ($onu['onu_index'] ?? '1'),
-                    'onu_id'                   => $onu['onu_id'] ?? ($onu['onu_index'] ?? '1'),
+                    'onu_index'                => $onu['onu_id'] ?? ($onu['onu_index'] ?? null),
+                    'onu_id'                   => $onu['onu_id'] ?? ($onu['onu_index'] ?? null),
                     'vendor_model'             => $onu['vendor_model'] ?? ($onu['onu_type'] ?? 'HGU EPON/GPON'),
                     'status'                   => $onu['status'] ?? 'Online',
                     'rx_power'                 => isset($onu['rx_power']) ? (float)$onu['rx_power'] : null,

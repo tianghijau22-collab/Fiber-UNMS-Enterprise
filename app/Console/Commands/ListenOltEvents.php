@@ -1421,34 +1421,11 @@ class ListenOltEvents extends Command
             // Jangan menunggu pasif sinyal trap berikutnya dari modem lain yang belum tentu dikirim OLT!
             $probeResult = FastOpticalProbeService::probeOdpStatus($odpId, $olt, $standardPort);
             
-            $isOdpDown = false;
-            $downCount = 0;
-            $probeStates = [];
-
-            if (!empty($probeResult['success'])) {
-                $isOdpDown = $probeResult['is_odp_down'];
-                $downCount = $probeResult['down_count'];
-                $probeStates = $probeResult['onu_states'] ?? [];
-            } else {
-                // Fallback DB count jika probe OLT tidak merespons
-                $downOnus = DB::table('ont_registrations')
-                    ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
-                    ->join('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
-                    ->where('network_ports.node_id', $odpId)
-                    ->where(function ($q) {
-                        $q->where('ont_registrations.status', '!=', 'active')
-                          ->orWhereNull('ont_registrations.rx_power')
-                          ->orWhere('ont_registrations.rx_power', '<=', -32.0);
-                    })
-                    ->select('ont_registrations.onu_serial', 'ont_registrations.onu_mac')
-                    ->get();
-
-                $downCount = $downOnus->count();
-                $pctDownFallback = $totalOnus > 0 ? round(($downCount / $totalOnus) * 100.0, 1) : 0;
-                $onlineFallback = max(0, $totalOnus - $downCount);
-                $isOdpDown = ($totalOnus >= 2 && $downCount === $totalOnus)
-                          || ($totalOnus >= 4 && $pctDownFallback >= 80.0 && $onlineFallback <= 3);
-            }
+            // Missing/ambiguous telemetry is not evidence for a mass outage.
+            if (empty($probeResult['success'])) return;
+            $isOdpDown = $probeResult['is_odp_down'];
+            $downCount = $probeResult['down_count'];
+            $probeStates = $probeResult['onu_states'] ?? [];
 
             if ($isOdpDown && !Cache::has($massKey)) {
                 Cache::put($massKey, true, now()->addHours(12));
@@ -1535,16 +1512,8 @@ class ListenOltEvents extends Command
                 $onlineCount = $probeResult['online_count'] ?? 0;
                 $probeStates = $probeResult['onu_states'] ?? [];
 
-                if (empty($probeResult['success'])) {
-                    // Fallback DB count jika probe SNMP gagal
-                    $onlineCount = DB::table('ont_registrations')
-                        ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
-                        ->join('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
-                        ->where('network_ports.node_id', $odpId)
-                        ->where('ont_registrations.status', 'active')
-                        ->where('ont_registrations.rx_power', '>', -32.0)
-                        ->count();
-                }
+                // Preserve the existing alarm until complete hardware verification.
+                if (empty($probeResult['success'])) return;
 
                 if ($onlineCount >= (int)ceil($totalOnus * 0.70)) {
                     Cache::forget($massKey);
