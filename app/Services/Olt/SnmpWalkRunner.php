@@ -26,10 +26,10 @@ class SnmpWalkRunner
         return ['rows'=>$conflict ? []:$rows,'conflict'=>$conflict];
     }
 
-    public function walk(OltDevice $olt,array $oids,int $repetitions=10,float $timeout=2,int $retries=1,float $budget=35): array
+    public function walk(OltDevice $olt,array $oids,int $repetitions=10,float $timeout=5,int $retries=2,float $budget=35): array
     {
         $started=OnuTelemetrySample::timestamp();$start=microtime(true);$budget=max(0.1,min(45,$budget));
-        $repetitions=max(1,min(10,$repetitions));$timeout=max(0.2,min(3,$timeout));$retries=max(0,min(1,$retries));
+        $repetitions=max(1,min(10,$repetitions));$timeout=max(0.2,min(5.0,$timeout));$retries=max(0,min(2,$retries));
         $tables=[];$reports=[];$jobs=[];$buffers=[];$errors=[];$oversize=[];
         $valid=filter_var($olt->ip_address,FILTER_VALIDATE_IP,FILTER_FLAG_IPV4)
             && in_array(strtolower((string)($olt->snmp_version ?: 'v2c')),['v2','v2c'],true) && count($oids)<=4;

@@ -57,9 +57,9 @@ class SnmpAcquisitionTest extends TestCase
         $r=new class($batches) extends SnmpWalkRunner {
             public array $calls=[];
             public function __construct(private array $batches){}
-            public function walk(OltDevice $olt,array $oids,int $repetitions=10,float $timeout=2,int $retries=1,float $budget=35): array
+            public function walk(OltDevice $olt,array $oids,int $repetitions=10,float $timeout=5,int $retries=2,float $budget=35): array
             {
-                $this->calls[]=compact('oids','repetitions','budget');$b=array_shift($this->batches);
+                $this->calls[]=compact('oids','repetitions','timeout','retries','budget');$b=array_shift($this->batches);
                 if(!isset($oids['states']) && !isset($oids['rx'])) {
                     $tables=[];$reports=[];foreach($oids as $k=>$root) {
                         $tables[$k]=array_filter($b['tables']['rx'],fn($oid)=>str_starts_with($oid,$root.'.'),ARRAY_FILTER_USE_KEY);
@@ -74,6 +74,7 @@ class SnmpAcquisitionTest extends TestCase
         $r=$this->runner([$this->batch(10,3),$this->batch(10,10)]);
         $out=Probe::readStateRxTables($this->olt());$a=$out['_acquisition'];
         $this->assertSame(2,count($r->calls));$this->assertSame(5,$r->calls[1]['repetitions']);$this->assertLessThanOrEqual(20.0,$r->calls[1]['budget']);
+        $this->assertSame(5.0,$r->calls[0]['timeout']);$this->assertSame(2,$r->calls[0]['retries']);
         $this->assertSame(['rx_'.Identity::ifIndexFromPort('1/1/15')],array_keys($r->calls[1]['oids']));
         $this->assertSame(7,$a['coverage']['missing_rx_before']);$this->assertSame(0,$a['coverage']['missing_rx_after']);$this->assertTrue($a['complete']);
     }
@@ -114,7 +115,8 @@ class SnmpAcquisitionTest extends TestCase
         $this->assertFalse($out['reports']['a']['complete']);$this->assertSame('nonzero_exit',$out['reports']['a']['reason']);
         $this->assertStringNotContainsString('private fixture',json_encode($out));
         $r=$this->child('echo "__OID__.1 = INTEGER: 3\n";usleep(2000000);');
-        $out=$r->walk($this->olt(),['a'=>'1.3.6.1.4.1.999'],10,1,0,0.15);
+        $out=$r->walk($this->olt(),['a'=>'1.3.6.1.4.1.999'],50,15,9,0.15);
+        $this->assertSame(10,$out['parameters']['repetitions']);$this->assertSame(5.0,$out['parameters']['timeout']);$this->assertSame(2,$out['parameters']['retries']);
         $this->assertFalse($out['reports']['a']['complete']);$this->assertSame('deadline',$out['reports']['a']['reason']);$this->assertLessThan(1500,$out['duration_ms']);
     }
     public function test_parser_rejects_outside_subtree_and_conflicting_values(): void

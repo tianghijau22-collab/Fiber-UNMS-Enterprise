@@ -104,7 +104,7 @@ class FastOpticalProbeService
 
     public static function executeParallelSnmpBulkWalk(OltDevice $olt,array $oids,?int $maxRepetitions=null,?int $timeoutSec=null,?int $retries=null): array
     {
-        $batch=app(SnmpWalkRunner::class)->walk($olt,$oids,$maxRepetitions ?? 10,$timeoutSec ?? 2,$retries ?? 1);
+        $batch=app(SnmpWalkRunner::class)->walk($olt,$oids,$maxRepetitions ?? 10,$timeoutSec ?? 5,$retries ?? 2);
         self::recordWalk($olt,$batch);return $batch['tables'];
     }
 
@@ -125,7 +125,7 @@ class FastOpticalProbeService
     {
         $state='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$rx='1.3.6.1.4.1.3902.1012.3.50.12.1.1.10';
         $runner=app(SnmpWalkRunner::class);
-        $b=$runner->walk($olt,['states'=>$state,'rx'=>$rx],$maxRepetitions ?? 10,$timeoutSec ?? 2,1);
+        $b=$runner->walk($olt,['states'=>$state,'rx'=>$rx],$maxRepetitions ?? 10,$timeoutSec ?? 5,2);
         $online=[];
         foreach($b['tables']['states'] ?? [] as $oid=>$value) {
             if(preg_match('/^'.preg_quote($state,'/').'\.([0-9]+)\.([0-9]+)$/',$oid,$m)
