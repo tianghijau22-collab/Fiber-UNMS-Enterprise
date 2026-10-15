@@ -18,6 +18,12 @@ use Tests\TestCase;
 
 class OltMonitoringHealthTest extends TestCase
 {
+    public function test_incomplete_transport_report_prevents_success_even_when_received_rows_look_complete(): void
+    {
+        $d=$this->olt([$this->row()]);$o=$this->observer();$o->begin($d,'slot_parallel');
+        $this->assertSame('PARTIAL',$o->read(1,[$this->row()],1,[],['complete'=>false,'coverage'=>['missing_rx_after'=>0]]));
+        $this->assertSame('incomplete_snmp_walk',Cache::get('olt_poll_health_v1_1')['reason']);
+    }
     private function at(int $ago=0): string {return now()->subSeconds($ago)->format('Y-m-d\TH:i:s.uP');}
     private function network(bool $up=true): array
     {

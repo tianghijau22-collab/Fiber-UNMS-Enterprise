@@ -334,10 +334,7 @@ class PollOltTelemetry extends Command
 
             // 3. Ultra-Fast Parallel SNMP Bulk Walk (Menjalankan Phase State & Rx Power simultan dalam proses terpisah)
             // Menggunakan adaptive auto-tuning (Auto Failover/Fallback berbasis latensi riil)
-            $parallelWalks = FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
-                'states' => "1.3.6.1.4.1.3902.1012.3.50.11.2.1.4",
-                'rx'     => "1.3.6.1.4.1.3902.1012.3.50.12.1.1.10",
-            ]);
+            $parallelWalks = FastOpticalProbeService::readStateRxTables($device);
 
             $rawStates   = $parallelWalks['states'] ?? [];
             $rawRxPowers = $parallelWalks['rx'] ?? [];
@@ -345,11 +342,7 @@ class PollOltTelemetry extends Command
             $walkDuration = round((microtime(true) - $walkStart) * 1000, 1);
 
             // Hardware-only identity cache; previous snapshots cannot seed ONU IDs.
-            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() =>
-                FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
-                    'sn1' => ZteOnuIdentityMap::PRIMARY,
-                    'sn2' => ZteOnuIdentityMap::SECONDARY,
-                ])
+            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() => FastOpticalProbeService::readIdentityTables($device)
             );
             $snMap = $snCache['entries'];
             $snObservedAt = $snCache['observed_at'];
@@ -466,7 +459,7 @@ class PollOltTelemetry extends Command
 
             // Accept only ownership-scoped, ordered hardware observations.
             $writeResult=app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,array_values($physicalOnuMap),$sampleStartedAt,'poll',true,array_keys($massDownPorts));
-            $readStatus=$this->pollHealth?->read($deviceId,array_values($physicalOnuMap),count($rawStates),$writeResult) ?? 'UNKNOWN';
+            $readStatus=$this->pollHealth?->read($deviceId,array_values($physicalOnuMap),count($rawStates),$writeResult,$parallelWalks['_acquisition'] ?? []) ?? 'UNKNOWN';
 
             // 9. Simpan Snapshot Data Lengkap ke Database OLT
             $existingUncfg = $existingSnapshot['unconfigured_onus'] ?? [];
@@ -590,10 +583,7 @@ class PollOltTelemetry extends Command
             $walkStart = microtime(true);
 
             // 3. Ultra-Fast Parallel SNMP Bulk Walk (Menjalankan Phase State & Rx Power simultan dalam proses terpisah)
-            $parallelWalks = FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
-                'states' => "1.3.6.1.4.1.3902.1012.3.50.11.2.1.4",
-                'rx'     => "1.3.6.1.4.1.3902.1012.3.50.12.1.1.10",
-            ], 50, 15);
+            $parallelWalks = FastOpticalProbeService::readStateRxTables($device);
 
             $rawStates   = $parallelWalks['states'] ?? [];
             $rawRxPowers = $parallelWalks['rx'] ?? [];
@@ -601,11 +591,7 @@ class PollOltTelemetry extends Command
             $walkDuration = round((microtime(true) - $walkStart) * 1000, 1);
 
             // Hardware-only identity cache; previous snapshots cannot seed ONU IDs.
-            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() =>
-                FastOpticalProbeService::executeParallelSnmpBulkWalk($device, [
-                    'sn1' => ZteOnuIdentityMap::PRIMARY,
-                    'sn2' => ZteOnuIdentityMap::SECONDARY,
-                ], 50, 12)
+            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() => FastOpticalProbeService::readIdentityTables($device)
             );
             $snMap = $snCache['entries'];
             $snObservedAt = $snCache['observed_at'];
@@ -724,7 +710,7 @@ class PollOltTelemetry extends Command
 
             // Accept only ownership-scoped, ordered hardware observations.
             $writeResult=app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,array_values($physicalOnuMap),$sampleStartedAt,'poll',true,array_keys($massDownPorts));
-            $readStatus=$this->pollHealth?->read($deviceId,array_values($physicalOnuMap),count($rawStates),$writeResult) ?? 'UNKNOWN';
+            $readStatus=$this->pollHealth?->read($deviceId,array_values($physicalOnuMap),count($rawStates),$writeResult,$parallelWalks['_acquisition'] ?? []) ?? 'UNKNOWN';
 
             // 9. Simpan Snapshot Data Lengkap ke Database OLT
             $existingUncfg = $existingSnapshot['unconfigured_onus'] ?? [];

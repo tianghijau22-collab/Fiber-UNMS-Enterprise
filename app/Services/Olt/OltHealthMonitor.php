@@ -141,7 +141,7 @@ class OltHealthMonitor
             'db_registered_total'=>count($snapshot['onu_list'] ?? []),'db_unregistered_total'=>count($snapshot['unconfigured_onus'] ?? []),
             'status'=>$result,'connection'=>['status'=>$connection,'checked_at'=>$probe['checked_at'] ?? null,'age_seconds'=>$age,
                 'latency_ms'=>$connection==='RESPONDING' ? ($probe['latency_ms'] ?? null):null,'route_status'=>$route,'reason'=>$route==='UNAVAILABLE' ? 'vpn_or_route_missing':($probe['reason'] ?? null)],
-            'poll'=>array_intersect_key($attempt,array_flip(['attempt_id','phase','mode','started_at','finished_at','duration_ms','result','reason','rows_read','known_states','rx_available','scope','return_code'])),
+            'poll'=>array_intersect_key($attempt,array_flip(['attempt_id','phase','mode','started_at','finished_at','duration_ms','result','reason','rows_read','known_states','rx_available','scope','return_code','walk_reports'])),
             'data_health'=>self::data($snapshot,$now,str_contains(strtolower((string)($device->vendor_key ?: $device->vendor)),'zte')),
             'querying_status'=>$phase==='READING' ? 'SYNCING':$result,
             'query_elapsed_seconds'=>$phase==='READING' ? self::age($attempt['started_at'] ?? null,$now):null];

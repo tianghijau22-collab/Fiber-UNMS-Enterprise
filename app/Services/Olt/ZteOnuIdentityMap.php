@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Cache;
 /** Hardware identities for the ZTE GPON serial tables used by this deployment. */
 class ZteOnuIdentityMap
 {
+    public const REFRESH_AFTER = 300;
+    public const MAX_AGE = 600;
     public const PRIMARY = '1.3.6.1.4.1.3902.1012.3.50.11.2.1.3';
     public const SECONDARY = '1.3.6.1.4.1.3902.1012.3.28.1.1.5';
     public const SOURCE = 'snmp_serial_table_v2';
@@ -75,7 +77,7 @@ class ZteOnuIdentityMap
     {
         if (!is_array($cache) || ($cache['schema'] ?? null) !== 2 || !is_array($cache['entries'] ?? null)) return [];
         $time = is_string($cache['observed_at'] ?? null) ? strtotime($cache['observed_at']) : false;
-        if ($time === false || $time > time() + 5 || $time < time() - 600) return [];
+        if ($time === false || $time > time() + 5 || $time < time() - self::MAX_AGE) return [];
         $seen = [];
         foreach ($cache['entries'] as $key => $sn) {
             if (!is_string($key) || !self::validKey($key) || !is_string($sn) || !self::validSerial($sn) || isset($seen[$sn])) return [];
@@ -90,16 +92,32 @@ class ZteOnuIdentityMap
         $key = self::cacheKey($oltId);
         $cache = Cache::get($key);
         $entries = self::cachedEntries($cache);
-        if ($entries !== [] && count($entries) >= $stateCount * 0.5) return $cache;
-
-        $tables = $readTables();
-        $cache = [
-            'schema' => 2,
-            'observed_at' => now()->toIso8601String(),
-            'entries' => self::fromTables($tables['sn1'] ?? [], $tables['sn2'] ?? []),
-        ];
-        Cache::put($key, $cache, 600);
-        return $cache;
+        $age=is_array($cache) ? OltHealthMonitor::age($cache['observed_at'] ?? null):null;
+        $usable=$entries!==[] && count($entries)>=max(1,$stateCount*0.8);
+        if($usable && $age!==null && $age<self::REFRESH_AFTER)return $cache;
+        $empty=['schema'=>2,'observed_at'=>null,'entries'=>[]];
+        if(Cache::has($key.'_refresh_backoff'))return $usable ? $cache:$empty;
+        $result=Cache::lock($key.'_refresh_lock',50)->get(function()use($key,$stateCount,$readTables,$cache,$usable,$empty){
+            $latest=Cache::get($key);$latestEntries=self::cachedEntries($latest);
+            if($latestEntries && count($latestEntries)>=max(1,$stateCount*0.8)
+                && OltHealthMonitor::age($latest['observed_at'])<self::REFRESH_AFTER)return $latest;
+            $at=OnuTelemetrySample::timestamp();
+            try {$tables=$readTables();} catch(\Throwable) {$tables=[];}
+            $new=self::fromTables($tables['sn1'] ?? [],$tables['sn2'] ?? []);
+            $accepted=($tables['_complete'] ?? true)===true && $new!==[] && count($new)>=max(1,$stateCount*0.8);
+            Cache::put($key.'_refresh_health',['attempted_at'=>$at,'finished_at'=>OnuTelemetrySample::timestamp(),
+                'previous_age'=>is_array($cache) ? OltHealthMonitor::age($cache['observed_at'] ?? null,OnuTelemetrySample::epoch($at)):null,
+                'previous_observed_at'=>is_array($cache) ? ($cache['observed_at'] ?? null):null,
+                'accepted'=>$accepted,'entries'=>count($new),'complete'=>($tables['_complete'] ?? true)===true],1800);
+            if($accepted) {
+                $value=['schema'=>2,'observed_at'=>$at,'entries'=>$new];
+                Cache::put($key,$value,self::MAX_AGE);Cache::forget($key.'_refresh_backoff');return $value;
+            }
+            Cache::put($key.'_refresh_backoff',true,30);
+            // A failed refresh cannot extend or relabel the previous observation.
+            return $usable && self::cachedEntries($cache)!==[] ? $cache:$empty;
+        });
+        return is_array($result) ? $result:($usable ? $cache:$empty);
     }
 
     /** Used when partitioning snapshots: topology records cannot establish ONU identity. */

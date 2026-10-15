@@ -97,144 +97,72 @@ class FastOpticalProbeService
         ];
     }
 
-    /**
-     * Eksekusi SNMP Bulk Walk berkecepatan tinggi menggunakan CLI snmpbulkwalk (dengan fallback ke PHP SNMP session)
-     */
-    public static function executeSnmpBulkWalk(OltDevice $olt, string $oid, ?int $maxRepetitions = null, ?int $timeoutSec = null, ?int $retries = null): array
+    public static function executeSnmpBulkWalk(OltDevice $olt,string $oid,?int $maxRepetitions=null,?int $timeoutSec=null,?int $retries=null): array
     {
-        $ip = $olt->ip_address;
-        $community = $olt->getEffectiveCommunity() ?: 'public';
-        $port = $olt->snmp_port ?: 161;
-
-        $profile = self::getOptimalSnmpParameters($olt);
-        $maxRepetitions = $maxRepetitions ?: $profile['max_repetitions'];
-        $timeoutSec     = $timeoutSec ?: $profile['timeout_sec'];
-        $retries        = $retries !== null ? $retries : $profile['retries'];
-
-        // Cek apakah snmpbulkwalk CLI tersedia di server Linux
-        static $hasBulkWalk = null;
-        if ($hasBulkWalk === null) {
-            $hasBulkWalk = (PHP_OS_FAMILY !== 'Windows' && !empty(shell_exec('which snmpbulkwalk 2>/dev/null')));
-        }
-
-        if ($hasBulkWalk) {
-            $cmd = "snmpbulkwalk -v2c -c " . escapeshellarg($community) . " -t {$timeoutSec} -r {$retries} -Cr{$maxRepetitions} -On " . escapeshellarg("{$ip}:{$port}") . " " . escapeshellarg($oid) . " 2>/dev/null";
-            $output = @shell_exec($cmd);
-            if ($output) {
-                $lines = explode("\n", trim($output));
-                $results = [];
-                foreach ($lines as $line) {
-                    $line = trim($line);
-                    if (!$line || str_contains($line, 'No Such Object') || str_contains($line, 'No Such Instance')) {
-                        continue;
-                    }
-                    $parts = explode('=', $line, 2);
-                    if (count($parts) === 2) {
-                        $resOid = ltrim(trim($parts[0]), '.');
-                        $resVal = trim($parts[1]);
-                        $results[$resOid] = $resVal;
-                    }
-                }
-                if (!empty($results)) {
-                    return $results;
-                }
-            }
-        }
-
-        // Fallback ke PHP SNMP extension
-        $session = self::getSnmpSession($olt, $timeoutSec * 1000, $retries);
-        if ($session) {
-            try {
-                return @$session->walk($oid) ?: [];
-            } catch (\Throwable $e) {
-                return [];
-            }
-        }
-
-        return [];
+        return self::executeParallelSnmpBulkWalk($olt,['walk'=>$oid],$maxRepetitions,$timeoutSec,$retries)['walk'] ?? [];
     }
 
-    /**
-     * Eksekusi SNMP Bulk Walk secara PARALEL (Simultan) untuk beberapa OID sekaligus
-     * Mengurangi waktu total dari T1 + T2 menjadi MAX(T1, T2).
-     */
-    public static function executeParallelSnmpBulkWalk(OltDevice $olt, array $oids, ?int $maxRepetitions = null, ?int $timeoutSec = null, ?int $retries = null): array
+    public static function executeParallelSnmpBulkWalk(OltDevice $olt,array $oids,?int $maxRepetitions=null,?int $timeoutSec=null,?int $retries=null): array
     {
-        $ip = $olt->ip_address;
-        $community = $olt->getEffectiveCommunity() ?: 'public';
-        $port = $olt->snmp_port ?: 161;
+        $batch=app(SnmpWalkRunner::class)->walk($olt,$oids,$maxRepetitions ?? 10,$timeoutSec ?? 2,$retries ?? 1);
+        self::recordWalk($olt,$batch);return $batch['tables'];
+    }
 
-        $profile = self::getOptimalSnmpParameters($olt);
-        $maxRepetitions = $maxRepetitions ?: $profile['max_repetitions'];
-        $timeoutSec     = $timeoutSec ?: $profile['timeout_sec'];
-        $retries        = $retries !== null ? $retries : $profile['retries'];
+    private static function recordWalk(OltDevice $olt,array $batch): void
+    {
+        // Metadata only: never credentials, command lines, stderr or raw values.
+        Cache::put('olt_walk_health_v1_'.$olt->id,array_diff_key($batch,['tables'=>true]),1800);
+    }
 
-        // Cek apakah snmpbulkwalk CLI tersedia di server Linux
-        static $hasBulkWalk = null;
-        if ($hasBulkWalk === null) {
-            $hasBulkWalk = (PHP_OS_FAMILY !== 'Windows' && !empty(shell_exec('which snmpbulkwalk 2>/dev/null')));
+    public static function readIdentityTables(OltDevice $olt): array
+    {
+        $b=app(SnmpWalkRunner::class)->walk($olt,['sn1'=>ZteOnuIdentityMap::PRIMARY,'sn2'=>ZteOnuIdentityMap::SECONDARY]);
+        self::recordWalk($olt,$b);
+        return $b['tables']+['_complete'=>count($b['reports'])===2 && count(array_filter($b['reports'],fn($r)=>$r['complete']))===2];
+    }
+
+    public static function readStateRxTables(OltDevice $olt,?int $maxRepetitions=null,?int $timeoutSec=null): array
+    {
+        $state='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$rx='1.3.6.1.4.1.3902.1012.3.50.12.1.1.10';
+        $runner=app(SnmpWalkRunner::class);
+        $b=$runner->walk($olt,['states'=>$state,'rx'=>$rx],$maxRepetitions ?? 10,$timeoutSec ?? 2,1);
+        $online=[];
+        foreach($b['tables']['states'] ?? [] as $oid=>$value) {
+            if(preg_match('/^'.preg_quote($state,'/').'\.([0-9]+)\.([0-9]+)$/',$oid,$m)
+                && trim((string)SnmpConnector::parseValue((string)$value))==='3')$online[$m[1].'_'.$m[2]]=true;
         }
-
-        if (!$hasBulkWalk) {
-            $results = [];
-            foreach ($oids as $k => $oid) {
-                $results[$k] = self::executeSnmpBulkWalk($olt, $oid, $maxRepetitions, $timeoutSec, $retries);
+        $missing=function(array $rows)use($online,$rx): int {
+            $seen=[];foreach($rows as $oid=>$value)if(preg_match('/^'.preg_quote($rx,'/').'\.([0-9]+)\.([0-9]+)\.1$/',$oid,$m))$seen[$m[1].'_'.$m[2]]=true;
+            return count(array_diff_key($online,$seen));
+        };
+        $before=$missing($b['tables']['rx'] ?? []);$retry=null;
+        if($online && (($b['reports']['rx']['complete'] ?? false)!==true || $before>max(3,(int)ceil(count($online)*0.05)))) {
+            // Recover missing PONs once, not the already received prefix of the entire table.
+            $present=[];foreach($b['tables']['rx'] ?? [] as $oid=>$value)if(preg_match('/^'.preg_quote($rx,'/').'\.([0-9]+)\.([0-9]+)\.1$/',$oid,$m))$present[$m[1].'_'.$m[2]]=true;
+            $ports=[];foreach(array_diff_key($online,$present) as $key=>$unused) {
+                $index=(int)explode('_',$key)[0];
+                if(ZteOnuIdentityMap::portFromIfIndex($index)!==null)$ports['rx_'.$index]=$rx.'.'.$index;
             }
-            return $results;
-        }
-
-        $processes = [];
-        $pipesList = [];
-
-        foreach ($oids as $key => $oid) {
-            $cmd = "snmpbulkwalk -v2c -c " . escapeshellarg($community) . " -t {$timeoutSec} -r {$retries} -Cr{$maxRepetitions} -On " . escapeshellarg("{$ip}:{$port}") . " " . escapeshellarg($oid) . " 2>/dev/null";
-            $descriptors = [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ];
-            $proc = @proc_open($cmd, $descriptors, $pipes);
-            if (is_resource($proc)) {
-                @fclose($pipes[0]);
-                @fclose($pipes[2]);
-                $processes[$key] = $proc;
-                $pipesList[$key] = $pipes[1];
+            $retryStart=microtime(true);$retry=['started_at'=>OnuTelemetrySample::timestamp(),'reports'=>[],'requested_ports'=>count($ports),'complete'=>true];
+            $completed=0;
+            foreach(array_chunk($ports,4,true) as $chunk) {
+                $left=20-(microtime(true)-$retryStart);if($left<0.2)break;
+                $part=$runner->walk($olt,$chunk,5,2,0,$left);
+                foreach($part['tables'] as $rows)$b['tables']['rx']=array_replace($b['tables']['rx'] ?? [],$rows);
+                $retry['reports']+=$part['reports'];$completed+=count($part['reports']);
             }
+            $retry['complete']=$completed===count($ports) && count(array_filter($retry['reports'],fn($r)=>($r['complete'] ?? false)!==true))===0;
+            $retry['finished_at']=OnuTelemetrySample::timestamp();$retry['duration_ms']=round((microtime(true)-$retryStart)*1000,1);
         }
-
-        $results = [];
-        foreach ($processes as $key => $proc) {
-            $output = @stream_get_contents($pipesList[$key]);
-            @fclose($pipesList[$key]);
-            @proc_close($proc);
-
-            $parsed = [];
-            if ($output) {
-                $lines = explode("\n", trim($output));
-                foreach ($lines as $line) {
-                    $line = trim($line);
-                    if (!$line || str_contains($line, 'No Such Object') || str_contains($line, 'No Such Instance')) {
-                        continue;
-                    }
-                    $parts = explode('=', $line, 2);
-                    if (count($parts) === 2) {
-                        $resOid = ltrim(trim($parts[0]), '.');
-                        $resVal = trim($parts[1]);
-                        $parsed[$resOid] = $resVal;
-                    }
-                }
-            }
-            $results[$key] = $parsed;
-        }
-
-        // Fallback jika ada OID yang kosong
-        foreach ($oids as $key => $oid) {
-            if (!isset($results[$key]) || empty($results[$key])) {
-                $results[$key] = self::executeSnmpBulkWalk($olt, $oid, $maxRepetitions, $timeoutSec, $retries);
-            }
-        }
-
-        return $results;
+        $after=$missing($b['tables']['rx'] ?? []);
+        $b['coverage']=['online_state_rows'=>count($online),'missing_rx_before'=>$before,'missing_rx_after'=>$after,'retried'=>$retry!==null];
+        $b['retry']=$retry;
+        $b['finished_at']=OnuTelemetrySample::timestamp();
+        $b['duration_ms']=round((microtime(true)-OnuTelemetrySample::epoch($b['started_at']))*1000,1);
+        $b['complete']=($b['reports']['states']['complete'] ?? false) && $after===0
+            && (($b['reports']['rx']['complete'] ?? false) || ($retry['complete'] ?? false));
+        self::recordWalk($olt,$b);
+        return $b['tables']+['_acquisition'=>array_diff_key($b,['tables'=>true])];
     }
 
     /**

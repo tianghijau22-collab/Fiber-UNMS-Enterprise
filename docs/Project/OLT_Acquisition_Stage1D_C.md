@@ -1,0 +1,15 @@
+# Identity refresh and bounded SNMP acquisition — stage 1D-C
+
+Identity evidence retains its original acquisition start time. A valid serial-table cache is refreshed after 300 seconds, before its 600-second validity limit. Refreshes use a non-blocking per-OLT lock. A failed, incomplete or insufficient refresh does not overwrite or extend the old observation; reuse stops when the old evidence expires. A 30-second backoff limits repeated failed refreshes. Only actual serial-table observations establish identity.
+
+Bulk subprocesses now drain stdout/stderr concurrently and report exit status, deadline, row count and completeness. Each group has at most four children and a 35-second deadline. Request parameters are capped at ten repetitions, three seconds per request and one retry; current defaults are ten repetitions, two seconds and one retry. Invalid/unsupported requests fail explicitly. Reports contain no credentials, command arguments or raw stderr.
+
+State/Rx acquisition compares received Rx OIDs with current working-state tuples. An incomplete walk or substantial missing coverage triggers one recovery window of up to 20 seconds. Recovery reads only PONs with missing OIDs, in groups of at most four with five repetitions and no per-request retries. It merges observations obtained during this acquisition only, never preserved snapshot values. Missing/invalid optical readings remain unavailable; they do not establish Offline. Sensor sentinel values do not themselves cause repeated recovery requests.
+
+The original walk and each recovery report remain visible in attempt metadata. Even plausible received rows cannot create SUCCESS when acquisition completeness is unverified. Receiving all expected OIDs does not guarantee that all sensor values are valid. No change is made to the ownership/order writer, 180-second sample validity, 600-second identity validity, customer binding or OLT configuration.
+
+The status/Rx CLI work is bounded to approximately 35+20 seconds plus process/parse/cache overhead. Identity refresh is a separate bounded group. This is not a hard deadline for the whole polling cycle: device setup, health probes, database operations and sequential scheduling across OLTs remain outside those budgets.
+
+Validation includes cache warm reuse, early refresh, failed refresh without time extension, expiry/backoff, lock contention, subprocess output larger than pipe buffers, timeout/nonzero exit, subtree parsing, targeted PON recovery and honest partial status. Read-only VPS trials verify current CLI/identity tables and Rx coverage before rollout. The deployed polling path must be observed over normal cycles and an actual early cache refresh.
+
+This release targets the deployed Linux SNMP v2c setup with /usr/bin/snmpbulkwalk. It does not validate SNMP v3, IPv6, other vendors/platforms, packet loss root cause, vendor OID defects or end-to-end alarm ordering. The separate OLT optical diagnostic endpoint/modal remains follow-up work. Deployment changes PHP only; existing browser assets and sessions are preserved.

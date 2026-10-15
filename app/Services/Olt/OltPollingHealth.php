@@ -48,10 +48,11 @@ class OltPollingHealth
         });
     }
 
-    public function read(int $id,array $rows,?int $rawStates,array $writer=[]): string
+    public function read(int $id,array $rows,?int $rawStates,array $writer=[],array $acquisition=[]): string
     {
         if(!isset($this->attempts[$id]))return 'UNKNOWN';
         $a=&$this->attempts[$id];$a['rows_read']=$rawStates ?? count($rows);
+        if($acquisition)$a['walk_reports']=$acquisition;
         $a['known_states']=count(array_filter($rows,fn($r)=>is_bool($r['is_online'] ?? null)));
         $a['rx_available']=count(array_filter($rows,fn($r)=>($r['is_online'] ?? null)===true && ($r['rx_available'] ?? false)===true));
         $online=count(array_filter($rows,fn($r)=>($r['is_online'] ?? null)===true));
@@ -60,6 +61,9 @@ class OltPollingHealth
             || $a['scope']==='selected_ports' || ($rawStates!==null && ($rawStates!==count($rows) || $rawStates<$a['expected_rows'])) || !$rows) {
             $a['result']='PARTIAL';$a['reason']='incomplete_observations';
         } else {$a['result']='SUCCESS';$a['reason']=null;}
+        if($a['result']==='SUCCESS' && $acquisition && ($acquisition['complete'] ?? false)!==true) {
+            $a['result']='PARTIAL';$a['reason']='incomplete_snmp_walk';
+        }
         $this->save($id,$a);return $a['result'];
     }
 
