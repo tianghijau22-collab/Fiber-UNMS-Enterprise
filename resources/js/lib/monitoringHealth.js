@@ -15,3 +15,16 @@ export function healthTime(value) {
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date.toLocaleString('id-ID', {timeZone:'Asia/Jakarta'}) : 'Belum tercatat';
 }
+
+export function vpnPingSeries(history) {
+  const samples=new Map();
+  for(const point of history || []) {
+    const at=point.vpn_sampled_at;
+    if(!at || !Number.isFinite(new Date(at).getTime()))continue;
+    const value=point.vpn_ping_status==='RESPONDING' && typeof point.vpn_latency_ms==='number' && Number.isFinite(point.vpn_latency_ms)
+      ? point.vpn_latency_ms:null;
+    samples.set(at,{at,value});
+  }
+  const points=[...samples.values()].sort((a,b)=>new Date(a.at)-new Date(b.at));
+  return {labels:points.map(p=>new Date(p.at).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta'})),values:points.map(p=>p.value)};
+}

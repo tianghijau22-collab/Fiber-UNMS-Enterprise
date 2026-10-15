@@ -56,6 +56,8 @@ class ServerMonitoringController extends Controller
             'rx_kbps'        => $netData['primary_rx_kbps'] ?? 0,
             'tx_kbps'        => $netData['primary_tx_kbps'] ?? 0,
             'vpn_latency_ms' => $vpnData['peer_latency_ms'] ?? null,
+            'vpn_sampled_at' => $vpnData['ping_checked_at'] ?? null,
+            'vpn_ping_status' => $vpnData['ping_status'] ?? 'UNKNOWN',
         ]);
 
         return response()->json([

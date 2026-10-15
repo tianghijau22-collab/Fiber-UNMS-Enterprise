@@ -33,7 +33,7 @@ class OltHealthMonitor
 
     public static function networkEvidence(?array $addresses, ?array $routes, mixed $bind): array
     {
-        $base = ['status'=>'UNKNOWN','interface'=>null,'local_ip'=>null,'peer_ip'=>null,
+        $base = ['status'=>'UNKNOWN','interface'=>null,'interface_index'=>null,'local_ip'=>null,'peer_ip'=>null,
             'checked_at'=>OnuTelemetrySample::timestamp(),'routes'=>$routes ?? [],'all_interfaces'=>[],
             'peer_latency_ms'=>null,'packet_loss_pct'=>null,'jitter_ms'=>null,
             'quality'=>'UNKNOWN','quality_color'=>'amber','quality_text'=>'Jalur VPN belum dapat diperiksa'];
@@ -43,7 +43,7 @@ class OltHealthMonitor
                 if (($addr['local'] ?? null) !== $bind) continue;
                 $up = in_array('UP',$link['flags'] ?? [],true);
                 return array_replace($base,['status'=>$up ? 'AVAILABLE':'DISCONNECTED',
-                    'interface'=>$link['ifname'] ?? null,'local_ip'=>$bind,'peer_ip'=>$addr['address'] ?? null,
+                    'interface'=>$link['ifname'] ?? null,'interface_index'=>$link['ifindex'] ?? null,'local_ip'=>$bind,'peer_ip'=>$addr['address'] ?? null,
                     'all_interfaces'=>[['name'=>$link['ifname'] ?? null,'local_ip'=>$bind,'peer_ip'=>$addr['address'] ?? null]],
                     'quality'=>$up ? 'UNVERIFIED':'DOWN','quality_color'=>$up ? 'amber':'rose',
                     'quality_text'=>$up ? 'Interface tersedia; respons OLT diperiksa terpisah':'Interface VPN tidak aktif']);
@@ -151,7 +151,7 @@ class OltHealthMonitor
     {
         $network=$this->network();$reports=[];
         foreach(OltDevice::where('status','active')->get() as $d)$reports[]=self::device($d,$network,self::cachedArray('olt_poll_health_v1_'.$d->id));
-        $vpn=$network;
+        $vpn=app(VpnPingMonitor::class)->sample($network);
         $vpn['routes']=array_values(array_map(fn($r)=>$r['dst'] ?? 'default',array_filter($network['routes'],fn($r)=>($r['dev'] ?? null)===($network['interface'] ?? null))));
         $vpn['olt_targets']=array_map(fn($r)=>['id'=>$r['device_id'],'name'=>$r['device_name'],'ip'=>$r['ip'],'vendor'=>$r['vendor'],
             'status'=>$r['connection']['status'],'latency_ms'=>$r['connection']['latency_ms'],'checked_at'=>$r['connection']['checked_at']],$reports);

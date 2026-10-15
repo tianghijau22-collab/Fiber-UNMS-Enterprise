@@ -16,7 +16,7 @@ import { Line, Doughnut } from 'react-chartjs-2';
 import { useTheme } from '../components/ThemeContext.jsx';
 import LoadingState from '../components/LoadingState.jsx';
 import MonitoringHealth, { HealthBadge } from '../components/MonitoringHealth.jsx';
-import { healthTime } from '../lib/monitoringHealth.js';
+import { healthTime, vpnPingSeries } from '../lib/monitoringHealth.js';
 
 ChartJS.register(
   CategoryScale,
@@ -96,6 +96,8 @@ export default function ServerMonitoring() {
           rx_kbps: json.data.network?.primary_rx_kbps ?? 0,
           tx_kbps: json.data.network?.primary_tx_kbps ?? 0,
           vpn_latency_ms: json.data.vpn?.peer_latency_ms ?? null,
+          vpn_sampled_at: json.data.vpn?.ping_checked_at ?? null,
+          vpn_ping_status: json.data.vpn?.ping_status ?? 'UNKNOWN',
         };
 
         setHistory((prev) => {
@@ -459,13 +461,15 @@ export default function ServerMonitoring() {
     ],
   }), [history]);
 
+  const vpnSamples = useMemo(() => vpnPingSeries(history), [history]);
+
   // Konfigurasi Chart Latensi VPN Tunnel
   const vpnLatencyChartData = useMemo(() => ({
-    labels: history.map((h) => h.time),
+    labels: vpnSamples.labels,
     datasets: [
       {
         label: 'Latensi VPN Peer (ms)',
-        data: history.map((h) => h.vpn_latency_ms),
+        data: vpnSamples.values,
         borderColor: '#8b5cf6',
         backgroundColor: isDarkMode ? 'rgba(139, 92, 246, 0.2)' : 'rgba(139, 92, 246, 0.1)',
         borderWidth: 2.5,
@@ -476,7 +480,7 @@ export default function ServerMonitoring() {
         pointBackgroundColor: '#8b5cf6',
       },
     ],
-  }), [history, isDarkMode]);
+  }), [vpnSamples, isDarkMode]);
 
   const baseChartOptions = {
     responsive: true,
@@ -842,7 +846,7 @@ export default function ServerMonitoring() {
         {/* 5. VPN Tunnel Latency Card */}
         <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Jalur VPN</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Latensi VPN</span>
             <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
               <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -852,12 +856,13 @@ export default function ServerMonitoring() {
           <div className="my-2">
             <div className="flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-black text-purple-600 dark:text-purple-400 font-mono tracking-tight">
-                {vpn.peer_latency_ms ? `${vpn.peer_latency_ms} ms` : '—'}
+                {vpn.peer_latency_ms != null ? `${vpn.peer_latency_ms} ms` : '—'}
               </span>
               <HealthBadge status={vpn.status}/>
             </div>
             <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
               <span>{vpn.quality_text || 'Belum terverifikasi'}</span>
+              <span className="text-[10px]">Diperiksa: {healthTime(vpn.ping_checked_at)}</span>
             </div>
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
@@ -924,7 +929,7 @@ export default function ServerMonitoring() {
               </p>
             </div>
             <span className="font-mono text-xs font-bold text-purple-600 dark:text-purple-400 px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800">
-              {vpn.peer_latency_ms ? `${vpn.peer_latency_ms} ms` : '—'}
+              {vpn.peer_latency_ms != null ? `${vpn.peer_latency_ms} ms` : '—'}
             </span>
           </div>
           <div className="h-60 w-full">
@@ -1609,20 +1614,21 @@ export default function ServerMonitoring() {
 
           {/* Card 2: Latensi & Jitter */}
           <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
-            <span className="text-[11px] font-bold text-slate-400 uppercase">Latensi RTT &amp; Jitter</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase">RTT dan variasi RTT</span>
             <div className="font-mono text-xs font-black text-purple-600 dark:text-purple-400">
-              {vpn.peer_latency_ms ? `${vpn.peer_latency_ms} ms` : '—'} <span className="text-slate-400 font-normal">(±{vpn.jitter_ms ?? '—'} ms)</span>
+              {vpn.peer_latency_ms != null ? `${vpn.peer_latency_ms} ms` : '—'} <span className="text-slate-400 font-normal">(±{vpn.jitter_ms ?? '—'} ms)</span>
             </div>
-            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">{vpn.quality_text}</p>
+            <p className="text-[10px] text-slate-500">{vpn.quality_text}</p>
+            <p className="text-[10px] text-slate-500">Pengukuran: {healthTime(vpn.ping_checked_at)} · 2 paket ping</p>
           </div>
 
           {/* Card 3: Packet Loss */}
           <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
             <span className="text-[11px] font-bold text-slate-400 uppercase">Packet Loss</span>
-            <div className="font-mono text-xs font-black text-emerald-600 dark:text-emerald-400">
+            <div className={`font-mono text-xs font-black ${vpn.packet_loss_pct == null ? 'text-slate-500' : vpn.packet_loss_pct > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
               {vpn.packet_loss_pct == null ? '—' : `${vpn.packet_loss_pct}%`} Loss
             </div>
-            <p className="text-[10px] text-slate-500">Belum ada pengukuran kehilangan paket</p>
+            <p className="text-[10px] text-slate-500">Dari sampel ping peer VPN</p>
           </div>
 
           {/* Card 4: Subnet OLT Terhubung */}
