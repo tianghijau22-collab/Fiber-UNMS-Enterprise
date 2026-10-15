@@ -15,6 +15,8 @@ import {
 import { Line, Doughnut } from 'react-chartjs-2';
 import { useTheme } from '../components/ThemeContext.jsx';
 import LoadingState from '../components/LoadingState.jsx';
+import MonitoringHealth, { HealthBadge } from '../components/MonitoringHealth.jsx';
+import { healthTime } from '../lib/monitoringHealth.js';
 
 ChartJS.register(
   CategoryScale,
@@ -93,7 +95,7 @@ export default function ServerMonitoring() {
           ram_pct: json.data.memory?.used_pct ?? 0,
           rx_kbps: json.data.network?.primary_rx_kbps ?? 0,
           tx_kbps: json.data.network?.primary_tx_kbps ?? 0,
-          vpn_latency_ms: json.data.vpn?.peer_latency_ms ?? 0,
+          vpn_latency_ms: json.data.vpn?.peer_latency_ms ?? null,
         };
 
         setHistory((prev) => {
@@ -840,7 +842,7 @@ export default function ServerMonitoring() {
         {/* 5. VPN Tunnel Latency Card */}
         <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Latensi VPN</span>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Jalur VPN</span>
             <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400">
               <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -852,18 +854,15 @@ export default function ServerMonitoring() {
               <span className="text-2xl sm:text-3xl font-black text-purple-600 dark:text-purple-400 font-mono tracking-tight">
                 {vpn.peer_latency_ms ? `${vpn.peer_latency_ms} ms` : '—'}
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400">
-                {vpn.status || 'CONNECTED'}
-              </span>
+              <HealthBadge status={vpn.status}/>
             </div>
             <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>{vpn.quality_text || 'Latensi Normal'}</span>
+              <span>{vpn.quality_text || 'Belum terverifikasi'}</span>
             </div>
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
             <span>Peer: <strong className="text-slate-700 dark:text-slate-300 font-mono">{vpn.peer_ip}</strong></span>
-            <span>Loss: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{vpn.packet_loss_pct ?? 0}%</strong></span>
+            <span>Loss: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{vpn.packet_loss_pct == null ? '—' : `${vpn.packet_loss_pct}%`}</strong></span>
           </div>
         </div>
       </div>
@@ -1030,16 +1029,10 @@ export default function ServerMonitoring() {
                 </span>
                 <span>Monitoring Parallel Background Worker &amp; Polling Request Telemetri</span>
               </h3>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                worker.is_paused
-                  ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
-                  : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-              }`}>
-                {worker.is_paused ? 'PAUSED (DIJEDA)' : 'RUNNING (24/7 CONTINUOUS)'}
-              </span>
+              <HealthBadge status={worker.status}/>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Setiap OLT berjalan simultan 3-Tahap (Slot/Card $\rightarrow$ Status Port PON $\rightarrow$ Granular ONU per Port) dengan update database realtime.
+              Status layanan, respons OLT, dan kebaruan data dinilai secara terpisah. Durasi mengikuti hasil pengambilan nyata.
             </p>
           </div>
 
@@ -1099,7 +1092,7 @@ export default function ServerMonitoring() {
                 onChange={(e) => handleChangeEngineMode(e.target.value)}
                 className="bg-transparent font-bold text-indigo-900 dark:text-indigo-200 text-xs focus:outline-none cursor-pointer"
               >
-                <option value="slot_parallel">⚡ Slot Parallel (Realtime ~8-12s + Anti-Flap) [Utama]</option>
+                <option value="slot_parallel">⚡ Slot Parallel [Utama]</option>
                 <option value="per_port">🔄 Per-Port (Round-Robin 2-Port) [Backup 1]</option>
                 <option value="global_bulk">🌐 Global Bulk (Se-OLT Sekaligus) [Backup 2]</option>
               </select>
@@ -1156,13 +1149,13 @@ export default function ServerMonitoring() {
             <div className="font-mono text-sm font-black text-emerald-600 dark:text-emerald-400">
               {worker.loop_delay_sec ?? 2} s
             </div>
-            <p className="text-[10px] text-slate-500">Antar Putaran Port</p>
+            <p className="text-[10px] text-slate-500">Jeda setelah siklus selesai</p>
           </div>
 
           <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase">Durasi Siklus</span>
             <div className="font-mono text-sm font-black text-indigo-600 dark:text-indigo-400">
-              {worker.cycle_duration_human || '320 ms'}
+              {worker.cycle_duration_human || 'Belum tersedia'}
             </div>
             <p className="text-[10px] text-slate-500">Waktu Polling Total</p>
           </div>
@@ -1170,7 +1163,7 @@ export default function ServerMonitoring() {
           <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase">Terakhir Dijalankan</span>
             <div className="font-mono text-sm font-black text-slate-900 dark:text-white">
-              {worker.seconds_ago_text || 'Baru saja'}
+              {worker.seconds_ago_text || 'Belum tercatat'}
             </div>
             <p className="text-[10px] text-slate-500 truncate">{worker.last_run_human}</p>
           </div>
@@ -1180,7 +1173,7 @@ export default function ServerMonitoring() {
             <div className="font-mono text-sm font-black text-slate-900 dark:text-white">
               {worker.total_devices ?? 0} OLT
             </div>
-            <p className="text-[10px] text-slate-500">Multi-Process Simultan</p>
+            <p className="text-[10px] text-slate-500">Perangkat terdaftar</p>
           </div>
 
           <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
@@ -1200,125 +1193,7 @@ export default function ServerMonitoring() {
           </div>
         </div>
 
-        {/* Tabel Laporan Eksekusi per Perangkat OLT + Real-Time Active Querying Port Pulse */}
-        {worker.device_reports && worker.device_reports.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Rincian Pembaruan Database Telemetri per Perangkat OLT:
-              </span>
-              <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-                Data di bawah tersimpan di Database Snapshot &amp; diperbarui otomatis per siklus
-              </span>
-            </div>
-            <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 text-slate-400 font-bold uppercase text-[10px]">
-                    <th className="p-2.5">Nama OLT</th>
-                    <th className="p-2.5">IP Address</th>
-                    <th className="p-2.5">Port Sedang Di-Query Detik Ini</th>
-                    <th className="p-2.5">Port Aktif / Total</th>
-                    <th className="p-2.5">Total ONU Terdaftar (DB)</th>
-                    <th className="p-2.5">Total Belum Terdaftar (DB)</th>
-                    <th className="p-2.5">Hasil Port Terakhir (SNMP)</th>
-                    <th className="p-2.5">Durasi</th>
-                    <th className="p-2.5">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono">
-                  {worker.device_reports.map((report, idx) => {
-                    const isSyncingNow = report.querying_status === 'SYNCING';
-                    const hasPort = Boolean(report.active_querying_port);
-
-                    return (
-                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
-                        <td className="p-2.5 text-slate-900 dark:text-white font-sans font-bold">{report.device_name}</td>
-                        <td className="p-2.5 text-slate-600 dark:text-slate-300">{report.ip}</td>
-                        
-                        {/* Port Sedang Di-Query Realtime dengan Pulse Animation */}
-                        <td className="p-2.5">
-                          {isSyncingNow && hasPort ? (
-                            <div className="inline-flex items-center gap-1.5 font-bold font-mono text-xs text-cyan-600 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/80 px-2.5 py-1 rounded-lg border border-cyan-300 dark:border-cyan-700/80 shadow-xs animate-pulse">
-                              <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
-                              </span>
-                              <span>{report.active_querying_port}</span>
-                              <span className="text-[9px] uppercase tracking-wider text-cyan-500 font-black">(Querying...)</span>
-                            </div>
-                          ) : hasPort ? (
-                            <div className="inline-flex items-center gap-1.5 font-bold font-mono text-xs text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              <span>{report.active_querying_port}</span>
-                              <span className="text-[9px] text-emerald-500 font-semibold">(Selesai)</span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 text-[11px] italic font-sans">Standby</span>
-                          )}
-                        </td>
-
-                        <td className="p-2.5 text-cyan-600 dark:text-cyan-400 font-bold">{report.active_ports} / {report.total_ports}</td>
-                        
-                        {/* Kolom 1: Total ONU Terdaftar di DB UNMS */}
-                        <td className="p-2.5">
-                          <div className="flex flex-col">
-                            <span className="text-purple-600 dark:text-purple-400 font-bold text-xs">
-                              {report.db_registered_total ?? report.onus_found ?? 0} ONU
-                            </span>
-                            <span className="text-[9px] text-slate-400 font-sans">
-                              Tersimpan di DB Pelanggan
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Kolom 2: Total Modem Belum Terdaftar (Akumulasi DB) */}
-                        <td className="p-2.5">
-                          <div className="flex flex-col">
-                            <span className={`font-bold text-xs ${(report.db_unregistered_total ?? report.uncfg_found ?? 0) > 0 ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400'}`}>
-                              {report.db_unregistered_total ?? report.uncfg_found ?? 0} Modem
-                            </span>
-                            <span className="text-[9px] text-slate-400 font-sans">
-                              Akumulasi Database (Semua Port)
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Kolom 3: Hasil Query Port Terakhir */}
-                        <td className="p-2.5">
-                          {report.last_port_polled ? (
-                            <div className="flex flex-col">
-                              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs">
-                                {report.last_port_polled}
-                              </span>
-                              <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">
-                                {report.last_port_onu_count ?? 0} ONU Terbaca
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 text-[11px] italic font-sans">—</span>
-                          )}
-                        </td>
-
-                        <td className="p-2.5 text-slate-700 dark:text-slate-300">{report.duration_ms} ms</td>
-                        <td className="p-2.5">
-                          <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
-                            report.status === 'SUCCESS'
-                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
-                          }`}>
-                            {report.status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        <MonitoringHealth worker={worker} vpn={vpn}/>
 
         {/* ── LIVE ACTIVITY LOG & REQUEST STREAM CONSOLE ── */}
         <div className="pt-2">
@@ -1357,6 +1232,9 @@ export default function ServerMonitoring() {
               >
                 <option value="ALL">Semua Level</option>
                 <option value="SUCCESS">SUCCESS</option>
+                <option value="PARTIAL">PARTIAL</option>
+                <option value="FAILED">FAILED</option>
+                <option value="UNKNOWN">UNKNOWN</option>
                 <option value="SYNCING">SYNCING</option>
                 <option value="INFO">INFO</option>
                 <option value="EMPTY">EMPTY / STANDBY</option>
@@ -1473,7 +1351,7 @@ export default function ServerMonitoring() {
                 key={idx}
                 className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-[11px] font-mono text-slate-600 dark:text-slate-300"
               >
-                <strong>{item.time}</strong> • {item.duration_ms} ms ({item.onus} ONU)
+                <strong>{item.time}</strong> • {item.duration_ms} ms ({item.onus} ONU) <HealthBadge status={item.status}/>
               </span>
             ))}
           </div>
@@ -1502,7 +1380,7 @@ export default function ServerMonitoring() {
                       : 'bg-rose-50 dark:bg-rose-950/80 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
                   }`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${snmpTrap.is_running ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
-                    {snmpTrap.is_running ? 'SUB-SECOND LISTENER ACTIVE' : 'LISTENER DOWN'}
+                    {snmpTrap.is_running ? 'LAYANAN LISTENER BERJALAN' : 'LISTENER DOWN'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -1612,7 +1490,7 @@ export default function ServerMonitoring() {
                     <th className="p-2.5">Nama OLT</th>
                     <th className="p-2.5">IP Address</th>
                     <th className="p-2.5">Vendor</th>
-                    <th className="p-2.5">Ping RTT</th>
+                    <th className="p-2.5">Respons SNMP terakhir</th>
                     <th className="p-2.5">Terakhir Mengirim Sinyal</th>
                     <th className="p-2.5">Event Terakhir</th>
                     <th className="p-2.5">Status Trap</th>
@@ -1628,23 +1506,12 @@ export default function ServerMonitoring() {
                         {o.is_reachable ? (
                           <span className="text-emerald-600 dark:text-emerald-400 font-bold">{o.ping_ms} ms</span>
                         ) : (
-                          <span className="text-rose-500 font-bold">Unreachable</span>
+                          <HealthBadge status={o.status_label}/>
                         )}
                       </td>
                       <td className="p-2.5 text-slate-600 dark:text-slate-300 font-sans">{o.last_trap_text}</td>
                       <td className="p-2.5 text-slate-500 font-sans text-[11px] truncate max-w-[200px]">{o.last_event || '—'}</td>
-                      <td className="p-2.5 font-sans">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          o.status_badge === 'emerald'
-                            ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-400'
-                            : o.status_badge === 'cyan'
-                            ? 'bg-cyan-100 dark:bg-cyan-950/80 text-cyan-700 dark:text-cyan-400'
-                            : 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-400'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${o.status_badge === 'rose' ? 'bg-rose-500' : 'bg-emerald-500'}`}></span>
-                          {o.status_label}
-                        </span>
-                      </td>
+                      <td className="p-2.5"><HealthBadge status={o.alarm_delivery_status}/></td>
                     </tr>
                   ))}
                 </tbody>
@@ -1718,7 +1585,7 @@ export default function ServerMonitoring() {
               <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
-              <span>Status &amp; Diagnostik Latensi VPN Tunnel</span>
+              <span>Status jalur VPN dan koneksi OLT</span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Koneksi tunnel Point-to-Point dari VPS ke MikroTik Router &amp; Jalur Routing ke Subnet OLT
@@ -1726,13 +1593,7 @@ export default function ServerMonitoring() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-xl text-xs font-bold border ${
-              vpn.status === 'CONNECTED'
-                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
-            }`}>
-              Tunnel {vpn.status || 'CONNECTED'} ({vpn.interface || 'ppp0'})
-            </span>
+            <HealthBadge status={vpn.status}/>
           </div>
         </div>
 
@@ -1750,7 +1611,7 @@ export default function ServerMonitoring() {
           <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
             <span className="text-[11px] font-bold text-slate-400 uppercase">Latensi RTT &amp; Jitter</span>
             <div className="font-mono text-xs font-black text-purple-600 dark:text-purple-400">
-              {vpn.peer_latency_ms ? `${vpn.peer_latency_ms} ms` : '—'} <span className="text-slate-400 font-normal">(±{vpn.jitter_ms || 0} ms)</span>
+              {vpn.peer_latency_ms ? `${vpn.peer_latency_ms} ms` : '—'} <span className="text-slate-400 font-normal">(±{vpn.jitter_ms ?? '—'} ms)</span>
             </div>
             <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">{vpn.quality_text}</p>
           </div>
@@ -1759,16 +1620,16 @@ export default function ServerMonitoring() {
           <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
             <span className="text-[11px] font-bold text-slate-400 uppercase">Packet Loss</span>
             <div className="font-mono text-xs font-black text-emerald-600 dark:text-emerald-400">
-              {vpn.packet_loss_pct ?? 0}% Loss
+              {vpn.packet_loss_pct == null ? '—' : `${vpn.packet_loss_pct}%`} Loss
             </div>
-            <p className="text-[10px] text-slate-500">Koneksi Sangat Stabil</p>
+            <p className="text-[10px] text-slate-500">Belum ada pengukuran kehilangan paket</p>
           </div>
 
           {/* Card 4: Subnet OLT Terhubung */}
           <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-1">
-            <span className="text-[11px] font-bold text-slate-400 uppercase">Subnet OLT Ter-Routing</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase">Rute melalui interface VPN</span>
             <div className="font-mono text-xs font-black text-slate-900 dark:text-white truncate">
-              {vpn.routes?.join(', ') || '10.11.0.0/16'}
+              {vpn.routes?.join(', ') || 'Belum tersedia'}
             </div>
             <p className="text-[10px] text-slate-500">via dev {vpn.interface}</p>
           </div>
@@ -1778,7 +1639,7 @@ export default function ServerMonitoring() {
         {vpn.olt_targets && vpn.olt_targets.length > 0 && (
           <div className="pt-2">
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-2">
-              Uji Latensi Langsung ke Setiap Perangkat OLT Terdaftar:
+              Respons SNMP terakhir dari setiap OLT:
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {vpn.olt_targets.map((target) => (
@@ -1792,11 +1653,11 @@ export default function ServerMonitoring() {
                   </div>
                   <div className="text-right">
                     <span className={`px-2 py-0.5 rounded-md font-mono font-bold text-[11px] ${
-                      target.latency_ms !== null && target.latency_ms < 50
+                      target.status === 'RESPONDING'
                         ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
                         : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
                     }`}>
-                      {target.latency_ms !== null ? `${target.latency_ms} ms` : 'Unreachable'}
+                      <HealthBadge status={target.status}/>
                     </span>
                   </div>
                 </div>
@@ -1829,9 +1690,7 @@ export default function ServerMonitoring() {
               <span className="font-bold text-xs text-slate-900 dark:text-white">
                 {gateway.snmp_daemon?.name || 'SNMP Poller Gateway'}
               </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                {gateway.snmp_daemon?.status || 'ACTIVE'}
-              </span>
+              <HealthBadge status={gateway.snmp_daemon?.status}/>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">{gateway.snmp_daemon?.detail}</p>
             <p className="text-[10px] font-mono text-slate-400 truncate">{gateway.snmp_daemon?.driver}</p>

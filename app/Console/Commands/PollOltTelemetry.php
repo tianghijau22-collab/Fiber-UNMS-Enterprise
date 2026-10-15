@@ -31,15 +31,7 @@ class PollOltTelemetry extends Command
         }
         $engineMode = $modeOption ?: Cache::get('olt_polling_engine_mode', 'slot_parallel');
 
-        // JIKA SPECIFIC DEVICE ID: Jalankan polling untuk OLT ini sesuai mode
-        if ($deviceId) {
-            if ($engineMode === 'slot_parallel') {
-                return $this->pollSlotParallelTelemetry((int)$deviceId, $oltCtrl);
-            } elseif ($engineMode === 'global_bulk') {
-                return $this->pollGlobalBulkTelemetry((int)$deviceId, $oltCtrl);
-            }
-            return $this->pollSinglePortOnDevice((int)$deviceId, $oltCtrl, $specificPort);
-        }
+        if ($deviceId) return $this->pollObservedDevice((int)$deviceId,$oltCtrl,$engineMode,$specificPort);
 
         // JIKA MODE DAEMON 24/7: Jalankan continuous loop tanpa henti (non-stop)
         if ($isDaemon) {
@@ -73,6 +65,29 @@ class PollOltTelemetry extends Command
         return $this->dispatchSinglePortParallel($oltCtrl, $engineMode);
     }
 
+    protected ?\App\Services\Olt\OltPollingHealth $pollHealth = null;
+
+    protected function pollObservedDevice(int $id,OltController $controller,string $mode,?string $port=null): int
+    {
+        $olt=OltDevice::find($id);if(!$olt)return 1;
+        $this->pollHealth ??= app(\App\Services\Olt\OltPollingHealth::class);
+        $this->pollHealth->begin($olt,$mode);$code=1;
+        try {
+            $code=match($mode){
+                'slot_parallel'=>$this->pollSlotParallelTelemetry($id,$controller),
+                'global_bulk'=>$this->pollGlobalBulkTelemetry($id,$controller),
+                default=>$this->pollSinglePortOnDevice($id,$controller,$port),
+            };
+            return $code;
+        } finally {
+            $a=$this->pollHealth->finish($olt,$code);
+            $query=Cache::get('olt_active_querying_port_'.$id,[]);
+            if(is_array($query))Cache::put('olt_active_querying_port_'.$id,array_replace($query,['status'=>$a['result'],'finished_at'=>$a['finished_at']]),60);
+            self::appendWorkerLog($olt->name,'HEALTH',$a['result'],'Hasil pembacaan: '.$a['result'],[
+                'reason'=>$a['reason'],'return_code'=>$code,'rows_read'=>$a['rows_read'],'duration_ms'=>$a['duration_ms']]);
+        }
+    }
+
     /**
      * Master Dispatcher: Menjalankan polling OLT secara IN-PROCESS (Mendukung Slot Parallel, Global Bulk, dan Per-Port)
      */
@@ -95,17 +110,8 @@ class PollOltTelemetry extends Command
         foreach ($devices as $device) {
             $devStart = microtime(true);
             try {
-                if ($engineMode === 'slot_parallel') {
-                    // ⚡ SKEMA UTAMA: Parallel Slot/Card Polling (Realtime ~8-12s + Anti-Flapping Filter)
-                    $this->pollSlotParallelTelemetry((int)$device->id, $oltCtrl);
-                } elseif ($engineMode === 'global_bulk') {
-                    // 🚀 SKEMA BACKUP 1: Global Bulk Polling Se-OLT Sekaligus
-                    $this->pollGlobalBulkTelemetry((int)$device->id, $oltCtrl);
-                } else {
-                    // 🔄 SKEMA BACKUP 2: Polling Port-by-Port Round-Robin (TETAP DIPERTAHANKAN)
-                    $this->pollSinglePortOnDevice((int)$device->id, $oltCtrl);
-                }
-
+                $exitCode=$this->pollObservedDevice((int)$device->id,$oltCtrl,$engineMode);
+                $attempt=Cache::get('olt_poll_health_v1_'.$device->id,[]);
                 $durationMs = round((microtime(true) - $devStart) * 1000, 1);
 
                 // Ambil snapshot data yang baru saja diperbarui
@@ -141,7 +147,9 @@ class PollOltTelemetry extends Command
                     'onus_found'            => $onusCount,
                     'uncfg_found'           => $uncfgCount,
                     'duration_ms'           => $durationMs,
-                    'status'                => 'SUCCESS',
+                    'status'                => $attempt['result'] ?? 'UNKNOWN',
+                    'return_code'           => $exitCode,
+                    'health_schema'         => 1,
                     'timestamp'             => now()->format('H:i:s'),
                 ];
             } catch (\Throwable $e) {
@@ -155,18 +163,22 @@ class PollOltTelemetry extends Command
                     'ip'           => $device->ip_address,
                     'vendor'       => $device->vendor,
                     'duration_ms'  => $durationMs,
-                    'status'       => 'FAILED: ' . $e->getMessage(),
+                    'status'       => 'FAILED',
+                    'return_code' => 1,
+                    'health_schema'=>1,
                     'timestamp'    => now()->format('H:i:s'),
                 ];
             }
         }
 
         $totalCycleDurationMs = round((microtime(true) - $cycleStart) * 1000, 1);
-        $prevStats = Cache::get('backend_worker_telemetry', []);
+        $cycleResult=empty($deviceReports) ? 'UNKNOWN' : (count(array_filter($deviceReports,fn($r)=>$r['status']==='SUCCESS'))===count($deviceReports) ? 'SUCCESS' : (count(array_filter($deviceReports,fn($r)=>$r['status']==='FAILED'))===count($deviceReports) ? 'FAILED':'PARTIAL'));
 
         // Record backend worker telemetry metadata to Cache for live monitoring
         $workerStats = [
-            'status'               => 'ACTIVE (24/7 IN-PROCESS LOOP)',
+            'status'               => 'CYCLE_COMPLETED',
+            'health_schema'        => 1,
+            'cycle_result'         => $cycleResult,
             'engine_mode'          => $engineMode,
             'last_run_at'          => now()->toIso8601String(),
             'last_run_human'       => now()->format('d M Y, H:i:s'),
@@ -174,13 +186,13 @@ class PollOltTelemetry extends Command
             'cycle_duration_human' => ($totalCycleDurationMs < 1000) ? "{$totalCycleDurationMs} ms" : round($totalCycleDurationMs / 1000, 2) . " s",
             'throttling_delay_ms'  => 0,
             'mode'                 => match ($engineMode) {
-                'slot_parallel' => 'Parallel Slot/Card Batching (Realtime ~8-12s + Anti-Flap)',
+                'slot_parallel' => 'Parallel Slot/Card Batching',
                 'global_bulk'   => 'Global Bulk Polling (Se-OLT Sekaligus)',
                 default         => 'Per-Port Round-Robin Polling (Klasik 2-Port)',
             },
             'total_devices'        => count($devices),
-            'total_ports_polled'   => $totalPortsPolled > 0 ? $totalPortsPolled : ($prevStats['total_ports_polled'] ?? 8),
-            'total_onus_polled'    => $totalOnusPolled > 0 ? $totalOnusPolled : ($prevStats['total_onus_polled'] ?? \App\Models\OntRegistration::count()),
+            'total_ports_polled'   => $totalPortsPolled,
+            'total_onus_polled'    => $totalOnusPolled,
             'total_uncfg_detected' => $totalUncfgPolled,
             'device_reports'       => $deviceReports,
         ];
@@ -196,7 +208,8 @@ class PollOltTelemetry extends Command
             'ports'       => $workerStats['total_ports_polled'],
             'onus'        => $workerStats['total_onus_polled'],
             'uncfg'       => $totalUncfgPolled,
-            'status'      => 'OK',
+            'status'      => $cycleResult,
+            'health_schema'=>1,
         ];
         if (count($cycleHistory) > 15) {
             $cycleHistory = array_slice($cycleHistory, -15);
@@ -452,7 +465,8 @@ class PollOltTelemetry extends Command
             }, $allPonPorts);
 
             // Accept only ownership-scoped, ordered hardware observations.
-            app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,array_values($physicalOnuMap),$sampleStartedAt,'poll',true,array_keys($massDownPorts));
+            $writeResult=app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,array_values($physicalOnuMap),$sampleStartedAt,'poll',true,array_keys($massDownPorts));
+            $readStatus=$this->pollHealth?->read($deviceId,array_values($physicalOnuMap),count($rawStates),$writeResult) ?? 'UNKNOWN';
 
             // 9. Simpan Snapshot Data Lengkap ke Database OLT
             $existingUncfg = $existingSnapshot['unconfigured_onus'] ?? [];
@@ -469,7 +483,7 @@ class PollOltTelemetry extends Command
 
             Cache::put("olt_active_querying_port_{$device->id}", [
                 'port'        => 'PARALLEL SLOTS (Card Chunks)',
-                'status'      => $totalFound > 0 ? 'SUCCESS' : 'EMPTY',
+                'status'      => $readStatus,
                 'onu_count'   => $totalFound,
                 'duration_ms' => $totalDurationMs,
                 'timestamp'   => now()->format('H:i:s'),
@@ -478,8 +492,8 @@ class PollOltTelemetry extends Command
             self::appendWorkerLog(
                 $device->name,
                 'SLOT_PARALLEL',
-                $totalFound > 0 ? 'SUCCESS' : 'EMPTY',
-                "⚡ Slot Parallel Selesai: {$totalFound} ONU ({$totalOnline} Online) se-OLT berhasil diperbarui ({$totalDurationMs} ms, SNMP walk: {$walkDuration} ms)",
+                $readStatus,
+                "⚡ Slot Parallel Selesai: {$totalFound} ONU ({$totalOnline} Online) se-OLT selesai dibaca ({$totalDurationMs} ms, SNMP walk: {$walkDuration} ms)",
                 ['onu_count' => $totalFound, 'online_count' => $totalOnline, 'duration_ms' => $totalDurationMs]
             );
 
@@ -709,7 +723,8 @@ class PollOltTelemetry extends Command
             }, $allPonPorts);
 
             // Accept only ownership-scoped, ordered hardware observations.
-            app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,array_values($physicalOnuMap),$sampleStartedAt,'poll',true,array_keys($massDownPorts));
+            $writeResult=app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,array_values($physicalOnuMap),$sampleStartedAt,'poll',true,array_keys($massDownPorts));
+            $readStatus=$this->pollHealth?->read($deviceId,array_values($physicalOnuMap),count($rawStates),$writeResult) ?? 'UNKNOWN';
 
             // 9. Simpan Snapshot Data Lengkap ke Database OLT
             $existingUncfg = $existingSnapshot['unconfigured_onus'] ?? [];
@@ -726,7 +741,7 @@ class PollOltTelemetry extends Command
 
             Cache::put("olt_active_querying_port_{$device->id}", [
                 'port'        => 'ALL PORTS (Global Bulk)',
-                'status'      => $totalFound > 0 ? 'SUCCESS' : 'EMPTY',
+                'status'      => $readStatus,
                 'onu_count'   => $totalFound,
                 'duration_ms' => $totalDurationMs,
                 'timestamp'   => now()->format('H:i:s'),
@@ -735,8 +750,8 @@ class PollOltTelemetry extends Command
             self::appendWorkerLog(
                 $device->name,
                 'GLOBAL_BULK',
-                $totalFound > 0 ? 'SUCCESS' : 'EMPTY',
-                "✨ Global Bulk Selesai: {$totalFound} ONU ({$totalOnline} Online) se-OLT berhasil diperbarui ({$totalDurationMs} ms, SNMP walk: {$walkDuration} ms)",
+                $readStatus,
+                "✨ Global Bulk Selesai: {$totalFound} ONU ({$totalOnline} Online) se-OLT selesai dibaca ({$totalDurationMs} ms, SNMP walk: {$walkDuration} ms)",
                 ['onu_count' => $totalFound, 'online_count' => $totalOnline, 'duration_ms' => $totalDurationMs]
             );
 
@@ -931,15 +946,6 @@ class PollOltTelemetry extends Command
             $batchDuration = round((microtime(true) - $batchStart) * 1000, 1);
             $totalBatchFound = count($batchOnusCombined);
 
-            // Update status pulse selesai
-            Cache::put("olt_active_querying_port_{$device->id}", [
-                'port'        => $batchLabel,
-                'status'      => $totalBatchFound > 0 ? 'SUCCESS' : 'EMPTY',
-                'onu_count'   => $totalBatchFound,
-                'duration_ms' => $batchDuration,
-                'timestamp'   => now()->format('H:i:s'),
-            ], 60);
-
             // 1. Ambil data fisik ONU yang sudah tersimpan sebelumnya (baik Registered maupun Unconfigured)
             $existingRegistered   = $existingSnapshot['onu_list'] ?? [];
             $existingUnconfigured = $existingSnapshot['unconfigured_onus'] ?? [];
@@ -958,7 +964,8 @@ class PollOltTelemetry extends Command
             $activePriorityPorts = Cache::get($priorityKey, []);
 
             // New per-port observations alone are eligible for writes; preserved ports keep their old timestamps.
-            app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,$batchOnusCombined,$sampleStartedAt,'poll',true);
+            $writeResult=app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,$batchOnusCombined,$sampleStartedAt,'poll',true);
+            $readStatus=$this->pollHealth?->read($deviceId,$batchOnusCombined,null,$writeResult) ?? 'UNKNOWN';
             $physicalOnuMap=\App\Services\Olt\OnuTelemetryWriter::mergePortObservations(array_values($physicalOnuMap),$batchOnusCombined);
 
             // 🛡️ LAYER 3: EVALUASI PORT PRIORITAS DENGAN FILTER GHOST ONU
@@ -1049,8 +1056,8 @@ class PollOltTelemetry extends Command
             self::appendWorkerLog(
                 $device->name,
                 $batchLabel,
-                $totalBatchFound > 0 ? 'SUCCESS' : 'EMPTY',
-                "Worker Pool Batch 4-Port (" . $batchLabel . "): {$totalBatchFound} ONU terbaca & database terupdate ({$batchDuration} ms)",
+                $readStatus,
+                "Worker Pool Batch 4-Port (" . $batchLabel . "): {$totalBatchFound} ONU terbaca; penyimpanan selesai ({$batchDuration} ms)",
                 ['onu_count' => $totalBatchFound, 'duration_ms' => $batchDuration]
             );
 

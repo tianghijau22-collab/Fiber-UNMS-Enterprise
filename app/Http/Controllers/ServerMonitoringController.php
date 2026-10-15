@@ -55,7 +55,7 @@ class ServerMonitoringController extends Controller
             'ram_pct'        => $memData['used_pct'],
             'rx_kbps'        => $netData['primary_rx_kbps'] ?? 0,
             'tx_kbps'        => $netData['primary_tx_kbps'] ?? 0,
-            'vpn_latency_ms' => $vpnData['peer_latency_ms'] ?? 0,
+            'vpn_latency_ms' => $vpnData['peer_latency_ms'] ?? null,
         ]);
 
         return response()->json([
@@ -90,8 +90,8 @@ class ServerMonitoringController extends Controller
             $stats = $this->getWorkerMetrics();
 
             return response()->json([
-                'status'      => 'success',
-                'message'     => "Background Telemetry Worker berhasil di-trigger dalam {$durationMs} ms.",
+                'status'      => in_array($stats['cycle_result'],['FAILED','UNKNOWN'],true) ? 'error':'success',
+                'message'     => 'Siklus selesai; hasil pembacaan: '.$stats['cycle_result'],
                 'duration_ms' => $durationMs,
                 'worker'      => $stats,
             ]);
@@ -525,237 +525,58 @@ class ServerMonitoringController extends Controller
      */
     protected function getVpnTunnelMetrics(): array
     {
-        return Cache::remember('server_mon_vpn_metrics', 12, function () {
-            $ipAddr = @shell_exec("ip -o addr show 2>/dev/null") ?: '';
-            $vpnInterfaces = [];
-            $primaryTunnel = null;
-
-            foreach (explode("\n", trim($ipAddr)) as $line) {
-                if (preg_match('/\d+:\s+(ppp\d+|wg\d+|tun\d+)\s+inet\s+([\d\.]+)\s+peer\s+([\d\.]+)/', $line, $m)) {
-                    $ifName  = $m[1];
-                    $localIp = $m[2];
-                    $peerIp  = $m[3];
-
-                    $vpnInterfaces[] = [
-                        'name'     => $ifName,
-                        'type'     => str_starts_with($ifName, 'ppp') ? 'Point-to-Point (PPTP/L2TP)' : (str_starts_with($ifName, 'wg') ? 'WireGuard' : 'OpenVPN / Tunnel'),
-                        'local_ip' => $localIp,
-                        'peer_ip'  => $peerIp,
-                    ];
-
-                    if (!$primaryTunnel) {
-                        $primaryTunnel = [
-                            'name'     => $ifName,
-                            'local_ip' => $localIp,
-                            'peer_ip'  => $peerIp,
-                        ];
-                    }
-                }
-            }
-
-            $peerIp = $primaryTunnel['peer_ip'] ?? '10.254.0.2';
-            $peerLatency = null;
-            $packetLoss = 0;
-            $jitter = 0;
-            $status = 'DISCONNECTED';
-            $quality = 'DOWN';
-            $qualityText = 'Tunnel Tidak Terhubung / Timeout';
-            $qualityColor = 'rose';
-
-            // 2. Fast Ping Test to VPN Peer Gateway (2 packets with 0.2s interval)
-            $pingOut = @shell_exec("ping -c 2 -i 0.2 -W 1 {$peerIp} 2>&1") ?: '';
-            if (preg_match('/rtt min\/avg\/max\/mdev = ([\d\.]+)\/([\d\.]+)\/([\d\.]+)\/([\d\.]+)/', $pingOut, $m)) {
-                $peerLatency = round((float)$m[2], 1);
-                $jitter      = round((float)$m[4], 2);
-                $status      = 'CONNECTED';
-            } elseif (preg_match('/time=([\d\.]+)\s*ms/', $pingOut, $m)) {
-                $peerLatency = round((float)$m[1], 1);
-                $status      = 'CONNECTED';
-            }
-
-            if (preg_match('/(\d+)%\s+packet loss/', $pingOut, $m)) {
-                $packetLoss = (int)$m[1];
-            }
-
-            // Tentukan Kualitas Latensi VPN
-            if ($status === 'CONNECTED' && $peerLatency !== null) {
-                if ($peerLatency < 30.0 && $packetLoss === 0) {
-                    $quality = 'OPTIMAL'; // Sangat Bagus (< 30ms)
-                    $qualityText = 'Sangat Bagus (Optimal)';
-                    $qualityColor = 'emerald';
-                } elseif ($peerLatency <= 60.0 && $packetLoss <= 5) {
-                    $quality = 'GOOD'; // Normal (30 - 60ms)
-                    $qualityText = 'Normal (Baik)';
-                    $qualityColor = 'emerald';
-                } elseif ($peerLatency <= 120.0) {
-                    $quality = 'MODERATE'; // Sedang / Waspada (60 - 120ms)
-                    $qualityText = 'Latensi Meningkat (Sedang)';
-                    $qualityColor = 'amber';
-                } else {
-                    $quality = 'DEGRADED'; // Tinggi (> 120ms atau packet loss)
-                    $qualityText = 'Latensi Tinggi / Degradasi';
-                    $qualityColor = 'rose';
-                }
-            }
-
-            // 3. Ping ke OLT Terdaftar di Database
-            $oltTargets = [];
-            try {
-                $olts = \App\Models\OltDevice::where('status', 'active')->get();
-                foreach ($olts as $olt) {
-                    $oltIp = $olt->ip_address;
-                    $oltPing = @shell_exec("ping -c 1 -W 1 {$oltIp} 2>&1") ?: '';
-                    $oltLat = null;
-                    if (preg_match('/time=([\d\.]+)\s*ms/', $oltPing, $m)) {
-                        $oltLat = round((float)$m[1], 1);
-                    }
-                    $oltTargets[] = [
-                        'id'         => $olt->id,
-                        'name'       => $olt->name,
-                        'ip'         => $oltIp,
-                        'vendor'     => $olt->vendor,
-                        'latency_ms' => $oltLat,
-                        'status'     => $oltLat !== null ? 'REACHABLE' : 'UNREACHABLE',
-                    ];
-                }
-            } catch (\Throwable $e) {
-                // fallback
-            }
-
-            return [
-                'status'           => $status,
-                'interface'        => $primaryTunnel['name'] ?? 'ppp0',
-                'local_ip'         => $primaryTunnel['local_ip'] ?? '10.254.0.1',
-                'peer_ip'          => $peerIp,
-                'peer_latency_ms'  => $peerLatency,
-                'packet_loss_pct'  => $packetLoss,
-                'jitter_ms'        => $jitter,
-                'quality'          => $quality,
-                'quality_text'     => $qualityText,
-                'quality_color'    => $qualityColor,
-                'routes'           => ['10.11.0.0/16', '192.168.100.0/24'],
-                'olt_targets'      => $oltTargets,
-                'all_interfaces'   => $vpnInterfaces,
-            ];
-        });
+        return $this->oltHealth()['vpn'];
     }
+
+    protected ?array $monitoringHealth = null;
+    protected function oltHealth(): array
+    {
+        return $this->monitoringHealth ??= app(\App\Services\Olt\OltHealthMonitor::class)->overview();
+    }
+
 
     /**
      * Membaca status dan telemetri Background Polling Worker (SNMP Daemon)
      */
     protected function getWorkerMetrics(): array
     {
-        $defaultStats = [
-            'status'               => 'ACTIVE',
-            'last_run_at'          => now()->subSeconds(rand(5, 25))->toIso8601String(),
-            'last_run_human'       => now()->subSeconds(rand(5, 25))->format('d M Y, H:i:s'),
-            'cycle_duration_ms'    => 320.5,
-            'cycle_duration_human' => '320.5 ms',
-            'throttling_delay_ms'  => 15,
-            'total_devices'        => \App\Models\OltDevice::where('status', 'active')->count(),
-            'total_ports_polled'   => 4,
-            'total_onus_polled'    => \App\Models\OntRegistration::count(),
-            'total_uncfg_detected' => 0,
-            'device_reports'       => [],
-        ];
-
-        $stats = Cache::get('backend_worker_telemetry', $defaultStats);
-        $history = Cache::get('backend_worker_history', []);
-
-        // Hitung seconds ago bulat
-        $lastRunCarbon = isset($stats['last_run_at']) ? Carbon::parse($stats['last_run_at']) : now();
-        $secondsAgo = (int)$lastRunCarbon->diffInSeconds(now());
-
-        $totalOnus = ($stats['total_onus_polled'] ?? 0) > 0 
-            ? (int)$stats['total_onus_polled'] 
-            : \App\Models\OntRegistration::count();
-
-        $totalPorts = ($stats['total_ports_polled'] ?? 0) > 0 
-            ? (int)$stats['total_ports_polled'] 
-            : 8;
-
-        $isPaused = (bool)Cache::get('backend_worker_paused', false);
-        $loopDelaySec = (int)Cache::get('backend_worker_loop_delay_sec', 2);
-
-        $deviceReports = $stats['device_reports'] ?? [];
-        if (empty($deviceReports)) {
-            $activeDevs = \App\Models\OltDevice::where('status', 'active')->get();
-            foreach ($activeDevs as $d) {
-                $deviceReports[] = [
-                    'device_id'   => $d->id,
-                    'device_name' => $d->name,
-                    'ip'          => $d->ip_address,
-                    'vendor'      => $d->vendor,
-                    'duration_ms' => 0,
-                    'status'      => 'SUCCESS',
-                    'timestamp'   => now()->format('H:i:s'),
-                ];
+        $health=$this->oltHealth();$stats=\App\Services\Olt\OltHealthMonitor::cachedArray('backend_worker_telemetry');
+        $paused=(bool)Cache::get('backend_worker_paused',false);
+        $service=$health['poller_service'];$status=$service['status'];
+        if($status==='RUNNING' && $paused)$status='PAUSED';
+        $at=$stats['last_run_at'] ?? null;$age=\App\Services\Olt\OltHealthMonitor::age($at);
+        $reports=[];$saved=collect(is_array($stats['device_reports'] ?? null) ? $stats['device_reports']:[])->filter(fn($r)=>is_array($r))->keyBy('device_id');
+        foreach($health['devices'] as $r) {
+            if($service['status']!=='RUNNING' && ($r['poll']['phase'] ?? null)==='READING') {
+                if($r['status']==='IN_PROGRESS')$r['status']='UNKNOWN';
+                $r['poll']['phase']='UNCONFIRMED';$r['query_elapsed_seconds']=null;
             }
+            $old=$saved->get($r['device_id'],[]);$query=\App\Services\Olt\OltHealthMonitor::cachedArray('olt_active_querying_port_'.$r['device_id']);
+            $reports[]=array_replace($old,$r,[
+                'duration_ms'=>$r['poll']['duration_ms'] ?? null,
+                'last_port_polled'=>$query['port'] ?? null,'active_querying_port'=>$query['port'] ?? null,
+                'last_port_onu_count'=>$r['poll']['rows_read'] ?? null,
+                'querying_status'=>$status==='RUNNING' ? $r['querying_status']:'STANDBY',
+            ]);
         }
-        $totalUncfgSum = 0;
-        $totalRegisteredSum = 0;
-
-        foreach ($deviceReports as &$report) {
-            $devId = $report['device_id'] ?? null;
-            if ($devId) {
-                $dev = \App\Models\OltDevice::find($devId);
-                $snapshot = $dev?->last_telemetry_snapshot ?? [];
-                $allOnus  = $snapshot['onu_list'] ?? [];
-                $uncfg    = $snapshot['unconfigured_onus'] ?? [];
-                $ponPorts = $snapshot['pon_ports'] ?? [];
-
-                $activeCount = count(array_filter($ponPorts, fn($p) => ($p['status'] ?? '') === 'Up' || ($p['registered_onus'] ?? 0) > 0));
-                
-                $regCount = count($allOnus);
-                $uncfgCount = count($uncfg);
-                $onlineCount = count(array_filter($allOnus, fn($o) => ($o['status'] ?? '') === 'Online' || ($o['status'] ?? '') === 'active'));
-
-                $report['total_ports']           = count($ponPorts) ?: ($report['total_ports'] ?? 0);
-                $report['active_ports']          = $activeCount ?: ($report['active_ports'] ?? 0);
-                $report['db_registered_total']   = $regCount;
-                $report['db_registered_online']  = $onlineCount;
-                $report['db_unregistered_total'] = $uncfgCount;
-                $report['onus_found']            = $regCount;
-                $report['uncfg_found']           = $uncfgCount;
-
-                $totalRegisteredSum += $regCount;
-                $totalUncfgSum += $uncfgCount;
-
-                $activeQuery = Cache::get("olt_active_querying_port_{$devId}");
-                $report['active_querying_port']  = $activeQuery['port'] ?? ($report['last_port_polled'] ?? null);
-                $report['last_port_polled']      = $activeQuery['port'] ?? ($report['last_port_polled'] ?? null);
-                $report['last_port_onu_count']   = $activeQuery['onu_count'] ?? 0;
-                $report['querying_status']       = $activeQuery['status'] ?? 'STANDBY';
-                $report['querying_timestamp']    = $activeQuery['timestamp'] ?? null;
-            }
-        }
-        unset($report);
-
-        $engineMode = Cache::get('olt_polling_engine_mode', 'global_bulk');
-        $modeLabel = $engineMode === 'global_bulk' ? 'Global Bulk Polling (Se-OLT Sekaligus)' : 'Per-Port Round-Robin Polling';
-
+        $history=array_values(array_map(fn($r)=>array_replace($r,['status'=>($r['health_schema'] ?? null)===1 ? ($r['status'] ?? 'UNKNOWN'):'UNKNOWN']),array_filter(\App\Services\Olt\OltHealthMonitor::cachedArray('backend_worker_history'),fn($r)=>is_array($r))));
+        $mode=Cache::get('olt_polling_engine_mode','slot_parallel');
         return [
-            'status'               => $isPaused ? 'PAUSED' : ($stats['status'] ?? 'ACTIVE'),
-            'engine_mode'          => $engineMode,
-            'mode_label'           => $modeLabel,
-            'is_paused'            => $isPaused,
-            'loop_delay_sec'       => $loopDelaySec,
-            'last_run_at'          => $stats['last_run_at'] ?? now()->toIso8601String(),
-            'last_run_human'       => $stats['last_run_human'] ?? now()->format('d M Y, H:i:s'),
-            'seconds_ago'          => $secondsAgo,
-            'seconds_ago_text'     => $secondsAgo < 60 ? "{$secondsAgo} detik lalu" : round($secondsAgo / 60) . " menit lalu",
-            'cycle_duration_ms'    => $stats['cycle_duration_ms'] ?? 320.5,
-            'cycle_duration_human' => $stats['cycle_duration_human'] ?? '320.5 ms',
-            'throttling_delay_ms'  => $stats['throttling_delay_ms'] ?? 15,
-            'total_devices'        => $stats['total_devices'] ?? \App\Models\OltDevice::where('status', 'active')->count(),
-            'total_ports_polled'   => $totalPorts,
-            'total_onus_polled'    => $totalRegisteredSum > 0 ? $totalRegisteredSum : $totalOnus,
-            'total_uncfg_detected' => $totalUncfgSum > 0 ? $totalUncfgSum : ($stats['total_uncfg_detected'] ?? 0),
-            'device_reports'       => $deviceReports,
-            'history'              => $history,
-            'logs'                 => Cache::get('backend_worker_logs', []),
+            'status'=>$status,'service'=>$service,'health_schema'=>1,'checked_at'=>$health['checked_at'],
+            'cycle_result'=>($stats['health_schema'] ?? null)===1 ? ($stats['cycle_result'] ?? 'UNKNOWN'):'UNKNOWN',
+            'engine_mode'=>$mode,'mode_label'=>match($mode){'slot_parallel'=>'Slot/Card Batching','global_bulk'=>'Global Bulk',default=>'Per-Port'},
+            'is_paused'=>$paused,'loop_delay_sec'=>(int)Cache::get('backend_worker_loop_delay_sec',3),
+            'last_run_at'=>$age===null ? null:$at,'last_run_human'=>$age===null ? null:Carbon::parse($at)->format('d M Y, H:i:s'),
+            'seconds_ago'=>$age,'seconds_ago_text'=>$age===null ? 'Belum ada siklus tercatat':($age<60 ? $age.' detik lalu':round($age/60).' menit lalu'),
+            'cycle_duration_ms'=>$stats['cycle_duration_ms'] ?? null,'cycle_duration_human'=>$stats['cycle_duration_human'] ?? null,
+            'throttling_delay_ms'=>$stats['throttling_delay_ms'] ?? null,'total_devices'=>count($reports),
+            'total_ports_polled'=>($stats['health_schema'] ?? null)===1 ? ($stats['total_ports_polled'] ?? null):null,
+            'total_onus_polled'=>array_sum(array_column($reports,'db_registered_total')),
+            'total_uncfg_detected'=>array_sum(array_column($reports,'db_unregistered_total')),
+            'device_reports'=>$reports,'history'=>$history,'logs'=>Cache::get('backend_worker_logs',[]) ?: [],
         ];
     }
+
 
     /**
      * Informasi OS, Kernel, Hostname, dan Uptime
@@ -799,8 +620,8 @@ class ServerMonitoringController extends Controller
     protected function getGatewayServicesHealth(array $diskData, array $vpnData = [], array $workerData = [], array $snmpTrapData = []): array
     {
         // 1. SNMP Poller & Background Telemetry Worker
-        $lastWorkerActivity = $workerData['last_run_human'] ?? (Cache::get('last_olt_polling_time') ?: now()->subSeconds(rand(5, 25))->toIso8601String());
-        $snmpStatus = 'ACTIVE';
+        $lastWorkerActivity = $workerData['last_run_human'] ?? 'Belum ada siklus tercatat';
+        $snmpStatus = $workerData['status'] ?? 'UNKNOWN';
 
         // 2. Database PostgreSQL
         $dbStatus = 'HEALTHY';
@@ -820,34 +641,34 @@ class ServerMonitoringController extends Controller
         $telegramConfigured = !empty(config('services.telegram.bot_token')) || !empty(env('TELEGRAM_BOT_TOKEN'));
 
         // 5. VPN Gateway Tunnel
-        $vpnStatus = $vpnData['status'] ?? 'CONNECTED';
+        $vpnStatus = $vpnData['status'] ?? 'UNKNOWN';
 
         // 6. SNMP Trap Listener Status
-        $trapStatus = ($snmpTrapData['status'] ?? 'ACTIVE') === 'ACTIVE' ? 'ACTIVE' : 'DOWN';
+        $trapStatus = $snmpTrapData['service']['status'] ?? 'UNKNOWN';
 
         return [
             'snmp_trap' => [
                 'name'        => 'SNMP Trap & Syslog Listener',
                 'status'      => $trapStatus,
-                'detail'      => 'Sub-Second Detector: ' . ($snmpTrapData['last_received_human'] ?? 'Standby (Port UDP 162/514)'),
+                'detail'      => 'Jalur: ' . ($snmpTrapData['path_status'] ?? 'UNKNOWN') . ' • ' . ($snmpTrapData['last_received_human'] ?? 'Belum ada paket'),
                 'driver'      => 'socket_select Asynchronous Non-Blocking Engine',
                 'last_active' => $snmpTrapData['last_received_human'] ?? 'Standby',
-                'duration'    => 'Sub-detik (~0.5s)',
+                'duration'    => null,
             ],
             'snmp_daemon' => [
                 'name'        => 'SNMP Poller Background Worker',
                 'status'      => $snmpStatus,
-                'detail'      => 'Worker Telemetri OLT Aktif (Throttling 15ms)',
+                'detail'      => 'Status proses; hasil pembacaan: ' . ($workerData['cycle_result'] ?? 'UNKNOWN'),
                 'driver'      => 'ZTE C300/C320, HSGQ & Multi-Vendor Engine',
                 'last_active' => $lastWorkerActivity,
-                'duration'    => $workerData['cycle_duration_human'] ?? '320 ms',
+                'duration'    => $workerData['cycle_duration_human'] ?? 'Belum tersedia',
             ],
             'vpn_tunnel' => [
                 'name'        => 'VPN Peer Bridge Tunnel (' . ($vpnData['interface'] ?? 'ppp0') . ')',
-                'status'      => $vpnStatus === 'CONNECTED' ? 'CONNECTED' : 'DOWN',
-                'detail'      => 'Peer: ' . ($vpnData['peer_ip'] ?? '10.254.0.2') . ' • Latensi: ' . ($vpnData['peer_latency_ms'] ?? 0) . ' ms (' . ($vpnData['quality_text'] ?? 'Normal') . ')',
+                'status'      => $vpnStatus,
+                'detail'      => $vpnData['quality_text'] ?? 'Belum terverifikasi',
                 'latency_ms'  => $vpnData['peer_latency_ms'] ?? null,
-                'quality'     => $vpnData['quality'] ?? 'OPTIMAL',
+                'quality'     => $vpnData['quality'] ?? 'UNKNOWN',
             ],
             'webrtc_gateway' => [
                 'name'        => 'WebRTC Audio & Dispatch Gateway',
@@ -941,155 +762,50 @@ class ServerMonitoringController extends Controller
      */
     protected function getHistoricalPoints(): array
     {
-        $history = Cache::get('server_mon_history', []);
-        if (empty($history)) {
-            // Inisialisasi awal titik dummy mulus
-            $history = [];
-            for ($i = 9; $i >= 0; $i--) {
-                $history[] = [
-                    'time'           => now()->subSeconds($i * 5)->format('H:i:s'),
-                    'cpu_pct'        => rand(8, 22),
-                    'ram_pct'        => 22.8,
-                    'rx_kbps'        => rand(15, 80),
-                    'tx_kbps'        => rand(10, 60),
-                    'vpn_latency_ms' => 22.4,
-                ];
-            }
-        }
-        return $history;
+        return Cache::get('server_mon_history',[]) ?: [];
     }
+
 
     /**
      * Membaca status, metrik, konektivitas OLT, dan live stream SNMP Trap Listener (UDP 162/514)
      */
     protected function getSnmpTrapMetrics(): array
     {
-        // 1. Heartbeat check (Daemon menulis timestamp setiap 5 detik)
-        $lastHeartbeat = (int)Cache::get('snmp_trap_listener_heartbeat', 0);
-        $isHeartbeatAlive = (time() - $lastHeartbeat) <= 20;
-
-        // 2. Status Service Systemd - Cached 15s jika heartbeat tidak aktif
-        $systemdStatus = Cache::remember('server_mon_trap_svc_status', 15, function () use ($isHeartbeatAlive) {
-            if ($isHeartbeatAlive) return 'ACTIVE';
-            $systemdOutput = [];
-            $exitCode = 0;
-            @exec('systemctl is-active fiber-event-listener 2>/dev/null', $systemdOutput, $exitCode);
-            $rawStatus = trim($systemdOutput[0] ?? '');
-            return ($rawStatus === 'active') ? 'ACTIVE' : 'INACTIVE';
-        });
-
-        $isActive = ($systemdStatus === 'ACTIVE') || $isHeartbeatAlive;
-
-        // 3. Status Port UDP 162 & 514
-        $portsListening = [
-            'trap_162' => [
-                'port'     => 162,
-                'protocol' => 'UDP',
-                'service'  => 'SNMP Trap',
-                'status'   => $isActive ? 'LISTENING' : 'CLOSED',
-            ],
-            'syslog_514' => [
-                'port'     => 514,
-                'protocol' => 'UDP',
-                'service'  => 'Syslog',
-                'status'   => $isActive ? 'LISTENING' : 'CLOSED',
-            ],
-        ];
-
-        // 4. Statistik Paket Masuk Hari Ini
-        $todayKey = 'snmp_trap_packets_today_' . now()->toDateString();
-        $packetsToday = (int)Cache::get($todayKey, 0);
-
-        // 5. Waktu Paket Terakhir Diterima
-        $lastReceivedAt = Cache::get('snmp_trap_last_received_at');
-        $lastReceivedHuman = 'Belum ada paket';
-        $secondsAgo = null;
-        if ($lastReceivedAt) {
-            $carbon = Carbon::parse($lastReceivedAt);
-            $secondsAgo = (int)$carbon->diffInSeconds(now());
-            $lastReceivedHuman = $secondsAgo < 60 ? "{$secondsAgo} detik lalu" : ($secondsAgo < 3600 ? round($secondsAgo / 60) . " menit lalu" : round($secondsAgo / 3600) . " jam lalu");
+        $health=$this->oltHealth();$service=$health['listener_service'];
+        $heartbeat=(int)Cache::get('snmp_trap_listener_heartbeat',0);
+        $age=time()-$heartbeat;$alive=$heartbeat>0 && $age>=-5 && $age<=20;
+        $isActive=$service['status']==='RUNNING';
+        $listener=\App\Services\Olt\OltHealthMonitor::cachedArray('snmp_trap_listener_status');
+        $ports=[];
+        foreach(['trap_162'=>['trap_active',162,'SNMP Trap'],'syslog_514'=>['syslog_active',514,'Syslog']] as $key=>$definition) {
+            [$flag,$port,$name]=$definition;
+            $ports[$key]=['port'=>$port,'protocol'=>'UDP','service'=>$name,
+                'status'=>!$isActive ? ($service['status']==='STOPPED' ? 'CLOSED':'UNKNOWN')
+                    : (!$alive || !array_key_exists($flag,$listener) ? 'UNKNOWN':($listener[$flag] ? 'LISTENING':'CLOSED'))];
         }
-
-        // 6. Monitoring Konektivitas Perangkat OLT ke SNMP Trap
-        $activeOlts = \App\Models\OltDevice::where('status', 'active')->get();
-        $oltTrapStatus = [];
-        $totalConnectedOlts = 0;
-
-        foreach ($activeOlts as $olt) {
-            $ip = $olt->ip_address;
-            $lastFromOlt = Cache::get("snmp_trap_last_from_{$ip}");
-
-            // Cek reachability OLT via ping/network
-            $isPingable = false;
-            $pingOutput = @shell_exec("ping -c 1 -W 1 {$ip} 2>&1") ?: '';
-            $pingLatency = null;
-            if (preg_match('/time=([\d\.]+)\s*ms/', $pingOutput, $m)) {
-                $isPingable = true;
-                $pingLatency = round((float)$m[1], 1);
-            }
-
-            $hasSentTrap = !empty($lastFromOlt);
-            $oltSecAgo = null;
-            $oltLastHuman = 'Belum pernah kirim trap';
-            if ($hasSentTrap && isset($lastFromOlt['timestamp'])) {
-                $oltCarbon = Carbon::parse($lastFromOlt['timestamp']);
-                $oltSecAgo = (int)$oltCarbon->diffInSeconds(now());
-                $oltLastHuman = $oltSecAgo < 60 ? "{$oltSecAgo} detik lalu" : ($oltSecAgo < 3600 ? round($oltSecAgo / 60) . " menit lalu" : round($oltSecAgo / 3600) . " jam lalu");
-            }
-
-            $statusLabel = 'READY';
-            $statusBadge = 'emerald';
-            if (!$isPingable) {
-                $statusLabel = 'UNREACHABLE';
-                $statusBadge = 'rose';
-            } elseif ($hasSentTrap && $oltSecAgo !== null && $oltSecAgo <= 3600) {
-                $statusLabel = 'ACTIVE_TRAPPING';
-                $statusBadge = 'cyan';
-                $totalConnectedOlts++;
-            } else {
-                $totalConnectedOlts++;
-            }
-
-            $oltTrapStatus[] = [
-                'id'             => $olt->id,
-                'name'           => $olt->name,
-                'ip'             => $ip,
-                'vendor'         => $olt->vendor,
-                'ping_ms'        => $pingLatency,
-                'is_reachable'   => $isPingable,
-                'last_trap_at'   => $lastFromOlt['timestamp'] ?? null,
-                'last_trap_text' => $oltLastHuman,
-                'last_event'     => $lastFromOlt['event_label'] ?? null,
-                'status_label'   => $statusLabel,
-                'status_badge'   => $statusBadge,
-            ];
+        $last=Cache::get('snmp_trap_last_received_at');$lastAge=\App\Services\Olt\OltHealthMonitor::age($last);
+        $olts=[];$responding=0;
+        foreach($health['devices'] as $r) {
+            $packet=\App\Services\Olt\OltHealthMonitor::cachedArray('snmp_trap_last_from_'.$r['ip']);
+            $packetAge=\App\Services\Olt\OltHealthMonitor::age($packet['timestamp'] ?? null);
+            $reachable=$r['connection']['status']==='RESPONDING';if($reachable)$responding++;
+            $olts[]=['id'=>$r['device_id'],'name'=>$r['device_name'],'ip'=>$r['ip'],'vendor'=>$r['vendor'],
+                'ping_ms'=>$r['connection']['latency_ms'],'latency_source'=>'snmp_sysuptime','is_reachable'=>$reachable,
+                'last_trap_at'=>$packet['timestamp'] ?? null,'last_trap_text'=>$packetAge===null ? 'Belum ada paket terverifikasi':$packetAge.' detik lalu',
+                'last_event'=>$packet['event_label'] ?? null,'status_label'=>$r['connection']['status'],
+                'status_badge'=>$reachable ? 'emerald':($r['connection']['status']==='UNKNOWN' ? 'amber':'rose'),
+                'alarm_delivery_status'=>$packetAge!==null && $packetAge<=3600 ? 'RECENT_PACKET':'UNVERIFIED'];
         }
-
-        // 7. Recent Trap Logs (maksimal 50 log terakhir)
-        $recentLogs = Cache::get('snmp_trap_recent_logs', []);
-
-        // 8. Health Summary
-        $overallHealth = 'HEALTHY';
-        if (!$isActive) {
-            $overallHealth = 'DOWN';
-        } elseif ($totalConnectedOlts < count($activeOlts)) {
-            $overallHealth = 'WARNING';
-        }
-
-        return [
-            'status'               => $isActive ? 'ACTIVE' : 'INACTIVE',
-            'health'               => $overallHealth,
-            'is_running'           => $isActive,
-            'systemd_status'       => $systemdStatus,
-            'ports'                => $portsListening,
-            'total_packets_today'  => $packetsToday,
-            'last_received_at'     => $lastReceivedAt,
-            'last_received_human'  => $lastReceivedHuman,
-            'seconds_ago'          => $secondsAgo,
-            'olts'                 => $oltTrapStatus,
-            'total_olts'           => count($activeOlts),
-            'connected_olts'       => $totalConnectedOlts,
-            'recent_logs'          => $recentLogs,
-        ];
+        $ready=$isActive && $alive && $health['vpn']['status']==='AVAILABLE'
+            && $ports['trap_162']['status']==='LISTENING' && $ports['syslog_514']['status']==='LISTENING';
+        return ['status'=>$isActive ? 'ACTIVE':$service['status'],'health'=>$ready ? 'PATH_READY':'UNVERIFIED',
+            'service'=>$service,'heartbeat_status'=>$alive ? 'RECENT':'STALE_OR_MISSING',
+            'path_status'=>$health['vpn']['status'],'alarm_delivery_status'=>'UNVERIFIED',
+            'is_running'=>$isActive,'systemd_status'=>$service['status'],'ports'=>$ports,
+            'total_packets_today'=>(int)Cache::get('snmp_trap_packets_today_'.now()->toDateString(),0),
+            'last_received_at'=>$lastAge===null ? null:$last,'last_received_human'=>$lastAge===null ? 'Belum ada paket terverifikasi':$lastAge.' detik lalu',
+            'seconds_ago'=>$lastAge,'olts'=>$olts,'total_olts'=>count($olts),'connected_olts'=>$responding,
+            'recent_logs'=>Cache::get('snmp_trap_recent_logs',[]) ?: []];
     }
+
 }
