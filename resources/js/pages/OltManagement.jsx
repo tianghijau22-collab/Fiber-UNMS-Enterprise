@@ -7,6 +7,8 @@ import RefreshButton from '../components/RefreshButton';
 import VpnMikrotikBridgeModal from '../components/VpnMikrotikBridgeModal';
 import FlowingOltTopology from '../components/FlowingOltTopology.jsx';
 import LoadingState from '../components/LoadingState.jsx';
+import { OnuStatus, TelemetryStamp, InventoryOnuSignal as SignalStrengthMeter } from '../components/OnuTelemetry.jsx';
+import { inventoryTelemetry, inventoryMatchesFilter, inventoryOpticalStats } from '../lib/onuTelemetry.js';
 
 // ─── Icon Components ──────────────────────────────────────────────────────────
 const IconSettings = () => (
@@ -122,39 +124,6 @@ const SortIcon = ({ field, currentField, direction }) => {
   return <span className="text-indigo-600 dark:text-indigo-400 font-extrabold ml-1 text-xs">{direction === 'asc' ? '▲' : '▼'}</span>;
 };
 
-const SignalStrengthMeter = ({ rxPower, status }) => {
-  if (status !== 'Online' || rxPower === null || rxPower <= -40) {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-        <span className="flex gap-0.5 items-end h-3">
-          <span className="w-1 h-1 bg-rose-400 rounded-2xs" />
-          <span className="w-1 h-1.5 bg-black/20 dark:bg-white/20 rounded-2xs" />
-          <span className="w-1 h-2 bg-black/20 dark:bg-white/20 rounded-2xs" />
-          <span className="w-1 h-3 bg-black/20 dark:bg-white/20 rounded-2xs" />
-        </span>
-        <span>Offline (-40.00 dBm)</span>
-      </span>
-    );
-  }
-  const rx = parseFloat(rxPower);
-  const bars = rx >= -19 ? 4 : rx >= -23 ? 3 : rx >= -27 ? 2 : 1;
-  const colorCls = bars >= 3 ? 'bg-emerald-500' : bars === 2 ? 'bg-amber-500' : 'bg-rose-500';
-  const textCls = bars >= 3 ? 'text-emerald-700 dark:text-emerald-400' : bars === 2 ? 'text-amber-700 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400';
-  const bgCls = bars >= 3 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/80' : bars === 2 ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/80' : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/80';
-
-  return (
-    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-xs font-bold shadow-2xs ${bgCls}`}>
-      <span className="flex gap-0.5 items-end h-3">
-        <span className={`w-1 h-1 rounded-2xs ${bars >= 1 ? colorCls : 'bg-black/10 dark:bg-white/20'}`} />
-        <span className={`w-1 h-1.5 rounded-2xs ${bars >= 2 ? colorCls : 'bg-black/10 dark:bg-white/20'}`} />
-        <span className={`w-1 h-2 rounded-2xs ${bars >= 3 ? colorCls : 'bg-black/10 dark:bg-white/20'}`} />
-        <span className={`w-1 h-3 rounded-2xs ${bars >= 4 ? colorCls : 'bg-black/10 dark:bg-white/20'}`} />
-      </span>
-      <span className={textCls}>{!isNaN(rx) ? rx.toFixed(2) : rxPower} dBm</span>
-    </div>
-  );
-};
-
 // Helper Format Port Interface (menampilkan format interface otentik dari OLT)
 const formatShortPort = (portStr) => {
   if (!portStr) return '—';
@@ -194,11 +163,13 @@ const getPortHealth = (port, oltDataRef) => {
   }
 
   const regCount = port.registered_onus !== undefined ? Number(port.registered_onus) : portOnus.length;
-  const onCount = port.online_onus !== undefined 
-    ? Number(port.online_onus)
-    : portOnus.filter(o => (o.status === 'Online' || o.status === 'active' || String(o.status).toLowerCase() === 'working') && o.rx_power !== null && Number(o.rx_power) > -38.0).length;
+  const onCount = portOnus.filter(o => inventoryTelemetry(o).is_online === true).length;
+  const verifiedOnline = portOnus.filter(o => inventoryTelemetry(o).is_online === true).length;
+  const verifiedDown = portOnus.filter(o => inventoryTelemetry(o).is_online === false).length;
+  const unknownCount = Math.max(regCount,portOnus.length)-verifiedOnline-verifiedDown;
 
   if (regCount > 0) {
+    if (unknownCount > 0) return { status:'unknown',label:`${unknownCount} belum terverifikasi`,isUp:false,isMassDown:false,isWarning:true,regCount,onCount:verifiedOnline };
     if (onCount === 0) {
       return { status: 'mass_down', label: 'Mati Massal', isUp: false, isMassDown: true, isWarning: false, regCount, onCount };
     }
@@ -568,7 +539,7 @@ export default function OltManagement() {
               return p !== targetClean && !p.startsWith(targetClean + '/');
             });
             const totalFoundOnPort = (res.onu_list || []).length + (res.unconfigured_onus || []).length;
-            const onlineFoundOnPort = (res.onu_list || []).filter(o => o.status === 'Online').length + (res.unconfigured_onus || []).filter(o => o.status === 'Online').length;
+            const onlineFoundOnPort = [...(res.onu_list || []),...(res.unconfigured_onus || [])].filter(o => inventoryTelemetry(o).is_online === true).length;
 
             const updatedPonPorts = (prev.pon_ports || []).map(p => {
               const pClean = (p.port_id || '').replace(/^gpon[-_]olt_/i, '').replace(/^epon[-_]olt_/i, '');
@@ -1042,34 +1013,7 @@ export default function OltManagement() {
       return true;
     });
 
-    let excellent = 0, good = 0, warning = 0, critical = 0, los = 0;
-    list.forEach(o => {
-      const isOffline = o.status !== 'Online' || o.rx_power === null || o.rx_power <= -40;
-      if (isOffline) {
-        los++;
-      } else {
-        const rx = parseFloat(o.rx_power);
-        if (rx >= -19) excellent++;
-        else if (rx >= -23) good++;
-        else if (rx >= -27) warning++;
-        else critical++;
-      }
-    });
-
-    const total = list.length;
-    return {
-      total,
-      excellent,
-      good,
-      warning,
-      critical,
-      los,
-      excellentPct: total > 0 ? Math.round((excellent / total) * 100) : 0,
-      goodPct: total > 0 ? Math.round((good / total) * 100) : 0,
-      warningPct: total > 0 ? Math.round((warning / total) * 100) : 0,
-      criticalPct: total > 0 ? Math.round((critical / total) * 100) : 0,
-      losPct: total > 0 ? Math.round((los / total) * 100) : 0,
-    };
+    return inventoryOpticalStats(list);
   }, [oltData?.onu_list, selectedPortFilter, isPortMatching]);
 
   // ─── Filtered & Sorted ONU List (Terdaftar) ─────────────────────────────────
@@ -1078,16 +1022,7 @@ export default function OltManagement() {
       if (!isPortMatching(onu.port, selectedPortFilter)) {
         return false;
       }
-      const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
-      const rx = parseFloat(onu.rx_power);
-
-      if (onuStatusFilter === 'online' && isOffline) return false;
-      if (onuStatusFilter === 'los' && !isOffline) return false;
-      if (onuStatusFilter === 'excellent' && (isOffline || rx < -19)) return false;
-      if (onuStatusFilter === 'good' && (isOffline || rx >= -19 || rx < -23)) return false;
-      if (onuStatusFilter === 'warning' && (isOffline || rx >= -23 || rx < -27)) return false;
-      if (onuStatusFilter === 'critical' && (isOffline || rx >= -27)) return false;
-      if (onuStatusFilter === 'high_loss' && (isOffline || rx >= -27)) return false;
+      if (!inventoryMatchesFilter(onu,onuStatusFilter)) return false;
 
       if (onuSearchQuery) {
         const q = onuSearchQuery.toLowerCase();
@@ -1105,10 +1040,8 @@ export default function OltManagement() {
     return [...rawFilteredOnus].sort((a, b) => {
       let comparison = 0;
       if (sortField === 'rx_power') {
-        const aOffline = a.status !== 'Online' || a.rx_power === null || a.rx_power <= -40;
-        const bOffline = b.status !== 'Online' || b.rx_power === null || b.rx_power <= -40;
-        const aVal = aOffline ? -999 : parseFloat(a.rx_power) || 0;
-        const bVal = bOffline ? -999 : parseFloat(b.rx_power) || 0;
+        const aVal = inventoryTelemetry(a).rx_power ?? -999;
+        const bVal = inventoryTelemetry(b).rx_power ?? -999;
         comparison = aVal - bVal;
       } else if (sortField === 'customer_name') {
         comparison = (a.customer_name || '').localeCompare(b.customer_name || '');
@@ -2489,7 +2422,7 @@ export default function OltManagement() {
                           port_id: selectedPortFilter,
                           status: 'Up',
                           registered_onus: (oltData.onu_list || []).filter(o => isPortMatching(o.port, selectedPortFilter)).length,
-                          online_onus: (oltData.onu_list || []).filter(o => isPortMatching(o.port, selectedPortFilter) && (o.status === 'online' || o.status === 'Online' || o.status === 'Working' || o.status === 'active')).length,
+                          online_onus: (oltData.onu_list || []).filter(o => isPortMatching(o.port, selectedPortFilter) && inventoryTelemetry(o).is_online === true).length,
                         };
                       })() : null);
 
@@ -2677,7 +2610,7 @@ export default function OltManagement() {
                             const target = port.port_id.replace(/^gpon[-_]olt_/i, '');
                             return p === target || p.startsWith(target + '/');
                           });
-                          const activeOnus = portOnusList.filter(o => o.status === 'Online' && o.rx_power !== null && o.rx_power > -40);
+                          const activeOnus = portOnusList.filter(o => inventoryTelemetry(o).rx_available);
                           const avgRx = activeOnus.length > 0
                             ? (activeOnus.reduce((acc, o) => acc + parseFloat(o.rx_power), 0) / activeOnus.length).toFixed(2)
                             : null;
@@ -2874,6 +2807,7 @@ export default function OltManagement() {
                       className="bg-slate-400 dark:bg-slate-600 h-full transition-all duration-500 hover:opacity-90"
                       title={`LOS / Offline: ${opticalStats.los} ONU (${opticalStats.losPct}%)`}
                     />
+                    <div className="bg-slate-200 dark:bg-slate-800 h-full" style={{width:`${(opticalStats.unknown + opticalStats.rxMissing) / opticalStats.total * 100}%`}} title="Status atau pengukuran Rx belum tersedia" />
                   </>
                 ) : (
                   <div className="w-full bg-black/10 dark:bg-white/20 h-full" />
@@ -2881,6 +2815,7 @@ export default function OltManagement() {
               </div>
             </div>
 
+            <p className="text-xs text-slate-500">Belum terverifikasi: {opticalStats.unknown} ONU · Online tanpa pengukuran Rx: {opticalStats.rxMissing} ONU</p>
             {/* 5 Clickable Distribution Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* 1. Sangat Baik */}
@@ -3154,7 +3089,6 @@ export default function OltManagement() {
                     {paginatedUnregisteredOnus.length > 0 ? (
                       paginatedUnregisteredOnus.map((onu, idx) => {
                         const globalIndex = (unregisteredPage - 1) * unregisteredPerPage + idx + 1;
-                        const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
                         return (
                           <tr key={onu.serial_number || idx} className="hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
                             <td className="px-5 py-3.5 font-mono text-xs text-black/50 dark:text-white/60 font-semibold">{globalIndex}</td>
@@ -3168,37 +3102,16 @@ export default function OltManagement() {
                               {onu.mac_address || onu.serial_number}
                             </td>
                             <td className="px-5 py-3.5">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${onu.status === 'Online'
-                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                                }`}>
-                                {onu.status || 'Online'}
-                              </span>
+                              <OnuStatus value={inventoryTelemetry(onu)} /><TelemetryStamp value={inventoryTelemetry(onu)} />
                             </td>
                             <td className="px-5 py-3.5 font-mono text-xs font-bold">
-                              {isOffline || onu.rx_power === null || Number(onu.rx_power) <= -38 ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                  Offline (-40.00 dBm)
-                                </span>
-                              ) : onu.rx_power < -27 ? (
-                                <span className="text-rose-600 dark:text-rose-400 font-bold">
-                                  {Number(onu.rx_power).toFixed(2)} dBm
-                                </span>
-                              ) : onu.rx_power < -24 ? (
-                                <span className="text-amber-600 dark:text-amber-400 font-bold">
-                                  {Number(onu.rx_power).toFixed(2)} dBm
-                                </span>
-                              ) : (
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                  {Number(onu.rx_power).toFixed(2)} dBm
-                                </span>
-                              )}
+                              <SignalStrengthMeter value={onu} />
                             </td>
                             <td className="px-5 py-3.5 text-black/70 dark:text-white/70 text-xs">
                               {onu.vendor_model || 'HGU EPON'}
                             </td>
                             <td className="px-5 py-3.5 text-black/70 dark:text-white/70 text-xs">
-                              {onu.register_time || onu.detected_at || 'Baru Saja'}
+                              {onu.register_time || onu.detected_at || 'Waktu deteksi belum tersedia'}
                             </td>
                             <td className="px-5 py-3.5 text-right space-x-2">
                               <button
@@ -3262,7 +3175,6 @@ export default function OltManagement() {
                 {paginatedUnregisteredOnus.length > 0 ? (
                   paginatedUnregisteredOnus.map((onu, idx) => {
                     const globalIndex = (unregisteredPage - 1) * unregisteredPerPage + idx + 1;
-                    const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
                     return (
                       <div key={onu.serial_number || idx} className="bg-white dark:bg-black rounded-lg border border-black/20 dark:border-white/20 shadow-xs overflow-hidden">
                         <div className="divide-y divide-slate-200 dark:divide-white/10 text-xs">
@@ -3300,12 +3212,7 @@ export default function OltManagement() {
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
                             <span className="text-black/60 dark:text-white/70 font-semibold">Status</span>
                             <span className="col-span-2">
-                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${onu.status === 'Online'
-                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                                }`}>
-                                {onu.status || 'Online'}
-                              </span>
+                              <OnuStatus value={inventoryTelemetry(onu)} /><TelemetryStamp value={inventoryTelemetry(onu)} />
                             </span>
                           </div>
 
@@ -3313,17 +3220,7 @@ export default function OltManagement() {
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
                             <span className="text-black/60 dark:text-white/70 font-semibold">Redaman Rx</span>
                             <span className="col-span-2 font-mono font-bold">
-                              {isOffline || onu.rx_power === null || Number(onu.rx_power) <= -38 ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                  Offline (-40.00 dBm)
-                                </span>
-                              ) : onu.rx_power < -27 ? (
-                                <span className="text-rose-600 dark:text-rose-400 font-bold">{Number(onu.rx_power).toFixed(2)} dBm</span>
-                              ) : onu.rx_power < -24 ? (
-                                <span className="text-amber-600 dark:text-amber-400 font-bold">{Number(onu.rx_power).toFixed(2)} dBm</span>
-                              ) : (
-                                <span className="text-emerald-600 dark:text-emerald-400 font-bold">{Number(onu.rx_power).toFixed(2)} dBm</span>
-                              )}
+                              <SignalStrengthMeter value={onu} />
                             </span>
                           </div>
 
@@ -3331,7 +3228,7 @@ export default function OltManagement() {
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
                             <span className="text-black/60 dark:text-white/70 font-semibold">Tipe / Model</span>
                             <span className="col-span-2 text-black/80 dark:text-white/90">
-                              {onu.vendor_model || 'HGU EPON'} · <span className="text-[11px] text-black/50 dark:text-white/60">{onu.register_time || onu.detected_at || 'Baru Saja'}</span>
+                              {onu.vendor_model || 'HGU EPON'} · <span className="text-[11px] text-black/50 dark:text-white/60">{onu.register_time || onu.detected_at || 'Waktu deteksi belum tersedia'}</span>
                             </span>
                           </div>
 
@@ -3512,6 +3409,8 @@ export default function OltManagement() {
                       { id: 'all', label: 'Semua Status' },
                       { id: 'online', label: 'Online' },
                       { id: 'los', label: 'Offline / LOS' },
+                      { id: 'unknown', label: 'Belum terverifikasi' },
+                      { id: 'rx_missing', label: 'Online · Rx belum tersedia' },
                       { id: 'excellent', label: '> -19 dBm (Prima)' },
                       { id: 'good', label: '-19 s/d -23 dBm (Normal)' },
                       { id: 'warning', label: '-23 s/d -27 dBm (Peringatan)' },
@@ -3577,13 +3476,10 @@ export default function OltManagement() {
                             <td className="px-5 py-3.5 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{formatShortPort(onu.port)}</td>
                             <td className="px-5 py-3.5 font-mono text-xs text-black/80 dark:text-white/90 font-bold">{onu.serial_number}</td>
                             <td className="px-5 py-3.5">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${onu.status === 'Online'
-                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                                }`}>{onu.status === 'Online' ? 'Online' : 'Offline'}</span>
+                              <OnuStatus value={inventoryTelemetry(onu)} /><TelemetryStamp value={inventoryTelemetry(onu)} />
                             </td>
                             <td className="px-5 py-3.5">
-                              <SignalStrengthMeter rxPower={onu.rx_power} status={onu.status} />
+                              <SignalStrengthMeter value={onu} />
                             </td>
                             <td className="px-5 py-3.5 text-right">
                               <button
@@ -3635,7 +3531,6 @@ export default function OltManagement() {
                 {paginatedRegisteredOnus.length > 0 ? (
                   paginatedRegisteredOnus.map((onu, idx) => {
                     const globalIndex = (registeredPage - 1) * registeredPerPage + idx + 1;
-                    const isOffline = onu.status !== 'Online' || onu.rx_power === null || onu.rx_power <= -40;
                     return (
                       <div key={onu.serial_number || idx} className="bg-white dark:bg-black rounded-lg border border-black/20 dark:border-white/20 shadow-xs overflow-hidden">
                         <div className="divide-y divide-slate-200 dark:divide-white/10 text-xs">
@@ -3673,12 +3568,7 @@ export default function OltManagement() {
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
                             <span className="text-black/60 dark:text-white/70 font-semibold">Status</span>
                             <span className="col-span-2">
-                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${onu.status === 'Online'
-                                ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                                : 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                                }`}>
-                                {onu.status === 'Online' ? 'Online' : 'Offline'}
-                              </span>
+                              <OnuStatus value={inventoryTelemetry(onu)} /><TelemetryStamp value={inventoryTelemetry(onu)} />
                             </span>
                           </div>
 
@@ -3686,7 +3576,7 @@ export default function OltManagement() {
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
                             <span className="text-black/60 dark:text-white/70 font-semibold">Redaman Rx</span>
                             <div className="col-span-2">
-                              <SignalStrengthMeter rxPower={onu.rx_power} status={onu.status} />
+                              <SignalStrengthMeter value={onu} />
                             </div>
                           </div>
 

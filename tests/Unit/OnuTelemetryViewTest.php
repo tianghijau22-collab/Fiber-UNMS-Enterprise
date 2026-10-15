@@ -11,9 +11,10 @@ class OnuTelemetryViewTest extends TestCase
 {
     private function row(string $port = '1/1/15', int $id = 1, array $overrides = []): array
     {
-        return array_replace(['serial_number'=>'TEST00000001','port'=>$port,'onu_id'=>$id,
+        $row=array_replace(['serial_number'=>'TEST00000001','port'=>$port,'onu_id'=>$id,
             'identity_source'=>Identity::SOURCE,'identity_observed_at'=>date(DATE_ATOM),
             'status'=>'Online','rx_power'=>-26.0], $overrides);
+        return array_replace($row,\App\Services\Olt\OnuTelemetrySample::normalize($row,$row['sample_observed_at'] ?? date(DATE_ATOM)));
     }
 
     private function device(int $id, array $rows, ?string $at = null): OltDevice
@@ -44,7 +45,7 @@ class OnuTelemetryViewTest extends TestCase
 
     public function test_stale_sample_and_missing_identity_observation_are_not_current_measurements(): void
     {
-        $out=(new View([$this->device(1,[$this->row()],date(DATE_ATOM,time()-181))]))->resolve(1,'TEST00000001');
+        $out=(new View([$this->device(1,[$this->row('1/1/15',1,['sample_observed_at'=>date(DATE_ATOM,time()-181)])],date(DATE_ATOM))]))->resolve(1,'TEST00000001');
         $this->assertSame('stale',$out['telemetry_freshness']);$this->assertNull($out['is_online']);$this->assertNull($out['rx_power']);
         $this->assertSame('gpon-olt_1/1/15',$out['gpon_interface']);
         $out=(new View([$this->device(1,[$this->row('1/1/15',1,['identity_observed_at'=>null])])]))->resolve(1,'TEST00000001');
@@ -98,4 +99,18 @@ class OnuTelemetryViewTest extends TestCase
         for($i=0;$i<2000;$i++)$v->resolve(1,'TEST00000001');
         $this->assertSame(1,$device->snapshotReads);
     }
+    public function test_recent_snapshot_cannot_promote_legacy_rows_without_per_onu_observation(): void
+    {
+        $row=$this->row();unset($row['sample_observed_at'],$row['telemetry_sample_version']);
+        $out=(new View([$this->device(1,[$row])]))->resolve(1,'TEST00000001');
+        $this->assertSame('unavailable',$out['telemetry_freshness']);$this->assertNull($out['sampled_at']);$this->assertNull($out['is_online']);
+    }
+    public function test_recent_sample_does_not_promote_separately_old_state_or_optical_observation(): void
+    {
+        $row=$this->row();$row['rx_observed_at']=date(DATE_ATOM,time()-200);
+        $out=(new View([$this->device(1,[$row])]))->resolve(1,'TEST00000001');$this->assertTrue($out['is_online']);$this->assertNull($out['rx_power']);
+        $row['state_observed_at']=date(DATE_ATOM,time()-200);
+        $out=(new View([$this->device(1,[$row])]))->resolve(1,'TEST00000001');$this->assertNull($out['is_online']);$this->assertNull($out['rx_power']);
+    }
+
 }

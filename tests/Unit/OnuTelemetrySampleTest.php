@@ -7,6 +7,25 @@ use PHPUnit\Framework\TestCase;
 
 class OnuTelemetrySampleTest extends TestCase
 {
+    public function test_projection_preserves_sample_state_and_rx_times_instead_of_relabelling(): void
+    {
+        $row=Sample::fromZteState(3,2526,'2026-10-13T00:00:03+00:00');
+        $row['state_observed_at']='2026-10-13T00:00:02+00:00';$row['rx_observed_at']='2026-10-13T00:00:01+00:00';
+        $this->assertSame($row,Sample::project($row));
+    }
+    public function test_projection_without_actual_time_never_promotes_online_or_a_numeric_rx(): void
+    {
+        foreach([['status'=>'Online','rx_power'=>-20],['status'=>'Offline','rx_power'=>-40],['telemetry_sample_version'=>2,'sample_observed_at'=>'invalid','is_online'=>true]] as $row) {
+            $out=Sample::project($row);$this->assertNull($out['sample_observed_at']);$this->assertNull($out['is_online']);
+            $this->assertNull($out['rx_power']);$this->assertFalse($out['rx_available']);
+        }
+    }
+    public function test_projection_does_not_create_missing_or_contradictory_state_and_rx_times(): void
+    {
+        $row=Sample::fromZteState(3,2526,'2026-10-13T00:00:00+00:00');
+        unset($row['rx_observed_at']);$out=Sample::project($row);$this->assertTrue($out['is_online']);$this->assertNull($out['rx_power']);
+        $row['state_observed_at']='2026-10-14T00:00:00+00:00';$out=Sample::project($row);$this->assertNull($out['is_online']);$this->assertNull($out['state_observed_at']);
+    }
     public function test_missing_and_transient_state_are_unknown_even_after_many_attempts(): void
     {
         foreach([null,0,2,7,'3'] as $state) {

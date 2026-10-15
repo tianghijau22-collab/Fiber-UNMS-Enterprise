@@ -190,7 +190,7 @@ class OnuTelemetryWriterTest extends TestCase
         $olt=OltDevice::findOrFail(1);$old=$olt->last_telemetry_snapshot;
         $old['polled_at']=$this->at();$olt->update(['last_telemetry_snapshot'=>$old]);
         $sample=$this->snapshot()['onu_list'][0];
-        $this->assertEqualsWithDelta(Sample::epoch($this->at(30)),Sample::epoch($sample['sample_observed_at']),1);
+        $this->assertNull($sample['sample_observed_at']);$this->assertNull($sample['is_online']);$this->assertNull($sample['rx_power']);
     }
 
     public function test_view_uses_per_onu_time_even_when_snapshot_completion_is_recent(): void
@@ -392,7 +392,25 @@ class OnuTelemetryWriterTest extends TestCase
         $conflict=$this->row(1,'1/1/16',true);$conflict['identity_observed_at']=$old['identity_observed_at'];
         $rows=Writer::mergePortObservations([$old],[$conflict]);
         $this->assertCount(2,$rows);$this->assertSame([],Identity::uniqueRows(array_values($rows)));
+    }    public function test_inventory_refresh_preserves_an_old_explicit_measurement_without_promoting_it(): void
+    {
+        $olt=OltDevice::findOrFail(1);$old=$olt->last_telemetry_snapshot;
+        $old['onu_list'][0]=array_replace($old['onu_list'][0],Sample::normalize($old['onu_list'][0],$this->at(700)));
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode($old)]);
+        $old['polled_at']=$this->at();$olt->update(['last_telemetry_snapshot'=>$old]);
+        $this->assertSame($old['onu_list'][0]['sample_observed_at'],$this->snapshot()['onu_list'][0]['sample_observed_at']);
+        $this->assertSame($old['onu_list'][0]['rx_observed_at'],$this->snapshot()['onu_list'][0]['rx_observed_at']);
     }
+    public function test_unregistered_detected_port_can_receive_only_its_matching_newer_ledger_sample(): void
+    {
+        $olt=OltDevice::findOrFail(1);$snapshot=$olt->last_telemetry_snapshot;$r=$this->row(9,'1/1/16');
+        $r['detected_port']=$r['port'];unset($r['port']);$snapshot['unconfigured_onus']=[$r];
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode($snapshot)]);
+        $this->write([$this->row(9,'1/1/16',false)],1,'event');$u=$this->snapshot()['unconfigured_onus'][0];
+        $this->assertFalse($u['is_online']);$this->assertSame('Offline',$u['status']);$this->assertNotNull($u['sample_observed_at']);
+        $this->assertSame('gpon-olt_1/1/16',Identity::portFromIfIndex(Identity::ifIndexFromPort($u['port'])));
+    }
+
 }
 
 class WriterListenerHarness extends \App\Console\Commands\ListenOltEvents
@@ -410,4 +428,5 @@ class WriterEventHarness extends \App\Console\Commands\ListenOltEvents
     public function receive(string $raw,string $ip,string $type): void { $this->processIncomingPacket($raw,$ip,$type); }
     protected function handleInterfaceMassCorrelator(OltDevice $olt,string $standardPort,string $targetSn,string $targetName,?string $nodeName,string $eventType,bool $isLoss,?float $recoveredRxPower=null,?string $targetCustId=null): bool { return false; }
     protected function handleOdpMassCorrelator(int $odpId,string $odpName,?string $standardPort,?OltDevice $olt,bool $isAlarmLoss,bool $isAlarmRecovery): void {}
+
 }

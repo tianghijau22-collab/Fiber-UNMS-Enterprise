@@ -95,16 +95,17 @@ class OnuTelemetryView
         if ($isZte && !self::ageIsValid($row['identity_observed_at'] ?? null, 600)) {
             $at = is_string($row['identity_observed_at'] ?? null) ? strtotime($row['identity_observed_at']) : false;
             return $at !== false && $at < time() - 600 ? array_replace($view, [
-                'telemetry_reason'=>'identity_stale', 'telemetry_freshness'=>'stale', 'sampled_at'=>$device['sampled_at'],
+                'telemetry_reason'=>'identity_stale', 'telemetry_freshness'=>'stale', 'sampled_at'=>$row['sample_observed_at'] ?? null,
             ]) : $view;
         }
         $view = array_replace($view, [
             'gpon_interface' => $row['port'] ?? null, 'onu_id' => $row['onu_id'] ?? null,
             'identity_status' => 'resolved', 'telemetry_source' => 'snapshot',
-            'sampled_at' => ($row['telemetry_sample_version'] ?? null) === 2 ? ($row['sample_observed_at'] ?? null) : $device['sampled_at'],
+            'sampled_at' => ($row['telemetry_sample_version'] ?? null) === 2 ? ($row['sample_observed_at'] ?? null) : ($isZte ? null:$device['sampled_at']),
         ]);
         $time = is_string($view['sampled_at']) ? strtotime($view['sampled_at']) : false;
         $view['sample_age_seconds'] = $time === false ? null : max(0, time() - $time);
+        if ($time === false) return array_replace($view,['telemetry_freshness'=>'unavailable','telemetry_reason'=>'sample_unavailable']);
         if (!self::ageIsValid($view['sampled_at'], self::MAX_SAMPLE_AGE)) {
             return array_replace($view, ['telemetry_freshness' => 'stale', 'telemetry_reason' => 'sample_stale']);
         }
@@ -137,6 +138,16 @@ class OnuTelemetryView
 
     private static function state(array $row): array
     {
+        if(($row['telemetry_sample_version'] ?? null)===2) {
+            $sample=OnuTelemetrySample::project($row);
+            if(!self::ageIsValid($sample['state_observed_at'],self::MAX_SAMPLE_AGE)) {
+                $sample['is_online']=null;$sample['status']='Unknown';
+            }
+            if(!self::ageIsValid($sample['rx_observed_at'],self::MAX_SAMPLE_AGE)) {
+                $sample['rx_power']=null;$sample['rx_available']=false;
+            }
+            $row=array_replace($row,$sample);
+        }
         $state = strtolower(trim((string)($row['status'] ?? '')));
         $online = array_key_exists('is_online', $row) && is_bool($row['is_online']) ? $row['is_online']
             : (in_array($state, ['online', 'active', 'working'], true) ? true

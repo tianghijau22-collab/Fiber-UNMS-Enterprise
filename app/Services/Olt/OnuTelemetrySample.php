@@ -51,6 +51,26 @@ class OnuTelemetrySample
         return $result;
     }
 
+    /** Project an existing observation without inventing a time from snapshot completion. */
+    public static function project(array $row): array
+    {
+        $at=$row['sample_observed_at'] ?? null;
+        $valid=($row['telemetry_sample_version'] ?? null)===2 && self::epoch($at)!==null;
+        $sample=self::normalize($valid ? $row:['status'=>'Unknown'],$valid ? $at:'');
+        $sample['sample_observed_at']=$valid ? $at:null;
+        foreach(['state_observed_at','rx_observed_at'] as $field) {
+            $time=self::epoch($row[$field] ?? null);
+            $sample[$field]=$valid && $time!==null && $time<=self::epoch($at)+5 ? $row[$field]:null;
+        }
+        if($sample['state_observed_at']===null) {
+            $sample['status']='Unknown';$sample['is_online']=null;$sample['rx_power']=null;$sample['rx_available']=false;
+        }
+        if($sample['rx_observed_at']===null){$sample['rx_power']=null;$sample['rx_available']=false;}
+        if($sample['is_online']===null)$sample['state_observed_at']=null;
+        if(!$sample['rx_available'])$sample['rx_observed_at']=null;
+        return $sample;
+    }
+
     public static function normalize(array $row, string $at): array
     {
         $state = strtolower(trim((string)($row['status'] ?? '')));

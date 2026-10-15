@@ -38,6 +38,7 @@ class OnuTelemetryPresentationTest extends TestCase
         }
         DB::table('network_ports')->insert(['id'=>3,'node_id'=>1,'port_number'=>3,'status'=>'available']);
         $row=['serial_number'=>'TEST00000001','port'=>'gpon-olt_1/1/16','onu_id'=>'1','status'=>'Online','rx_power'=>-26.2,'_source'=>'live_snmp','identity_source'=>Identity::SOURCE,'identity_observed_at'=>date(DATE_ATOM)];
+        $row=array_replace($row,\App\Services\Olt\OnuTelemetrySample::normalize($row,date(DATE_ATOM)));
         foreach([1,2] as $id){
             $r=$row;if($id===2){$r['port']='gpon-olt_1/1/3';$r['rx_power']=-20;}
             DB::table('olt_devices')->insert(['id'=>$id,'name'=>'Fixture OLT '.$id,'vendor_key'=>'zte-c320','connection_mode'=>'live','status'=>'active','last_telemetry_snapshot'=>json_encode(['polled_at'=>date(DATE_ATOM),'onu_list'=>[$r]])]);
@@ -81,7 +82,7 @@ class OnuTelemetryPresentationTest extends TestCase
 
     public function test_stale_snapshot_does_not_restore_online_from_active_registration(): void
     {
-        $snap=json_decode(DB::table('olt_devices')->where('id',1)->value('last_telemetry_snapshot'),true);$snap['polled_at']=date(DATE_ATOM,time()-300);
+        $snap=json_decode(DB::table('olt_devices')->where('id',1)->value('last_telemetry_snapshot'),true);$snap['polled_at']=date(DATE_ATOM);foreach($snap['onu_list'] as &$row){foreach(['sample_observed_at','state_observed_at','rx_observed_at'] as $field)$row[$field]=date(DATE_ATOM,time()-300);}unset($row);
         DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode($snap)]);
         $c=collect($this->customers())->firstWhere('id',1);$this->assertSame('stale',$c['telemetry_freshness']);$this->assertNull($c['is_online']);$this->assertNull($c['rx_power']);
     }

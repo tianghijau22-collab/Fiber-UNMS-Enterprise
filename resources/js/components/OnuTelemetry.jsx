@@ -1,5 +1,10 @@
 import React from 'react';
-import { onuPresentation } from '../lib/onuTelemetry.js';
+import { onuPresentation, inventoryTelemetry } from '../lib/onuTelemetry.js';
+
+export function InventoryOnuSignal({ value }) {
+  const display=onuPresentation(inventoryTelemetry(value));
+  return <span className={`font-mono text-xs font-bold ${display.rxColor}`}>{display.rxLabel}</span>;
+}
 
 export function OnuStatus({ value }) {
   const display = onuPresentation(value);

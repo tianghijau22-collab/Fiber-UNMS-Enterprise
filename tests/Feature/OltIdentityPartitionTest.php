@@ -7,6 +7,7 @@ use App\Models\OltDevice;
 use App\Services\Olt\ZteOnuIdentityMap as Identity;
 use App\Services\Olt\ZteOnuOpticalBatch;
 use App\Services\Olt\FastOpticalProbeService;
+use App\Services\Olt\OnuTelemetryView;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +49,7 @@ class OltIdentityPartitionTest extends TestCase
 
     private function row(int $sn, string $port, int $id): array
     {
-        return ['_source'=>'live_snmp','identity_source'=>Identity::SOURCE,'identity_observed_at'=>now()->toIso8601String(),'serial_number'=>'TEST0000000'.$sn,'port'=>$port,'onu_id'=>$id,'status'=>'Online','rx_power'=>-26.0];
+        return ['_source'=>'live_snmp','identity_source'=>Identity::SOURCE,'identity_observed_at'=>now()->toIso8601String(),'serial_number'=>'TEST0000000'.$sn,'port'=>$port,'onu_id'=>$id,'status'=>'Online','rx_power'=>-26.0,...\App\Services\Olt\OnuTelemetrySample::normalize(['status'=>'Online','rx_power'=>-26.0],now()->toIso8601String())];
     }
 
     public function test_one_odp_retains_two_individual_pons_and_never_uses_registration_ids(): void
@@ -70,7 +71,7 @@ class OltIdentityPartitionTest extends TestCase
             $this->assertNull($row['onu_id']);$this->assertNull($row['port']);
             $this->assertSame('unresolved',$row['identity_status']);
             $this->assertSame('gpon-olt_1/1/15',$row['topology_port']);
-            $this->assertSame('Online',$row['status']);$this->assertSame(-25.0,$row['rx_power']);
+            $this->assertSame('Unknown',$row['status']);$this->assertNull($row['rx_power']);$this->assertNull($row['is_online']);
         }
         $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|delete|insert)\b/i',$q['query']))));
     }
@@ -178,6 +179,43 @@ class OltIdentityPartitionTest extends TestCase
         $two=OltDevice::findOrFail(1)->last_telemetry_snapshot['_onu_write_ledger']['TEST00000001']['sample_observed_at'];
         $this->assertGreaterThan(\App\Services\Olt\OnuTelemetrySample::epoch($one),\App\Services\Olt\OnuTelemetrySample::epoch($two));
     }
+    public function test_unregistered_physical_sample_keeps_its_full_tuple_and_original_metadata(): void
+    {
+        $row=$this->row(9,'1/1/16',8);$row['sample_observed_at']=now()->subSeconds(35)->toIso8601String();
+        $row['state_observed_at']=$row['sample_observed_at'];$row['rx_observed_at']=$row['sample_observed_at'];
+        $out=$this->partition([$row]);$u=$out['unconfigured_onus'][0];
+        foreach(['sample_observed_at','state_observed_at','rx_observed_at','telemetry_sample_version','is_online','rx_available','rx_power'] as $key)$this->assertSame($row[$key],$u[$key],$key);
+        $this->assertSame('gpon-olt_1/1/16',$u['port']);$this->assertSame($u['port'],$u['detected_port']);$this->assertSame('8',$u['onu_id']);
+        $device=OltDevice::findOrFail(1);$device->last_telemetry_snapshot=$out;
+        $again=app(OltController::class)->processAndPartitionTelemetry($device,[],$out['pon_ports'],$out['onu_list'],$out['unconfigured_onus']);
+        $this->assertSame($u,$again['unconfigured_onus'][0]);
+        $view=(new OnuTelemetryView([$device]))->resolve(1,$u['serial_number']);
+        $this->assertTrue($view['is_online']);$this->assertSame($u['sample_observed_at'],$view['sampled_at']);
+    }
+    public function test_registered_projection_keeps_boolean_state_and_never_uses_snapshot_completion_as_measurement(): void
+    {
+        $row=$this->row(1,'1/1/15',1);$row['is_online']=true;$row['rx_available']=false;$row['rx_power']=null;$row['rx_observed_at']=null;
+        $out=$this->partition([$row]);$r=$out['onu_list'][0];
+        $this->assertTrue($r['is_online']);$this->assertFalse($r['rx_available']);$this->assertNull($r['rx_power']);
+        unset($row['sample_observed_at']);$out=$this->partition([$row]);
+        $this->assertNull($out['onu_list'][0]['sample_observed_at']);$this->assertNull($out['onu_list'][0]['is_online']);
+        $this->assertSame('Unknown',$out['onu_list'][0]['status']);
+    }
+    public function test_autofind_without_operational_read_is_unknown_and_not_counted_as_loss(): void
+    {
+        $device=OltDevice::findOrFail(1);$out=app(OltController::class)->processAndPartitionTelemetry($device,[],[['port_id'=>'gpon-olt_1/1/15']],[],[
+            ['serial_number'=>'TEST00000009','detected_port'=>'gpon-olt_1/1/15','status'=>'Online','rx_power'=>-19]
+        ]);
+        $u=$out['unconfigured_onus'][0];$this->assertSame('Unknown',$u['status']);$this->assertNull($u['is_online']);$this->assertNull($u['rx_power']);
+        $this->assertNull($u['sample_observed_at']);$this->assertSame(0,$out['pon_ports'][0]['los_onus']);$this->assertSame(1,$out['pon_ports'][0]['unknown_onus']);
+    }
+    public function test_polled_sample_takes_precedence_over_a_preserved_unregistered_copy(): void
+    {
+        $fresh=$this->row(9,'1/1/16',8);$old=$fresh;$old['is_online']=false;$old['status']='Offline';$old['rx_power']=null;
+        $out=app(OltController::class)->processAndPartitionTelemetry(OltDevice::findOrFail(1),[],[],[$fresh],[$old]);
+        $this->assertCount(1,$out['unconfigured_onus']);$this->assertTrue($out['unconfigured_onus'][0]['is_online']);
+    }
+
 }
 
 class IdentityProbeHarness extends FastOpticalProbeService

@@ -24,7 +24,7 @@ class OnuTelemetryWriter
     private static function key(array $row): ?string
     {
         $sn = strtoupper(trim((string)($row['serial_number'] ?? $row['sn'] ?? '')));
-        $index = ZteOnuIdentityMap::ifIndexFromPort((string)($row['port'] ?? ''));
+        $index = ZteOnuIdentityMap::ifIndexFromPort((string)($row['port'] ?? $row['detected_port'] ?? ''));
         $rawId=$row['onu_id'] ?? null;
         $id=(is_int($rawId) || (is_string($rawId) && ctype_digit($rawId))) && (int)$rawId>0 && (int)$rawId<=65535 ? (int)$rawId : null;
         return $sn !== '' && $index !== null && $id !== null ? "$sn@$index:$id" : null;
@@ -209,8 +209,7 @@ class OnuTelemetryWriter
                     if(($key=self::key($row)) && !isset($ledger[strtoupper(trim((string)($row['serial_number'] ?? '')))])) {
                         $old=$existing[$key] ?? null;
                         // An unmigrated writer cannot turn an inventory refresh into a fresh measurement.
-                        $observed=$old['sample_observed_at'] ?? $current['polled_at'] ?? null;
-                        $row=array_replace($row,OnuTelemetrySample::normalize($old ?? ['status'=>'Unknown'],$observed ?? ''));
+                        $row=array_replace($row,OnuTelemetrySample::project($old ?? []));
                     }
                 }
                 unset($row);$incoming[$list]=$rows;

@@ -504,7 +504,11 @@ class OltController extends Controller
         // ZTE GPON hardware identity is separate from the customer/ODP topology.
         $usesZteIdentity = $device && $device->connection_mode === 'live'
             && str_contains(strtolower((string)($device->vendor_key ?: $device->vendor)), 'zte');
-        $identityRows = $usesZteIdentity ? array_values(ZteOnuIdentityMap::uniqueRows($driverOnuList)) : $driverOnuList;
+        $polledSerials=array_fill_keys(array_map(fn($r)=>strtoupper(trim((string)($r['serial_number'] ?? ''))),$driverOnuList),true);
+        // Stored physical inventory also passes through this reader. Autofind rows have no serial-table identity.
+        // A fresh polled row takes precedence over the preserved unregistered copy of that serial.
+        $preservedPhysical=array_filter($driverUncfg,fn($r)=>!isset($polledSerials[strtoupper(trim((string)($r['serial_number'] ?? '')))]));
+        $identityRows = $usesZteIdentity ? array_values(ZteOnuIdentityMap::uniqueRows(array_merge($preservedPhysical,$driverOnuList))) : $driverOnuList;
         $driverOnuMap = [];
         foreach ($identityRows as $onu) {
             $sn  = strtoupper(trim((string)($onu['serial_number'] ?? '')));
@@ -536,8 +540,8 @@ class OltController extends Controller
             $portClean = $nodePort ? str_replace('gpon_olt_', 'gpon-olt_', $nodePort) : null;
             $finalPort = $portClean ? (explode(',', $portClean)[0] ?? $portClean) : null;
 
-            $sample = $liveOnu ? \App\Services\Olt\OnuTelemetrySample::normalize($liveOnu,
-                $liveOnu['sample_observed_at'] ?? ($device?->last_telemetry_snapshot['polled_at'] ?? '')) : null;
+            $sample = $usesZteIdentity ? \App\Services\Olt\OnuTelemetrySample::project($liveOnu ?? [])
+                : ($liveOnu ? \App\Services\Olt\OnuTelemetrySample::normalize($liveOnu,$liveOnu['sample_observed_at'] ?? ''):null);
             $statusClean = $sample['status'] ?? ($ont->status === 'active' ? 'Online' : 'Offline');
             $rxPower = $sample ? $sample['rx_power'] : ($ont->rx_power !== null ? (float)$ont->rx_power : null);
 
@@ -548,11 +552,7 @@ class OltController extends Controller
                 'identity_source' => $liveOnu['identity_source'] ?? null,
                 'identity_observed_at' => $liveOnu['identity_observed_at'] ?? null,
                 'identity_status' => $liveOnu ? 'resolved' : 'unresolved',
-                'sample_observed_at' => $liveOnu['sample_observed_at'] ?? null,
-                'state_observed_at' => $liveOnu['state_observed_at'] ?? null,
-                'rx_observed_at' => $liveOnu['rx_observed_at'] ?? null,
-                'telemetry_sample_version' => $liveOnu['telemetry_sample_version'] ?? null,
-                'rx_available' => $sample['rx_available'] ?? false,
+                ...($sample ?? []),
                 'topology_port'   => $topologyPort,
                 'port'            => $finalPort,
                 'customer_id'     => $ont->customerService?->customer?->id,
@@ -587,7 +587,11 @@ class OltController extends Controller
             if (!$isRegistered) {
                 $seenUnregSns[$sn] = true;
                 $unregPort = $onu['port'] ?? ($onu['detected_port'] ?? null);
+                $sample=$usesZteIdentity ? \App\Services\Olt\OnuTelemetrySample::project($onu):[];
                 $unregisteredOnus[] = [
+                    ...$sample,
+                    'port'                     => $unregPort,
+                    'identity_status'          => 'resolved',
                     '_source'                  => 'live_snmp',
                     'identity_source'          => $onu['identity_source'] ?? null,
                     'identity_observed_at'     => $onu['identity_observed_at'] ?? null,
@@ -598,11 +602,11 @@ class OltController extends Controller
                     'onu_index'                => $onu['onu_id'] ?? ($onu['onu_index'] ?? null),
                     'onu_id'                   => $onu['onu_id'] ?? ($onu['onu_index'] ?? null),
                     'vendor_model'             => $onu['vendor_model'] ?? ($onu['onu_type'] ?? 'HGU EPON/GPON'),
-                    'status'                   => $onu['status'] ?? 'Online',
-                    'rx_power'                 => isset($onu['rx_power']) ? (float)$onu['rx_power'] : null,
+                    'status'                   => $sample['status'] ?? ($onu['status'] ?? 'Unknown'),
+                    'rx_power'                 => $usesZteIdentity ? $sample['rx_power']:(isset($onu['rx_power']) ? (float)$onu['rx_power']:null),
                     'tx_power'                 => isset($onu['tx_power']) ? (float)$onu['tx_power'] : null,
                     'distance_meters'          => $onu['distance_meters'] ?? null,
-                    'detected_at'              => $onu['detected_at'] ?? 'Terdeteksi Aktif di OLT',
+                    'detected_at'              => $onu['detected_at'] ?? null,
                     'is_unregistered_physical' => true,
                 ];
             }
@@ -618,7 +622,9 @@ class OltController extends Controller
             if (!empty($uSn) && isset($registeredMap[$uSn])) {
                 continue;
             }
-            $unregisteredOnus[] = $uncfg;
+            // Autofind proves detection only; it cannot establish registered ONU state or Rx.
+            $unregisteredOnus[] = $usesZteIdentity
+                ? array_replace($uncfg,\App\Services\Olt\OnuTelemetrySample::project([]),['identity_status'=>'unresolved']):$uncfg;
         }
 
         // 4. Kategori 3: Orphaned ONUs (Ada di UNMS tapi tidak ditemukan di OLT fisik)
@@ -658,12 +664,14 @@ class OltController extends Controller
             $portId = $port['port_id'] ?? '';
             $regCount = 0;
             $onCount = 0;
+            $downCount = 0;
             $uncfgCount = 0;
             foreach ($registeredOnus as $ro) {
                 $roPort = $ro['port'] ?? '';
                 if ($this->portsMatch($portId, $roPort)) {
                     $regCount++;
                     if (strcasecmp($ro['status'] ?? '', 'Online') === 0) $onCount++;
+                    if (strcasecmp($ro['status'] ?? '', 'Offline') === 0) $downCount++;
                 }
             }
             foreach ($unregisteredOnus as $uo) {
@@ -671,6 +679,7 @@ class OltController extends Controller
                 if ($this->portsMatch($portId, $uoPort)) {
                     $uncfgCount++;
                     if (strcasecmp($uo['status'] ?? '', 'Online') === 0) $onCount++;
+                    if (strcasecmp($uo['status'] ?? '', 'Offline') === 0) $downCount++;
                 }
             }
             $totalPhysicalOnus = $regCount + $uncfgCount;
@@ -679,7 +688,8 @@ class OltController extends Controller
                 $port['registered_onus']   = $regCount;
                 $port['unconfigured_onus'] = $uncfgCount;
                 $port['online_onus']       = $onCount;
-                $port['los_onus']          = max(0, $totalPhysicalOnus - $onCount);
+                $port['los_onus']          = $downCount;
+                $port['unknown_onus']      = max(0,$totalPhysicalOnus-$onCount-$downCount);
             } else {
                 $port['registered_onus']   = $port['registered_onus'] ?? 0;
                 $port['unconfigured_onus'] = $port['unconfigured_onus'] ?? 0;
