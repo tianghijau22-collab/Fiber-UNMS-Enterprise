@@ -87,6 +87,7 @@ class OltController extends Controller
 
     public function index(Request $request)
     {
+        $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $vendor       = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
         $deviceId     = $request->input('device_id') ?: ($request->query('device_id') ?: null);
         $isFresh      = $request->boolean('fresh') || $request->boolean('force');
@@ -243,7 +244,8 @@ class OltController extends Controller
                 'last_telemetry_snapshot' => $snapshot,
                 'last_connected_at'       => now(),
             ]);
-            $this->syncOntRegistrations($device, $driverOnuList);
+            $this->syncOntRegistrations($device, $driverOnuList, $sampleStartedAt);
+            $snapshot=$device->last_telemetry_snapshot;unset($snapshot['_onu_write_ledger']);
         }
 
         return response()->json($snapshot);
@@ -254,6 +256,7 @@ class OltController extends Controller
      */
     public function getPortOnus(Request $request)
     {
+        $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $vendor   = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
         $deviceId = $request->input('device_id') ?: ($request->query('device_id') ?: null);
         $device   = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
@@ -336,7 +339,7 @@ class OltController extends Controller
 
         // Update database registrations & snapshot
         if ($device) {
-            $this->syncOntRegistrations($device, $driverOnuList);
+            $this->syncOntRegistrations($device, $driverOnuList, $sampleStartedAt);
 
             $currentSnapshot = $device->last_telemetry_snapshot ?: [];
             if (empty($currentSnapshot['pon_ports'])) {
@@ -388,8 +391,10 @@ class OltController extends Controller
                 'last_connected_at'       => now(),
             ]);
 
-            // Invalidate GIS Map cache payload agar GIS Map seketika menampilkan redaman baru
-            \Illuminate\Support\Facades\Cache::forget('gis_map_data_payload_v1');
+            $committed=$device->last_telemetry_snapshot;
+            $freshPortOnus=array_values(array_filter($committed['onu_list'] ?? [],fn($o)=>$this->portsMatch((string)($o['port'] ?? ''),$normalizedPort)));
+            $driverUncfg=array_values(array_filter($committed['unconfigured_onus'] ?? [],fn($o)=>$this->portsMatch((string)($o['port'] ?? $o['detected_port'] ?? ''),$normalizedPort)));
+            \App\Services\Olt\OnuTelemetryWriter::invalidate();
         }
 
         return response()->json([
@@ -407,6 +412,7 @@ class OltController extends Controller
      */
     public function syncPort(Request $request)
     {
+        $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $vendor   = $request->input('vendor') ?: 'zte-c300';
         $deviceId = $request->input('device_id');
         $port     = $request->input('port');
@@ -424,7 +430,7 @@ class OltController extends Controller
         $driverOnuList = $driver->getOnuListByPort($port);
 
         // Sync ke ont_registrations
-        $this->syncOntRegistrations($device, $driverOnuList);
+        $this->syncOntRegistrations($device, $driverOnuList, $sampleStartedAt);
 
         // Update snapshot device
         $normalizedPort = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], strtolower(trim($port)));
@@ -443,6 +449,8 @@ class OltController extends Controller
             'last_telemetry_snapshot' => $currentSnapshot,
             'last_connected_at'       => now(),
         ]);
+
+        $driverOnuList=array_values(array_filter($device->last_telemetry_snapshot['onu_list'] ?? [],fn($o)=>$this->portsMatch((string)($o['port'] ?? ''),$normalizedPort)));
 
         return response()->json([
             'status'         => 'success',
@@ -528,21 +536,10 @@ class OltController extends Controller
             $portClean = $nodePort ? str_replace('gpon_olt_', 'gpon-olt_', $nodePort) : null;
             $finalPort = $portClean ? (explode(',', $portClean)[0] ?? $portClean) : null;
 
-            $rawStatus = $liveOnu['status'] ?? ($ont->status === 'active' ? 'Online' : 'Offline');
-            $statusClean = (in_array(strtoupper($rawStatus), ['ONLINE', 'ACTIVE', 'WORKING'])) ? 'Online' : 'Offline';
-            $isOnline = ($statusClean === 'Online');
-
-            $rxPower = null;
-            if (isset($liveOnu['rx_power']) && is_numeric($liveOnu['rx_power'])) {
-                $rxPower = (float)$liveOnu['rx_power'];
-            } elseif ($isOnline && isset($ont->rx_power) && is_numeric($ont->rx_power) && (float)$ont->rx_power > -35.0 && (float)$ont->rx_power != -21.50) {
-                $rxPower = (float)$ont->rx_power;
-            }
-
-            if (!$isOnline || ($rxPower !== null && $rxPower <= -38.0)) {
-                $statusClean = 'Offline';
-                $rxPower = -40.00;
-            }
+            $sample = $liveOnu ? \App\Services\Olt\OnuTelemetrySample::normalize($liveOnu,
+                $liveOnu['sample_observed_at'] ?? ($device?->last_telemetry_snapshot['polled_at'] ?? '')) : null;
+            $statusClean = $sample['status'] ?? ($ont->status === 'active' ? 'Online' : 'Offline');
+            $rxPower = $sample ? $sample['rx_power'] : ($ont->rx_power !== null ? (float)$ont->rx_power : null);
 
             $registeredOnus[] = [
                 '_source'         => $liveOnu ? 'live_snmp' : 'database',
@@ -551,6 +548,11 @@ class OltController extends Controller
                 'identity_source' => $liveOnu['identity_source'] ?? null,
                 'identity_observed_at' => $liveOnu['identity_observed_at'] ?? null,
                 'identity_status' => $liveOnu ? 'resolved' : 'unresolved',
+                'sample_observed_at' => $liveOnu['sample_observed_at'] ?? null,
+                'state_observed_at' => $liveOnu['state_observed_at'] ?? null,
+                'rx_observed_at' => $liveOnu['rx_observed_at'] ?? null,
+                'telemetry_sample_version' => $liveOnu['telemetry_sample_version'] ?? null,
+                'rx_available' => $sample['rx_available'] ?? false,
                 'topology_port'   => $topologyPort,
                 'port'            => $finalPort,
                 'customer_id'     => $ont->customerService?->customer?->id,
@@ -560,8 +562,8 @@ class OltController extends Controller
                 'mac_address'     => $ont->onu_mac,
                 'status'          => $statusClean,
                 'rx_power'        => $rxPower,
-                'tx_power'        => isset($liveOnu['tx_power']) ? (float)$liveOnu['tx_power'] : (float)($ont->tx_power ?? 2.1),
-                'distance_meters' => $liveOnu['distance_meters'] ?? 850,
+                'tx_power'        => is_numeric($liveOnu['tx_power'] ?? null) ? (float)$liveOnu['tx_power'] : null,
+                'distance_meters' => $liveOnu['distance_meters'] ?? null,
                 'ip_address'      => $ont->customerService?->ip_address ?: '—',
                 'onu_type'        => $ont->onu_type ?: 'HGU EPON/GPON',
             ];
@@ -697,36 +699,31 @@ class OltController extends Controller
         ];
     }
 
-    public function syncOntRegistrations(OltDevice $device, array $onuList): void
+    /** Imports establish administrative binding; only the hardware writer supplies telemetry. */
+    public function bindImportedRegistration(int $serviceId, int $portId, string $serial): bool
     {
-        if (empty($onuList)) return;
-        $serials = array_values(array_filter(array_map(fn($o) => strtoupper(trim((string)($o['serial_number'] ?? ($o['mac_address'] ?? '')))), $onuList)));
-        if (empty($serials)) return;
-
-        $regs = OntRegistration::whereIn('onu_serial', $serials)
-            ->orWhereIn('onu_mac', $serials)
-            ->get();
-
-        $regsBySn = $regs->keyBy(fn($r) => strtoupper(trim($r->onu_serial)));
-        $regsByMac = $regs->keyBy(fn($r) => strtoupper(trim($r->onu_mac)));
-
-        foreach ($onuList as $onuData) {
-            $sn = strtoupper(trim((string)($onuData['serial_number'] ?? '')));
-            $mac = strtoupper(trim((string)($onuData['mac_address'] ?? ($onuData['onu_mac'] ?? ''))));
-            $ontReg = ($sn && isset($regsBySn[$sn])) ? $regsBySn[$sn] : (($mac && isset($regsByMac[$mac])) ? $regsByMac[$mac] : null);
-            if (!$ontReg) continue;
-
-            $isOnline = ($onuData['status'] === 'Online' || strtolower($onuData['status'] ?? '') === 'working') && isset($onuData['rx_power']) && (float)$onuData['rx_power'] > -38.0;
-            $newStatus = $isOnline ? 'active' : 'inactive';
-            $newRx     = $isOnline ? (float)$onuData['rx_power'] : -40.00;
-            $newTx     = $isOnline ? ($onuData['tx_power'] ?? 1.95) : 0.0;
-
-            $ontReg->update([
-                'rx_power' => $newRx,
-                'tx_power' => $newTx,
-                'status'   => $newStatus,
-            ]);
+        $serial=strtoupper(trim($serial));
+        $target=\App\Models\NetworkPort::with('node')->findOrFail($portId);
+        $owner=\App\Services\Olt\OnuTelemetryView::ownerId($target->node);
+        if(!$owner)throw \Illuminate\Validation\ValidationException::withMessages(['onu_serial'=>'OLT pemilik port impor belum terverifikasi.']);
+        $matches=OntRegistration::with(['customerService.networkPort.node','oltPort.node'])
+            ->where('customer_service_id',$serviceId)->whereRaw('UPPER(TRIM(onu_serial)) = ?',[$serial])->get();
+        if($matches->count()>1)throw \Illuminate\Validation\ValidationException::withMessages(['onu_serial'=>'Beberapa registrasi cocok; selesaikan konflik sebelum impor.']);
+        $registration=$matches->first();
+        if($registration) {
+            $previousOwner=\App\Services\Olt\OnuTelemetryView::ownerId($registration->customerService?->networkPort?->node ?: $registration->oltPort?->node);
+            if($previousOwner && $previousOwner!==$owner)throw \Illuminate\Validation\ValidationException::withMessages(['onu_serial'=>'Registrasi masih terhubung ke OLT lain; perpindahan perlu ditetapkan secara eksplisit.']);
+            $registration->update(['olt_port_id'=>$portId]);return false;
         }
+        OntRegistration::create(['customer_service_id'=>$serviceId,'olt_port_id'=>$portId,'onu_serial'=>$serial,
+            'onu_type'=>'ZTE ONU GPON','status'=>'pending','rx_power'=>null,'tx_power'=>null,'registered_at'=>now(),
+            'notes'=>'Imported; awaiting verified hardware telemetry.']);
+        return true;
+    }
+    public function syncOntRegistrations(OltDevice $device, array $onuList, ?string $observedAt = null): void
+    {
+        app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,$onuList,
+            $observedAt ?? \App\Services\Olt\OnuTelemetrySample::timestamp(),'poll');
     }
 
     private function buildRealCards(OltDevice $device): array
@@ -1312,37 +1309,17 @@ class OltController extends Controller
                         ]);
                     }
 
-                    $ontReg = OntRegistration::where('onu_serial', $sn)->first();
-                    if (!$ontReg) {
-                        OntRegistration::create([
-                            'customer_service_id' => $service->id,
-                            'olt_port_id'         => $netPort->id,
-                            'onu_serial'          => $sn,
-                            'onu_type'            => 'ZTE ONU GPON',
-                            'rx_power'            => $rxFloat ?? -19.50,
-                            'tx_power'            => 2.10,
-                            'status'              => $status,
-                            'registered_at'       => now(),
-                            'last_online_at'      => $status === 'active' ? now() : null,
-                        ]);
-                        $imported++;
-                    } else {
-                        $ontReg->update([
-                            'customer_service_id' => $service->id,
-                            'olt_port_id'         => $netPort->id,
-                            'rx_power'            => $rxFloat ?? $ontReg->rx_power,
-                            'status'              => $status,
-                            'last_online_at'      => $status === 'active' ? now() : $ontReg->last_online_at,
-                        ]);
-                        $updated++;
-                    }
+                    if($this->bindImportedRegistration((int)$service->id,(int)$netPort->id,$sn))$imported++;else $updated++;
                 }
             });
         }
 
         // Trigger snapshot update
+        $sampleStartedAt=\App\Services\Olt\OnuTelemetrySample::timestamp();
         $driver = $this->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
-        $snapshot = $this->processAndPartitionTelemetry($device, $driver->getDeviceInfo(), $driver->getPonPorts(), $driver->getOnuList(), []);
+        $hardwareRows=$driver->getOnuList();
+        $this->syncOntRegistrations($device,$hardwareRows,$sampleStartedAt);
+        $snapshot = $this->processAndPartitionTelemetry($device, $driver->getDeviceInfo(), $driver->getPonPorts(), $hardwareRows, []);
         $device->update(['last_telemetry_snapshot' => $snapshot, 'last_connected_at' => now()]);
 
         AuditLog::record(
@@ -1463,36 +1440,16 @@ class OltController extends Controller
                 $svcNum = 'SVC-' . sprintf('%05d', $idx + 1);
                 $service = CustomerService::firstOrCreate(['customer_id' => $customer->id], ['service_number' => $svcNum, 'service_package_id' => 1, 'network_port_id' => $netPort->id, 'status' => 'active', 'ip_address' => '10.11.11.' . rand(2, 254)]);
 
-                $ontReg = OntRegistration::where('onu_serial', $sn)->first();
-                if (!$ontReg) {
-                    OntRegistration::create([
-                        'customer_service_id' => $service->id,
-                        'olt_port_id'         => $netPort->id,
-                        'onu_serial'          => $sn,
-                        'onu_type'            => 'ZTE ONU GPON',
-                        'rx_power'            => $rxFloat ?? -19.50,
-                        'tx_power'            => 2.10,
-                        'status'              => $status,
-                        'registered_at'       => now(),
-                        'last_online_at'      => $status === 'active' ? now() : null,
-                    ]);
-                    $imported++;
-                } else {
-                    $ontReg->update([
-                        'customer_service_id' => $service->id,
-                        'olt_port_id'         => $netPort->id,
-                        'rx_power'            => $rxFloat ?? $ontReg->rx_power,
-                        'status'              => $status,
-                        'last_online_at'      => $status === 'active' ? now() : $ontReg->last_online_at,
-                    ]);
-                    $updated++;
-                }
+                if($this->bindImportedRegistration((int)$service->id,(int)$netPort->id,$sn))$imported++;else $updated++;
             }
         });
 
         // Trigger snapshot update
+        $sampleStartedAt=\App\Services\Olt\OnuTelemetrySample::timestamp();
         $driver = $this->getDriver($device->vendor_key ?: strtolower($device->vendor), $device->id);
-        $snapshot = $this->processAndPartitionTelemetry($device, $driver->getDeviceInfo(), $driver->getPonPorts(), $driver->getOnuList(), []);
+        $hardwareRows=$driver->getOnuList();
+        $this->syncOntRegistrations($device,$hardwareRows,$sampleStartedAt);
+        $snapshot = $this->processAndPartitionTelemetry($device, $driver->getDeviceInfo(), $driver->getPonPorts(), $hardwareRows, []);
         $device->update(['last_telemetry_snapshot' => $snapshot, 'last_connected_at' => now()]);
 
         AuditLog::record(

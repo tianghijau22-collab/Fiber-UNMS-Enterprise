@@ -179,6 +179,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     public function getOnuList(): array
     {
+        $sampleStartedAt = OnuTelemetrySample::timestamp();
         if ($this->cachedOnuList !== null) {
             return $this->cachedOnuList;
         }
@@ -244,7 +245,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     foreach ($snHexList as $compositeKey => $sn) {
                         [$portIfIndex, $onuId] = explode('_', $compositeKey);
                         $portName = ZteOnuIdentityMap::portFromIfIndex((int)$portIfIndex);
-                        $stateCode = $stateMap[$compositeKey] ?? 3;
+                        $stateCode = $stateMap[$compositeKey] ?? null;
                         $model = $modelMap[$compositeKey] ?? 'F670L';
                         $desc  = $descMap[$compositeKey] ?? "ONU {$sn}";
 
@@ -254,15 +255,13 @@ class ZteC320Driver implements OltDeviceDriverInterface
                         $rxPower = $this->formatOpticalPower($rxRaw);
                         $txPower = $this->formatOpticalPower($txRaw);
 
-                        $isOnline = ($stateCode === 3 && $rxPower !== null && (float)$rxPower > -35.0 && (float)$rxPower < -5.0);
-                        $status = $isOnline ? 'Online' : 'LOS';
-                        if (!$isOnline) {
-                            $rxPower = -40.00;
-                        }
+                        $sample = OnuTelemetrySample::fromZteState($stateCode,$rxRaw,$sampleStartedAt);
+                        $rxPower=$sample['rx_power'];$status=$sample['status'];
 
                         $onus[] = [
                             '_source'         => 'live_snmp',
                             'identity_source' => ZteOnuIdentityMap::SOURCE,
+                            ...$sample,
                             'identity_observed_at' => now()->toIso8601String(),
                             'onu_id'          => $onuId,
                             'port'            => $portName,
@@ -340,6 +339,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     public function getOnuListByPort(string $portId): array
     {
+        $sampleStartedAt = OnuTelemetrySample::timestamp();
         $ifIndex = ZteOnuIdentityMap::ifIndexFromPort($portId);
         if ($ifIndex === null) return [];
         $normalizedPort = ZteOnuIdentityMap::portFromIfIndex($ifIndex);
@@ -386,7 +386,7 @@ class ZteC320Driver implements OltDeviceDriverInterface
                     foreach ($snHexList as $key => $sn) {
                         [$portIfIndex, $onuId] = explode('_', $key);
                         if ((int)$portIfIndex !== $ifIndex) continue;
-                        $stateCode = $stateMap[$onuId] ?? 3;
+                        $stateCode = $stateMap[$onuId] ?? null;
                         $model = $modelMap[$onuId] ?? 'F670L';
                         $rxRaw = $rxMap[$onuId] ?? null;
                         $txRaw = $txMap[$onuId] ?? null;
@@ -394,15 +394,13 @@ class ZteC320Driver implements OltDeviceDriverInterface
                         $rxPower = $this->formatOpticalPower($rxRaw);
                         $txPower = $this->formatOpticalPower($txRaw);
 
-                        $isOnline = ($stateCode === 3 && $rxPower !== null && (float)$rxPower > -35.0 && (float)$rxPower < -5.0);
-                        $status = $isOnline ? 'Online' : 'LOS';
-                        if (!$isOnline) {
-                            $rxPower = -40.00;
-                        }
+                        $sample = OnuTelemetrySample::fromZteState($stateCode,$rxRaw,$sampleStartedAt);
+                        $rxPower=$sample['rx_power'];$status=$sample['status'];
 
                         $onus[] = [
                             '_source'         => 'live_snmp',
                             'identity_source' => ZteOnuIdentityMap::SOURCE,
+                            ...$sample,
                             'identity_observed_at' => now()->toIso8601String(),
                             'onu_id'          => $onuId,
                             'port'            => $normalizedPort,

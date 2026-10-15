@@ -252,6 +252,7 @@ class PollOltTelemetry extends Command
      */
     protected function pollSlotParallelTelemetry(int $deviceId, OltController $oltCtrl): int
     {
+        $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $device = OltDevice::find($deviceId);
         if (!$device) {
             $this->error("OLT Device ID {$deviceId} not found.");
@@ -389,61 +390,15 @@ class PollOltTelemetry extends Command
                 $stateCode = $stateMap[$compositeKey] ?? null;
                 $rawRx     = $rxMap[$compositeKey] ?? null;
 
-                // Hitung Nilai Redaman Optik (DDM Formula)
-                $hasValidRawRx = ($rawRx !== null && $rawRx > 0 && $rawRx < 65534);
-                $calculatedRx  = $hasValidRawRx ? round(($rawRx * 0.002) - 30.0, 2) : null;
-                $isExplicitStateOnline = ($stateCode === 3);
-
-                // 🛡️ DEFENSIVE STATE PRESERVATION FILTER (Anti-Glitch / Anti-Packet-Drop)
-                $prevItem = $prevSnapshotOnus->get(strtoupper($sn));
-                $prevWasOnline = $prevItem && in_array(strtolower($prevItem['status'] ?? ''), ['online', 'active', 'working']);
-                $prevRx = isset($prevItem['rx_power']) && is_numeric($prevItem['rx_power']) && (float)$prevItem['rx_power'] > -35.0 ? (float)$prevItem['rx_power'] : null;
-
-                if ($isExplicitStateOnline && $hasValidRawRx && $calculatedRx > -38.0 && $calculatedRx < -5.0) {
-                    // Valid Online dengan redaman riil
-                    $rxPower = $calculatedRx;
-                    $status = 'Online';
-                    $isOnline = true;
-                    Cache::forget("ont_miss_count_{$sn}");
-                } elseif ($rawRx === 65535 || $rawRx === 0 || $rawRx === 2147483647 || ($hasValidRawRx && $calculatedRx <= -38.0)) {
-                    // 🚨 Terkonfirmasi Tegas: Hardware OLT Transceiver mengembalikan 65535 / 0 (Dark Fiber / Loss of Signal)
-                    $rxPower = -40.00;
-                    $status = 'LOS';
-                    $isOnline = false;
-                } elseif ($isExplicitStateOnline && $rawRx === null) {
-                    // Phase State Online tapi redaman DDM belum terkirim / jitter paket: pertahankan redaman terakhir yang valid atau null
-                    $rxPower = ($prevWasOnline && $prevRx !== null && (float)$prevRx != -21.50) ? $prevRx : null;
-                    $status = 'Online';
-                    $isOnline = true;
-                    Cache::forget("ont_miss_count_{$sn}");
-                } else {
-                    // SNMP tidak mengembalikan state=3: Cek apakah timeout jaringan atau drop fisik riil
-                    $hasTrapDown = Cache::get("ont_trap_down_{$sn}", false);
-                    $missCount = (int)Cache::get("ont_miss_count_{$sn}", 0) + 1;
-                    Cache::put("ont_miss_count_{$sn}", $missCount, 3600); // 1 jam TTL
-
-                    // Pertahankan status Online JIKA:
-                    // 1. Terdeteksi respons SNMP terpotong / degraded karena transit VPN loss, ATAU
-                    // 2. Sebelumnya Online dan belum miss 4 siklus berurutan serta tidak ada Trap Down / bukan explicit offline
-                    if ($prevWasOnline && ($isSnmpDegraded || ($missCount < 4 && !$hasTrapDown && $stateCode !== 1))) {
-                        // 🛡️ Filter Packet Loss: Pertahankan status Online & redaman sebelumnya
-                        $rxPower = $prevRx;
-                        $status = 'Online';
-                        $isOnline = true;
-                    } else {
-                        // Terkonfirmasi Down / LOS riil
-                        $rxPower = -40.00;
-                        $status = 'LOS';
-                        $isOnline = false;
-                    }
-                }
-
-                $txPower = 1.95;
+                $sample = \App\Services\Olt\OnuTelemetrySample::fromZteState($stateCode,$rawRx,$sampleStartedAt);
+                $rxPower = $sample['rx_power'];$status = $sample['status'];$isOnline = $sample['is_online'];
+                $txPower = null;
 
                 $onuItem = [
                     '_source'         => 'live_snmp',
                     'identity_source' => ZteOnuIdentityMap::SOURCE,
                     'identity_observed_at' => $snObservedAt,
+                    ...$sample,
                     'onu_id'          => (string)$onuId,
                     'port'            => $portName,
                     'customer_name'   => "ONU {$sn}",
@@ -452,7 +407,7 @@ class PollOltTelemetry extends Command
                     'status'          => $status,
                     'rx_power'        => $rxPower,
                     'tx_power'        => $txPower,
-                    'distance_meters' => 850,
+                    'distance_meters' => null,
                     'ip_address'      => '—',
                 ];
 
@@ -468,14 +423,14 @@ class PollOltTelemetry extends Command
                 $portOnus = $onusByPort[$pId] ?? ($onusByPort[str_replace('gpon-olt_', '', $pId)] ?? []);
                 $found = count($portOnus);
                 $onlineCount = count(array_filter($portOnus, fn($o) => 
-                    ($o['status'] === 'Online' || strtolower($o['status'] ?? '') === 'working') 
-                    && isset($o['rx_power']) && (float)$o['rx_power'] > -38.0
+                    in_array(strtolower($o['status'] ?? ''), ['online','active','working'], true)
                 ));
 
+                $complete = count(array_filter($portOnus, fn($o)=>in_array(strtolower($o['status'] ?? ''),['online','active','working','offline','inactive','los'],true))) === $found;
                 $isMassDown = false;
-                if ($found >= 10) {
+                if ($complete && $found >= 10) {
                     $isMassDown = ($onlineCount === 0) || ((($found - $onlineCount) / $found) >= 0.90 && $onlineCount <= 3);
-                } elseif ($found >= 3) {
+                } elseif ($complete && $found >= 3) {
                     $isMassDown = ($onlineCount === 0);
                 }
 
@@ -490,79 +445,14 @@ class PollOltTelemetry extends Command
                 $p['is_mass_outage']  = $isMassDown;
 
                 if ($found > 0) {
-                    $this->handleInterfaceMassOutagePollCheck($device, $pId, $found, $onlineCount, $portOnus);
+                    if($complete) $this->handleInterfaceMassOutagePollCheck($device, $pId, $found, $onlineCount, $portOnus);
                 }
 
                 return $p;
             }, $allPonPorts);
 
-            // 8. Bulk Sync Database OntRegistration & Alarms (Anti-Flapping & Instant Notifications)
-            $allSerials = array_unique(array_map(fn($o) => strtoupper(trim((string)$o['serial_number'])), $physicalOnuMap));
-            
-            if (!empty($allSerials)) {
-                $dbOnts = \App\Models\OntRegistration::with(['customerService.customer', 'customerService.networkPort.node', 'oltPort.node'])
-                    ->whereIn('onu_serial', $allSerials)
-                    ->orWhereIn('onu_mac', $allSerials)
-                    ->get()
-                    ->keyBy(fn($r) => strtoupper(trim((string)($r->onu_serial ?: $r->onu_mac))));
-
-                DB::transaction(function() use ($physicalOnuMap, $dbOnts, $device, $massDownPorts) {
-                    foreach ($physicalOnuMap as $onuData) {
-                        $sn = strtoupper(trim((string)$onuData['serial_number']));
-                        $ontReg = $dbOnts->get($sn);
-                        if (!$ontReg) continue;
-
-                        $isOnline = ($onuData['status'] === 'Online' || strtolower($onuData['status']) === 'working') && (float)$onuData['rx_power'] > -38.0;
-                        $newStatus = $isOnline ? 'active' : 'inactive';
-                        $newRx     = (float)$onuData['rx_power'];
-                        $newTx     = (float)$onuData['tx_power'];
-                        $oldStatus = $ontReg->status;
-
-                        $portName  = $onuData['port'] ?? 'PON';
-                        $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
-
-                        // Deteksi perubahan status untuk alarm & notifikasi
-                        if ($oldStatus !== $newStatus) {
-                            $flapTrackerKey = "ont_flap_tracker_{$sn}";
-                            $flaps = Cache::get($flapTrackerKey, []);
-                            $now = now()->timestamp;
-                            $flaps = array_values(array_filter($flaps, fn($t) => ($now - $t) <= 900));
-                            $flaps[] = $now;
-                            Cache::put($flapTrackerKey, $flaps, 1800);
-
-                            $suppressKey = "ont_flap_suppressed_{$sn}";
-                            if (count($flaps) >= 3) {
-                                Cache::put($suppressKey, true, 1800);
-                            }
-
-                            $isSuppressed = Cache::get($suppressKey, false);
-                            $alertCooldownKey = "ont_alert_cooldown_{$sn}_{$newStatus}";
-                            $inCooldown = Cache::has($alertCooldownKey);
-
-                            if (!$isSuppressed && !$inCooldown) {
-                                Cache::put($alertCooldownKey, true, 600); // 10 menit cooldown
-
-                                if ($oldStatus === 'active' && $newStatus === 'inactive') {
-                                    \App\Models\AuditLog::record('ALARM_SUDDEN_LOS', 'Monitoring OLT', "🚨 SUDDEN LOSS: Modem {$custName} ({$sn}) putus / LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => -40.00]);
-                                } elseif ($oldStatus === 'inactive' && $newStatus === 'active') {
-                                    \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "✨ RECOVERY: Modem {$custName} ({$sn}) kembali ONLINE pada {$portName} (Rx: {$newRx} dBm)", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => $newRx]);
-                                }
-                            }
-                        }
-
-                        $updatePayload = [
-                            'status'     => $newStatus,
-                            'rx_power'   => $newRx,
-                            'tx_power'   => $newTx,
-                            'updated_at' => now(),
-                        ];
-                        if ($isOnline) {
-                            $updatePayload['last_online_at'] = now();
-                        }
-                        $ontReg->update($updatePayload);
-                    }
-                });
-            }
+            // Accept only ownership-scoped, ordered hardware observations.
+            app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,array_values($physicalOnuMap),$sampleStartedAt,'poll',true,array_keys($massDownPorts));
 
             // 9. Simpan Snapshot Data Lengkap ke Database OLT
             $existingUncfg = $existingSnapshot['unconfigured_onus'] ?? [];
@@ -618,6 +508,7 @@ class PollOltTelemetry extends Command
      */
     protected function pollGlobalBulkTelemetry(int $deviceId, OltController $oltCtrl): int
     {
+        $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $device = OltDevice::find($deviceId);
         if (!$device) {
             $this->error("OLT Device ID {$deviceId} not found.");
@@ -756,61 +647,15 @@ class PollOltTelemetry extends Command
                 $stateCode = $stateMap[$compositeKey] ?? null;
                 $rawRx     = $rxMap[$compositeKey] ?? null;
 
-                // Hitung Nilai Redaman Optik (DDM Formula)
-                $hasValidRawRx = ($rawRx !== null && $rawRx > 0 && $rawRx < 65534);
-                $calculatedRx  = $hasValidRawRx ? round(($rawRx * 0.002) - 30.0, 2) : null;
-                $isExplicitStateOnline = ($stateCode === 3);
-
-                // 🛡️ DEFENSIVE STATE PRESERVATION FILTER (Anti-Glitch / Anti-Packet-Drop)
-                $prevItem = $prevSnapshotOnus->get(strtoupper($sn));
-                $prevWasOnline = $prevItem && in_array(strtolower($prevItem['status'] ?? ''), ['online', 'active', 'working']);
-                $prevRx = isset($prevItem['rx_power']) && is_numeric($prevItem['rx_power']) && (float)$prevItem['rx_power'] > -35.0 ? (float)$prevItem['rx_power'] : null;
-
-                if ($isExplicitStateOnline && $hasValidRawRx && $calculatedRx > -38.0 && $calculatedRx < -5.0) {
-                    // Valid Online dengan redaman riil
-                    $rxPower = $calculatedRx;
-                    $status = 'Online';
-                    $isOnline = true;
-                    Cache::forget("ont_miss_count_{$sn}");
-                } elseif ($rawRx === 65535 || $rawRx === 0 || $rawRx === 2147483647 || ($hasValidRawRx && $calculatedRx <= -38.0)) {
-                    // 🚨 Terkonfirmasi Tegas: Hardware OLT Transceiver mengembalikan 65535 / 0 (Dark Fiber / Loss of Signal)
-                    $rxPower = -40.00;
-                    $status = 'LOS';
-                    $isOnline = false;
-                } elseif ($isExplicitStateOnline && $rawRx === null) {
-                    // Phase State Online tapi redaman DDM belum terkirim / jitter paket: pertahankan redaman terakhir yang valid atau null
-                    $rxPower = ($prevWasOnline && $prevRx !== null && (float)$prevRx != -21.50) ? $prevRx : null;
-                    $status = 'Online';
-                    $isOnline = true;
-                    Cache::forget("ont_miss_count_{$sn}");
-                } else {
-                    // SNMP tidak mengembalikan state=3: Cek apakah timeout jaringan atau drop fisik riil
-                    $hasTrapDown = Cache::get("ont_trap_down_{$sn}", false);
-                    $missCount = (int)Cache::get("ont_miss_count_{$sn}", 0) + 1;
-                    Cache::put("ont_miss_count_{$sn}", $missCount, 3600); // 1 jam TTL
-
-                    // Pertahankan status Online JIKA:
-                    // 1. Terdeteksi respons SNMP terpotong / degraded karena transit VPN loss, ATAU
-                    // 2. Sebelumnya Online dan belum miss 4 siklus berurutan serta tidak ada Trap Down / bukan explicit offline
-                    if ($prevWasOnline && ($isSnmpDegraded || ($missCount < 4 && !$hasTrapDown && $stateCode !== 1))) {
-                        // 🛡️ Filter Packet Loss: Pertahankan status Online & redaman sebelumnya
-                        $rxPower = $prevRx;
-                        $status = 'Online';
-                        $isOnline = true;
-                    } else {
-                        // Terkonfirmasi Down / LOS riil
-                        $rxPower = -40.00;
-                        $status = 'LOS';
-                        $isOnline = false;
-                    }
-                }
-
-                $txPower = 1.95;
+                $sample = \App\Services\Olt\OnuTelemetrySample::fromZteState($stateCode,$rawRx,$sampleStartedAt);
+                $rxPower = $sample['rx_power'];$status = $sample['status'];$isOnline = $sample['is_online'];
+                $txPower = null;
 
                 $onuItem = [
                     '_source'         => 'live_snmp',
                     'identity_source' => ZteOnuIdentityMap::SOURCE,
                     'identity_observed_at' => $snObservedAt,
+                    ...$sample,
                     'onu_id'          => (string)$onuId,
                     'port'            => $portName,
                     'customer_name'   => "ONU {$sn}",
@@ -819,7 +664,7 @@ class PollOltTelemetry extends Command
                     'status'          => $status,
                     'rx_power'        => $rxPower,
                     'tx_power'        => $txPower,
-                    'distance_meters' => 850,
+                    'distance_meters' => null,
                     'ip_address'      => '—',
                 ];
 
@@ -835,14 +680,14 @@ class PollOltTelemetry extends Command
                 $portOnus = $onusByPort[$pId] ?? ($onusByPort[str_replace('gpon-olt_', '', $pId)] ?? []);
                 $found = count($portOnus);
                 $onlineCount = count(array_filter($portOnus, fn($o) => 
-                    ($o['status'] === 'Online' || strtolower($o['status'] ?? '') === 'working') 
-                    && isset($o['rx_power']) && (float)$o['rx_power'] > -38.0
+                    in_array(strtolower($o['status'] ?? ''), ['online','active','working'], true)
                 ));
 
+                $complete = count(array_filter($portOnus, fn($o)=>in_array(strtolower($o['status'] ?? ''),['online','active','working','offline','inactive','los'],true))) === $found;
                 $isMassDown = false;
-                if ($found >= 10) {
+                if ($complete && $found >= 10) {
                     $isMassDown = ($onlineCount === 0) || ((($found - $onlineCount) / $found) >= 0.90 && $onlineCount <= 3);
-                } elseif ($found >= 3) {
+                } elseif ($complete && $found >= 3) {
                     $isMassDown = ($onlineCount === 0);
                 }
 
@@ -857,91 +702,14 @@ class PollOltTelemetry extends Command
                 $p['is_mass_outage']  = $isMassDown;
 
                 if ($found > 0) {
-                    $this->handleInterfaceMassOutagePollCheck($device, $pId, $found, $onlineCount, $portOnus);
+                    if($complete) $this->handleInterfaceMassOutagePollCheck($device, $pId, $found, $onlineCount, $portOnus);
                 }
 
                 return $p;
             }, $allPonPorts);
 
-            // 8. Bulk Sync Database OntRegistration & Alarms (Anti-Flapping & Instant Notifications)
-            $allSerials = array_unique(array_map(fn($o) => strtoupper(trim((string)$o['serial_number'])), $physicalOnuMap));
-            
-            if (!empty($allSerials)) {
-                $dbOnts = \App\Models\OntRegistration::with(['customerService.customer', 'customerService.networkPort.node', 'oltPort.node'])
-                    ->whereIn('onu_serial', $allSerials)
-                    ->orWhereIn('onu_mac', $allSerials)
-                    ->get()
-                    ->keyBy(fn($r) => strtoupper(trim((string)($r->onu_serial ?: $r->onu_mac))));
-
-                DB::transaction(function() use ($physicalOnuMap, $dbOnts, $device, $massDownPorts) {
-                    foreach ($physicalOnuMap as $onuData) {
-                        $sn = strtoupper(trim((string)$onuData['serial_number']));
-                        $ontReg = $dbOnts->get($sn);
-                        if (!$ontReg) continue;
-
-                        $isOnline = ($onuData['status'] === 'Online' || strtolower($onuData['status']) === 'working') && (float)$onuData['rx_power'] > -38.0;
-                        $newStatus = $isOnline ? 'active' : 'inactive';
-                        $newRx     = (float)$onuData['rx_power'];
-                        $newTx     = (float)$onuData['tx_power'];
-                        $oldStatus = $ontReg->status;
-                        $oldRx     = (float)($ontReg->rx_power ?? -40.00);
-
-                        $portName  = $onuData['port'] ?? 'PON';
-                        $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
-
-                        // Deteksi perubahan status untuk alarm & notifikasi
-                        if ($oldStatus !== $newStatus) {
-                            // Flap dampening tracking
-                            $flapTrackerKey = "ont_flap_tracker_{$sn}";
-                            $flaps = Cache::get($flapTrackerKey, []);
-                            $now = now()->timestamp;
-                            $flaps = array_values(array_filter($flaps, fn($t) => ($now - $t) <= 900));
-                            $flaps[] = $now;
-                            Cache::put($flapTrackerKey, $flaps, 1800);
-
-                            $suppressKey = "ont_flap_suppressed_{$sn}";
-                            if (count($flaps) >= 3) {
-                                Cache::put($suppressKey, true, 1800);
-                                $notifiedKey = "ont_flap_notified_{$sn}";
-                                if (!Cache::has($notifiedKey)) {
-                                    Cache::put($notifiedKey, true, 1800);
-                                    \App\Models\AuditLog::record('ALARM_FLAPPING', 'Monitoring OLT', "⚠️ FLAPPING: Modem {$custName} ({$sn}) mengalami status naik-turun berulang kali (" . count($flaps) . "x / 15 mnt).", null, ['serial_number' => $sn, 'port' => $portName]);
-                                }
-                            }
-
-                            $isSuppressed = Cache::get($suppressKey, false);
-                            $alertCooldownKey = "ont_alert_cooldown_{$sn}_{$newStatus}";
-                            $inCooldown = Cache::has($alertCooldownKey);
-
-                            if (!$isSuppressed && !$inCooldown) {
-                                Cache::put($alertCooldownKey, true, 600); // 10 menit cooldown
-
-                                // Sudden Loss
-                                if ($oldStatus === 'active' && $newStatus === 'inactive') {
-                                    \App\Models\AuditLog::record('ALARM_SUDDEN_LOS', 'Monitoring OLT', "🚨 SUDDEN LOSS: Modem {$custName} ({$sn}) putus / LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => -40.00]);
-                                }
-
-                                // Recovery
-                                if ($oldStatus === 'inactive' && $newStatus === 'active') {
-                                    \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) pulih normal pada {$portName} (Rx: {$newRx} dBm)", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => $newRx]);
-                                }
-                            }
-
-                            $ontReg->update([
-                                'rx_power' => $newRx,
-                                'tx_power' => $newTx,
-                                'status'   => $newStatus,
-                            ]);
-                        } elseif (abs($oldRx - $newRx) >= 0.5) {
-                            // Perbarui jika redaman berubah signifikan tanpa merusak status
-                            $ontReg->update([
-                                'rx_power' => $newRx,
-                                'tx_power' => $newTx,
-                            ]);
-                        }
-                    }
-                });
-            }
+            // Accept only ownership-scoped, ordered hardware observations.
+            app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,array_values($physicalOnuMap),$sampleStartedAt,'poll',true,array_keys($massDownPorts));
 
             // 9. Simpan Snapshot Data Lengkap ke Database OLT
             $existingUncfg = $existingSnapshot['unconfigured_onus'] ?? [];
@@ -997,6 +765,7 @@ class PollOltTelemetry extends Command
      */
     protected function pollSinglePortOnDevice(int $deviceId, OltController $oltCtrl, ?string $specificPort = null): int
     {
+        $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $device = OltDevice::find($deviceId);
         if (!$device) {
             $this->error("OLT Device ID {$deviceId} not found.");
@@ -1185,177 +954,12 @@ class PollOltTelemetry extends Command
                 }
             }
 
-            // 2. Hapus entri lama khusus untuk port yang sedang di-query di batch ini secara PRESISI
-            foreach ($physicalOnuMap as $key => $o) {
-                $p = $o['port'] ?? ($o['detected_port'] ?? '');
-                foreach ($targetPorts as $tPort) {
-                    if ($oltCtrl->portsMatch($p, $tPort)) {
-                        unset($physicalOnuMap[$key]);
-                        break;
-                    }
-                }
-            }
+            $priorityKey = "olt_priority_ports_{$device->id}";
+            $activePriorityPorts = Cache::get($priorityKey, []);
 
-            // 3. Evaluasi KESEHATAN PORT DI BATCH INI (Deteksi Dini Gangguan Massal Interface)
-            $massDownPorts = [];
-            foreach ($portsResults as $pIdKey => $pRes) {
-                $pFound = $pRes['count'] ?? 0;
-                $pOnusList = $pRes['onus'] ?? [];
-                $pOnlineCount = count(array_filter($pOnusList, fn($o) => 
-                    ($o['status'] === 'Online' || strtolower($o['status'] ?? '') === 'working') 
-                    && isset($o['rx_power']) && (float)$o['rx_power'] > -38.0
-                ));
-                
-                // Gangguan Massal Interface: >= 3 pelanggan & 0 online (100% mati), ATAU >= 6 pelanggan & online <= 15%
-                $isMassDown = ($pFound >= 3 && $pOnlineCount === 0) || ($pFound >= 6 && $pOnlineCount <= (int)ceil($pFound * 0.15));
-                if ($isMassDown) {
-                    $massDownPorts[$pIdKey] = true;
-                    $massDownPorts[str_replace('gpon-olt_', '', $pIdKey)] = true;
-                    $this->handleInterfaceMassOutagePollCheck($device, $pIdKey, $pFound, $pOnlineCount, $pOnusList);
-                }
-            }
-
-            // Masukkan data ONU segar hasil pembacaan port saat ini & Kelola Priority Watchlist
-            $activePriorityPorts = $validPriorityPorts;
-
-            if (!empty($batchOnusCombined)) {
-                foreach ($batchOnusCombined as $onuData) {
-                    $sn = strtoupper(trim((string)($onuData['serial_number'] ?? ($onuData['mac_address'] ?? ''))));
-                    $p  = strtolower(trim((string)($onuData['port'] ?? ($onuData['detected_port'] ?? ''))));
-                    if (!$sn) continue;
-
-                    $isOnline = ($onuData['status'] === 'Online' || strtolower($onuData['status']) === 'working') && isset($onuData['rx_power']) && is_numeric($onuData['rx_power']) && (float)$onuData['rx_power'] > -38.0;
-                    $newStatus = $isOnline ? 'active' : 'inactive';
-                    $newRx     = $isOnline ? (float)$onuData['rx_power'] : -40.00;
-                    $newTx     = $isOnline ? ($onuData['tx_power'] ?? 1.95) : 0.0;
-
-                    // 🛡️ LAYER 1: MULTI-PORT CONFLICT & GHOST ONU GUARD
-                    // Cek apakah serial ini tercatat aktif/online di port lain (dalam physicalOnuMap atau batch saat ini)
-                    $isOnlineElsewhere = false;
-                    $elsewherePort = null;
-
-                    foreach ($physicalOnuMap as $otherKey => $otherOnu) {
-                        $otherSn = strtoupper(trim((string)($otherOnu['serial_number'] ?? ($otherOnu['mac_address'] ?? ''))));
-                        $otherP  = strtolower(trim((string)($otherOnu['port'] ?? ($otherOnu['detected_port'] ?? ''))));
-                        if ($otherSn === $sn && !$oltCtrl->portsMatch($otherP, $p)) {
-                            $otherIsOnline = ($otherOnu['status'] === 'Online' || strtolower($otherOnu['status'] ?? '') === 'working')
-                                && isset($otherOnu['rx_power']) && is_numeric($otherOnu['rx_power']) && (float)$otherOnu['rx_power'] > -38.0;
-                            if ($otherIsOnline) {
-                                $isOnlineElsewhere = true;
-                                $elsewherePort = $otherOnu['port'] ?? $otherP;
-                                break;
-                            }
-                        }
-                    }
-
-                    // KASUS A: Port ini melaporkan Offline/LOS, tapi modem terbukti AKTIF ONLINE di port lain!
-                    // Ini membuktikan entri di port saat ini adalah konfigurasi lama/ghost di OLT yang belum dihapus.
-                    if (!$isOnline && $isOnlineElsewhere) {
-                        $this->warn("[GHOST_ONU_IGNORED] Serial {$sn} aktif online di port {$elsewherePort}. Mengabaikan status offline/ghost dari port {$p}.");
-                        // Hapus entri ghost ini dari physicalOnuMap jika ada agar tidak mengotori snapshot dan port health
-                        $ghostKey = $sn . '@' . $p;
-                        unset($physicalOnuMap[$ghostKey]);
-                        continue;
-                    }
-
-                    // KASUS B: Port ini melaporkan ONLINE, bersihkan entri lama/stale yang offline untuk serial ini dari port lain
-                    if ($isOnline) {
-                        foreach ($physicalOnuMap as $chkKey => $chkOnu) {
-                            $chkSn = strtoupper(trim((string)($chkOnu['serial_number'] ?? ($chkOnu['mac_address'] ?? ''))));
-                            $chkP  = strtolower(trim((string)($chkOnu['port'] ?? ($chkOnu['detected_port'] ?? ''))));
-                            if ($chkSn === $sn && !$oltCtrl->portsMatch($chkP, $p)) {
-                                unset($physicalOnuMap[$chkKey]);
-                            }
-                        }
-                    }
-
-                    $key = $sn . '@' . $p;
-                    $physicalOnuMap[$key] = $onuData;
-
-                    // Cari kecocokan data pelanggan
-                    $ontReg = \App\Models\OntRegistration::with(['customerService.customer', 'customerService.networkPort.node', 'oltPort.node'])
-                        ->whereRaw('LOWER(onu_serial) = ?', [strtolower($sn)])
-                        ->orWhereRaw('LOWER(onu_mac) = ?', [strtolower($sn)])
-                        ->first();
-
-                    if ($ontReg) {
-                        // 🛡️ LAYER 1.5: GHOST PORT MISMATCH GUARD
-                        // Ambil port resmi OLT dari ODP pelanggan atau ONT registration
-                        $officialPort = $ontReg->customerService?->networkPort?->node?->olt_port_ref 
-                            ?: ($ontReg->oltPort?->node?->olt_port_ref ?: null);
-
-                        // Jika modem terbaca offline/LOS pada port $p, tetapi port resmi pelanggan adalah port lain:
-                        // Ini 100% ghost config sisa di OLT! Lewati agar tidak merusak status riil pelanggan!
-                        if (!$isOnline && $officialPort && !$oltCtrl->portsMatch($p, $officialPort)) {
-                            $this->warn("[GHOST_PORT_IGNORED] Serial {$sn} resmi terdaftar di {$officialPort} (ODP " . ($ontReg->customerService?->networkPort?->node?->name ?? 'N/A') . "), namun terbaca offline di port {$p}. Mengabaikan status ghost.");
-                            $ghostKey = $sn . '@' . $p;
-                            unset($physicalOnuMap[$ghostKey]);
-                            continue;
-                        }
-
-                        $oldStatus = $ontReg->status;
-                        $custName  = $ontReg->customerService?->customer?->name ?: ('Pelanggan #' . $ontReg->id);
-                        $portName  = $onuData['port'] ?? ($ontReg->oltPort?->node?->olt_port_ref ?: ($targetPorts[0] ?? 'PON'));
-                        $onuIdVal  = $onuData['onu_id'] ?? null;
-                        $portDesc  = $portName . ($onuIdVal ? ":{$onuIdVal}" : "");
-                        $odpName   = $ontReg->customerService?->networkPort?->node?->name;
-                        $odpInfo   = $odpName ? "\n<b>Lokasi ODP:</b> {$odpName}" : "";
-
-                        // Cek perubahan status untuk deteksi Alarm & Anti-Flapping
-                        if ($oldStatus !== $newStatus) {
-                            // 🛡️ LAYER 2: FLAP DAMPENING TRACKER & RATE LIMITING
-                            $flapTrackerKey = "ont_flap_tracker_{$sn}";
-                            $flaps = Cache::get($flapTrackerKey, []);
-                            $now = now()->timestamp;
-                            // Filter transisi dalam jendela 15 menit terakhir (900 detik)
-                            $flaps = array_values(array_filter($flaps, fn($t) => ($now - $t) <= 900));
-                            $flaps[] = $now;
-                            Cache::put($flapTrackerKey, $flaps, 1800);
-
-                            // Jika berfluktuasi >= 3 kali dalam 15 menit, aktifkan peredam notifikasi (suppression)
-                            $suppressKey = "ont_flap_suppressed_{$sn}";
-                            if (count($flaps) >= 3) {
-                                Cache::put($suppressKey, true, 1800); // Redam notifikasi selama 30 menit
-                                $notifiedKey = "ont_flap_notified_{$sn}";
-                                if (!Cache::has($notifiedKey)) {
-                                    Cache::put($notifiedKey, true, 1800);
-                                    \App\Models\AuditLog::record('ALARM_FLAPPING', 'Monitoring OLT', "⚠️ FLAPPING: Modem {$custName} ({$sn}) mengalami status naik-turun berulang kali (" . count($flaps) . "x / 15 mnt). Notifikasi diredam 30 menit.", null, ['serial_number' => $sn, 'port' => $portName]);
-                                }
-                            }
-
-                            $isSuppressed = Cache::get($suppressKey, false);
-                            // Cooldown per status: jangan kirim notifikasi jenis status yang sama jika sudah terkirim dalam 10 menit terakhir
-                            $alertCooldownKey = "ont_alert_cooldown_{$sn}_{$newStatus}";
-                            $inCooldown = Cache::has($alertCooldownKey);
-
-                            if (!$isSuppressed && !$inCooldown) {
-                                Cache::put($alertCooldownKey, true, 600); // 10 menit cooldown per event tipe
-
-                                // 🚨 ALARM SUDDEN LOSS: Modem tiba-tiba drop dari Online menjadi LOS/Mati
-                                if ($oldStatus === 'active' && $newStatus === 'inactive') {
-                                    \App\Models\AuditLog::record('ALARM_SUDDEN_LOS', 'Monitoring OLT', "🚨 SUDDEN LOSS: Modem {$custName} ({$sn}) tiba-tiba putus / LOS pada {$portName}", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => -40.00]);
-
-                                    // Masukkan port ini ke antrean prioritas cepat
-                                    if (!in_array($portName, $activePriorityPorts)) {
-                                        $activePriorityPorts[] = $portName;
-                                    }
-                                }
-
-                                // 🟢 ALARM INSTANT RECOVERY: Modem terdeteksi pulih kembali online!
-                                if ($oldStatus === 'inactive' && $newStatus === 'active') {
-                                    \App\Models\AuditLog::record('ALARM_RECOVERY', 'Monitoring OLT', "🟢 RECOVERY: Modem {$custName} ({$sn}) pulih normal pada {$portName} (Rx: {$newRx} dBm)", null, ['serial_number' => $sn, 'port' => $portName, 'rx_power' => $newRx]);
-                                }
-                            }
-                        }
-
-                        $ontReg->update([
-                            'rx_power' => $newRx,
-                            'tx_power' => $newTx,
-                            'status'   => $newStatus,
-                        ]);
-                    }
-                }
-            }
+            // New per-port observations alone are eligible for writes; preserved ports keep their old timestamps.
+            app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($device,$batchOnusCombined,$sampleStartedAt,'poll',true);
+            $physicalOnuMap=\App\Services\Olt\OnuTelemetryWriter::mergePortObservations(array_values($physicalOnuMap),$batchOnusCombined);
 
             // 🛡️ LAYER 3: EVALUASI PORT PRIORITAS DENGAN FILTER GHOST ONU
             // Jika semua modem riil pada port tersebut sudah online, keluarkan dari prioritas
@@ -1367,7 +971,7 @@ class PollOltTelemetry extends Command
 
                 $hasLossOnPort = false;
                 foreach ($onusOnPort as $o) {
-                    $isOnline = ($o['status'] === 'Online' || strtolower($o['status'] ?? '') === 'working') && isset($o['rx_power']) && (float)$o['rx_power'] > -38.0;
+                    $isOnline = in_array(strtolower($o['status'] ?? ''), ['online','active','working'], true);
                     if (!$isOnline) {
                         // Verifikasi apakah ONU offline ini sebenarnya aktif online di port lain (ghost ONU)
                         $sn = strtoupper(trim((string)($o['serial_number'] ?? ($o['mac_address'] ?? ''))));
@@ -1377,8 +981,7 @@ class PollOltTelemetry extends Command
                                 $otherSn = strtoupper(trim((string)($otherOnu['serial_number'] ?? ($otherOnu['mac_address'] ?? ''))));
                                 $otherP  = strtolower(trim((string)($otherOnu['port'] ?? ($otherOnu['detected_port'] ?? ''))));
                                 if ($otherSn === $sn && !$oltCtrl->portsMatch($otherP, $tPort)) {
-                                    $otherIsOnline = ($otherOnu['status'] === 'Online' || strtolower($otherOnu['status'] ?? '') === 'working')
-                                        && isset($otherOnu['rx_power']) && (float)$otherOnu['rx_power'] > -38.0;
+                                    $otherIsOnline = in_array(strtolower($otherOnu['status'] ?? ''), ['online','active','working'], true);
                                     if ($otherIsOnline) {
                                         $isGhost = true;
                                         break;
@@ -1411,17 +1014,18 @@ class PollOltTelemetry extends Command
                 if (isset($portsResults[$pId])) {
                     $found = $portsResults[$pId]['count'];
                     $onus = $portsResults[$pId]['onus'] ?? [];
-                    $onlineCount = count(array_filter($onus, fn($o) => ($o['status'] === 'Online' || strtolower($o['status'] ?? '') === 'working') && isset($o['rx_power']) && (float)$o['rx_power'] > -38.0));
+                    $onlineCount = count(array_filter($onus, fn($o) => in_array(strtolower($o['status'] ?? ''), ['online','active','working'], true)));
                     
                     // Port Down jika ada registered ONUs tetapi seluruhnya mati (online == 0)
-                    $isMassDown = $found > 0 && $onlineCount === 0;
+                    $complete=count(array_filter($onus,fn($o)=>in_array(strtolower($o['status'] ?? ''),['online','active','working','offline','inactive','los'],true)))===count($onus);
+                    $isMassDown = $complete && $found > 0 && $onlineCount === 0;
                     $p['status'] = $found > 0 ? ($isMassDown ? 'Down' : 'Up') : ($p['status'] ?? 'Down');
                     $p['registered_onus'] = $found;
                     $p['online_onus'] = $onlineCount;
                     $p['is_mass_outage'] = $isMassDown;
 
                     // Evaluasi fail-safe alert gangguan massal via background poller
-                    $this->handleInterfaceMassOutagePollCheck($device, $pId, $found, $onlineCount, $onus);
+                    if($complete) $this->handleInterfaceMassOutagePollCheck($device, $pId, $found, $onlineCount, $onus);
                 }
                 return $p;
             }, $allPonPorts);
@@ -1477,6 +1081,10 @@ class PollOltTelemetry extends Command
      */
     protected function handleInterfaceMassOutagePollCheck(OltDevice $device, string $pId, int $found, int $onlineCount, array $onus): void
     {
+        $complete=$found>0 && count($onus)===$found && count(\App\Services\Olt\ZteOnuIdentityMap::uniqueRows($onus))===$found
+            && count(array_filter($onus,fn($o)=>in_array(strtolower($o['status'] ?? ''),['online','active','working','offline','inactive','los'],true)))===$found;
+        if(!$complete) return;
+        $onlineCount=count(array_filter($onus,fn($o)=>in_array(strtolower($o['status'] ?? ''),['online','active','working'],true)));
         $oltId = $device->id;
         $oltName = $device->name;
         $cleanP = str_replace(['gpon-olt_', 'epon-olt_'], '', $pId);
@@ -1502,7 +1110,7 @@ class PollOltTelemetry extends Command
         $isMassDown = false;
         if ($found >= 10) {
             $isMassDown = ($onlineCount === 0) || ($pctDown >= 90.0 && $onlineCount <= 3);
-        } elseif ($found >= 3) {
+        } elseif ($complete && $found >= 3) {
             $isMassDown = ($onlineCount === 0);
         }
 
@@ -1525,13 +1133,13 @@ class PollOltTelemetry extends Command
                         ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
                         ->leftJoin('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
                         ->leftJoin('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
+                        ->whereIn('network_nodes.id', \App\Services\Olt\OnuTelemetryWriter::ownerNodeIds($device->id))
                         ->where(function ($q) use ($serials, $cleanP, $fullP) {
                             if (!empty($serials)) {
                                 $q->whereIn('ont_registrations.onu_serial', $serials)
                                   ->orWhereIn('ont_registrations.onu_mac', $serials);
                             }
-                            $q->orWhere('network_nodes.olt_port_ref', $fullP)
-                              ->orWhere('network_nodes.olt_port_ref', $cleanP);
+                            if(empty($serials)) $q->whereRaw('1=0');
                         })
                         ->select([
                             'customers.name as customer_name',
@@ -1595,7 +1203,7 @@ class PollOltTelemetry extends Command
                     'POLL_TELEMETRY'
                 );
 
-                // 💾 Bulk sync DB hanya untuk yang offline (exclude online modems)
+                // Legacy correlation hook; per-ONU observations perform guarded database writes.
                 \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('inactive', $fullP, null, -40.00, $onlineSerials);
 
                 // Push ke Live Events Queue untuk UI
@@ -1653,13 +1261,13 @@ class PollOltTelemetry extends Command
                         ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
                         ->leftJoin('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
                         ->leftJoin('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
+                        ->whereIn('network_nodes.id', \App\Services\Olt\OnuTelemetryWriter::ownerNodeIds($device->id))
                         ->where(function ($q) use ($serials, $cleanP, $fullP) {
                             if (!empty($serials)) {
                                 $q->whereIn('ont_registrations.onu_serial', $serials)
                                   ->orWhereIn('ont_registrations.onu_mac', $serials);
                             }
-                            $q->orWhere('network_nodes.olt_port_ref', $fullP)
-                              ->orWhere('network_nodes.olt_port_ref', $cleanP);
+                            if(empty($serials)) $q->whereRaw('1=0');
                         })
                         ->select([
                             'customers.name as customer_name',
@@ -1724,7 +1332,7 @@ class PollOltTelemetry extends Command
                     'POLL_TELEMETRY'
                 );
 
-                // 💾 Bulk sync DB ke active
+                // Legacy correlation hook; per-ONU observations perform guarded database writes.
                 \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('active', $fullP, null);
             }
         }
@@ -1744,6 +1352,7 @@ class PollOltTelemetry extends Command
 
         foreach ($devices as $device) {
             try {
+                $sampleStartedAt=\App\Services\Olt\OnuTelemetrySample::timestamp();
                 $probe = FastOpticalProbeService::probePortHardwareStatus($device);
                 if (empty($probe['success']) || empty($probe['ports'])) {
                     continue;
@@ -1769,8 +1378,8 @@ class PollOltTelemetry extends Command
                                 Cache::forget($downCounterKey);
                                 $this->warn("🚨 [HARDWARE SFP PULSE] Port {$portName} pada {$device->name} TERKONFIRMASI DOWN!");
 
-                                // 1. Bulk DB Sync ke inactive & -40.00 dBm seketika (<3ms)
-                                FastOpticalProbeService::instantBulkDbSync('inactive', $portName, null, -40.00);
+                                // Exact hardware port loss affects only verified tuples on this OLT/PON.
+                                app(\App\Services\Olt\OnuTelemetryWriter::class)->applyPortLoss($device,$portName,$sampleStartedAt);
 
                                 // 2. Kirim Notifikasi Alarm Gangguan Massal (Telegram & Web UI)
                                 AppNotification::notifyAll(
@@ -1798,7 +1407,7 @@ class PollOltTelemetry extends Command
                             if ($prevStatus === 'DOWN') {
                                 $this->info("🟢 [HARDWARE SFP PULSE] Port {$portName} pada {$device->name} TRANSISI DOWN -> UP!");
 
-                                // 1. Bulk DB Sync ke active seketika
+                                // Legacy correlation hook; per-ONU observations perform guarded database writes.
                                 FastOpticalProbeService::instantBulkDbSync('active', $portName, null);
 
                                 // 2. Kirim Notifikasi Pemulihan Massal (Telegram & Web UI)

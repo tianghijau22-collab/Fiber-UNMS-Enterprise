@@ -840,7 +840,7 @@ class NetworkNodeController extends Controller
             $sn = strtoupper(trim((string)($port->onu_serial ?: $port->onu_mac)));
             $point = $liveProbeResult['probed_states'][$sn] ?? null;
             if ($point && (int)($point['ont_id'] ?? 0) === (int)$port->ont_id) {
-                $view = OnuTelemetryView::withPoint($view, $point, now()->toIso8601String());
+                $view = OnuTelemetryView::withPoint($view, $point, $point['sample_observed_at'] ?? '');
             }
             foreach ($view as $key => $value) $port->{$key} = $value;
             $port->ont_status = $view['onu_status'];

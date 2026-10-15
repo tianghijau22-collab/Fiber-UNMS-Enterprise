@@ -7,6 +7,15 @@ use Illuminate\Support\Facades\Crypt;
 
 class OltDevice extends Model
 {
+    public function update(array $attributes = [], array $options = [])
+    {
+        if ($this->exists && array_key_exists('last_telemetry_snapshot', $attributes)
+            && \App\Services\Olt\OnuTelemetryWriter::supported($this)) {
+            return app(\App\Services\Olt\OnuTelemetryWriter::class)->publish($this, $attributes);
+        }
+        return parent::update($attributes, $options);
+    }
+
     protected $table = 'olt_devices';
 
     protected $fillable = [

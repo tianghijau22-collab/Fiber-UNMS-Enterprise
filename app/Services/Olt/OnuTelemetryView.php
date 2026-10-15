@@ -101,7 +101,7 @@ class OnuTelemetryView
         $view = array_replace($view, [
             'gpon_interface' => $row['port'] ?? null, 'onu_id' => $row['onu_id'] ?? null,
             'identity_status' => 'resolved', 'telemetry_source' => 'snapshot',
-            'sampled_at' => $device['sampled_at'],
+            'sampled_at' => ($row['telemetry_sample_version'] ?? null) === 2 ? ($row['sample_observed_at'] ?? null) : $device['sampled_at'],
         ]);
         $time = is_string($view['sampled_at']) ? strtotime($view['sampled_at']) : false;
         $view['sample_age_seconds'] = $time === false ? null : max(0, time() - $time);
@@ -114,6 +114,9 @@ class OnuTelemetryView
     /** Point readings must refer to the already selected OLT/PON/ONU, never to an ODP uplink. */
     public static function withPoint(array $view, array $reading, string $sampledAt): array
     {
+        $currentAt=OnuTelemetrySample::epoch($view['sampled_at'] ?? null);
+        $pointAt=OnuTelemetrySample::epoch($sampledAt);
+        if($pointAt===null || ($currentAt!==null && $pointAt<$currentAt))return $view;
         $expectedIndex = ZteOnuIdentityMap::ifIndexFromPort((string)$view['gpon_interface']);
         $actualIndex = ZteOnuIdentityMap::ifIndexFromPort((string)($reading['port'] ?? ''));
         if ($view['identity_status'] !== 'resolved' || ($reading['identity_verified'] ?? false) !== true

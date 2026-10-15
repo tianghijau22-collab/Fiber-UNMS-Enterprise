@@ -167,6 +167,7 @@ class ListenOltEvents extends Command
 
     protected function processIncomingPacket(string $rawMsg, string $fromIp, string $sourceType)
     {
+        $receivedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $now = now()->toDateTimeString();
 
         // Rekam metrik paket masuk untuk Server Monitoring
@@ -273,16 +274,18 @@ class ListenOltEvents extends Command
 
         // 3. Cari Data Pelanggan & Lokasi ODP di Database Terlebih Dahulu (Jika Ada Serial Number)
         $reg = null;
+        $registrationAmbiguous=false;
         if ($serialNumber) {
-            $reg = DB::table('ont_registrations')
+            $registrations = DB::table('ont_registrations')
                 ->leftJoin('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
                 ->leftJoin('customers', 'customers.id', '=', 'customer_services.customer_id')
                 ->leftJoin('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
                 ->leftJoin('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
-                ->where('network_nodes.olt_device_id', $olt->id)
+                ->whereIn('network_nodes.id', \App\Services\Olt\OnuTelemetryWriter::ownerNodeIds($olt->id))
+                ->whereNull('ont_registrations.deleted_at')->whereNull('customer_services.deleted_at')->whereNull('customers.deleted_at')
                 ->where(function ($q) use ($serialNumber) {
-                    $q->where('ont_registrations.onu_serial', $serialNumber)
-                      ->orWhere('ont_registrations.onu_mac', $serialNumber);
+                    $q->whereRaw('UPPER(TRIM(ont_registrations.onu_serial)) = ?', [strtoupper(trim($serialNumber))])
+                      ->orWhereRaw('UPPER(TRIM(ont_registrations.onu_mac)) = ?', [strtoupper(trim($serialNumber))]);
                 })
                 ->select([
                     'ont_registrations.*',
@@ -298,7 +301,9 @@ class ListenOltEvents extends Command
                     'network_nodes.olt_device_id as olt_device_id',
                     'network_ports.port_number as odp_port_number',
                 ])
-                ->first();
+                ->get();
+            $registrationAmbiguous=$registrations->count()>1;
+            if($registrations->count()===1)$reg=$registrations->first();
         }
 
         // 4. The source guard selected exactly one OLT. Search only that inventory.
@@ -315,76 +320,25 @@ class ListenOltEvents extends Command
         $oltName = $olt->name;
         $oltId = $olt->id;
 
-        // 5. Standarisasi Format Port OLT Secara Presisi (Slot & Subrack Aware)
-        $standardPort = null;
-
-        // Prioritas 1: Port dari referensi database ODP pelanggan resmi
-        if ($reg && !empty($reg->olt_port_ref)) {
-            $standardPort = str_starts_with($reg->olt_port_ref, 'gpon-olt_') 
-                ? $reg->olt_port_ref 
-                : 'gpon-olt_' . $reg->olt_port_ref;
+        // Select the customer's hardware PON, never the shared ODP uplink.
+        $snapshot=$olt->last_telemetry_snapshot ?? [];
+        $identities=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+        $targetOnt=$serialNumber ? ($identities[strtoupper(trim($serialNumber))] ?? null) : null;
+        if($serialNumber && !$targetOnt) return;
+        $decodedIndex=$portRef ? \App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort(preg_replace('~^gpon-onu_~','gpon-olt_',$portRef)) : null;
+        if($targetOnt) {
+            $actualIndex=\App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort($targetOnt['port']);
+            if(($portRef && $decodedIndex!==$actualIndex) || ($onuId!==null && (string)$onuId!==(string)$targetOnt['onu_id'])) return;
+            $standardPort=$targetOnt['port'];$onuId=$targetOnt['onu_id'];
+        } else {
+            if(!in_array($eventType,['PORT_DOWN','PORT_UP'],true) || $decodedIndex===null) return;
+            $standardPort=\App\Services\Olt\ZteOnuIdentityMap::portFromIfIndex($decodedIndex);
         }
 
-        // Prioritas 2: Port dari snapshot telemetri OLT berdasarkan Serial Number
-        if (!$standardPort && $targetOnt && !empty($targetOnt['port'])) {
-            $standardPort = $targetOnt['port'];
-            if (!$onuId && !empty($targetOnt['onu_id'])) {
-                $onuId = $targetOnt['onu_id'];
-            }
-        }
-
-        // Prioritas 3: Port yang didecode langsung dari OID / VLQ ifIndex (misal gpon-olt_1/7/1)
-        if (!$standardPort && $portRef && (str_starts_with($portRef, 'gpon-olt_') || str_starts_with($portRef, 'epon_') || preg_match('/^[0-9]+\/[0-9]+\/[0-9]+$/', $portRef))) {
-            $standardPort = str_starts_with($portRef, 'gpon-olt_') ? $portRef : 'gpon-olt_' . $portRef;
-        }
-
-        // Prioritas 4: Jika hanya ada nomor port angka (misal "1" atau "4") tanpa info slot
-        if (!$standardPort && $portRef) {
-            if (is_numeric($portRef)) {
-                // Periksa apakah OLT hanya memiliki 1 slot aktif (seperti C320 di slot 1)
-                if ($olt && !empty($olt->last_telemetry_snapshot['pon_ports'])) {
-                    $matchingPorts = [];
-                    foreach ($olt->last_telemetry_snapshot['pon_ports'] as $pp) {
-                        if (str_ends_with($pp['port_id'] ?? '', "/{$portRef}")) {
-                            $matchingPorts[] = $pp['port_id'];
-                        }
-                    }
-                    // Hanya gunakan jika tidak ambigu (hanya ada 1 port berakhiran angka tersebut)
-                    if (count($matchingPorts) === 1) {
-                        $standardPort = $matchingPorts[0];
-                    }
-                }
-            }
-            if (!$standardPort) {
-                $standardPort = 'gpon-olt_' . $portRef;
-            }
-        }
-
-        // Fallback targetOnt jika belum didapatkan
-        if (!$targetOnt && $oltId) {
-            $snapshot = $olt?->last_telemetry_snapshot ?? [];
-            $allOnus = array_merge($snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
-            foreach ($allOnus as $so) {
-                $matchSn = $serialNumber && (strcasecmp($so['serial_number'] ?? '', $serialNumber) === 0 || strcasecmp($so['onu_mac'] ?? '', $serialNumber) === 0);
-                $p = $so['port'] ?? '';
-                $oId = $so['onu_id'] ?? null;
-                $matchPort = ($p === $standardPort || $p === $portRef || str_ends_with($p, (string)$portRef)) && (string)$oId === (string)$onuId;
-
-                if ($matchSn || $matchPort) {
-                    $targetOnt = $so;
-                    if (!$serialNumber && !empty($so['serial_number'])) {
-                        $serialNumber = $so['serial_number'];
-                    }
-                    break;
-                }
-            }
-        }
-
-        $targetName   = $reg?->customer_name ?? ($targetOnt['customer_name'] ?? ($targetOnt['name'] ?? null));
-        $targetSn     = $serialNumber ?: ($reg?->onu_serial ?? ($targetOnt['serial_number'] ?? null));
-        $targetCustId = $reg?->customer_number ?: ($reg?->customer_id ? "ID-{$reg->customer_id}" : null);
-        $nodeId       = $reg?->node_id ?? null;
-        $nodeName     = $reg?->node_name ?? null;
+        $targetName=$registrationAmbiguous ? ('ONU '.$serialNumber) : ($reg?->customer_name ?? ($targetOnt['customer_name'] ?? null));
+        $targetSn=$serialNumber ?: ($targetOnt['serial_number'] ?? null);
+        $targetCustId=$reg?->customer_number ?: ($reg?->customer_id ? 'ID-'.$reg->customer_id : null);
+        $nodeId=$reg?->node_id ?? null;$nodeName=$reg?->node_name ?? null;
 
         // 🚨 KHUSUS EVENT LEVEL PORT / SFP FISIK DICABUT (PORT_DOWN):
         if ($eventType === 'PORT_DOWN' && $standardPort && $olt) {
@@ -394,17 +348,7 @@ class ListenOltEvents extends Command
             $onusOnPort = $this->getAllOnusOnInterface($olt, $standardPort);
             $serials = collect($onusOnPort)->pluck('sn')->filter()->toArray();
 
-            // 2. SEGERA update status database seluruh pelanggan di port ini menjadi inactive & -40.00 dBm (REALTIME!)
-            if (!empty($serials)) {
-                DB::table('ont_registrations')
-                    ->whereIn('onu_serial', $serials)
-                    ->update([
-                        'status'     => 'inactive',
-                        'rx_power'   => -40.00,
-                        'updated_at' => now(),
-                    ]);
-                $this->warn("   ⚡ [REALTIME DB SYNC] " . count($serials) . " modem pada {$standardPort} seketika diupdate ke -40.00 dBm (LOS)!");
-            }
+            app(\App\Services\Olt\OnuTelemetryWriter::class)->applyPortLoss($olt,$standardPort,$receivedAt,'event');
 
             // 3. Masukkan semua pelanggan ke window loss interface & picu notifikasi gangguan massal interface
             $windowKey = "interface_loss_window_{$oltId}_{$standardPort}";
@@ -458,7 +402,7 @@ class ListenOltEvents extends Command
                 null,
                 'PORT_UP',
                 false,
-                -20.00,
+                null,
                 null
             );
 
@@ -493,12 +437,20 @@ class ListenOltEvents extends Command
             }
         }
 
-        // 7. Eksekusi Pembacaan Redaman Instan jika Event adalah RECOVERY (~50ms Direct SNMP)
-        $recoveredRxPower = null;
-        if ($isAlarmRecovery && $olt) {
-            $queryPort = $targetOnt['port'] ?? $standardPort;
-            $queryOnuId = $targetOnt['onu_id'] ?? $onuId;
-            $recoveredRxPower = $this->queryInstantRxPower($olt, $queryPort, (int)$queryOnuId);
+        $recoveredRxPower=null;
+        if($isAlarmRecovery && $targetOnt) {
+            $confirmed=FastOpticalProbeService::readSerialObservations($olt,[$targetSn]);
+            $reading=$confirmed[strtoupper(trim($targetSn))] ?? null;
+            if(!$reading || $reading['is_online']!==true)return;
+            $recoveredRxPower=$reading['rx_power'];
+        }
+        if($targetOnt) {
+            $eventRow=array_replace($targetOnt,['status'=>$isAlarmLoss ? 'Offline':'Online','is_online'=>!$isAlarmLoss,
+                'rx_power'=>$isAlarmLoss ? null:$recoveredRxPower,'rx_available'=>!$isAlarmLoss && $recoveredRxPower!==null,
+                'last_down_cause'=>$isAlarmLoss ? $eventLabel:null]);
+            $eventRow=array_replace($eventRow,\App\Services\Olt\OnuTelemetrySample::normalize($eventRow,$receivedAt));
+            $written=app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($olt,[$eventRow],$receivedAt,'event');
+            if($written['accepted']===0) return;
         }
 
         // 8. Deteksi Gangguan Massal per Interface (Correlated Mass Outage Detector)
@@ -517,106 +469,7 @@ class ListenOltEvents extends Command
             );
         }
 
-        // 9. Eksekusi Sinkronisasi Database & Snapshot OLT
-        if ($isAlarmLoss) {
-            // A. Update ont_registrations
-            if (!empty($targetSn) && $targetSn !== '—') {
-                DB::table('ont_registrations')
-                    ->where('onu_serial', $targetSn)
-                    ->orWhere('onu_mac', $targetSn)
-                    ->update([
-                        'status'     => 'inactive',
-                        'rx_power'   => -40.00,
-                        'notes'      => "Sudden Loss via {$sourceType} ({$eventLabel}) pada {$now}",
-                        'updated_at' => now(),
-                    ]);
-            }
-
-            // B. Sinkronkan In-Memory Database Snapshot OLT agar GIS & Telemetry langsung konsisten
-            if ($olt && !empty($olt->last_telemetry_snapshot)) {
-                $snapshot = $olt->last_telemetry_snapshot;
-                $snapChanged = false;
-                foreach (['onu_list', 'unconfigured_onus'] as $listKey) {
-                    if (!empty($snapshot[$listKey])) {
-                        foreach ($snapshot[$listKey] as &$so) {
-                            $matchSn = !empty($targetSn) && $targetSn !== '—' && (
-                                strcasecmp($so['serial_number'] ?? '', $targetSn) === 0 ||
-                                strcasecmp($so['onu_mac'] ?? '', $targetSn) === 0 ||
-                                strcasecmp($so['mac_address'] ?? '', $targetSn) === 0
-                            );
-                            $matchPortOnu = ($so['port'] ?? '') === $standardPort && (string)($so['onu_id'] ?? '') === (string)$onuId;
-
-                            if ($matchSn || $matchPortOnu) {
-                                $so['status'] = 'offline';
-                                $so['rx_power'] = -40.00;
-                                $so['last_down_cause'] = $eventLabel;
-                                $snapChanged = true;
-                                break;
-                            }
-                        }
-                        unset($so);
-                    }
-                }
-                if ($snapChanged) {
-                    $olt->update(['last_telemetry_snapshot' => $snapshot]);
-                }
-            }
-
-            $this->error("   🚨 [ALARM CREATED] Modem {$targetName} ({$targetSn}) seketika dijatuhkan ke -40.00 dBm!");
-        } elseif ($isAlarmRecovery) {
-            // A. Update ont_registrations
-            if (!empty($targetSn) && $targetSn !== '—') {
-                $updateData = [
-                    'status'         => 'active',
-                    'last_online_at' => now(),
-                    'notes'          => "Online recovery via {$sourceType}" . ($recoveredRxPower ? " ({$recoveredRxPower} dBm)" : "") . " pada {$now}",
-                    'updated_at'     => now(),
-                ];
-                if ($recoveredRxPower !== null) {
-                    $updateData['rx_power'] = $recoveredRxPower;
-                }
-
-                DB::table('ont_registrations')
-                    ->where('onu_serial', $targetSn)
-                    ->orWhere('onu_mac', $targetSn)
-                    ->update($updateData);
-            }
-
-            // B. Sinkronkan In-Memory Database Snapshot OLT
-            if ($olt && !empty($olt->last_telemetry_snapshot)) {
-                $snapshot = $olt->last_telemetry_snapshot;
-                $snapChanged = false;
-                foreach (['onu_list', 'unconfigured_onus'] as $listKey) {
-                    if (!empty($snapshot[$listKey])) {
-                        foreach ($snapshot[$listKey] as &$so) {
-                            $matchSn = !empty($targetSn) && $targetSn !== '—' && (
-                                strcasecmp($so['serial_number'] ?? '', $targetSn) === 0 ||
-                                strcasecmp($so['onu_mac'] ?? '', $targetSn) === 0 ||
-                                strcasecmp($so['mac_address'] ?? '', $targetSn) === 0
-                            );
-                            $matchPortOnu = ($so['port'] ?? '') === $standardPort && (string)($so['onu_id'] ?? '') === (string)$onuId;
-
-                            if ($matchSn || $matchPortOnu) {
-                                $so['status'] = 'online';
-                                if ($recoveredRxPower !== null) {
-                                    $so['rx_power'] = $recoveredRxPower;
-                                }
-                                $so['last_down_cause'] = null;
-                                $snapChanged = true;
-                                break;
-                            }
-                        }
-                        unset($so);
-                    }
-                }
-                if ($snapChanged) {
-                    $olt->update(['last_telemetry_snapshot' => $snapshot]);
-                }
-            }
-
-            $rxDesc = $recoveredRxPower ? " [{$recoveredRxPower} dBm]" : "";
-            $this->info("   🟢 [RECOVERY CREATED] Modem {$targetName} ({$targetSn}) terdeteksi pulih online{$rxDesc}!");
-        }
+        // Registration and snapshot were committed together by the guarded writer above.
 
         // 9b. Deteksi & Notifikasi Gangguan Massal ODP Real-Time via SNMP Trap (Sub-Detik)
         if ($nodeId && !$suppressIndividualAlert) {
@@ -631,7 +484,7 @@ class ListenOltEvents extends Command
         }
 
         // 10. Invalidate Cache Peta GIS & Dashboard Metrics agar UI Langsung Update Real-Time
-        Cache::forget('gis_map_data_payload_v1');
+        \App\Services\Olt\OnuTelemetryWriter::invalidate();
         Cache::forget('gis_topology_hierarchy_all');
         Cache::forget('dashboard_metrics_payload');
 
@@ -867,6 +720,7 @@ class ListenOltEvents extends Command
                 $quickPortProbe = FastOpticalProbeService::probePortOnusQuickState($olt, $standardPort);
             }
 
+            if ($isMassOutage && !($quickPortProbe['complete'] ?? false)) return false;
             if ($isMassOutage) {
                 $alertCooldownKey = "interface_mass_alert_sent_{$oltId}_{$standardPort}";
                 $alreadyAlerted = Cache::has($alertCooldownKey)
@@ -991,7 +845,7 @@ class ListenOltEvents extends Command
 
                     $this->error("   🚨🚨 [MASS OUTAGE DETECTED] Interface {$standardPort} mengalami gangguan massal ({$finalDownCount}/{$totalOnPort} clients down)!");
 
-                    // 💾 Instant Bulk DB Sync: Hanya update pelanggan yang benar-benar offline (exclude modem online)
+                    // Legacy correlation hook; per-ONU observations perform guarded database writes.
                     FastOpticalProbeService::instantBulkDbSync('inactive', $standardPort, null, -40.00, $onlineSerials);
 
                     // Push ke Live Events Queue untuk GIS Map & Web UI
@@ -1077,6 +931,8 @@ class ListenOltEvents extends Command
                 $hasEnoughTraps = ($totalRecOnPort <= 4) ? ($recoveredCount >= 1) : ($recoveredCount >= 2);
 
                 if ($isPortUp || $hasEnoughTraps) {
+                    $confirmedRecovery=FastOpticalProbeService::probePortOnusQuickState($olt,$standardPort);
+                    if(!($confirmedRecovery['complete'] ?? false) || !($confirmedRecovery['is_mass_recovery'] ?? false)) return false;
                     $recAlertCooldownKey   = "interface_mass_recovery_alert_{$oltId}_{$standardPort}";
                     $recAlertCooldownClean = "interface_mass_recovery_alert_{$oltId}_{$cleanP}";
                     $recAlertCooldownFull  = "interface_mass_recovery_alert_{$oltId}_{$fullP}";
@@ -1110,13 +966,13 @@ class ListenOltEvents extends Command
                                 ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
                                 ->leftJoin('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
                                 ->leftJoin('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
+                                ->whereIn('network_nodes.id', \App\Services\Olt\OnuTelemetryWriter::ownerNodeIds($olt->id))
                                 ->where(function ($q) use ($serials, $cleanP, $fullP) {
                                     if (!empty($serials)) {
                                         $q->whereIn('ont_registrations.onu_serial', $serials)
                                           ->orWhereIn('ont_registrations.onu_mac', $serials);
                                     }
-                                    $q->orWhere('network_nodes.olt_port_ref', $fullP)
-                                      ->orWhere('network_nodes.olt_port_ref', $cleanP);
+                                    if(empty($serials)) $q->whereRaw('1=0');
                                 })
                                 ->select([
                                     'customers.name as customer_name',
@@ -1187,7 +1043,7 @@ class ListenOltEvents extends Command
                                     if ($finalRx !== null) {
                                         $updateOnt['rx_power'] = $finalRx;
                                     }
-                                    DB::table('ont_registrations')->where('onu_serial', $cSn)->orWhere('onu_mac', $cSn)->update($updateOnt);
+                                    // Correlation alone cannot promote every customer to Online; confirmed per-ONU writes run independently.
                                 }
                             } else {
                                 $badge = "🔴";
@@ -1229,7 +1085,7 @@ class ListenOltEvents extends Command
 
                         $this->info("   🟢🟢 [MASS RECOVERY VIA TRAP] Interface {$fullP} telah pulih normal ({$actualOnlineCount}/{$displayRecCount} clients up)!");
 
-                        // 💾 Instant Bulk DB Sync: Seketika update seluruh pelanggan di interface ini ke active
+                        // Legacy correlation hook; per-ONU observations perform guarded database writes.
                         FastOpticalProbeService::instantBulkDbSync('active', $standardPort, null);
                     }
                 }
@@ -1245,88 +1101,19 @@ class ListenOltEvents extends Command
      */
     protected function getAllOnusOnInterface(OltDevice $olt, string $standardPort): array
     {
-        $onusMap = [];
-
-        // 1. Ambil dari snapshot OLT (baik onu_list maupun unconfigured_onus)
-        $snapshot = $olt->last_telemetry_snapshot ?? [];
-        $rawSnapshotOnus = array_merge($snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
-
-        foreach ($rawSnapshotOnus as $so) {
-            $p = strtolower(trim((string)($so['port'] ?? ($so['detected_port'] ?? ''))));
-            $std = strtolower(trim($standardPort));
-
-            $match = ($p === $std || str_ends_with($p, $std) || str_ends_with($std, $p));
-            if (!$match) {
-                $pClean = str_replace(['gpon-olt_', 'gpon-onu_', 'gei_'], '', $p);
-                $stdClean = str_replace(['gpon-olt_', 'gpon-onu_', 'gei_'], '', $std);
-                $match = ($pClean === $stdClean);
-            }
-
-            if ($match) {
-                $sn = strtoupper(trim((string)($so['serial_number'] ?? ($so['onu_mac'] ?? ''))));
-                if ($sn) {
-                    $onuId = $so['onu_id'] ?? null;
-                    $defaultName = "ONU {$p}" . ($onuId ? ":{$onuId}" : "");
-                    $onusMap[$sn] = [
-                        'sn'       => $sn,
-                        'name'     => $so['customer_name'] ?? ($so['name'] ?? $defaultName),
-                        'cust_id'  => $so['customer_number'] ?? null,
-                        'port'     => $p,
-                        'onu_id'   => $onuId,
-                        'status'   => $so['status'] ?? 'unknown',
-                        'rx_power' => $so['rx_power'] ?? null,
-                        'node'     => null,
-                    ];
-                }
-            }
+        $index=\App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort($standardPort);if($index===null)return [];
+        $snapshot=$olt->last_telemetry_snapshot ?? [];
+        $rows=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+        $result=[];
+        foreach($rows as $sn=>$row) {
+            $time=\App\Services\Olt\OnuTelemetrySample::epoch($row['identity_observed_at'] ?? null);
+            if(\App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort($row['port'])!==$index || $time===null || $time<microtime(true)-600 || $time>microtime(true)+5)continue;
+            $result[]=['sn'=>$sn,'name'=>$row['customer_name'] ?? ('ONU '.$sn),'cust_id'=>$row['customer_number'] ?? null,
+                'port'=>$row['port'],'onu_id'=>$row['onu_id'],'status'=>$row['status'] ?? 'Unknown','rx_power'=>$row['rx_power'] ?? null,'node'=>null];
         }
-
-        // 2. Ambil dari database ont_registrations via ODP
-        $dbOnus = DB::table('ont_registrations')
-            ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
-            ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
-            ->leftJoin('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
-            ->leftJoin('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
-            ->where(function ($q) use ($standardPort) {
-                $q->where('network_nodes.olt_port_ref', $standardPort)
-                  ->orWhere('network_nodes.olt_port_ref', str_replace('gpon-olt_', '', $standardPort));
-            })
-            ->select([
-                'customers.customer_number',
-                'customers.id as customer_id',
-                'customers.name as customer_name',
-                'ont_registrations.onu_serial',
-                'ont_registrations.onu_mac',
-                'network_nodes.name as node_name',
-                'ont_registrations.status',
-                'ont_registrations.rx_power',
-            ])
-            ->get();
-
-        foreach ($dbOnus as $do) {
-            $sn = strtoupper(trim((string)($do->onu_serial ?: $do->onu_mac)));
-            if (!$sn) continue;
-
-            if (isset($onusMap[$sn])) {
-                $onusMap[$sn]['name']    = $do->customer_name;
-                $onusMap[$sn]['cust_id'] = $do->customer_number ?: "ID-{$do->customer_id}";
-                $onusMap[$sn]['node']    = $do->node_name;
-            } else {
-                $onusMap[$sn] = [
-                    'sn'       => $sn,
-                    'name'     => $do->customer_name,
-                    'cust_id'  => $do->customer_number ?: "ID-{$do->customer_id}",
-                    'port'     => $standardPort,
-                    'onu_id'   => null,
-                    'status'   => $do->status,
-                    'rx_power' => $do->rx_power,
-                    'node'     => $do->node_name,
-                ];
-            }
-        }
-
-        return array_values($onusMap);
+        return $result;
     }
+
 
     /**
      * Query direct optical power (Rx dBm) from OLT via SNMP in ~50ms
@@ -1471,11 +1258,11 @@ class ListenOltEvents extends Command
                 }
                 $clientListText = implode("\n", $clientLines);
 
-                // 💾 Instant Bulk DB Sync: Seketika update pelanggan offline di ODP ini (exclude modem online!)
+                // Legacy correlation hook; per-ONU observations perform guarded database writes.
                 FastOpticalProbeService::instantBulkDbSync('inactive', null, $odpId, -40.00, $onlineSerials);
 
                 Cache::forget('dashboard_metrics_payload');
-                Cache::forget('gis_map_data_payload_v1');
+                \App\Services\Olt\OnuTelemetryWriter::invalidate();
                 Cache::forget('gis_topology_hierarchy_all');
 
                 if ($downCount === $totalOnus || $onlineCount === 0) {
@@ -1518,11 +1305,11 @@ class ListenOltEvents extends Command
                 if ($onlineCount >= (int)ceil($totalOnus * 0.70)) {
                     Cache::forget($massKey);
                     
-                    // 💾 Instant Bulk DB Sync: Seketika kembalikan active di database
+                    // Legacy correlation hook; per-ONU observations perform guarded database writes.
                     FastOpticalProbeService::instantBulkDbSync('active', null, $odpId);
 
                     Cache::forget('dashboard_metrics_payload');
-                    Cache::forget('gis_map_data_payload_v1');
+                    \App\Services\Olt\OnuTelemetryWriter::invalidate();
                     Cache::forget('gis_topology_hierarchy_all');
 
                     $first = $onus->first();

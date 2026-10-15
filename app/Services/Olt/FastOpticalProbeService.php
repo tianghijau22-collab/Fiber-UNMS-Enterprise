@@ -332,7 +332,7 @@ class FastOpticalProbeService
 
         $first = $onus->first();
         $portRef = $standardPort ?: ($first->olt_port_ref ?? null);
-        $oltId = $first->olt_device_id ?: \App\Models\NetworkNode::find($odpId)?->parent?->olt_device_id;
+        $oltId = OnuTelemetryView::ownerId(\App\Models\NetworkNode::find($odpId));
         $resolvedOlt = $oltId ? ($olt ?: OltDevice::find($oltId)) : null;
 
         if (!$resolvedOlt || $resolvedOlt->status !== 'active' || $resolvedOlt->connection_mode !== 'live' || ($oltId && (int)$resolvedOlt->id !== (int)$oltId)) {
@@ -345,12 +345,13 @@ class FastOpticalProbeService
             ];
         }
 
+        $sampleStartedAt = OnuTelemetrySample::timestamp();
         $readings = static::readVerifiedOdpOnus($resolvedOlt, $onus->all());
         $probedStates = []; $onlineCount = 0; $downCount = 0;
         foreach ($onus as $onu) {
             $sn = strtoupper(trim((string)($onu->onu_serial ?: $onu->onu_mac)));
             if (!isset($readings[$sn])) continue;
-            $reading = $readings[$sn];
+            $reading = array_replace($readings[$sn],OnuTelemetrySample::normalize($readings[$sn],$sampleStartedAt));
             $reading['name'] = $onu->customer_name;
             $probedStates[$sn] = $reading;
             if ($reading['is_online']) $onlineCount++; else $downCount++;
@@ -439,7 +440,8 @@ class FastOpticalProbeService
             $pId = is_array($pItem) ? ($pItem['port_id'] ?? '') : (string)$pItem;
             if (empty($pId)) continue;
 
-            $ifIndex = self::calculateIfIndex($pId);
+            $ifIndex = ZteOnuIdentityMap::ifIndexFromPort($pId);
+            if($ifIndex===null)continue;
             $oid = "1.3.6.1.2.1.2.2.1.8.{$ifIndex}";
             $oidsToQuery[] = $oid;
             $portIndexMap[$oid] = $pId;
@@ -452,40 +454,15 @@ class FastOpticalProbeService
         try {
             $raw = @$session->get($oidsToQuery);
             if (is_array($raw)) {
-                foreach ($raw as $oid => $val) {
-                    $cleanOid = str_replace('iso.', '1.', $oid);
-                    // Match OID
-                    $matchedPort = $portIndexMap[$oid] ?? ($portIndexMap[$cleanOid] ?? null);
-                    if (!$matchedPort) {
-                        foreach ($portIndexMap as $k => $v) {
-                            if (str_ends_with($oid, substr($k, strrpos($k, '.')))) {
-                                $matchedPort = $v;
-                                break;
-                            }
-                        }
-                    }
-
-                    if ($matchedPort) {
-                        $operVal = (int)trim(str_replace(['INTEGER:', ' '], '', (string)$val));
-                        // 1 = UP, 2 = DOWN (RFC 2863 IF-MIB)
-                        $isUp = ($operVal === 1);
-                        $portStatuses[$matchedPort] = [
-                            'port'      => $matchedPort,
-                            'oper_val'  => $operVal,
-                            'is_up'     => $isUp,
-                            'status_str'=> $isUp ? 'UP' : 'DOWN',
-                        ];
-
-                        if ($isUp) {
-                            $upPorts[] = $matchedPort;
-                        } else {
-                            $downPorts[] = $matchedPort;
-                        }
-                    }
+                $portStatuses=OnuTelemetrySample::interfaceReadings($raw,$portIndexMap);
+                foreach($portStatuses as $port=>$reading) {
+                    if($reading['is_up'])$upPorts[]=$port;else $downPorts[]=$port;
                 }
             }
         } catch (\Throwable $e) {
-            // fallback silently
+            // Missing/invalid hardware state remains unknown.
+        } finally {
+            $session->close();
         }
 
         $durationMs = round((microtime(true) - $tStart) * 1000, 2);
@@ -505,227 +482,52 @@ class FastOpticalProbeService
      * 🚀 PILAR 2: Fast Walk Status Operasional Seluruh ONU pada 1 Port PON (~1 - 2 detik)
      * Memverifikasi apakah suatu port PON mengalami gangguan massal atau telah pulih massal.
      */
+    public static function readSerialObservations(OltDevice $olt, array $serials): array
+    {
+        $observedAt=OnuTelemetrySample::timestamp();
+        $snapshot=$olt->last_telemetry_snapshot ?? [];
+        $rows=array_values(ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? [])));
+        $rows=array_filter($rows,fn($r)=>($at=OnuTelemetrySample::epoch($r['identity_observed_at'] ?? null))!==null && $at>=microtime(true)-600 && $at<=microtime(true)+5);
+        if(!$rows || !$serials) return [];
+        $session=self::getSnmpSession($olt,1800,0);if(!$session)return [];
+        $deadline=microtime(true)+3.0;
+        try {
+            $readings=ZteOnuOpticalBatch::read($serials,$rows,function($oids)use($session,$deadline){
+                return microtime(true)>$deadline ? [] : @$session->get($oids);
+            });
+            return array_map(fn($r)=>array_replace($r,OnuTelemetrySample::normalize($r,$observedAt)),$readings);
+        } finally { $session->close(); }
+    }
+
     public static function probePortOnusQuickState(OltDevice $olt, string $standardPort): array
     {
-        $tStart = microtime(true);
-        $ifIndex = self::calculateIfIndex($standardPort);
-        $session = self::getSnmpSession($olt, 2500);
-
-        if (!$session) {
-            return [
-                'success' => false,
-                'reason'  => 'Gagal koneksi SNMP',
-            ];
-        }
-
-        $downCount = 0;
-        $onlineCount = 0;
-        $totalOnus = 0;
-        $onuStates = [];
-        $onuStatesBySn = [];
-        $snMap = [];
-
-        // 1. Walk subtree serial number port ini (~20ms) agar hasil probe bisa di-lookup via SN
-        try {
-            $snWalk = @$session->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.3.{$ifIndex}");
-            if (is_array($snWalk) && !empty($snWalk)) {
-                foreach ($snWalk as $snOid => $snVal) {
-                    $snParts = explode('.', (string)$snOid);
-                    $oId = (int)end($snParts);
-                    $parsedSn = self::parseZteSerialNumber((string)$snVal);
-                    if ($parsedSn && $oId > 0) {
-                        $snMap[$oId] = strtoupper(trim($parsedSn));
-                    }
-                }
-            }
-        } catch (\Throwable $e) {}
-
-        try {
-            // 2. Walk subtree operasional status ONU port ini (1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.{$ifIndex})
-            $states = @$session->walk("1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.{$ifIndex}");
-            if (is_array($states) && !empty($states)) {
-                $totalOnus = count($states);
-                foreach ($states as $oid => $val) {
-                    $parts = explode('.', (string)$oid);
-                    $onuId = (int)end($parts);
-                    $oper = (int)trim(str_replace(['INTEGER:', ' '], '', (string)$val));
-                    $isOnline = ($oper === 3);
-                    if ($isOnline) {
-                        $onlineCount++;
-                    } else {
-                        $downCount++;
-                    }
-                    $sn = $snMap[$onuId] ?? null;
-                    $stateEntry = [
-                        'onu_id'    => $onuId,
-                        'sn'        => $sn,
-                        'oper'      => $oper,
-                        'is_online' => $isOnline,
-                        'rx_power'  => $isOnline ? null : -40.00,
-                    ];
-                    $onuStates[$onuId] = $stateEntry;
-                    if ($sn) {
-                        $onuStatesBySn[$sn] = $stateEntry;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            // fallback
-        }
-
-        // 3. Walk subtree redaman optik port ini (~20-40ms) untuk mengambil redaman riil setiap ONU
-        try {
-            $rxWalk = @$session->walk("1.3.6.1.4.1.3902.1012.3.50.12.1.1.10.{$ifIndex}");
-            if (is_array($rxWalk) && !empty($rxWalk)) {
-                foreach ($rxWalk as $rxOid => $rxVal) {
-                    $rxParts = explode('.', (string)$rxOid);
-                    $onuIdPart = (end($rxParts) === '1' && count($rxParts) >= 2) ? (int)$rxParts[count($rxParts)-2] : (int)end($rxParts);
-                    $rawInt = (int)trim(str_replace(['INTEGER:', ' '], '', (string)$rxVal));
-                    if ($rawInt > 0 && $rawInt < 65534) {
-                        $dbm = round(($rawInt * 0.002) - 30.0, 2);
-                        if ($dbm > -38.0 && $dbm < -5.0 && isset($onuStates[$onuIdPart])) {
-                            $onuStates[$onuIdPart]['rx_power'] = $dbm;
-                            $sn = $onuStates[$onuIdPart]['sn'] ?? null;
-                            if ($sn && isset($onuStatesBySn[$sn])) {
-                                $onuStatesBySn[$sn]['rx_power'] = $dbm;
-                            }
-                        }
-                    } elseif ($rawInt === 65535 || $rawInt === 0 || $rawInt === 2147483647) {
-                        // 🎯 Explicit Loss of Optical Signal / No Light
-                        if (isset($onuStates[$onuIdPart])) {
-                            $onuStates[$onuIdPart]['rx_power'] = -40.00;
-                            $onuStates[$onuIdPart]['is_online'] = false;
-                            $sn = $onuStates[$onuIdPart]['sn'] ?? null;
-                            if ($sn && isset($onuStatesBySn[$sn])) {
-                                $onuStatesBySn[$sn]['rx_power'] = -40.00;
-                                $onuStatesBySn[$sn]['is_online'] = false;
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (\Throwable $e) {}
-
-        $pctDown = $totalOnus > 0 ? round(($downCount / $totalOnus) * 100.0, 1) : 0;
-        $pctOnline = $totalOnus > 0 ? round(($onlineCount / $totalOnus) * 100.0, 1) : 0;
-
-        // 🎯 POLA CERDAS GANGGUAN MASSAL INTERFACE:
-        // 1. 100% Seluruh Pelanggan LOSS (downCount === totalOnus)
-        // 2. Ambang batas ketat >= 90% down DENGAN toleransi maksimal 1 s/d 3 modem ghost/on (hanya untuk port dengan >= 10 pelanggan)
-        // Hapus total aturan lama 60% dan batas 12 down!
-        $isMassOutage = false;
-        if ($totalOnus >= 10) {
-            $isMassOutage = ($downCount === $totalOnus) || ($pctDown >= 90.0 && $onlineCount <= 3);
-        } elseif ($totalOnus >= 3) {
-            $isMassOutage = ($downCount === $totalOnus);
-        }
-
-        // Kriteria Pemulihan Massal:
-        // Minimal 70% online ATAU minimal 2 modem online jika <= 4 pelanggan
-        $isMassRecovery = ($totalOnus <= 4) ? ($onlineCount >= 1) : ($pctOnline >= 70.0);
-
-        $durationMs = round((microtime(true) - $tStart) * 1000, 2);
-
-        return [
-            'success'          => $totalOnus > 0,
-            'port'             => $standardPort,
-            'ifIndex'          => $ifIndex,
-            'total_onus'       => $totalOnus,
-            'online_count'     => $onlineCount,
-            'down_count'       => $downCount,
-            'pct_down'         => $pctDown,
-            'pct_online'       => $pctOnline,
-            'is_mass_outage'   => $isMassOutage,
-            'is_mass_recovery' => $isMassRecovery,
-            'onu_states'       => $onuStates,
-            'onu_states_by_sn' => $onuStatesBySn,
-            'duration_ms'      => $durationMs,
-        ];
+        $started=microtime(true);$at=OnuTelemetrySample::timestamp();
+        $index=ZteOnuIdentityMap::ifIndexFromPort($standardPort);
+        $snapshot=$olt->last_telemetry_snapshot ?? [];
+        $identities=ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+        $expected=array_filter($identities,fn($r)=>$index!==null && ZteOnuIdentityMap::ifIndexFromPort($r['port'])===$index);
+        $readings=$index===null ? [] : static::readSerialObservations($olt,array_keys($expected));
+        $online=count(array_filter($readings,fn($r)=>$r['is_online']===true));
+        $down=count(array_filter($readings,fn($r)=>$r['is_online']===false));
+        $total=count($expected);$unknown=$total-count($readings);$complete=$total>0 && $unknown===0;
+        $byId=[];foreach($readings as $r)$byId[$r['onu_id']]=$r;
+        return ['success'=>$complete,'complete'=>$complete,'port'=>$standardPort,'ifIndex'=>$index,'observed_at'=>$at,
+            'total_onus'=>$total,'online_count'=>$online,'down_count'=>$down,'unknown_count'=>$unknown,
+            'pct_down'=>$total ? round($down/$total*100,1):0,'pct_online'=>$total ? round($online/$total*100,1):0,
+            'is_mass_outage'=>$complete && (($total>=3 && $down===$total) || ($total>=10 && $down/$total>=0.9 && $online<=3)),
+            'is_mass_recovery'=>$complete && ($total<=4 ? $online>=1 : $online/$total>=0.7),
+            'onu_states'=>$byId,'onu_states_by_sn'=>$readings,'duration_ms'=>round((microtime(true)-$started)*1000,2)];
     }
 
-    /**
-     * 💾 PILAR 4: Instant Database Bulk Synchronization (< 3 milidetik)
-     * Mengupdate data pelanggan pada port / ODP yang terdampak secara serentak,
-     * serta mengosongkan cache GIS & Dashboard secara instan.
-     */
+    /** Legacy correlator hook: topology/aggregate inference is never permission to write ONU state. */
     public static function instantBulkDbSync(
-        string $targetStatus,
-        ?string $standardPort = null,
-        ?int $odpId = null,
-        ?float $rxPower = null,
-        ?array $excludeSerials = null
+        string $targetStatus, ?string $standardPort = null, ?int $odpId = null,
+        ?float $rxPower = null, ?array $excludeSerials = null
     ): int {
-        $updatedRows = 0;
-
-        try {
-            if ($odpId) {
-                $q = DB::table('ont_registrations')
-                    ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
-                    ->join('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
-                    ->where('network_ports.node_id', $odpId);
-
-                if (!empty($excludeSerials)) {
-                    $q->whereNotIn('ont_registrations.onu_serial', $excludeSerials)
-                      ->whereNotIn('ont_registrations.onu_mac', $excludeSerials);
-                }
-
-                $updateData = [
-                    'ont_registrations.status'     => $targetStatus,
-                    'ont_registrations.updated_at' => now(),
-                ];
-                if ($targetStatus === 'inactive') {
-                    $updateData['ont_registrations.rx_power'] = -40.00;
-                    $updateData['ont_registrations.notes']    = 'Mass Outage via Fast Probe pada ' . now()->format('d/m/Y H:i:s');
-                } elseif ($rxPower !== null) {
-                    $updateData['ont_registrations.rx_power'] = $rxPower;
-                    $updateData['ont_registrations.notes']    = 'Mass Recovery via Fast Probe pada ' . now()->format('d/m/Y H:i:s');
-                }
-
-                $updatedRows = $q->update($updateData);
-            } elseif ($standardPort) {
-                $cleanP = str_replace(['gpon-olt_', 'epon-olt_', 'gpon_', 'epon_'], '', strtolower(trim($standardPort)));
-                $fullP  = 'gpon-olt_' . $cleanP;
-
-                $updateData = [
-                    'ont_registrations.status'     => $targetStatus,
-                    'ont_registrations.updated_at' => now(),
-                ];
-                if ($targetStatus === 'inactive') {
-                    $updateData['ont_registrations.rx_power'] = -40.00;
-                    $updateData['ont_registrations.notes']    = "Interface Mass Outage ({$standardPort}) pada " . now()->format('d/m/Y H:i:s');
-                } elseif ($rxPower !== null) {
-                    $updateData['ont_registrations.rx_power'] = $rxPower;
-                    $updateData['ont_registrations.notes']    = "Interface Mass Recovery ({$standardPort}) pada " . now()->format('d/m/Y H:i:s');
-                }
-
-                $q = DB::table('ont_registrations')
-                    ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
-                    ->join('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
-                    ->join('network_nodes', 'network_nodes.id', '=', 'network_ports.node_id')
-                    ->where(function ($query) use ($cleanP, $fullP, $standardPort) {
-                        $query->where('network_nodes.olt_port_ref', $cleanP)
-                              ->orWhere('network_nodes.olt_port_ref', $fullP)
-                              ->orWhere('network_nodes.olt_port_ref', $standardPort);
-                    });
-
-                if (!empty($excludeSerials)) {
-                    $q->whereNotIn('ont_registrations.onu_serial', $excludeSerials)
-                      ->whereNotIn('ont_registrations.onu_mac', $excludeSerials);
-                }
-
-                $updatedRows = $q->update($updateData);
-            }
-
-            // Invalidate seluruh Cache GIS & Dashboard agar UI langsung refresh real-time
-            Cache::forget('gis_map_data_payload_v1');
-            Cache::forget('gis_topology_hierarchy_all');
-            Cache::forget('dashboard_metrics_payload');
-        } catch (\Throwable $e) {
-            Log::warning("[FastOpticalProbeService] Gagal bulk sync database: " . $e->getMessage());
-        }
-
-        return $updatedRows;
+        // Verified per-ONU poll, point and event producers call OnuTelemetryWriter directly.
+        return 0;
     }
+
 
     /**
      * 🚀 ON-DEMAND LIVE OPTICAL PROBE FOR ODP
@@ -784,7 +586,7 @@ class FastOpticalProbeService
         }
 
         // Resolve OLT ownership separately from each customer's physical PON.
-        $mappedOltId = $odpNode->olt_device_id ?: $odpNode->parent?->olt_device_id;
+        $mappedOltId = OnuTelemetryView::ownerId($odpNode);
         $resolvedOlt = $mappedOltId ? ($olt ?: OltDevice::find($mappedOltId)) : null;
         $portRef = $standardPort ?: ($odpNode->olt_port_ref ?: $odpNode->parent?->olt_port_ref);
 
@@ -798,19 +600,17 @@ class FastOpticalProbeService
             ];
         }
 
+        $sampleStartedAt = OnuTelemetrySample::timestamp();
         $readings = static::readVerifiedOdpOnus($resolvedOlt, $onus->all());
+        $inventory = ZteOnuIdentityMap::uniqueRows(array_merge($resolvedOlt->last_telemetry_snapshot['onu_list'] ?? [], $resolvedOlt->last_telemetry_snapshot['unconfigured_onus'] ?? []));
+        $writeRows=[];
+        foreach($readings as $sn=>$reading) if(isset($inventory[$sn])) $writeRows[]=array_replace($inventory[$sn],$reading,OnuTelemetrySample::normalize($reading,$sampleStartedAt));
+        app(OnuTelemetryWriter::class)->apply($resolvedOlt,$writeRows,$sampleStartedAt,'point');
         $onlineCount = 0; $downCount = 0; $probedStates = [];
         foreach ($onus as $onu) {
             $sn = strtoupper(trim((string)($onu->onu_serial ?: $onu->onu_mac)));
             if (!isset($readings[$sn])) continue;
             $reading = $readings[$sn];
-            $updateData = [
-                'status' => $reading['is_online'] ? 'active' : 'inactive',
-                'rx_power' => $reading['rx_power'],
-                'updated_at' => now(),
-            ];
-            if ($reading['is_online']) $updateData['last_online_at'] = now();
-            DB::table('ont_registrations')->where('id', $onu->ont_id)->whereNull('deleted_at')->update($updateData);
             $reading['ont_id'] = $onu->ont_id; $reading['name'] = $onu->customer_name;
             $probedStates[$sn] = $reading;
             if ($reading['is_online']) $onlineCount++; else $downCount++;

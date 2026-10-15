@@ -23,7 +23,7 @@ class OltIdentityPartitionTest extends TestCase
         $this->assertSame(':memory:', config('database.connections.sqlite.database'));
         Http::fake(); Http::preventStrayRequests();
         IdentityProbeHarness::$identities=[];IdentityProbeHarness::$values=[];IdentityProbeHarness::$calls=0;
-        Schema::create('olt_devices', function(Blueprint $t){$t->id();$t->string('name');$t->string('vendor_key');$t->string('connection_mode');$t->string('status');$t->string('ip_address');});
+        Schema::create('olt_devices', function(Blueprint $t){$t->id();$t->string('name');$t->string('vendor_key');$t->string('connection_mode');$t->string('status');$t->string('ip_address');$t->json('last_telemetry_snapshot')->nullable();$t->timestamps();});
         foreach([1,2] as $id)DB::table('olt_devices')->insert(['id'=>$id,'name'=>'Fixture OLT '.$id,'vendor_key'=>'zte-c320','connection_mode'=>'live','status'=>'active','ip_address'=>'192.0.2.'.$id]);
         Schema::create('customers', function(Blueprint $t){$t->id();$t->string('name');$t->string('customer_number');$t->softDeletes();});
         Schema::create('customer_services', function(Blueprint $t){$t->id();$t->integer('customer_id');$t->integer('service_package_id')->nullable();$t->string('ip_address')->nullable();$t->softDeletes();});
@@ -113,6 +113,7 @@ class OltIdentityPartitionTest extends TestCase
     private function opticalFixture(bool $secondSerialMismatch=false): void
     {
         IdentityProbeHarness::$identities=[$this->row(1,'1/1/15',1),$this->row(2,'1/1/16',1)];
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode(['onu_list'=>IdentityProbeHarness::$identities,'polled_at'=>now()->toIso8601String()])]);
         foreach(IdentityProbeHarness::$identities as $idx=>$row){
             $index=Identity::ifIndexFromPort($row['port']);$id=$row['onu_id'];$actual=$secondSerialMismatch&&$idx===1?'TEST00000009':$row['serial_number'];
             IdentityProbeHarness::$values += [Identity::PRIMARY.".$index.$id"=>$actual,Identity::SECONDARY.".$index.$id"=>$actual,
@@ -154,6 +155,28 @@ class OltIdentityPartitionTest extends TestCase
         $this->assertFalse($out['success']);$this->assertSame(0,IdentityProbeHarness::$calls);
         $status=IdentityProbeHarness::probeOdpStatus(1,OltDevice::findOrFail(2));
         $this->assertFalse($status['success']);$this->assertFalse($status['is_odp_down']);$this->assertSame(0,IdentityProbeHarness::$calls);
+    }
+
+    public function test_status_probe_is_read_only_even_with_confirmed_offline_measurements(): void
+    {
+        $this->opticalFixture();$index=Identity::ifIndexFromPort('1/1/15');
+        IdentityProbeHarness::$values["1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.$index.1"]=1;
+        Cache::put('customers_index_payload_v5','unchanged',100);
+        DB::enableQueryLog();DB::flushQueryLog();
+        $out=IdentityProbeHarness::probeOdpStatus(1);
+        $writes=array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|insert|delete)\b/i',$q['query']));
+        $this->assertSame([],array_values($writes));$this->assertTrue($out['success']);
+        $this->assertSame('unchanged',Cache::get('customers_index_payload_v5'));
+        $this->assertSame('active',DB::table('ont_registrations')->where('id',1701)->value('status'));
+    }
+
+    public function test_repeated_live_probe_advances_its_observation_after_versioned_snapshot_is_saved(): void
+    {
+        $this->opticalFixture();IdentityProbeHarness::probeOdpLiveOptical(1);
+        $one=OltDevice::findOrFail(1)->last_telemetry_snapshot['_onu_write_ledger']['TEST00000001']['sample_observed_at'];
+        IdentityProbeHarness::probeOdpLiveOptical(1);
+        $two=OltDevice::findOrFail(1)->last_telemetry_snapshot['_onu_write_ledger']['TEST00000001']['sample_observed_at'];
+        $this->assertGreaterThan(\App\Services\Olt\OnuTelemetrySample::epoch($one),\App\Services\Olt\OnuTelemetrySample::epoch($two));
     }
 }
 

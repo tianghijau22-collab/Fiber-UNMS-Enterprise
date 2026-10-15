@@ -38,6 +38,18 @@ class ZteDriverIdentityTest extends TestCase
         $driver=new IdentityDriverHarness($snmp);
         foreach(['','1/1','1/1/16:2','1/1/0','1/1/15,1/1/16'] as $port) $this->assertSame([],$driver->getOnuListByPort($port));
     }
+
+    public function test_driver_does_not_infer_offline_from_missing_power_or_online_from_missing_state(): void
+    {
+        $idx=Identity::ifIndexFromPort('1/1/16');$snmp=Mockery::mock(SnmpConnector::class);
+        $snmp->shouldReceive('isReachable')->once()->andReturn(true);
+        $tables=[Identity::PRIMARY.".$idx"=>[Identity::PRIMARY.".$idx.1"=>'TEST00000001',Identity::PRIMARY.".$idx.2"=>'TEST00000002'],
+            "1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.$idx"=>["1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.$idx.1"=>'3']];
+        $snmp->shouldReceive('walk')->andReturnUsing(fn($oid)=>$tables[$oid]??[]);
+        $rows=(new IdentityDriverHarness($snmp))->getOnuListByPort('1/1/16');
+        $this->assertTrue($rows[0]['is_online']);$this->assertNull($rows[0]['rx_power']);
+        $this->assertNull($rows[1]['is_online']);$this->assertSame('Unknown',$rows[1]['status']);
+    }
 }
 
 class IdentityDriverHarness extends ZteC320Driver

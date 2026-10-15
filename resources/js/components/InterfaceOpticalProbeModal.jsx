@@ -1,3 +1,5 @@
+import { onuPresentation } from '../lib/onuTelemetry.js';
+import { OnuStatus } from './OnuTelemetry.jsx';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import html2canvas from 'html2canvas';
@@ -63,7 +65,7 @@ export default function InterfaceOpticalProbeModal({
     if (isOpen) {
       if (initialOltId && initialOltId !== 'all') {
         setSelectedOlt(initialOltId);
-      } else if (olts.length > 0 && selectedOlt === 'all') {
+      } else if (olts.length === 1 && selectedOlt === 'all') {
         setSelectedOlt(olts[0].id);
       }
 
@@ -89,6 +91,10 @@ export default function InterfaceOpticalProbeModal({
   }, [isOpen, onClose]);
 
   const handleExecuteProbe = useCallback(async (targetIface = selectedInterface, targetOlt = selectedOlt) => {
+    if (!targetOlt || targetOlt === 'all') {
+      setErrorMsg('Pilih satu OLT terlebih dahulu agar pembacaan menuju perangkat yang tepat.');
+      return;
+    }
     if (!targetIface || targetIface === 'all' || targetIface === '—') {
       setErrorMsg('Harap pilih interface / port PON OLT terlebih dahulu.');
       return;
@@ -144,8 +150,8 @@ export default function InterfaceOpticalProbeModal({
       if (!matchSearch) return false;
 
       // Quality Filter
-      if (qualityFilter === 'ONLINE') return item.is_online;
-      if (qualityFilter === 'OFFLINE') return !item.is_online;
+      if (qualityFilter === 'ONLINE') return onuPresentation(item).online === true;
+      if (qualityFilter === 'OFFLINE') return onuPresentation(item).online === false;
       if (qualityFilter === 'WARNING_CRITICAL') {
         return item.is_online && (item.attenuation_quality === 'WARNING' || item.attenuation_quality === 'CRITICAL');
       }
@@ -155,7 +161,7 @@ export default function InterfaceOpticalProbeModal({
 
   const summary = probeResult?.summary;
   const currentOltObj = olts.find((o) => String(o.id) === String(selectedOlt));
-  const oltDisplayName = currentOltObj ? currentOltObj.name : (selectedOlt === 'all' ? 'Semua OLT' : selectedOlt);
+  const oltDisplayName = currentOltObj ? currentOltObj.name : (selectedOlt === 'all' ? 'OLT belum dipilih' : selectedOlt);
 
   // ─── HIGH-QUALITY PAGINATED SCREENSHOT GENERATOR ────────────────────────────
   const handleScreenshot = async () => {
@@ -185,7 +191,10 @@ export default function InterfaceOpticalProbeModal({
         String(now.getDate()).padStart(2, '0');
       const timeStr = String(now.getHours()).padStart(2, '0') +
         String(now.getMinutes()).padStart(2, '0');
-      const formattedDate = now.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) + ' WIB';
+      const observed = new Date(probeResult?.summary?.probed_at);
+      const formattedDate = Number.isFinite(observed.getTime())
+        ? observed.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'medium' }) + ' WIB'
+        : 'Waktu data belum tersedia';
 
       for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
         setScreenshotProgressText(`Memproses Hal ${pageIdx + 1} dari ${pages.length}...`);
@@ -220,24 +229,11 @@ export default function InterfaceOpticalProbeModal({
         let rowsHtml = '';
         pageRows.forEach((row, i) => {
           const rowNum = startRowIdx + i;
-          const isUp = row.is_online;
-          const rx = parseFloat(row.rx_power);
-
-          let rxColor = textSecondary;
-          let rxText = '-40.00 dBm';
-          if (isUp) {
-            rxText = rx > -38 ? `${rx.toFixed(2)} dBm` : '-40.00 dBm';
-            if (rx >= -25.0) rxColor = '#10b981'; // Emerald
-            else if (rx >= -28.0) rxColor = '#f59e0b'; // Amber
-            else rxColor = '#f43f5e'; // Rose
-          } else {
-            rxText = 'LOS / Offline';
-            rxColor = '#f43f5e';
-          }
-
-          const statusBadge = isUp
-            ? `<span style="color:#10b981;font-weight:700;font-size:11px;">ONLINE</span>`
-            : `<span style="color:#f43f5e;font-weight:700;font-size:11px;">OFFLINE</span>`;
+          const presentation = onuPresentation(row);
+          const rxText = presentation.rxLabel;
+          const rxColor = presentation.rx === null ? textSecondary : presentation.rx >= -25 ? '#10b981' : presentation.rx >= -28 ? '#f59e0b' : '#f43f5e';
+          const statusColor = presentation.online === true ? '#10b981' : presentation.online === false ? '#f43f5e' : textSecondary;
+          const statusBadge = `<span style="color:${statusColor};font-weight:700;font-size:11px;">${presentation.label}</span>`;
 
           const portStr = row.onu_port_id || '-';
           const snStr = row.serial_number ? `<span style="font-size:11px;color:${textSecondary};margin-left:6px;font-family:monospace;">(${row.serial_number})</span>` : '';
@@ -283,7 +279,7 @@ export default function InterfaceOpticalProbeModal({
 
               <!-- METADATA SUMMARY BAR -->
               <div style="display:flex;gap:16px;font-size:11px;font-family:monospace;padding-top:10px;border-top:1px solid ${borderColor};">
-                <div style="color:${textPrimary};">Total ONU: <strong style="color:${textPrimary};">${probeResult?.data?.length ?? 0}</strong></div>
+                <div style="color:${textPrimary};">Terbaca: <strong style="color:${textPrimary};">${probeResult?.data?.length ?? 0}</strong> / ${summary?.total_onus ?? 0} • Belum terverifikasi: ${summary?.unknown_count ?? 0}</div>
                 <div style="color:#10b981;">Online: <strong style="color:#10b981;">${summary?.online_count ?? 0}</strong></div>
                 <div style="color:#f43f5e;">Offline / LOS: <strong style="color:#f43f5e;">${summary?.down_count ?? 0}</strong></div>
               </div>
@@ -414,7 +410,7 @@ export default function InterfaceOpticalProbeModal({
                 onChange={(e) => setSelectedOlt(e.target.value)}
                 className="w-full px-3 py-2 bg-white dark:bg-black border border-black/20 dark:border-white/20 rounded-md font-bold text-xs text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
-                <option value="all">Semua OLT (Otomatis)</option>
+                <option value="all">Pilih OLT</option>
                 {olts.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.name}
@@ -567,6 +563,16 @@ export default function InterfaceOpticalProbeModal({
             </div>
           ) : probeResult?.data ? (
             <div className="space-y-3">
+              {probeResult.complete === false && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  {(summary?.total_onus ?? 0) > 0
+                    ? `Pembacaan belum lengkap: ${summary?.unknown_count ?? 0} ONU belum terverifikasi. Baris yang belum terbaca tidak dianggap Offline.`
+                    : 'Belum ada identitas ONU terverifikasi untuk port ini. Data pelanggan belum dapat dibandingkan.'}
+                </div>
+              )}
+              <div className="text-[11px] text-black/60 dark:text-white/60">
+                Waktu pembacaan: {summary?.probed_at_human ?? 'Belum tersedia'}
+              </div>
               {/* 1. MOBILE RESPONSIVE CARDS VIEW (md:hidden) */}
               <div className="block md:hidden space-y-2">
                 {filteredRows.length === 0 ? (
@@ -575,15 +581,8 @@ export default function InterfaceOpticalProbeModal({
                   </div>
                 ) : (
                   filteredRows.map((row, idx) => {
-                    const isUp = row.is_online;
-                    const rx = parseFloat(row.rx_power);
-
-                    let rxColorClass = 'text-black/60 dark:text-white/60';
-                    if (isUp) {
-                      if (rx >= -25.0) rxColorClass = 'text-emerald-600 dark:text-emerald-400';
-                      else if (rx >= -28.0) rxColorClass = 'text-amber-600 dark:text-amber-400';
-                      else rxColorClass = 'text-rose-600 dark:text-rose-400 animate-pulse';
-                    }
+                    const presentation = onuPresentation(row);
+                    const rxColorClass = presentation.rxColor;
 
                     return (
                       <div
@@ -602,19 +601,10 @@ export default function InterfaceOpticalProbeModal({
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold ${
-                                isUp
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : 'text-rose-600 dark:text-rose-400'
-                              }`}
-                            >
-                              <span className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                              <span>{isUp ? 'ONLINE' : 'OFFLINE'}</span>
-                            </span>
+                            <OnuStatus value={row} />
 
                             <span className={`font-mono font-bold text-xs ${rxColorClass}`}>
-                              {isUp && rx > -38 ? `${rx.toFixed(2)} dBm` : '-40.00 dBm'}
+                              {presentation.rxLabel}
                             </span>
                           </div>
                         </div>
@@ -663,15 +653,8 @@ export default function InterfaceOpticalProbeModal({
                       </tr>
                     ) : (
                       filteredRows.map((row, idx) => {
-                        const isUp = row.is_online;
-                        const rx = parseFloat(row.rx_power);
-
-                        let rxColorClass = 'text-black/60 dark:text-white/60';
-                        if (isUp) {
-                          if (rx >= -25.0) rxColorClass = 'text-emerald-600 dark:text-emerald-400';
-                          else if (rx >= -28.0) rxColorClass = 'text-amber-600 dark:text-amber-400';
-                          else rxColorClass = 'text-rose-600 dark:text-rose-400 animate-pulse';
-                        }
+                        const presentation = onuPresentation(row);
+                        const rxColorClass = presentation.rxColor;
 
                         return (
                           <tr
@@ -690,22 +673,13 @@ export default function InterfaceOpticalProbeModal({
 
                             {/* Status */}
                             <td className="py-2.5 px-3 whitespace-nowrap">
-                              <span
-                                className={`inline-flex items-center gap-1.5 text-[10px] font-bold ${
-                                  isUp
-                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                    : 'text-rose-600 dark:text-rose-400'
-                                }`}
-                              >
-                                <span className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                <span>{isUp ? 'ONLINE' : 'OFFLINE'}</span>
-                              </span>
+                              <OnuStatus value={row} />
                             </td>
 
                             {/* Redaman Rx Power (Clean Pure Colored Text) */}
                             <td className="py-2.5 px-3 whitespace-nowrap">
                               <span className={`font-mono font-bold text-xs ${rxColorClass}`}>
-                                {isUp && rx > -38 ? `${rx.toFixed(2)} dBm` : '-40.00 dBm'}
+                                {presentation.rxLabel}
                               </span>
                             </td>
 

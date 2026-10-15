@@ -260,8 +260,8 @@ class CustomerController extends Controller
                 $request->input('interface') ?: $request->input('olt_port_ref')
             );
 
-            $rxPowerVal = $detected['rx_power'] ?? ($validated['rx_power'] ?? -18.50);
-            $txPowerVal = $detected['tx_power'] ?? 2.10;
+            $rxPowerVal = $detected['rx_power'] ?? ($validated['rx_power'] ?? null);
+            $txPowerVal = $detected['tx_power'] ?? null;
             $statusVal  = (strtolower($detected['status']) === 'online') ? 'active' : ($dbStatus === 'active' ? 'active' : 'inactive');
 
             OntRegistration::create([
@@ -448,7 +448,7 @@ class CustomerController extends Controller
                     OntRegistration::create([
                         'customer_service_id' => $service->id,
                         'onu_serial'          => $validated['onu_serial'] ?? 'HWTC-NEW01',
-                        'rx_power'            => $validated['rx_power'] ?? -18.5,
+                        'rx_power'            => $validated['rx_power'] ?? null,
                         'status'              => 'active',
                     ]);
                 }
@@ -660,13 +660,13 @@ class CustomerController extends Controller
                     $item['interface'] ?? ($item['gpon_port'] ?? null)
                 );
 
-                $rxPowerVal = $detected['rx_power'] ?? -19.50;
-                $txPowerVal = $detected['tx_power'] ?? 2.10;
+                $rxPowerVal = $detected['rx_power'] ?? null;
+                $txPowerVal = $detected['tx_power'] ?? null;
                 $statusVal  = (strtolower($detected['status']) === 'online') ? 'active' : 'active';
 
                 // Register / Update ONT in ont_registrations table
                 OntRegistration::updateOrCreate(
-                    ['onu_serial' => $item['onu_serial']],
+                    ['customer_service_id' => $service->id, 'onu_serial' => $item['onu_serial']],
                     [
                         'customer_service_id' => $service->id,
                         'onu_type'            => $detected['vendor_model'] ?: 'ZTE ONU',
@@ -736,7 +736,7 @@ class CustomerController extends Controller
 
             // 2. Tandai ONT Lama sebagai replaced/inactive jika ada
             if ($oldOnuSerial) {
-                OntRegistration::where('onu_serial', $oldOnuSerial)->update([
+                OntRegistration::where('customer_service_id', $service->id)->where('onu_serial', $oldOnuSerial)->update([
                     'status' => 'inactive',
                     'notes'  => "Diganti dengan modem baru SN: {$newOnuSerial}. Alasan: " . ($validated['replacement_reason'] ?? 'Pergantian Modem'),
                 ]);
@@ -744,11 +744,11 @@ class CustomerController extends Controller
 
             // 3. Register / Update ONT Baru
             OntRegistration::updateOrCreate(
-                ['onu_serial' => $newOnuSerial],
+                ['customer_service_id' => $service->id, 'onu_serial' => $newOnuSerial],
                 [
                     'customer_service_id' => $service->id,
                     'onu_type'            => 'ONT Replacement',
-                    'rx_power'            => $validated['rx_power'] ?? -19.5,
+                    'rx_power'            => $validated['rx_power'] ?? null,
                     'status'              => 'active',
                     'registered_at'       => now(),
                     'notes'               => "Pergantian ONU dari SN lama: {$oldOnuSerial}. Alasan: " . ($validated['replacement_reason'] ?? 'Rusak/Ganti Modem'),
@@ -846,198 +846,34 @@ class CustomerController extends Controller
      */
     public static function resolveOnuPhysicalPortAndSync(?string $onuSerial, ?int $odpId = null, ?string $hintInterface = null): array
     {
-        $sn = strtoupper(trim((string)$onuSerial));
-        $detectedPort = null;
-        $detectedOltId = null;
-        $detectedOltName = null;
-        $detectedRx = null;
-        $detectedTx = null;
-        $detectedStatus = 'Offline';
-        $detectedModel = null;
-        $detectedOnuId = null;
-
-        // 1. Cek hint interface jika ada (misal dari import Sobok: "1/3/5" atau "gpon-olt_1/3/5")
-        if (!empty($hintInterface)) {
-            $cleanHint = trim($hintInterface);
-            if (preg_match('/(?:gpon[-_]olt[-_])?(\d+\/\d+\/\d+)/i', $cleanHint, $m)) {
-                $p = 'gpon-olt_' . $m[1];
-                if ($p !== 'gpon-olt_1/1/1') {
-                    $detectedPort = $p;
-                }
-            }
+        $empty=['port'=>null,'olt_id'=>null,'olt_name'=>null,'rx_power'=>null,'tx_power'=>null,'status'=>'Unknown','onu_id'=>null,'vendor_model'=>null];
+        $sn=strtoupper(trim((string)$onuSerial));if($sn==='')return $empty;
+        $devices=OltDevice::where('status','active')->where('connection_mode','live')->get();
+        $view=new \App\Services\Olt\OnuTelemetryView($devices);
+        $owner=$odpId ? \App\Services\Olt\OnuTelemetryView::ownerId(\App\Models\NetworkNode::find($odpId)) : null;
+        if($odpId && !$owner)return $empty;
+        $matches=[];
+        foreach($devices as $device) {
+            if($owner && (int)$device->id!==$owner)continue;
+            $row=$view->resolve((int)$device->id,$sn);
+            if($row['identity_status']==='resolved')$matches[]=$row;
         }
-
-        // 2. Cari di Telemetry Snapshot OLT yang aktif
-        $activeOlts = OltDevice::where('status', 'active')->whereNotNull('last_telemetry_snapshot')->get();
-        if ($sn) {
-            foreach ($activeOlts as $olt) {
-                $snap = $olt->last_telemetry_snapshot;
-                // a) Cek di onu_list
-                foreach ($snap['onu_list'] ?? [] as $item) {
-                    $itemSn = strtoupper(trim((string)($item['serial_number'] ?? ($item['sn'] ?? ''))));
-                    $itemMac = strtoupper(trim((string)($item['mac_address'] ?? ($item['onu_mac'] ?? ''))));
-                    if (($itemSn && $itemSn === $sn) || ($itemMac && $itemMac === $sn)) {
-                        $p = $item['port'] ?? null;
-                        if ($p && $p !== 'gpon-olt_1/1/1') {
-                            $detectedPort = $p;
-                            $detectedOltId = $olt->id;
-                            $detectedOltName = $olt->name;
-                        }
-                        if (isset($item['rx_power']) && is_numeric($item['rx_power'])) {
-                            $detectedRx = (float)$item['rx_power'];
-                        }
-                        if (isset($item['tx_power']) && is_numeric($item['tx_power'])) {
-                            $detectedTx = (float)$item['tx_power'];
-                        }
-                        if (!empty($item['status'])) {
-                            $detectedStatus = $item['status'];
-                        }
-                        if (!empty($item['onu_id'])) {
-                            $detectedOnuId = $item['onu_id'];
-                        }
-                        if (!empty($item['vendor_model'])) {
-                            $detectedModel = $item['vendor_model'];
-                        }
-                        break 2;
-                    }
-                }
-
-                // b) Cek di unconfigured_onus
-                foreach ($snap['unconfigured_onus'] ?? [] as $uncfg) {
-                    $uSn = strtoupper(trim((string)($uncfg['serial_number'] ?? '')));
-                    $uMac = strtoupper(trim((string)($uncfg['mac_address'] ?? '')));
-                    if (($uSn && $uSn === $sn) || ($uMac && $uMac === $sn)) {
-                        $p = $uncfg['detected_port'] ?? ($uncfg['port'] ?? null);
-                        if ($p && $p !== 'gpon-olt_1/1/1') {
-                            $detectedPort = $p;
-                            $detectedOltId = $olt->id;
-                            $detectedOltName = $olt->name;
-                        }
-                        if (isset($uncfg['rx_power']) && is_numeric($uncfg['rx_power'])) {
-                            $detectedRx = (float)$uncfg['rx_power'];
-                        }
-                        break 2;
-                    }
-                }
-            }
-        }
-
-        // 3. Jika belum ditemukan, periksa ODP yang dipilih
-        if ($odpId) {
-            $odpNode = NetworkNode::find($odpId);
-            if ($odpNode) {
-                // a) Cek jika ODP sudah punya olt_port_ref valid
-                if (!empty($odpNode->olt_port_ref) && $odpNode->olt_port_ref !== 'gpon-olt_1/1/1') {
-                    if (!$detectedPort) {
-                        $detectedPort = $odpNode->olt_port_ref;
-                        $detectedOltId = $detectedOltId ?: $odpNode->olt_device_id;
-                    }
-                } else {
-                    // b) Infer dari pelanggan tetangga (sibling) pada ODP yang sama
-                    $siblingPorts = NetworkPort::where('node_id', $odpId)
-                        ->whereNotNull('customer_service_id')
-                        ->with('customerService')
-                        ->get();
-
-                    foreach ($siblingPorts as $sp) {
-                        $sibSn = strtoupper(trim((string)($sp->customerService?->onu_serial ?? '')));
-                        if ($sibSn && $sibSn !== $sn) {
-                            foreach ($activeOlts as $olt) {
-                                foreach ($olt->last_telemetry_snapshot['onu_list'] ?? [] as $otherO) {
-                                    $oSn = strtoupper(trim((string)($otherO['serial_number'] ?? '')));
-                                    if ($oSn === $sibSn) {
-                                        $p = $otherO['port'] ?? null;
-                                        if ($p && $p !== 'gpon-olt_1/1/1' && str_starts_with($p, 'gpon-olt_')) {
-                                            $detectedPort = $p;
-                                            $detectedOltId = $olt->id;
-                                            $detectedOltName = $olt->name;
-                                            break 3;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // c) Jika port terdeteksi dan ODP belum memiliki olt_port_ref (atau masih 1/1/1), sinkronkan ODP!
-                if ($detectedPort && (empty($odpNode->olt_port_ref) || $odpNode->olt_port_ref === 'gpon-olt_1/1/1')) {
-                    $odpNode->update([
-                        'olt_port_ref'  => $detectedPort,
-                        'olt_device_id' => $detectedOltId ?: $odpNode->olt_device_id,
-                    ]);
-                }
-            }
-        }
-
-        // Fallback default OLT device jika belum terpasang
-        if (!$detectedOltId && $activeOlts->isNotEmpty()) {
-            $detectedOltId = $activeOlts->first()->id;
-            $detectedOltName = $activeOlts->first()->name;
-        }
-
-        return [
-            'port'         => $detectedPort,
-            'olt_id'       => $detectedOltId,
-            'olt_name'     => $detectedOltName,
-            'rx_power'     => $detectedRx,
-            'tx_power'     => $detectedTx,
-            'status'       => $detectedStatus,
-            'onu_id'       => $detectedOnuId,
-            'vendor_model' => $detectedModel,
-        ];
+        if(count($matches)!==1)return $empty;
+        $row=$matches[0];
+        return array_replace($empty,['port'=>$row['gpon_interface'],'olt_id'=>$row['olt_id'],'olt_name'=>$row['olt_name'],
+            'rx_power'=>$row['rx_power'],'status'=>$row['onu_status'],'onu_id'=>$row['onu_id']]);
     }
+
 
     /**
      * Menyuntikkan atau memperbarui pelanggan langsung ke dalam Telemetry Snapshot OLT
      */
     public static function injectCustomerIntoOltSnapshot(int $oltId, array $onuData): void
     {
-        $olt = OltDevice::find($oltId);
-        if (!$olt || empty($olt->last_telemetry_snapshot)) return;
-
-        $snapshot = $olt->last_telemetry_snapshot;
-        $onus = $snapshot['onu_list'] ?? [];
-        $sn = strtoupper(trim((string)($onuData['serial_number'] ?? '')));
-
-        $found = false;
-        foreach ($onus as $idx => $item) {
-            $itemSn = strtoupper(trim((string)($item['serial_number'] ?? '')));
-            if ($itemSn && $itemSn === $sn) {
-                $onus[$idx] = array_merge($item, $onuData);
-                $found = true;
-                break;
-            }
-        }
-        if (!$found) {
-            $onus[] = array_merge([
-                '_source'         => 'database',
-                'customer_id'     => $onuData['customer_id'] ?? null,
-                'customer_name'   => $onuData['customer_name'] ?? 'Pelanggan',
-                'customer_number' => $onuData['customer_number'] ?? '',
-                'serial_number'   => $sn,
-                'port'            => $onuData['port'] ?? null,
-                'rx_power'        => $onuData['rx_power'] ?? -19.5,
-                'tx_power'        => $onuData['tx_power'] ?? 2.1,
-                'status'          => $onuData['status'] ?? 'Online',
-                'distance_meters' => 850,
-                'ip_address'      => '—',
-                'vendor_model'    => $onuData['vendor_model'] ?? 'HGU GPON/EPON',
-            ], $onuData);
-        }
-
-        // Hapus dari unconfigured_onus jika ada
-        if (!empty($snapshot['unconfigured_onus'])) {
-            $snapshot['unconfigured_onus'] = array_values(array_filter($snapshot['unconfigured_onus'], function ($u) use ($sn) {
-                $uSn = strtoupper(trim((string)($u['serial_number'] ?? ($u['mac_address'] ?? ''))));
-                return $uSn !== $sn;
-            }));
-        }
-
-        $snapshot['onu_list'] = $onus;
-        $olt->update(['last_telemetry_snapshot' => $snapshot]);
-        \Illuminate\Support\Facades\Cache::forget('gis_map_data_payload_v1');
+        // Administrative registration is not proof of a hardware tuple or an optical sample.
+        \App\Services\Olt\OnuTelemetryWriter::invalidate();
     }
+
 
     /**
      * POST /api/customers/probe-interface-optical
@@ -1045,277 +881,54 @@ class CustomerController extends Controller
      */
     public function probeInterfaceOptical(Request $request)
     {
-        $tStart = microtime(true);
-
-        $oltId     = $request->input('olt_id');
-        $interface = trim((string)$request->input('interface', ''));
-        $syncDb    = (bool)$request->input('sync_db', true);
-
-        if (empty($interface) || $interface === 'all' || $interface === '—') {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Harap pilih interface / port PON OLT yang valid terlebih dahulu.',
-            ], 422);
-        }
-
-        // Standardize interface name (e.g. "1/2/1" -> "gpon-olt_1/2/1")
-        $cleanPort = str_replace(['gpon_olt_', 'gpon_'], 'gpon-olt_', strtolower($interface));
-        if (preg_match('/^(\d+\/\d+\/\d+)$/', $cleanPort, $m)) {
-            $cleanPort = 'gpon-olt_' . $m[1];
-        }
-
-        // 1. Dapatkan OLT Device target
-        $olt = null;
-        if ($oltId && $oltId !== 'all') {
-            $olt = OltDevice::find($oltId);
-        }
-        if (!$olt) {
-            $olt = OltDevice::where('status', 'active')->first() ?: OltDevice::first();
-        }
-
-        if (!$olt) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Tidak ada perangkat OLT yang terdaftar atau aktif dalam sistem.',
-            ], 404);
-        }
-
-        // 2. Eksekusi Live Fast SNMP Probe langsung ke Hardware OLT
-        $probeResult = \App\Services\Olt\FastOpticalProbeService::probePortOnusQuickState($olt, $cleanPort);
-        $liveOnuStates = $probeResult['onu_states'] ?? [];
-
-        // 3. Ambil seluruh data pelanggan di database yang terkait dengan interface ini atau OLT ini
-        $customers = Customer::with([
-            'services.servicePackage',
-            'services.networkPort.node.parent.parent',
-            'services.networkPort.node.oltDevice',
-            'services.ontRegistration.oltPort.node',
-        ])
-        ->get();
-
-        // Siapkan map pencocokan pelanggan
-        $matchedCustomersBySn = [];
-        $matchedCustomersByPort = [];
-
-        foreach ($customers as $c) {
-            $primaryService = $c->services->first();
-            $port = $primaryService?->networkPort;
-            $odpNode = $port?->node;
-            $odcNode = $odpNode?->parent;
-            $ont = $primaryService?->ontRegistration;
-
-            $snKey = strtoupper(trim((string)($ont?->onu_serial ?: ($primaryService?->onu_serial ?: ''))));
-            $macKey = strtoupper(trim((string)($ont?->onu_mac ?: '')));
-
-            // Ekstrak slot dan port secara presisi angka untuk pencocokan interface otentik
-            $extractSlotPort = function ($p) {
-                if (!$p) return '';
-                $p = strtolower(trim((string)$p));
-                $p = explode(':', $p)[0];
-                $p = explode(',', $p)[0];
-                if (preg_match('/(\d+)\/(\d+)\/(\d+)/', $p, $m)) {
-                    return "{$m[1]}/{$m[2]}/{$m[3]}";
-                }
-                if (preg_match('/(\d+)\/(\d+)/', $p, $m)) {
-                    return "{$m[1]}/{$m[2]}";
-                }
-                return str_replace(['gpon-olt_', 'gpon_olt_', 'gpon_', 'epon-olt_', 'epon_olt_', 'epon_'], '', $p);
-            };
-
-            $rawPortRef = $odpNode?->olt_port_ref ?: ($odcNode?->olt_port_ref ?: ($ont?->oltPort?->node?->olt_port_ref ?: ''));
-            $custSlotPort = $extractSlotPort($rawPortRef);
-            $targetSlotPort = $extractSlotPort($cleanPort);
-
-            // Cek pencocokan eksak slot & port (menghindari port 1/2/14 terbawa ke 1/2/1)
-            $isInterfaceMatch = !empty($targetSlotPort) && ($custSlotPort === $targetSlotPort);
-
-            $custData = [
-                'customer_id'         => $c->id,
-                'customer_number'     => $c->customer_number ?: "CMN " . sprintf('%04d', $c->id),
-                'name'                => $c->name,
-                'phone'               => $c->phone ?: '-',
-                'address'             => $c->address ?: 'Solok, Sumatera Barat',
-                'package_name'        => $primaryService?->servicePackage?->name ?: 'Standard Internet',
-                'service_status'      => strtoupper($c->service_status ?: 'OPEN'),
-                'odp_name'            => $odpNode?->name ?: 'ODP Non-GIS',
-                'odp_code'            => $odpNode?->code ?: '-',
-                'odp_id'              => $odpNode?->id,
-                'odp_port_number'     => $port?->port_number ?: '-',
-                'ont_registration_id' => $ont?->id,
-            ];
-
-            if ($snKey) {
-                $matchedCustomersBySn[$snKey] = $custData;
-            }
-            if ($macKey) {
-                $matchedCustomersBySn[$macKey] = $custData;
-            }
-            if ($isInterfaceMatch) {
-                $matchedCustomersByPort[] = array_merge($custData, ['sn' => $snKey ?: $macKey]);
+        $started=microtime(true);$at=\App\Services\Olt\OnuTelemetrySample::timestamp();
+        $oltId=$request->input('olt_id');$interface=trim((string)$request->input('interface',''));
+        $index=\App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort($interface);
+        if(!ctype_digit((string)$oltId) || (int)$oltId<1 || $index===null) return response()->json(['status'=>'error','message'=>'Pilih satu OLT dan interface PON yang valid.'],422);
+        $olt=OltDevice::where('status','active')->where('connection_mode','live')->find((int)$oltId);
+        if(!$olt)return response()->json(['status'=>'error','message'=>'OLT aktif tidak ditemukan.'],404);
+        $port=\App\Services\Olt\ZteOnuIdentityMap::portFromIfIndex($index);
+        $probe=\App\Services\Olt\FastOpticalProbeService::probePortOnusQuickState($olt,$port);
+        $inventory=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(array_merge($olt->last_telemetry_snapshot['onu_list'] ?? [],$olt->last_telemetry_snapshot['unconfigured_onus'] ?? []));
+        $customersBySerial=[];
+        foreach(Customer::with(['services.servicePackage','services.networkPort.node.parent.parent','services.ontRegistration'])->get() as $customer) {
+            foreach($customer->services as $service) {
+                $registration=$service->ontRegistration;$node=$service->networkPort?->node;
+                if(!$registration || \App\Services\Olt\OnuTelemetryView::ownerId($node)!==(int)$olt->id)continue;
+                $serial=strtoupper(trim((string)($registration->onu_serial ?: $registration->onu_mac)));
+                $customersBySerial[$serial][]=['customer_id'=>$customer->id,'customer_name'=>$customer->name,'customer_number'=>$customer->customer_number,
+                    'phone'=>$customer->phone,'address'=>$customer->address,'package_name'=>$service->servicePackage?->name,
+                    'service_status'=>strtoupper($customer->service_status ?: 'OPEN'),'odp_name'=>$node?->name,'odp_code'=>$node?->code,
+                    'odp_port_number'=>$service->networkPort?->port_number,'ont_registration_id'=>$registration->id];
             }
         }
-
-        // 4. Bangun daftar terpadu (Merge Live OLT ONUs + Database Customers)
-        $processedSn = [];
-        $mergedList = [];
-        $onlineCount = 0;
-        $downCount = 0;
-        $totalRxSum = 0;
-        $validRxCount = 0;
-        $worstRx = null;
-        $bestRx = null;
-        $warningCount = 0;
-        $criticalCount = 0;
-
-        // A. Proses seluruh ONU yang terdeteksi secara fisik di OLT
-        foreach ($liveOnuStates as $onuId => $state) {
-            $sn = strtoupper(trim((string)($state['sn'] ?? '')));
-            $isOnline = (bool)($state['is_online'] ?? false);
-            $rawRx = isset($state['rx_power']) && is_numeric($state['rx_power']) ? (float)$state['rx_power'] : ($isOnline ? -22.00 : -40.00);
-
-            if ($isOnline) {
-                $onlineCount++;
-                if ($rawRx > -38.0) {
-                    $totalRxSum += $rawRx;
-                    $validRxCount++;
-                    if ($worstRx === null || $rawRx < $worstRx) $worstRx = $rawRx;
-                    if ($bestRx === null || $rawRx > $bestRx) $bestRx = $rawRx;
-                    if ($rawRx <= -27.0) $criticalCount++;
-                    elseif ($rawRx <= -24.0) $warningCount++;
-                }
-            } else {
-                $downCount++;
-                $rawRx = -40.00;
-            }
-
-            $matchedCust = $sn ? ($matchedCustomersBySn[$sn] ?? null) : null;
-            if ($sn) $processedSn[$sn] = true;
-
-            $quality = 'LOS';
-            if ($isOnline) {
-                if ($rawRx >= -20.0) $quality = 'EXCELLENT';
-                elseif ($rawRx >= -24.0) $quality = 'GOOD';
-                elseif ($rawRx >= -27.0) $quality = 'WARNING';
-                else $quality = 'CRITICAL';
-            }
-
-            $mergedList[] = [
-                'onu_index'           => $onuId,
-                'onu_port_id'         => "{$cleanPort}:{$onuId}",
-                'serial_number'       => $sn ?: "ONU-{$onuId}",
-                'is_online'           => $isOnline,
-                'status_label'        => $isOnline ? 'Online' : 'Offline / LOS',
-                'rx_power'            => $rawRx,
-                'attenuation_quality' => $quality,
-                'is_registered'       => !empty($matchedCust),
-                'customer_id'         => $matchedCust['customer_id'] ?? null,
-                'customer_number'     => $matchedCust['customer_number'] ?? 'Belum Terdaftar',
-                'customer_name'       => $matchedCust['name'] ?? 'ONU Belum Di-mapping',
-                'phone'               => $matchedCust['phone'] ?? '-',
-                'address'             => $matchedCust['address'] ?? '-',
-                'package_name'        => $matchedCust['package_name'] ?? '-',
-                'service_status'      => $matchedCust['service_status'] ?? 'OPEN',
-                'odp_name'            => $matchedCust['odp_name'] ?? 'ODP Belum Di-set',
-                'odp_code'            => $matchedCust['odp_code'] ?? '-',
-                'odp_port_number'     => $matchedCust['odp_port_number'] ?? '-',
-                'ont_registration_id' => $matchedCust['ont_registration_id'] ?? null,
-            ];
-
-            // 💾 Update DB jika syncDb = true
-            if ($syncDb && !empty($matchedCust['ont_registration_id'])) {
-                OntRegistration::where('id', $matchedCust['ont_registration_id'])->update([
-                    'rx_power'   => $rawRx,
-                    'status'     => $isOnline ? 'active' : 'inactive',
-                    'updated_at' => now(),
-                ]);
-                if (!empty($matchedCust['customer_id'])) {
-                    Customer::where('id', $matchedCust['customer_id'])->update([
-                        'status' => $isOnline ? 'active' : 'suspended',
-                    ]);
-                }
-            }
+        $rows=[];$writeRows=[];
+        foreach($probe['onu_states_by_sn'] ?? [] as $sn=>$reading) {
+            if(!isset($inventory[$sn]))continue;
+            $identity=$inventory[$sn];$rx=$reading['is_online'] ? $reading['rx_power']:null;
+            $writeRows[]=array_replace($identity,$reading,\App\Services\Olt\OnuTelemetrySample::normalize($reading,$at));
+            $quality=!$reading['is_online'] ? 'LOS':($rx===null ? 'UNKNOWN':($rx<=-28 ? 'CRITICAL':($rx<=-25 ? 'WARNING':'GOOD')));
+            $customerRows=$customersBySerial[$sn] ?? [];$customer=count($customerRows)===1 ? $customerRows[0] : [];
+            $rows[]=array_replace(['telemetry_contract'=>1,'identity_status'=>'resolved','gpon_interface'=>$port,
+                'onu_index'=>$reading['onu_id'],'onu_port_id'=>$port.':'.$reading['onu_id'],
+                'serial_number'=>$sn,'is_online'=>$reading['is_online'],'status_label'=>$reading['is_online'] ? 'Online':'Offline',
+                'rx_power'=>$rx,'rx_available'=>$reading['rx_available'],'attenuation_quality'=>$quality,
+                'is_registered'=>count($customerRows)===1,'customer_id'=>null,'customer_number'=>null,
+                'customer_name'=>'ONU '.$sn,'ont_registration_id'=>null,
+                'sampled_at'=>$at,'telemetry_source'=>'snmp_point'],$customer);
         }
-
-        // B. Masukkan juga pelanggan di DB pada interface ini yang mungkin sedang belum terdeteksi/offline di OLT
-        foreach ($matchedCustomersByPort as $dbCust) {
-            $sn = strtoupper(trim((string)($dbCust['sn'] ?? '')));
-            if ($sn && isset($processedSn[$sn])) {
-                continue; // Sudah diproses dari live probe OLT
-            }
-
-            $mergedList[] = [
-                'onu_index'           => '-',
-                'onu_port_id'         => $cleanPort,
-                'serial_number'       => $sn ?: '—',
-                'is_online'           => false,
-                'status_label'        => 'Offline / Belum Sync OLT',
-                'rx_power'            => -40.00,
-                'attenuation_quality' => 'LOS',
-                'is_registered'       => true,
-                'customer_id'         => $dbCust['customer_id'],
-                'customer_number'     => $dbCust['customer_number'],
-                'customer_name'       => $dbCust['name'],
-                'phone'               => $dbCust['phone'],
-                'address'             => $dbCust['address'],
-                'package_name'        => $dbCust['package_name'],
-                'service_status'      => $dbCust['service_status'],
-                'odp_name'            => $dbCust['odp_name'],
-                'odp_code'            => $dbCust['odp_code'],
-                'odp_port_number'     => $dbCust['odp_port_number'],
-                'ont_registration_id' => $dbCust['ont_registration_id'],
-            ];
-            $downCount++;
-        }
-
-        // Sort: Online first, then worst attenuation, then customer name
-        usort($mergedList, function ($a, $b) {
-            if ($a['is_online'] !== $b['is_online']) {
-                return $a['is_online'] ? -1 : 1;
-            }
-            if ($a['rx_power'] !== $b['rx_power']) {
-                return $a['rx_power'] <=> $b['rx_power'];
-            }
-            return strcmp($a['customer_name'], $b['customer_name']);
-        });
-
-        $totalOnus = count($mergedList);
-        $avgRx = $validRxCount > 0 ? round($totalRxSum / $validRxCount, 2) : -40.00;
-        $durationMs = round((microtime(true) - $tStart) * 1000, 1);
-
-        if ($syncDb) {
-            self::clearCustomerCache();
-        }
-
-        // Status Kesehatan Interface
-        $interfaceHealth = 'HEALTHY';
-        if ($totalOnus > 0 && $downCount === $totalOnus) {
-            $interfaceHealth = 'MASS_OUTAGE';
-        } elseif ($criticalCount > 3 || ($totalOnus > 0 && ($downCount / $totalOnus) >= 0.5)) {
-            $interfaceHealth = 'DEGRADED';
-        }
-
-        return response()->json([
-            'status'             => 'success',
-            'olt_id'             => $olt->id,
-            'olt_name'           => $olt->name,
-            'olt_ip'             => $olt->ip_address,
-            'interface'          => $cleanPort,
-            'interface_health'   => $interfaceHealth,
-            'summary'            => [
-                'total_onus'     => $totalOnus,
-                'online_count'   => $onlineCount,
-                'down_count'     => $downCount,
-                'warning_count'  => $warningCount,
-                'critical_count' => $criticalCount,
-                'avg_rx_power'   => $avgRx,
-                'min_rx_power'   => $worstRx ?? -40.00,
-                'max_rx_power'   => $bestRx ?? -40.00,
-                'duration_ms'    => $durationMs,
-                'probed_at'      => now()->toIso8601String(),
-                'probed_at_human'=> now()->format('d/m/Y H:i:s'),
-            ],
-            'data'               => $mergedList,
-        ]);
+        if($request->boolean('sync_db',true))app(\App\Services\Olt\OnuTelemetryWriter::class)->apply($olt,$writeRows,$at,'point');
+        $powers=array_column(array_filter($rows,fn($r)=>$r['is_online'] && $r['rx_power']!==null),'rx_power');
+        $complete=$probe['complete'] ?? false;$total=$probe['total_onus'] ?? 0;
+        return response()->json(['status'=>'success','complete'=>$complete,'olt_id'=>$olt->id,'olt_name'=>$olt->name,'olt_ip'=>$olt->ip_address,'interface'=>$port,
+            'message'=>$complete ? 'Pembacaan terverifikasi selesai.':'Pembacaan belum lengkap; pelanggan yang belum terbaca tidak dianggap Offline.',
+            'interface_health'=>!$complete ? 'UNKNOWN':(($probe['is_mass_outage'] ?? false) ? 'MASS_OUTAGE':(($powers && min($powers)<=-25) ? 'DEGRADED':'HEALTHY')),
+            'summary'=>['total_onus'=>$total,'online_count'=>$probe['online_count'] ?? 0,'down_count'=>$probe['down_count'] ?? 0,'unknown_count'=>$probe['unknown_count'] ?? $total,
+                'warning_count'=>count(array_filter($powers,fn($rx)=>$rx<=-25 && $rx>-28)),'critical_count'=>count(array_filter($powers,fn($rx)=>$rx<=-28)),
+                'avg_rx_power'=>$powers ? round(array_sum($powers)/count($powers),2):null,'min_rx_power'=>$powers ? min($powers):null,'max_rx_power'=>$powers ? max($powers):null,
+                'duration_ms'=>round((microtime(true)-$started)*1000,1),'probed_at'=>$at,'probed_at_human'=>now()->format('d/m/Y H:i:s')],
+            'data'=>$rows]);
     }
+
 }
 
