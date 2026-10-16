@@ -172,10 +172,54 @@ class FastOpticalProbeService
         return $b['tables']+['_complete'=>count($b['reports'])===2 && count(array_filter($b['reports'],fn($r)=>$r['complete']))===2];
     }
 
+    /** Large tables use every PON named by a complete, fresh hardware ifName walk. */
+    public static function readStateTables(OltDevice $olt,?int $maxRepetitions=null,?int $timeoutSec=null): array
+    {
+        $root='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$ifName='1.3.6.1.2.1.31.1.1.1.1';
+        $runner=app(SnmpWalkRunner::class);$started=OnuTelemetrySample::timestamp();$start=microtime(true);
+        $snapshot=$olt->last_telemetry_snapshot ?? [];
+        $known=array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []);
+        $scope=null;
+        if(count($known)>256) {
+            $discovery=$runner->walk($olt,['interfaces'=>$ifName],10,1,1,4);
+            $ports=[];$valid=($discovery['reports']['interfaces']['complete'] ?? false)===true;
+            foreach($discovery['tables']['interfaces'] ?? [] as $oid=>$raw) {
+                if(!preg_match('/^'.preg_quote($ifName,'/').'\.[0-9]+$/D',(string)$oid)){$valid=false;continue;}
+                $name=trim((string)SnmpConnector::parseValue((string)$raw),"\" \t\r\n");
+                if(stripos($name,'gpon')===false)continue;
+                // ifName's own row index differs from the vendor ONU-table index on these OLTs.
+                $index=ZteOnuIdentityMap::ifIndexFromPort($name);
+                if($index===null || isset($ports[$index])){$valid=false;continue;}
+                $ports[$index]=[$root.'.'.$index];
+            }
+            if(!$ports || count($ports)>128)$valid=false;
+            foreach($known as $row) {
+                $index=ZteOnuIdentityMap::ifIndexFromPort((string)($row['port'] ?? ''));
+                if($index!==null && !isset($ports[$index]))$valid=false;
+            }
+            $scope=['source'=>'fresh_ifname','accepted'=>$valid,'ports'=>count($ports),
+                'report'=>$discovery['reports']['interfaces'] ?? [],'duration_ms'=>$discovery['duration_ms']];
+            if($valid) {
+                $queued=self::pointQueue($olt,$ports,'state_discovery',max(0.1,35-(microtime(true)-$start)),true);
+                $rows=$queued['rows'];unset($queued['rows'],$queued['tables']);
+                return ['tables'=>['states'=>$rows],
+                    'reports'=>['states'=>['complete'=>$queued['complete'],'reason'=>$queued['complete']?null:'incomplete_pon_walks','rows'=>count($rows)]],
+                    'started_at'=>$started,'finished_at'=>OnuTelemetrySample::timestamp(),
+                    'duration_ms'=>round((microtime(true)-$start)*1000,1),
+                    'parameters'=>$queued['parameters'],'state_discovery'=>['strategy'=>'fresh_pon_state_walk','scope'=>$scope,'queue'=>$queued]];
+            }
+        }
+        // A failed/ambiguous port scope cannot justify excluding any part of the root table.
+        $batch=$runner->walk($olt,['states'=>$root],$maxRepetitions ?? 10,$timeoutSec ?? 5,2,max(0.1,35-(microtime(true)-$start)));
+        if($scope)$batch['state_discovery']=['strategy'=>'root_fallback','scope'=>$scope];
+        $batch['started_at']=$started;$batch['duration_ms']=round((microtime(true)-$start)*1000,1);
+        return $batch;
+    }
+
     public static function readStateRxTables(OltDevice $olt,?int $maxRepetitions=null,?int $timeoutSec=null): array
     {
         $state='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$rx='1.3.6.1.4.1.3902.1012.3.50.12.1.1.10';
-        $b=app(SnmpWalkRunner::class)->walk($olt,['states'=>$state],$maxRepetitions ?? 10,$timeoutSec ?? 5,2);
+        $b=self::readStateTables($olt,$maxRepetitions,$timeoutSec);
         $states=$b['tables']['states'] ?? [];$stateComplete=($b['reports']['states']['complete'] ?? false)===true;
         $pointStart=microtime(true);$stateRecovery=null;
         if(!$stateComplete) {
