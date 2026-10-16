@@ -21,7 +21,7 @@ export function inventoryMatchesFilter(row, filter, now) {
   if(filter==='online')return d.online===true;
   if(filter==='los')return d.online===false;
   if(filter==='unknown')return d.online===null;
-  if(filter==='rx_missing')return d.online===true && d.rx===null;
+  if(filter==='rx_missing')return d.offlineByRx;
   if(['excellent','good','warning','critical','high_loss'].includes(filter)) {
     if(d.rx===null)return false;
     return filter==='excellent' ? d.rx>=-19 : filter==='good' ? d.rx< -19 && d.rx>=-23
@@ -31,9 +31,10 @@ export function inventoryMatchesFilter(row, filter, now) {
 }
 
 export function inventoryOpticalStats(rows, now) {
-  const result={total:rows.length,excellent:0,good:0,warning:0,critical:0,los:0,unknown:0,rxMissing:0};
+  const result={total:rows.length,excellent:0,good:0,warning:0,critical:0,los:0,unknown:0,rxMissing:0,offlineByRx:0};
   for(const row of rows) {
     const d=onuPresentation(inventoryTelemetry(row,now));
+    if(d.offlineByRx)result.offlineByRx++;
     const key=d.online===false ? 'los':d.online===null ? 'unknown':d.rx===null ? 'rxMissing'
       :d.rx>=-19 ? 'excellent':d.rx>=-23 ? 'good':d.rx>=-27 ? 'warning':'critical';
     result[key]++;
@@ -44,15 +45,18 @@ export function inventoryOpticalStats(rows, now) {
 
 export function onuPresentation(value = {}) {
   const current = value.telemetry_contract === 1;
-  const online = current && typeof value.is_online === 'boolean' ? value.is_online : null;
+  const hardwareOnline = current && typeof value.is_online === 'boolean' ? value.is_online : null;
   const raw = value.rx_power;
-  const rx = online === true && value.rx_available === true && raw !== null && raw !== ''
-    && Number.isFinite(Number(raw)) ? Number(raw) : null;
+  const rx = hardwareOnline === true && value.rx_available === true && raw !== null && raw !== ''
+    && Number.isFinite(Number(raw)) && Number(raw)>-40 && Number(raw)<=10 ? Number(raw) : null;
+  // User-selected display policy only. Never replace or write the original OLT state.
+  const offlineByRx = current && rx === null && hardwareOnline !== false;
+  const online = current ? (hardwareOnline === false || rx === null ? false:true):null;
   const color = online === false ? 'text-rose-600 dark:text-rose-400'
     : online === true ? 'text-emerald-600 dark:text-emerald-400' : neutralTelemetryColor;
   const label = online === true ? 'Online' : online === false ? 'Offline'
     : value.telemetry_freshness === 'stale' ? 'Data lama' : 'Belum terverifikasi';
-  const rxLabel = online === false ? 'Offline' : rx === null ? 'N/A' : `${rx.toFixed(2)} dBm`;
+  const rxLabel = rx === null ? 'N/A' : `${rx.toFixed(2)} dBm`;
   const rxColor = rx === null ? neutralTelemetryColor : rx >= -25
     ? 'text-emerald-600 dark:text-emerald-400' : rx >= -28
       ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400';
@@ -62,7 +66,14 @@ export function onuPresentation(value = {}) {
   const stamp = date && Number.isFinite(date.getTime())
     ? `Pembaruan ${date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}${value.telemetry_source === 'snapshot' ? ' (tersimpan)' : value.telemetry_source === 'snmp_point' ? ' (langsung)' : ''}`
     : 'Waktu data belum tersedia';
-  return { online, rx, color, label, rxLabel, rxColor, interfaceLabel, stamp };
+  return { online, hardwareOnline, offlineByRx, rx, color, label, rxLabel, rxColor, interfaceLabel, stamp };
+}
+
+export function opticalDisplaySummary(rows = [], expectedTotal = rows.length) {
+  const views=rows.map(row=>onuPresentation(row));
+  const online=views.filter(row=>row.online===true).length;
+  const down=views.filter(row=>row.online===false).length;
+  return {online_count:online,down_count:down,unknown_count:Math.max(rows.length,expectedTotal)-online-down};
 }
 
 export function nodeTelemetryState(node = {}) {

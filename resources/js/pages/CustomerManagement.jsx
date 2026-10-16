@@ -1,4 +1,4 @@
-import { onuPresentation } from '../lib/onuTelemetry.js';
+import { onuPresentation, opticalDisplaySummary } from '../lib/onuTelemetry.js';
 import { OnuStatus, TelemetryStamp } from '../components/OnuTelemetry.jsx';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -1147,7 +1147,7 @@ export default function CustomerManagement() {
     { value: 'all', label: 'Semua Layanan' },
     { value: 'OPEN', label: 'Layanan Open (Aktif)' },
     { value: 'BLOKIR', label: 'Layanan Terblokir' },
-    { value: 'LOSS_PHYSICAL', label: 'Kabel Putus (Offline & Open)' },
+    { value: 'LOSS_PHYSICAL', label: 'Offline & Open' },
     { value: 'LOSS_BLOCKED', label: 'Isolir Tagihan (Offline & Blokir)' },
   ], []);
 
@@ -2320,7 +2320,7 @@ export default function CustomerManagement() {
         initialOltId={filterOlt !== 'all' ? filterOlt : (olts[0]?.id || 'all')}
         initialInterface={filterInterface !== 'all' ? filterInterface : ''}
         onProbeCompleted={(res) => {
-          showToastMsg(`Pengecekan real-time port ${res.interface} selesai (${res.summary?.total_onus ?? 0} klien, ${res.summary?.online_count ?? 0} online).`);
+          showToastMsg(`Pengecekan real-time port ${res.interface} selesai (${res.summary?.total_onus ?? 0} klien, ${opticalDisplaySummary(res.data || []).online_count} online).`);
           fetchCustomers(true);
         }}
       />

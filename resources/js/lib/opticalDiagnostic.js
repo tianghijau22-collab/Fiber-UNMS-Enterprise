@@ -13,7 +13,7 @@ const messages = {
   identity_unresolved: 'Interface dan nomor ONU belum terverifikasi.',
   point_incomplete: 'Pembacaan langsung belum lengkap. Periksa sumber dan waktu data tersimpan.',
   state_unavailable: 'Identitas terkonfirmasi, tetapi status ONU belum tersedia.',
-  rx_unavailable: 'ONU Online, redaman N/A.',
+  rx_unavailable: 'Redaman N/A. Status tampilan Offline sesuai aturan monitoring.',
 };
 export function opticalDiagnostic(data, now = Date.now()) {
   const d = data || {}, at = Date.parse(d.sampled_at);
@@ -25,10 +25,10 @@ export function opticalDiagnostic(data, now = Date.now()) {
   const finite = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) ? Number(value) : null;
   const raw = finite(d.rx_power);
   const rx = online === true && d.rx_available === true && raw !== null && raw > -40 && raw <= 10 ? raw : null;
-  const value = {...d, telemetry_contract:1, identity_status:valid ? 'resolved':'unresolved', is_online:online, rx_power:rx, rx_available:rx !== null,
+  const value = {...d, telemetry_contract:d.telemetry_contract===1 ? 1:0, identity_status:valid ? 'resolved':'unresolved', is_online:online, rx_power:rx, rx_available:rx !== null,
     telemetry_freshness:!fresh && Number.isFinite(at) ? 'stale':d.telemetry_freshness};
   const presentation = onuPresentation(value);
-  const quality = online === false ? 'offline':online === null || rx === null ? 'unknown':rx < -27 ? 'critical':rx < -24 ? 'warning':'good';
+  const quality = presentation.online === false ? 'offline':presentation.online === null || rx === null ? 'unknown':rx < -27 ? 'critical':rx < -24 ? 'warning':'good';
   const sensor = field => online === true && d.telemetry_source === 'snmp_point' ? finite(d[field]):null;
   return {...presentation, quality, identityValid:valid, sourceLabel:d.telemetry_source === 'snmp_point' ? 'Pembacaan langsung'
     :d.telemetry_source === 'snapshot' ? 'Data tersimpan':'Data belum tersedia',message:messages[d.probe_reason] || null,

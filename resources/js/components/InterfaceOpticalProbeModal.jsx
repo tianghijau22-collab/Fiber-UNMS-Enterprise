@@ -1,4 +1,4 @@
-import { onuPresentation } from '../lib/onuTelemetry.js';
+import { onuPresentation, opticalDisplaySummary } from '../lib/onuTelemetry.js';
 import { OnuStatus } from './OnuTelemetry.jsx';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -153,13 +153,13 @@ export default function InterfaceOpticalProbeModal({
       if (qualityFilter === 'ONLINE') return onuPresentation(item).online === true;
       if (qualityFilter === 'OFFLINE') return onuPresentation(item).online === false;
       if (qualityFilter === 'WARNING_CRITICAL') {
-        return item.is_online && (item.attenuation_quality === 'WARNING' || item.attenuation_quality === 'CRITICAL');
+        return onuPresentation(item).online === true && (item.attenuation_quality === 'WARNING' || item.attenuation_quality === 'CRITICAL');
       }
       return true;
     });
   }, [probeResult, tableSearch, qualityFilter]);
 
-  const summary = probeResult?.summary;
+  const summary = probeResult?.summary ? {...probeResult.summary,...opticalDisplaySummary(probeResult.data || [],probeResult.summary.total_onus || 0)} : null;
   const currentOltObj = olts.find((o) => String(o.id) === String(selectedOlt));
   const oltDisplayName = currentOltObj ? currentOltObj.name : (selectedOlt === 'all' ? 'OLT belum dipilih' : selectedOlt);
 

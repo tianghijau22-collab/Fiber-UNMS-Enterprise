@@ -247,7 +247,7 @@ export function OpticalPowerContent({onu, activeOlt, onClose, opticalData, loadi
                   isWarning ? 'text-amber-600 dark:text-amber-400' :
                   'text-rose-600 dark:text-rose-400'
                 }`}>
-                  {isOffline ? 'OFFLINE' : (rxVal !== null ? rxVal.toFixed(2) : 'N/A')}
+                  {rxVal !== null ? rxVal.toFixed(2) : 'N/A'}
                 </span>
                 {rxVal !== null && (
                   <span className="text-sm font-bold font-mono text-black/60 dark:text-white/70">dBm</span>
@@ -269,7 +269,7 @@ export function OpticalPowerContent({onu, activeOlt, onClose, opticalData, loadi
                   'text-rose-700 dark:text-rose-400'
                 }>
                   {isUnknown ? (isOnline ? 'Online · redaman N/A' : presentation.label) : isOffline
-                    ? 'Offline terverifikasi; penyebab belum dipastikan'
+                    ? (presentation.hardwareOnline === false ? 'Offline terverifikasi; penyebab belum dipastikan' : 'Offline · redaman N/A')
                     : isGood
                       ? 'Kualitas Sinyal Sangat Baik (Optimal)'
                       : isWarning
@@ -449,7 +449,9 @@ export function OpticalPowerContent({onu, activeOlt, onClose, opticalData, loadi
               {isUnknown
                 ? 'Status atau redaman belum terverifikasi. Ulangi pembacaan dan periksa koneksi OLT sebelum menyimpulkan gangguan pelanggan.'
                 : isOffline
-                  ? 'Status hardware menunjukkan ONU Offline. Penyebab belum dipastikan; periksa daya dan jalur optik pelanggan.'
+                  ? (presentation.hardwareOnline === false
+                    ? 'Status hardware menunjukkan ONU Offline. Penyebab belum dipastikan; periksa daya dan jalur optik pelanggan.'
+                    : 'Redaman N/A. Status tampilan Offline sesuai aturan monitoring. Ulangi pembacaan untuk memeriksa data terbaru.')
                   : isGood
                     ? 'Redaman terukur berada pada kisaran baik. Pengukuran ini tidak membuktikan kualitas trafik atau packet loss.'
                     : isWarning

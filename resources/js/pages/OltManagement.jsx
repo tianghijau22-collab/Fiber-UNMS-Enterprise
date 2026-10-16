@@ -2816,7 +2816,7 @@ export default function OltManagement() {
               </div>
             </div>
 
-            <p className="text-xs text-slate-500">Belum terverifikasi: {opticalStats.unknown} ONU · Online tanpa pengukuran Rx: {opticalStats.rxMissing} ONU</p>
+            <p className="text-xs text-slate-500">Belum terverifikasi: {opticalStats.unknown} ONU · Offline karena N/A: {opticalStats.offlineByRx} ONU</p>
             {/* 5 Clickable Distribution Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* 1. Sangat Baik */}
@@ -3411,7 +3411,7 @@ export default function OltManagement() {
                       { id: 'online', label: 'Online' },
                       { id: 'los', label: 'Offline / LOS' },
                       { id: 'unknown', label: 'Belum terverifikasi' },
-                      { id: 'rx_missing', label: 'Online · Rx belum tersedia' },
+                      { id: 'rx_missing', label: 'Offline karena N/A' },
                       { id: 'excellent', label: '> -19 dBm (Prima)' },
                       { id: 'good', label: '-19 s/d -23 dBm (Normal)' },
                       { id: 'warning', label: '-23 s/d -27 dBm (Peringatan)' },
