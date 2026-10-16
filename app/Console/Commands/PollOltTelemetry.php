@@ -342,7 +342,7 @@ class PollOltTelemetry extends Command
             $walkDuration = round((microtime(true) - $walkStart) * 1000, 1);
 
             // Hardware-only identity cache; previous snapshots cannot seed ONU IDs.
-            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() => FastOpticalProbeService::readIdentityTables($device)
+            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() => FastOpticalProbeService::readIdentityTables($device, $rawStates, ($parallelWalks['_acquisition']['reports']['states']['complete'] ?? false) === true)
             );
             $snMap = $snCache['entries'];
             $snObservedAt = $snCache['observed_at'];
@@ -591,7 +591,7 @@ class PollOltTelemetry extends Command
             $walkDuration = round((microtime(true) - $walkStart) * 1000, 1);
 
             // Hardware-only identity cache; previous snapshots cannot seed ONU IDs.
-            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() => FastOpticalProbeService::readIdentityTables($device)
+            $snCache = ZteOnuIdentityMap::remember((int)$device->id, count($rawStates), fn() => FastOpticalProbeService::readIdentityTables($device, $rawStates, ($parallelWalks['_acquisition']['reports']['states']['complete'] ?? false) === true)
             );
             $snMap = $snCache['entries'];
             $snObservedAt = $snCache['observed_at'];

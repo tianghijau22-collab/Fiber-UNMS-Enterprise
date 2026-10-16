@@ -114,8 +114,59 @@ class FastOpticalProbeService
         Cache::put('olt_walk_health_v1_'.$olt->id,array_diff_key($batch,['tables'=>true]),1800);
     }
 
-    public static function readIdentityTables(OltDevice $olt): array
+
+    /** Interleave PON chunks and rotate the first PON across cycles. Topology is never identity evidence. */
+    private static function pointQueue(OltDevice $olt,array $groups,string $purpose,float $budget,bool $walk=false): array
     {
+        $started=microtime(true);
+        ksort($groups,SORT_NUMERIC);$ports=array_keys($groups);$count=count($ports);$requests=[];
+        if($count) {
+            $key='olt_point_cursor_v1_'.$olt->id.'_'.$purpose;
+            $offset=((int)Cache::get($key,0))%$count;Cache::put($key,($offset+1)%$count,3600);
+            $ports=array_merge(array_slice($ports,$offset),array_slice($ports,0,$offset));
+            $chunks=[];foreach($ports as $port)$chunks[$port]=array_chunk(array_values(array_unique($groups[$port])),$walk?1:24);
+            do {
+                $more=false;
+                foreach($ports as $port)if($chunks[$port]){$requests['p'.$port.'_'.count($requests)]=array_shift($chunks[$port]);$more=true;}
+            } while($more);
+        }
+        $runner=app(SnmpWalkRunner::class);
+        $b=$walk?$runner->walkQueued($olt,$requests,$budget):$runner->getQueued($olt,$requests,$budget);
+        $failed=[];foreach($b['reports'] as $key=>$report)if(($report['complete'] ?? false)!==true && isset($requests[$key]))$failed[$key]=$requests[$key];
+        $left=$budget-(microtime(true)-$started);
+        if($failed && $left>=0.2) {
+            // One retry shares the original deadline; never retry successful PON chunks.
+            $retry=$walk?$runner->walkQueued($olt,$failed,$left):$runner->getQueued($olt,$failed,$left);
+            $b['initial_reports']=$b['reports'];
+            foreach($retry['tables'] as $key=>$table)$b['tables'][$key]=array_replace($b['tables'][$key] ?? [],$table);
+            $b['reports']=array_replace($b['reports'],$retry['reports']);
+            $b['retry_reports']=$retry['reports'];
+        }
+        $rows=[];foreach($b['tables'] as $table)$rows=array_replace($rows,$table);
+        $b['finished_at']=OnuTelemetrySample::timestamp();$b['duration_ms']=round((microtime(true)-$started)*1000,1);
+        $b['rows']=$rows;$b['complete']=$requests!==[] && count($b['reports'])===count($requests)
+            && count(array_filter($b['reports'],fn($r)=>($r['complete'] ?? false)!==true))===0;
+        return $b;
+    }
+
+    /** Point identity reads are scoped by a complete, current hardware state table. */
+    public static function readIdentityTables(OltDevice $olt,array $states=[],bool $scopeComplete=false): array
+    {
+        $stateRoot='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$groups=[];
+        if($scopeComplete)foreach($states as $oid=>$unused) {
+            if(preg_match('/^'.preg_quote($stateRoot,'/').'\.([0-9]+)\.([0-9]+)$/',$oid,$m)
+                && ZteOnuIdentityMap::portFromIfIndex((int)$m[1])!==null && (int)$m[2]>0 && (int)$m[2]<=65535) {
+                $groups[$m[1]][]=ZteOnuIdentityMap::PRIMARY.'.'.$m[1];
+                $groups[$m[1]][]=ZteOnuIdentityMap::SECONDARY.'.'.$m[1];
+            }
+        }
+        if($groups) {
+            $b=self::pointQueue($olt,$groups,'identity',35,true);$rows=$b['rows'];unset($b['rows'],$b['tables']);
+            $b['strategy']='pon_identity_walk';self::recordWalk($olt,$b);
+            return ['sn1'=>array_filter($rows,fn($oid)=>str_starts_with($oid,ZteOnuIdentityMap::PRIMARY.'.'),ARRAY_FILTER_USE_KEY),
+                'sn2'=>array_filter($rows,fn($oid)=>str_starts_with($oid,ZteOnuIdentityMap::SECONDARY.'.'),ARRAY_FILTER_USE_KEY),'_complete'=>$b['complete']];
+        }
+        // Incomplete state cannot establish a complete point-read identity scope.
         $b=app(SnmpWalkRunner::class)->walk($olt,['sn1'=>ZteOnuIdentityMap::PRIMARY,'sn2'=>ZteOnuIdentityMap::SECONDARY]);
         self::recordWalk($olt,$b);
         return $b['tables']+['_complete'=>count($b['reports'])===2 && count(array_filter($b['reports'],fn($r)=>$r['complete']))===2];
@@ -124,43 +175,41 @@ class FastOpticalProbeService
     public static function readStateRxTables(OltDevice $olt,?int $maxRepetitions=null,?int $timeoutSec=null): array
     {
         $state='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$rx='1.3.6.1.4.1.3902.1012.3.50.12.1.1.10';
-        $runner=app(SnmpWalkRunner::class);
-        $b=$runner->walk($olt,['states'=>$state,'rx'=>$rx],$maxRepetitions ?? 10,$timeoutSec ?? 5,2);
-        $online=[];
-        foreach($b['tables']['states'] ?? [] as $oid=>$value) {
+        $b=app(SnmpWalkRunner::class)->walk($olt,['states'=>$state],$maxRepetitions ?? 10,$timeoutSec ?? 5,2);
+        $states=$b['tables']['states'] ?? [];$stateComplete=($b['reports']['states']['complete'] ?? false)===true;
+        $pointStart=microtime(true);$stateRecovery=null;
+        if(!$stateComplete) {
+            // Old tuples select requests only. Only newly returned hardware values may update a sample.
+            $snapshot=$olt->last_telemetry_snapshot ?? [];$groups=[];
+            foreach(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []) as $row) {
+                $index=ZteOnuIdentityMap::ifIndexFromPort((string)($row['port'] ?? ''));$id=(string)($row['onu_id'] ?? '');
+                if($index!==null && ctype_digit($id) && (int)$id>0 && (int)$id<=65535 && !isset($states[$state.'.'.$index.'.'.(int)$id]))
+                    $groups[$index][]=$state.'.'.$index.'.'.(int)$id;
+            }
+            if($groups) {
+                $part=self::pointQueue($olt,$groups,'states',5);$states=array_replace($states,$part['rows']);
+                unset($part['rows'],$part['tables']);$stateRecovery=$part;
+            }
+        }
+        $groups=[];$online=0;
+        foreach($states as $oid=>$value) {
             if(preg_match('/^'.preg_quote($state,'/').'\.([0-9]+)\.([0-9]+)$/',$oid,$m)
-                && trim((string)SnmpConnector::parseValue((string)$value))==='3')$online[$m[1].'_'.$m[2]]=true;
-        }
-        $missing=function(array $rows)use($online,$rx): int {
-            $seen=[];foreach($rows as $oid=>$value)if(preg_match('/^'.preg_quote($rx,'/').'\.([0-9]+)\.([0-9]+)\.1$/',$oid,$m))$seen[$m[1].'_'.$m[2]]=true;
-            return count(array_diff_key($online,$seen));
-        };
-        $before=$missing($b['tables']['rx'] ?? []);$retry=null;
-        if($online && (($b['reports']['rx']['complete'] ?? false)!==true || $before>max(3,(int)ceil(count($online)*0.05)))) {
-            // Recover missing PONs once, not the already received prefix of the entire table.
-            $present=[];foreach($b['tables']['rx'] ?? [] as $oid=>$value)if(preg_match('/^'.preg_quote($rx,'/').'\.([0-9]+)\.([0-9]+)\.1$/',$oid,$m))$present[$m[1].'_'.$m[2]]=true;
-            $ports=[];foreach(array_diff_key($online,$present) as $key=>$unused) {
-                $index=(int)explode('_',$key)[0];
-                if(ZteOnuIdentityMap::portFromIfIndex($index)!==null)$ports['rx_'.$index]=$rx.'.'.$index;
+                && ZteOnuIdentityMap::portFromIfIndex((int)$m[1])!==null && (int)$m[2]>0 && (int)$m[2]<=65535
+                && trim((string)SnmpConnector::parseValue((string)$value))==='3') {
+                $groups[$m[1]][]=$rx.'.'.$m[1].'.'.$m[2].'.1';$online++;
             }
-            $retryStart=microtime(true);$retry=['started_at'=>OnuTelemetrySample::timestamp(),'reports'=>[],'requested_ports'=>count($ports),'complete'=>true];
-            $completed=0;
-            foreach(array_chunk($ports,4,true) as $chunk) {
-                $left=20-(microtime(true)-$retryStart);if($left<0.2)break;
-                $part=$runner->walk($olt,$chunk,5,2,0,$left);
-                foreach($part['tables'] as $rows)$b['tables']['rx']=array_replace($b['tables']['rx'] ?? [],$rows);
-                $retry['reports']+=$part['reports'];$completed+=count($part['reports']);
-            }
-            $retry['complete']=$completed===count($ports) && count(array_filter($retry['reports'],fn($r)=>($r['complete'] ?? false)!==true))===0;
-            $retry['finished_at']=OnuTelemetrySample::timestamp();$retry['duration_ms']=round((microtime(true)-$retryStart)*1000,1);
         }
-        $after=$missing($b['tables']['rx'] ?? []);
-        $b['coverage']=['online_state_rows'=>count($online),'missing_rx_before'=>$before,'missing_rx_after'=>$after,'retried'=>$retry!==null];
-        $b['retry']=$retry;
-        $b['finished_at']=OnuTelemetrySample::timestamp();
+        $point=self::pointQueue($olt,$groups,'rx',max(0.1,20-(microtime(true)-$pointStart)));
+        $rxRows=$point['rows'];$missing=0;
+        foreach($groups as $oids)foreach($oids as $oid)if(!array_key_exists($oid,$rxRows))$missing++;
+        $b['tables']=['states'=>$states,'rx'=>$rxRows];
+        $b['reports']['rx']=['complete'=>$online===0 || $point['complete'],'reason'=>$online===0 || $point['complete']?null:'incomplete_point_reads','rows'=>count($rxRows)];
+        unset($point['rows'],$point['tables']);$b['point_reads']=$point;$b['state_recovery']=$stateRecovery;
+        $b['strategy']='state_walk_exact_rx_get';
+        $b['coverage']=['online_state_rows'=>$online,'missing_rx_before'=>$online,'missing_rx_after'=>$missing,'retried'=>false];
+        $b['retry']=null;$b['finished_at']=OnuTelemetrySample::timestamp();
         $b['duration_ms']=round((microtime(true)-OnuTelemetrySample::epoch($b['started_at']))*1000,1);
-        $b['complete']=($b['reports']['states']['complete'] ?? false) && $after===0
-            && (($b['reports']['rx']['complete'] ?? false) || ($retry['complete'] ?? false));
+        $b['complete']=$stateComplete && ($online===0 || $point['complete']) && $missing===0;
         self::recordWalk($olt,$b);
         return $b['tables']+['_acquisition'=>array_diff_key($b,['tables'=>true])];
     }

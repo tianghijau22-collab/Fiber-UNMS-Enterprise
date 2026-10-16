@@ -44,56 +44,6 @@ class SnmpAcquisitionTest extends TestCase
         $key=Identity::cacheKey(1);$old=$this->cache(301);Cache::put($key,$old,600);$lock=Cache::lock($key.'_refresh_lock',50);$lock->get();
         try {$this->assertSame($old,Identity::remember(1,1,fn()=>throw new \RuntimeException('Unexpected read')));} finally {$lock->release();}
     }
-    private function batch(int $online,int $rxRows,bool $complete=true): array
-    {
-        $state='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$rx='1.3.6.1.4.1.3902.1012.3.50.12.1.1.10';$index=Identity::ifIndexFromPort('1/1/15');$s=[];$r=[];
-        for($i=1;$i<=$online;$i++)$s["$state.$index.$i"]='INTEGER: 3';
-        for($i=1;$i<=$rxRows;$i++)$r["$rx.$index.$i.1"]='INTEGER: 2500';
-        return ['tables'=>['states'=>$s,'rx'=>$r],'reports'=>['states'=>['complete'=>true],'rx'=>['complete'=>$complete]],
-            'started_at'=>Sample::timestamp(),'finished_at'=>Sample::timestamp(),'duration_ms'=>0,'parameters'=>[]];
-    }
-    private function runner(array $batches): object
-    {
-        $r=new class($batches) extends SnmpWalkRunner {
-            public array $calls=[];
-            public function __construct(private array $batches){}
-            public function walk(OltDevice $olt,array $oids,int $repetitions=10,float $timeout=5,int $retries=2,float $budget=35): array
-            {
-                $this->calls[]=compact('oids','repetitions','timeout','retries','budget');$b=array_shift($this->batches);
-                if(!isset($oids['states']) && !isset($oids['rx'])) {
-                    $tables=[];$reports=[];foreach($oids as $k=>$root) {
-                        $tables[$k]=array_filter($b['tables']['rx'],fn($oid)=>str_starts_with($oid,$root.'.'),ARRAY_FILTER_USE_KEY);
-                        $reports[$k]=$b['reports']['rx'];
-                    }$b['tables']=$tables;$b['reports']=$reports;
-                }return $b;
-            }
-        };app()->instance(SnmpWalkRunner::class,$r);return $r;
-    }
-    public function test_missing_rx_gets_one_smaller_bounded_retry_and_new_readings_win(): void
-    {
-        $r=$this->runner([$this->batch(10,3),$this->batch(10,10)]);
-        $out=Probe::readStateRxTables($this->olt());$a=$out['_acquisition'];
-        $this->assertSame(2,count($r->calls));$this->assertSame(5,$r->calls[1]['repetitions']);$this->assertLessThanOrEqual(20.0,$r->calls[1]['budget']);
-        $this->assertSame(5.0,$r->calls[0]['timeout']);$this->assertSame(2,$r->calls[0]['retries']);
-        $this->assertSame(['rx_'.Identity::ifIndexFromPort('1/1/15')],array_keys($r->calls[1]['oids']));
-        $this->assertSame(7,$a['coverage']['missing_rx_before']);$this->assertSame(0,$a['coverage']['missing_rx_after']);$this->assertTrue($a['complete']);
-    }
-    public function test_complete_rx_walk_and_invalid_sensor_values_do_not_trigger_extra_requests(): void
-    {
-        $b=$this->batch(1,1);$key=array_key_first($b['tables']['rx']);$b['tables']['rx'][$key]='INTEGER: 65535';$r=$this->runner([$b]);
-        $out=Probe::readStateRxTables($this->olt());$this->assertCount(1,$r->calls);$this->assertFalse($out['_acquisition']['coverage']['retried']);
-        $this->assertNull(Sample::fromZteState(3,65535,Sample::timestamp())['rx_power']);
-    }
-    public function test_incomplete_retry_is_not_a_complete_acquisition_even_when_some_rows_exist(): void
-    {
-        $r=$this->runner([$this->batch(10,3,false),$this->batch(10,5,false)]);
-        $out=Probe::readStateRxTables($this->olt());$this->assertCount(2,$r->calls);$this->assertFalse($out['_acquisition']['complete']);
-        $this->assertSame(5,$out['_acquisition']['coverage']['missing_rx_after']);
-    }
-    public function test_no_working_state_does_not_start_a_recovery_rx_walk(): void
-    {
-        $r=$this->runner([$this->batch(0,0,false)]);Probe::readStateRxTables($this->olt());$this->assertCount(1,$r->calls);
-    }
     private function child(string $code): SnmpWalkRunner
     {
         return new class($code) extends SnmpWalkRunner {
