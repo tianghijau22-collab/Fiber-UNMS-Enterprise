@@ -1,0 +1,17 @@
+# Selected-ONU optical diagnosis — stage 1D-E
+
+The optical-power endpoint uses a read-only ZTE diagnostic service instead of the legacy simulated optical driver. An explicit device_id selects that OLT; unknown/inactive/unsupported devices cannot fall back to another device. Legacy scanner callers without device_id may select only one active live ZTE device whose fresh hardware serial identity resolves uniquely. Missing, expired or ambiguous ownership returns 422.
+
+The current hardware inventory supplies the PON/ONU tuple. Client hints must agree with it; a legacy port-only hint can obtain its ONU ID from that same hardware tuple. Without inventory, a full valid hint can select a point query, but no state or power is exposed until hardware serial confirmation. Conflicting inventory locations are blocked.
+
+One bounded exact GET requests both serial columns, working state and ONU Rx for the same tuple. A complete response must confirm the requested serial without a contradictory serial in the other column. A different or unconfirmed serial yields Unknown, never a snapshot/database fallback. A transport/incomplete response may show an existing matching snapshot, retaining its original identity/sample timestamps and freshness.
+
+Hardware state determines Online/Offline/Unknown. Missing Rx, sensor sentinels and weak measured power do not establish Offline or LOS. The endpoint does not infer Dying Gasp or a physical failure cause. Tx, OLT receive power, voltage, bias, temperature and distance remain null until independently supported measurements are implemented; the old offsets/defaults are removed. Package/customer details come only from a unique live registration owned by the selected OLT; ambiguous, deleted, foreign and conflicting ownership is excluded.
+
+The web modal displays source, acquisition time and unresolved conditions. It does not fill telemetry from row props or invent a gauge needle for missing Rx. It reevaluates sample and identity validity while open, aborts superseded requests and rejects responses for another OLT/serial. Recommendations distinguish weak signal from verified Offline and do not claim packet-loss quality from one optical reading.
+
+This GET performs no snapshot/customer writes, topology changes or cache refresh. SNMP point work is bounded to six seconds through the existing runner. Authentication and authorization are unchanged. Polling, VPN and alarm workers are unchanged and do not require a restart for this HTTP-only release.
+
+Validation includes selected/automatic OLT selection, duplicate/expired identity, tuple hints, serial mismatch, unknown/offline state, Online without Rx, original fallback timestamps, customer ownership/ambiguity/deletion and no writes. Frontend tests and six full-content render scenarios check missing sensors, weak signal, stale data, neutral Unknown and absence of fabricated measurements. Candidate and deployed read-only VPS checks compare the original eight customers, ODP/GIS and writer metadata.
+
+Scope: deployed Linux ZTE SNMP v2c and web modal. Other vendors/simulation are explicitly unavailable here. The legacy driver method remains for separate review if reused elsewhere. Existing APK screens still have their own cached-Rx and LOS presentation logic and require a separate client update; backend compatibility does not validate those displays. Remaining bulk-polling timeouts, mapping gaps, alarm ordering and long-term performance remain separate.
