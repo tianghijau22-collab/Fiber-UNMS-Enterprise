@@ -13,7 +13,7 @@ const messages = {
   identity_unresolved: 'Interface dan nomor ONU belum terverifikasi.',
   point_incomplete: 'Pembacaan langsung belum lengkap. Periksa sumber dan waktu data tersimpan.',
   state_unavailable: 'Identitas terkonfirmasi, tetapi status ONU belum tersedia.',
-  rx_unavailable: 'ONU Online, tetapi redaman belum tersedia.',
+  rx_unavailable: 'ONU Online, redaman N/A.',
 };
 export function opticalDiagnostic(data, now = Date.now()) {
   const d = data || {}, at = Date.parse(d.sampled_at);

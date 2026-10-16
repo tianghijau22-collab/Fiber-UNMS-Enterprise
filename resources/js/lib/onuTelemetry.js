@@ -52,7 +52,7 @@ export function onuPresentation(value = {}) {
     : online === true ? 'text-emerald-600 dark:text-emerald-400' : neutralTelemetryColor;
   const label = online === true ? 'Online' : online === false ? 'Offline'
     : value.telemetry_freshness === 'stale' ? 'Data lama' : 'Belum terverifikasi';
-  const rxLabel = online === false ? 'Offline' : rx === null ? 'Belum tersedia' : `${rx.toFixed(2)} dBm`;
+  const rxLabel = online === false ? 'Offline' : rx === null ? 'N/A' : `${rx.toFixed(2)} dBm`;
   const rxColor = rx === null ? neutralTelemetryColor : rx >= -25
     ? 'text-emerald-600 dark:text-emerald-400' : rx >= -28
       ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400';

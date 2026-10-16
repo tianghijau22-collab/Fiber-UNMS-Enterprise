@@ -11,7 +11,7 @@ test('zero/null/old API values do not imply an operational status', () => {
 test('working without optical data remains Online and does not display zero', () => {
   for (const rx of [null, '', NaN]) {
     const out = onuPresentation({ ...known, rx_power: rx, rx_available: false });
-    assert.equal(out.label, 'Online'); assert.equal(out.rxLabel, 'Belum tersedia');
+    assert.equal(out.label, 'Online'); assert.equal(out.rxLabel, 'N/A');
   }
   assert.equal(onuPresentation({ ...known, rx_power: -36 }).online, true);
   assert.equal(onuPresentation(known).rxLabel, '-26.20 dBm');

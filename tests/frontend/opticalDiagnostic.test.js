@@ -6,7 +6,7 @@ const data={telemetry_contract:1,identity_status:'resolved',identity_observed_at
   gpon_interface:'gpon-olt_1/1/16',is_online:true,rx_available:true,rx_power:-26,telemetry_source:'snmp_point',telemetry_freshness:'fresh'};
 test('working without Rx remains Online and never shows critical or offline',()=>{
  const d=opticalDiagnostic({...data,rx_power:null,rx_available:false,probe_reason:'rx_unavailable'},now);
- assert.equal(d.label,'Online');assert.equal(d.rx,null);assert.equal(d.quality,'unknown');assert.match(d.message,/redaman belum tersedia/);
+ assert.equal(d.label,'Online');assert.equal(d.rx,null);assert.equal(d.quality,'unknown');assert.match(d.message,/redaman N\/A/);
 });
 test('weak signal is critical quality but still Online',()=>{
  const d=opticalDiagnostic({...data,rx_power:-36},now);

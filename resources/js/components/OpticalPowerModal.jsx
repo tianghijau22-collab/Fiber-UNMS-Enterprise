@@ -247,7 +247,7 @@ export function OpticalPowerContent({onu, activeOlt, onClose, opticalData, loadi
                   isWarning ? 'text-amber-600 dark:text-amber-400' :
                   'text-rose-600 dark:text-rose-400'
                 }`}>
-                  {isOffline ? 'OFFLINE' : (rxVal !== null ? rxVal.toFixed(2) : 'Belum tersedia')}
+                  {isOffline ? 'OFFLINE' : (rxVal !== null ? rxVal.toFixed(2) : 'N/A')}
                 </span>
                 {rxVal !== null && (
                   <span className="text-sm font-bold font-mono text-black/60 dark:text-white/70">dBm</span>
@@ -268,7 +268,7 @@ export function OpticalPowerContent({onu, activeOlt, onClose, opticalData, loadi
                   isWarning ? 'text-amber-700 dark:text-amber-400' :
                   'text-rose-700 dark:text-rose-400'
                 }>
-                  {isUnknown ? (isOnline ? 'Online · redaman belum tersedia' : presentation.label) : isOffline
+                  {isUnknown ? (isOnline ? 'Online · redaman N/A' : presentation.label) : isOffline
                     ? 'Offline terverifikasi; penyebab belum dipastikan'
                     : isGood
                       ? 'Kualitas Sinyal Sangat Baik (Optimal)'

@@ -173,7 +173,7 @@ class OnuTelemetryView
         $powers = array_values(array_map(fn($v) => $v['rx_power'], array_filter($views, fn($v) => $v['is_online'] === true && $v['rx_available'])));
         $best = $powers ? max($powers) : null; $worst = $powers ? min($powers) : null;
         $totalLoss = $total > 0 && $down === $total && $unknown === 0;
-        $range = !$total ? 'Belum ada pelanggan' : ($totalLoss ? 'Semua pelanggan Offline' : (!$powers ? 'Redaman belum tersedia' : ($best === $worst ? "$best dBm" : "$best s/d $worst dBm")));
+        $range = !$total ? 'Belum ada pelanggan' : ($totalLoss ? 'Semua pelanggan Offline' : (!$powers ? 'N/A' : ($best === $worst ? "$best dBm" : "$best s/d $worst dBm")));
         if ($down && !$totalLoss) $range .= ' (Ada pelanggan Offline)';
         if ($unknown) $range .= " ($unknown belum terverifikasi)";
         $signal = !$total ? 'no_customer' : ($totalLoss ? 'critical' : ($unknown || (!$powers && !$down) ? 'unknown' : ($down || $worst < -28 ? 'critical' : ($worst < -25 ? 'warning' : 'good'))));

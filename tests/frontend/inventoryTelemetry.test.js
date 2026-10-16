@@ -5,7 +5,7 @@ const now=Date.parse('2026-10-15T14:00:00Z');
 const row={telemetry_sample_version:2,sample_observed_at:'2026-10-15T13:59:50Z',state_observed_at:'2026-10-15T13:59:50Z',rx_observed_at:'2026-10-15T13:59:50Z',identity_source:'snmp_serial_table_v2',identity_observed_at:'2026-10-15T13:59:50Z',port:'gpon-olt_1/1/16',onu_id:'1',is_online:true,rx_available:true,rx_power:-26.2};
 test('inventory retains online without Rx and excludes it from LOS and optical quality filters',()=>{
  const value={...row,rx_power:null,rx_available:false,rx_observed_at:null};
- const out=onuPresentation(inventoryTelemetry(value,now));assert.equal(out.label,'Online');assert.equal(out.rxLabel,'Belum tersedia');
+ const out=onuPresentation(inventoryTelemetry(value,now));assert.equal(out.label,'Online');assert.equal(out.rxLabel,'N/A');
  assert.equal(inventoryMatchesFilter(value,'online',now),true);assert.equal(inventoryMatchesFilter(value,'los',now),false);
  assert.equal(inventoryMatchesFilter(value,'warning',now),false);assert.equal(inventoryMatchesFilter(value,'rx_missing',now),true);
 });
