@@ -46,13 +46,14 @@ class OnuOpticalDiagnostic
             'state'=>"1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.$index.$id",'rx'=>"1.3.6.1.4.1.3902.1012.3.50.12.1.1.10.$index.$id.1"];
         $at=OnuTelemetrySample::timestamp();
         try {$batch=app(SnmpWalkRunner::class)->getQueued($device,['onu'=>array_values($oids)],6);}
+        catch(OltReadBusy $e){$batch=['coordination_reason'=>$e->reason];}
         catch(\Throwable){$batch=[];}
         if(($batch['reports']['onu']['complete'] ?? false)!==true) {
             // Stored data keep their own time and freshness; a failed probe cannot refresh them.
             $fallback=$view['identity_status']==='resolved' && $view['gpon_interface']===ZteOnuIdentityMap::portFromIfIndex($index)
                 && (int)$view['onu_id']===$id ? $view:$empty;
             $fallback['identity_observed_at']=$fallback['identity_status']==='resolved' ? ($candidate['identity_observed_at'] ?? null):null;
-            return $finish($fallback,'partial','point_incomplete',$at);
+            return $finish($fallback,isset($batch['coordination_reason'])?'busy':'partial',$batch['coordination_reason'] ?? 'point_incomplete',$at);
         }
         $values=$batch['tables']['onu'] ?? [];$confirmed=false;
         foreach(['sn1','sn2'] as $field) {

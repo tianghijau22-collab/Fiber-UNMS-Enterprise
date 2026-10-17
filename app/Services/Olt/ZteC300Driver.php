@@ -43,6 +43,12 @@ class ZteC300Driver extends ZteC320Driver
     }
     public function getDeviceInfo(): array
     {
+        if(!$this->isLive)return $this->getDeviceInfoUnlocked();
+        return OltReadLease::forTarget($this->ip,$this->port,fn()=>$this->getDeviceInfoUnlocked());
+    }
+
+    private function getDeviceInfoUnlocked(): array
+    {
         if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 $sysDescr  = $this->snmp->get('1.3.6.1.2.1.1.1.0');
@@ -86,6 +92,12 @@ class ZteC300Driver extends ZteC320Driver
     }
 
     public function getChassisCards(): array
+    {
+        if(!$this->isLive)return $this->getChassisCardsUnlocked();
+        return OltReadLease::forTarget($this->ip,$this->port,fn()=>$this->getChassisCardsUnlocked());
+    }
+
+    private function getChassisCardsUnlocked(): array
     {
         if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {

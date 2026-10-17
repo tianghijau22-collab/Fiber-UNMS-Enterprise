@@ -33,8 +33,9 @@ class OpticalDiagnosticTest extends TestCase
             DB::table('network_nodes')->insert(['id'=>$id,'name'=>'Fixture ODP '.$id,'olt_device_id'=>$id]);$this->registration($id,$id);
         }
         $this->runner=new class extends SnmpWalkRunner {
-            public array $calls=[];public bool $complete=true;public string $serial='TEST00000001';public ?string $secondary=null;public int $state=3;public ?int $rx=2500;
+            public array $calls=[];public bool $complete=true;public bool $busy=false;public string $serial='TEST00000001';public ?string $secondary=null;public int $state=3;public ?int $rx=2500;
             public function getQueued(OltDevice $olt,array $requests,float $budget=20): array {
+                if($this->busy)throw new \App\Services\Olt\OltReadBusy;
                 $this->calls[]=['olt'=>(int)$olt->id,'requests'=>$requests,'budget'=>$budget];$values=[];
                 foreach($requests['onu'] as $oid) {
                     if(str_starts_with($oid,Identity::PRIMARY.'.'))$values[$oid]=$this->serial;
@@ -149,6 +150,16 @@ class OpticalDiagnosticTest extends TestCase
     }
     public function test_diagnostic_get_does_not_write_customer_or_snapshot_state(): void {
         DB::enableQueryLog();DB::flushQueryLog();$this->endpoint();
+        $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|insert|delete)\b/i',$q['query']))));
+    }
+
+    public function test_busy_olt_keeps_stored_measurement_time_and_does_not_claim_a_live_result(): void {
+        $this->runner->busy=true;$row=$this->row(60);
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode(['onu_list'=>[$row]])]);
+        DB::enableQueryLog();DB::flushQueryLog();$d=$this->read();
+        $this->assertSame('busy',$d['probe_status']);$this->assertSame('olt_busy',$d['probe_reason']);
+        $this->assertSame('snapshot',$d['_source']);$this->assertSame($row['sample_observed_at'],$d['sampled_at']);
+        $this->assertTrue($d['is_online']);$this->assertSame(-26.0,$d['rx_power']);$this->assertSame([],$this->runner->calls);
         $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|insert|delete)\b/i',$q['query']))));
     }
 }
