@@ -85,21 +85,7 @@ class OltController extends Controller
         }
     }
 
-    private function withLiveRead(Request $request,callable $read,bool $snapshotAllowed=false)
-    {
-        $id=$request->input('device_id') ?: $request->query('device_id');
-        $device=$id ? OltDevice::find((int)$id):OltDevice::first();
-        $cached=$snapshotAllowed && !$request->boolean('fresh') && !$request->boolean('force') && !empty($device?->last_telemetry_snapshot);
-        if(!$device || $device->connection_mode!=='live' || $cached)return $read();
-        return \App\Services\Olt\OltReadLease::forDevice($device,$read);
-    }
-
     public function index(Request $request)
-    {
-        return $this->withLiveRead($request,fn()=>$this->indexUnlocked($request),true);
-    }
-
-    private function indexUnlocked(Request $request)
     {
         $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $vendor       = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
@@ -270,11 +256,6 @@ class OltController extends Controller
      */
     public function getPortOnus(Request $request)
     {
-        return $this->withLiveRead($request,fn()=>$this->getPortOnusUnlocked($request),true);
-    }
-
-    private function getPortOnusUnlocked(Request $request)
-    {
         $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $vendor   = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
         $deviceId = $request->input('device_id') ?: ($request->query('device_id') ?: null);
@@ -430,11 +411,6 @@ class OltController extends Controller
      * Sinkronisasi bertahap 1 Port PON ke database UNMS (untuk Progressive Batch Sync Wizard).
      */
     public function syncPort(Request $request)
-    {
-        return $this->withLiveRead($request,fn()=>$this->syncPortUnlocked($request),false);
-    }
-
-    private function syncPortUnlocked(Request $request)
     {
         $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $vendor   = $request->input('vendor') ?: 'zte-c300';

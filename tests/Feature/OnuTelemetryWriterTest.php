@@ -23,7 +23,7 @@ class OnuTelemetryWriterTest extends TestCase
         $this->assertSame('sqlite',config('database.default'));
         $this->assertSame(':memory:',config('database.connections.sqlite.database'));
         Http::fake();Http::preventStrayRequests();
-        Schema::create('olt_devices',function(Blueprint $t){$t->id();$t->string('name');$t->string('vendor_key');$t->string('connection_mode');$t->string('status');$t->string('ip_address')->default('192.0.2.111');$t->json('last_telemetry_snapshot')->nullable();$t->timestamps();});
+        Schema::create('olt_devices',function(Blueprint $t){$t->id();$t->string('name');$t->string('vendor_key');$t->string('connection_mode');$t->string('status');$t->json('last_telemetry_snapshot')->nullable();$t->timestamps();});
         Schema::create('customers',function(Blueprint $t){$t->id();$t->string('name');$t->string('customer_number')->nullable();$t->string('phone')->nullable();$t->softDeletes();});
         Schema::create('customer_services',function(Blueprint $t){$t->id();$t->integer('customer_id');$t->softDeletes();});
         Schema::create('network_nodes',function(Blueprint $t){$t->id();$t->string('name')->nullable();$t->string('code')->nullable();$t->string('olt_port_ref')->nullable();$t->integer('parent_node_id')->nullable();$t->integer('olt_device_id')->nullable();$t->softDeletes();});

@@ -42,10 +42,3 @@ test('late responses for another OLT or ONU cannot populate the current modal',(
  assert.equal(opticalResponseMatches(value,2,'TEST00000002'),false);
  assert.equal(opticalResponseMatches(null,2,'TEST00000001'),false);
 });
-
-test('busy OLT explains the stored fallback and retains its original observation time',()=>{
- const value={...data,probe_status:'busy',probe_reason:'olt_busy',telemetry_source:'snapshot'};
- const d=opticalDiagnostic(value,now);
- assert.match(d.message,/sedang dibaca/);assert.match(d.message,/waktu aslinya/);
- assert.equal(value.sampled_at,data.sampled_at);assert.equal(d.sourceLabel,'Data tersimpan');
-});

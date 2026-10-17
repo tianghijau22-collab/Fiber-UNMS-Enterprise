@@ -12,20 +12,10 @@ class SnmpWalkRunner
     /** Exact point reads, rolling four-worker queue; a slow job never holds a whole batch. */
     public function getQueued(OltDevice $olt,array $requests,float $budget=20): array
     {
-        return OltReadLease::forDevice($olt,fn()=>$this->getQueuedUnlocked($olt,$requests,$budget));
-    }
-
-    private function getQueuedUnlocked(OltDevice $olt,array $requests,float $budget=20): array
-    {
         return $this->requestQueued($olt,$requests,$budget,false);
     }
 
     public function walkQueued(OltDevice $olt,array $requests,float $budget=35): array
-    {
-        return OltReadLease::forDevice($olt,fn()=>$this->walkQueuedUnlocked($olt,$requests,$budget));
-    }
-
-    private function walkQueuedUnlocked(OltDevice $olt,array $requests,float $budget=35): array
     {
         return $this->requestQueued($olt,$requests,$budget,true);
     }
@@ -112,11 +102,6 @@ class SnmpWalkRunner
     }
 
     public function walk(OltDevice $olt,array $oids,int $repetitions=10,float $timeout=5,int $retries=2,float $budget=35): array
-    {
-        return OltReadLease::forDevice($olt,fn()=>$this->walkUnlocked($olt,$oids,$repetitions,$timeout,$retries,$budget));
-    }
-
-    private function walkUnlocked(OltDevice $olt,array $oids,int $repetitions=10,float $timeout=5,int $retries=2,float $budget=35): array
     {
         $started=OnuTelemetrySample::timestamp();$start=microtime(true);$budget=max(0.1,min(45,$budget));
         $repetitions=max(1,min(10,$repetitions));$timeout=max(0.2,min(5.0,$timeout));$retries=max(0,min(2,$retries));

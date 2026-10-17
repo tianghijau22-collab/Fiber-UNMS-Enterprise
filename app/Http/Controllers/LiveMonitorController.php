@@ -170,8 +170,6 @@ class LiveMonitorController extends Controller
                         'timestamp'   => now()->toIso8601String(),
                     ]
                 ]);
-            } catch (\App\Services\Olt\OltReadBusy $e) {
-                return $e->render($request);
             } catch (\Exception $e) {
                 // Fallback graceful
             }

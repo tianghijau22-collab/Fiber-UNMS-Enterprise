@@ -57,12 +57,6 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     public function getDeviceInfo(): array
     {
-        if(!$this->isLive)return $this->getDeviceInfoUnlocked();
-        return OltReadLease::forTarget($this->ip,$this->port,fn()=>$this->getDeviceInfoUnlocked());
-    }
-
-    private function getDeviceInfoUnlocked(): array
-    {
         if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {
                 $sysDescr  = $this->snmp->get('1.3.6.1.2.1.1.1.0');
@@ -110,12 +104,6 @@ class ZteC320Driver implements OltDeviceDriverInterface
     }
 
     public function getPonPorts(): array
-    {
-        if(!$this->isLive)return $this->getPonPortsUnlocked();
-        return OltReadLease::forTarget($this->ip,$this->port,fn()=>$this->getPonPortsUnlocked());
-    }
-
-    private function getPonPortsUnlocked(): array
     {
         if ($this->cachedPonPorts !== null) {
             return $this->cachedPonPorts;
@@ -190,12 +178,6 @@ class ZteC320Driver implements OltDeviceDriverInterface
     }
 
     public function getOnuList(): array
-    {
-        if(!$this->isLive)return $this->getOnuListUnlocked();
-        return OltReadLease::forTarget($this->ip,$this->port,fn()=>$this->getOnuListUnlocked());
-    }
-
-    private function getOnuListUnlocked(): array
     {
         $sampleStartedAt = OnuTelemetrySample::timestamp();
         if ($this->cachedOnuList !== null) {
@@ -357,12 +339,6 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     public function getOnuListByPort(string $portId): array
     {
-        if(!$this->isLive)return $this->getOnuListByPortUnlocked($portId);
-        return OltReadLease::forTarget($this->ip,$this->port,fn()=>$this->getOnuListByPortUnlocked($portId));
-    }
-
-    private function getOnuListByPortUnlocked(string $portId): array
-    {
         $sampleStartedAt = OnuTelemetrySample::timestamp();
         $ifIndex = ZteOnuIdentityMap::ifIndexFromPort($portId);
         if ($ifIndex === null) return [];
@@ -454,12 +430,6 @@ class ZteC320Driver implements OltDeviceDriverInterface
 
     public function getUnconfiguredOnus(): array
     {
-        if(!$this->isLive)return $this->getUnconfiguredOnusUnlocked();
-        return OltReadLease::forTarget($this->ip,$this->port,fn()=>$this->getUnconfiguredOnusUnlocked());
-    }
-
-    private function getUnconfiguredOnusUnlocked(): array
-    {
         if ($this->snmp && $this->isLive) {
             try {
                 $uncfgTable = $this->snmp->walk('1.3.6.1.4.1.3902.1012.3.50.11.3.1.1');
@@ -499,12 +469,6 @@ class ZteC320Driver implements OltDeviceDriverInterface
     }
 
     public function getOnuOpticalPower(string $serialNumber, ?string $port = null, ?int $onuId = null): array
-    {
-        if(!$this->isLive)return $this->getOnuOpticalPowerUnlocked($serialNumber,$port,$onuId);
-        return OltReadLease::forTarget($this->ip,$this->port,fn()=>$this->getOnuOpticalPowerUnlocked($serialNumber,$port,$onuId));
-    }
-
-    private function getOnuOpticalPowerUnlocked(string $serialNumber, ?string $port = null, ?int $onuId = null): array
     {
         if ($this->snmp && $this->isLive && $this->snmp->isReachable()) {
             try {

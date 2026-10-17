@@ -881,14 +881,6 @@ class CustomerController extends Controller
      */
     public function probeInterfaceOptical(Request $request)
     {
-        $id=$request->input('olt_id');
-        $olt=ctype_digit((string)$id) ? OltDevice::find((int)$id):null;
-        if(!$olt || $olt->connection_mode!=='live')return $this->probeInterfaceOpticalUnlocked($request);
-        return \App\Services\Olt\OltReadLease::forDevice($olt,fn()=>$this->probeInterfaceOpticalUnlocked($request));
-    }
-
-    private function probeInterfaceOpticalUnlocked(Request $request)
-    {
         $started=microtime(true);$at=\App\Services\Olt\OnuTelemetrySample::timestamp();
         $oltId=$request->input('olt_id');$interface=trim((string)$request->input('interface',''));
         $index=\App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort($interface);
