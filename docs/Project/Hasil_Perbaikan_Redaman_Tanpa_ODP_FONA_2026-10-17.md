@@ -83,3 +83,18 @@ Direktori privat: `/var/backups/fona/stage1dm-20261017T094144Z`.
 | system-configuration.tar.gz | 732 byte | `ccd8cbcd39fa406018259261e02ec1dca6c9b1bb7f350a5d0e32af5e108fecbb` |
 
 Arsip database diuji dengan pg_restore, dan arsip aplikasi beserta checksum diperiksa sebelum pemasangan. APK tidak dibangun ulang. Temuan transport F21 dan perilaku APK F22 dari audit sebelumnya tetap terpisah. Perbaikan ini menangani pemilihan tampilan pelanggan tanpa ODP; tidak menyatakan seluruh masalah penyediaan Rx dari perangkat sudah selesai.
+
+
+## Pembaruan bukti CLI dari pengguna — 17 Oktober 2026
+
+Pengguna menjalankan perintah pada prompt `OLTZTEC300-CINOXMEDIANET` dan mengirim keluaran berikut. Waktu eksekusi CLI tidak dicantumkan, sehingga hasil ini tidak diperlakukan sebagai pengukuran serentak dengan pemeriksaan SNMP pukul 16:40 WIB.
+
+| SN pada pemeriksaan SNMP sebelumnya | Perintah CLI yang dikirim pengguna | Hasil CLI |
+|---|---|---|
+| ZTEGD1AAF636 | `show pon power onu-rx gpon-onu_1/3/5:17` | N/A |
+| ZTEGD6D9BC79 | `show pon power onu-rx gpon-onu_1/6/11:25` | N/A |
+| ZTEGC9FC8D36 | `show pon power onu-rx gpon-onu_1/5/1:18` | N/A |
+
+Untuk ketiga lokasi tersebut, hasil CLI yang dikirim sesuai dengan ketiadaan Rx valid pada pemeriksaan SNMP sebelumnya (raw Rx 65535). Tidak ditemukan perbedaan berupa CLI menampilkan angka sedangkan FONA/SNMP menghilangkannya pada tiga contoh ini. Tidak ada dasar dari bukti ini untuk memaksa nilai Rx atau mengubah konversi sentinel menjadi angka redaman.
+
+Kesimpulan ini hanya mencakup tiga lokasi, bukan seluruh 137 layanan pada snapshot sebelumnya. State Online yang pernah diterima melalui SNMP dan keluaran Rx N/A merupakan dua informasi berbeda. Keduanya belum menentukan penyebab fisik maupun membuktikan waktu status Online dan pembacaan CLI sama. Penelusuran berikutnya perlu memeriksa status operasional/phase ONU, alasan down terakhir, dan waktu pengamatan pada lokasi yang sama. Kebijakan tampilan N/A sebagai Offline tetap sesuai pilihan pengguna; tidak ada perubahan aplikasi, konfigurasi OLT, atau status database pada pembaruan laporan ini.
