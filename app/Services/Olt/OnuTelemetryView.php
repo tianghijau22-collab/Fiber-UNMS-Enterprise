@@ -12,6 +12,7 @@ class OnuTelemetryView
     private array $devices = [];
     private array $rows = [];
     private array $duplicates = [];
+    private array $hardwareOwners = [];
 
     public function __construct(iterable $devices)
     {
@@ -22,7 +23,10 @@ class OnuTelemetryView
             $this->devices[$id] = ['name'=>$device->name, 'sampled_at'=>$snapshot['polled_at'] ?? null, 'is_zte'=>$isZte];
             $rows = \App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []);
             if ($isZte) {
-                foreach(ZteOnuIdentityMap::groups($rows) as $sn=>$locations)if(count($locations)>1)$this->duplicates[$id][$sn]=ZteOnuIdentityMap::duplicateInfo($locations,false);
+                foreach(ZteOnuIdentityMap::groups($rows) as $sn=>$locations) {
+                    if($device->status==='active' && $device->connection_mode==='live')$this->hardwareOwners[$sn][$id]=true;
+                    if(count($locations)>1)$this->duplicates[$id][$sn]=ZteOnuIdentityMap::duplicateInfo($locations,false);
+                }
                 $rows = array_values(ZteOnuIdentityMap::uniqueRows($rows));
             } else {
                 $rows = array_filter($rows, fn($r) => ($r['_source'] ?? '') === 'live_snmp');
@@ -71,7 +75,32 @@ class OnuTelemetryView
 
     public function forNode(?NetworkNode $node, ?string $serial, ?string $mac = null): array
     {
-        return $this->resolve(self::ownerId($node), $serial, $mac);
+        $owner=self::ownerId($node);
+        return $owner!==null ? $this->resolve($owner,$serial,$mac):$this->resolveUnmapped($serial,$mac);
+    }
+
+    /** Display-only discovery for customers without an OLT binding. Never assigns an ODP or changes ownership. */
+    public function resolveUnmapped(?string $serial, ?string $mac = null): array
+    {
+        $empty=$this->resolve(null,$serial,$mac);$owners=[];$keys=[];
+        foreach(array_unique(array_map(fn($s)=>strtoupper(trim((string)$s)),[$serial,$mac])) as $key) {
+            // Only serial-table evidence participates. A customer alias or database status cannot select an OLT.
+            if(!isset($this->hardwareOwners[$key]))continue;
+            $keys[]=$key;
+            foreach($this->hardwareOwners[$key] as $id=>$_)$owners[$id]=true;
+        }
+        if(count($owners)!==1)return count($owners)>1 ? array_replace($empty,['telemetry_reason'=>'olt_identity_conflict']):$empty;
+        $owner=(int)array_key_first($owners);$matches=[];$locations=[];
+        foreach($keys as $key) {
+            $view=$this->resolve($owner,$key);
+            if($view['identity_status']!=='resolved')return array_replace($empty,['telemetry_reason'=>$view['telemetry_reason']]);
+            if($view['telemetry_freshness']!=='fresh')return array_replace($empty,[
+                'telemetry_reason'=>$view['telemetry_reason'],'telemetry_freshness'=>$view['telemetry_freshness'],
+                'sampled_at'=>$view['sampled_at'],'sample_age_seconds'=>$view['sample_age_seconds']]);
+            $matches[]=$view;$locations[$view['gpon_interface'].':'.$view['onu_id']]=true;
+        }
+        if(count($locations)!==1)return array_replace($empty,['telemetry_reason'=>'identity_conflict']);
+        return array_replace($matches[0],['olt_resolution'=>'hardware_serial']);
     }
 
     public function resolve(?int $oltId, ?string $serial, ?string $mac = null): array

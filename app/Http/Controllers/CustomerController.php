@@ -40,7 +40,7 @@ class CustomerController extends Controller
                 'services.servicePackage',
                 'services.networkPort.node.parent.parent',
                 'services.networkPort.node.oltDevice',
-                'services.ontRegistration.oltPort.node',
+                'services.ontRegistration.oltPort.node.parent.parent',
             ])
             ->orderBy('id', 'desc')
             ->get();
@@ -54,7 +54,7 @@ class CustomerController extends Controller
 
             $snKey = strtolower(trim($ont?->onu_serial ?: ($primaryService?->onu_serial ?: '')));
             $macKey = strtolower(trim($ont?->onu_mac ?: ''));
-            $view = $telemetry->forNode($odpNode, $snKey, $macKey);
+            $view = $telemetry->forNode($odpNode ?: $ont?->oltPort?->node, $snKey, $macKey);
             $oltId = $view['olt_id'];
             $oltName = $view['olt_name'];
             $interfaceDisplay = $view['gpon_interface'];
@@ -776,7 +776,7 @@ class CustomerController extends Controller
             'services.servicePackage',
             'services.networkPort.node.parent.parent',
             'services.networkPort.node.oltDevice',
-            'services.ontRegistration.oltPort.node',
+            'services.ontRegistration.oltPort.node.parent.parent',
         ])->findOrFail($id);
 
         $service = $customer->services->first();
@@ -787,7 +787,7 @@ class CustomerController extends Controller
         $sn = strtoupper(trim((string)($ont?->onu_serial ?: ($service?->onu_serial ?: ''))));
         $mac = strtoupper(trim((string)($ont?->onu_mac ?: '')));
 
-        $view = OnuTelemetryView::load()->forNode($odpNode, $sn, $mac);
+        $view = OnuTelemetryView::load()->forNode($odpNode ?: $ont?->oltPort?->node, $sn, $mac);
         $gponInterface = $view['gpon_interface'];
         $rxPower = $view['rx_power'];
         $txPower = null;

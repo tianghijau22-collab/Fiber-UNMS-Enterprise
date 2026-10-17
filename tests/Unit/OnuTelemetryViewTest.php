@@ -113,4 +113,61 @@ class OnuTelemetryViewTest extends TestCase
         $out=(new View([$this->device(1,[$row])]))->resolve(1,'TEST00000001');$this->assertNull($out['is_online']);$this->assertNull($out['rx_power']);
     }
 
+    public function test_customer_without_node_can_display_one_fresh_hardware_serial_without_changing_topology(): void
+    {
+        $v=new View([$this->device(1,[$this->row('1/6/11',1)])]);
+        $out=$v->forNode(null,' test00000001 ');
+        $this->assertSame(1,$out['olt_id']);$this->assertSame('gpon-olt_1/6/11',$out['gpon_interface']);$this->assertSame('1',$out['onu_id']);
+        $this->assertSame(-26.0,$out['rx_power']);$this->assertSame('hardware_serial',$out['olt_resolution']);$this->assertSame('snapshot',$out['telemetry_source']);
+        $this->assertSame($v->resolve(1,'TEST00000001')['sampled_at'],$out['sampled_at']);
+        $this->assertNull($v->resolve(null,'TEST00000001')['olt_id']);
+    }
+
+    public function test_automatic_display_never_selects_between_two_olts_or_overrides_an_explicit_owner(): void
+    {
+        $v=new View([$this->device(1,[$this->row()]),$this->device(2,[$this->row('1/6/7',11,['rx_power'=>-21])])]);
+        $out=$v->forNode(null,'TEST00000001');$this->assertNull($out['rx_power']);$this->assertSame('olt_identity_conflict',$out['telemetry_reason']);
+        $node=(new \App\Models\NetworkNode)->forceFill(['olt_device_id'=>2]);
+        $out=$v->forNode($node,'TEST00000001');$this->assertSame(2,$out['olt_id']);$this->assertSame(-21.0,$out['rx_power']);$this->assertArrayNotHasKey('olt_resolution',$out);
+        $node->olt_device_id=3;$out=$v->forNode($node,'TEST00000001');$this->assertNull($out['rx_power']);$this->assertSame(3,$out['olt_id']);
+    }
+
+    public function test_unmapped_customers_do_not_promote_stale_or_legacy_samples_or_inactive_devices(): void
+    {
+        foreach(['sample_observed_at'=>date(DATE_ATOM,time()-181),'identity_observed_at'=>date(DATE_ATOM,time()-601),'identity_source'=>null] as $field=>$bad) {
+            $v=new View([$this->device(1,[$this->row('1/6/7',11,[$field=>$bad])])]);$out=$v->forNode(null,'TEST00000001');
+            $this->assertNull($out['rx_power']);$this->assertNull($out['olt_id']);$this->assertSame('unresolved',$out['identity_status']);
+        }
+        foreach(['status'=>'inactive','connection_mode'=>'demo'] as $field=>$value){
+            $device=$this->device(1,[$this->row()]);$device->{$field}=$value;
+            $this->assertNull((new View([$device]))->forNode(null,'TEST00000001')['olt_id']);
+        }
+    }
+
+    public function test_unmapped_alias_conflicts_and_ambiguous_hardware_serials_remain_unresolved(): void
+    {
+        $v=new View([$this->device(1,[$this->row(),$this->row('1/6/7',11,['serial_number'=>'TEST00000002'])])]);
+        $this->assertSame('identity_conflict',$v->forNode(null,'TEST00000001','TEST00000002')['telemetry_reason']);
+        $v=new View([$this->device(1,[$this->row(),$this->row('1/6/7',11)])]);
+        $this->assertNull($v->forNode(null,'TEST00000001')['rx_power']);
+    }
+
+    public function test_unmapped_display_keeps_missing_rx_and_duplicate_serial_policy_without_guessing_a_value(): void
+    {
+        $active=$this->row();$ghost=$this->row('1/6/7',11,['is_online'=>false,'rx_power'=>null]);
+        $v=new View([$this->device(1,[$active,$ghost])]);$out=$v->forNode(null,'TEST00000001');
+        $this->assertSame(-26.0,$out['rx_power']);$this->assertTrue($out['serial_duplicate']);$this->assertSame('hardware_serial',$out['olt_resolution']);
+        $v=new View([$this->device(1,[$this->row('1/6/7',11,['rx_power'=>null])])]);$out=$v->forNode(null,'TEST00000001');
+        $this->assertSame(1,$out['olt_id']);$this->assertNull($out['rx_power']);$this->assertFalse($out['rx_available']);$this->assertTrue($out['is_online']);
+    }
+
+    public function test_unmapped_discovery_reuses_the_request_index_without_queries_or_redecoding(): void
+    {
+        $device=new class extends OltDevice {public int $snapshotReads=0;public function getAttribute($key){if($key==='last_telemetry_snapshot')$this->snapshotReads++;return parent::getAttribute($key);}};
+        $device->setRawAttributes($this->device(1,[$this->row()])->getAttributes());$v=new View([$device]);
+        \Illuminate\Support\Facades\DB::enableQueryLog();\Illuminate\Support\Facades\DB::flushQueryLog();
+        for($i=0;$i<1000;$i++)$v->forNode(null,'TEST00000001');
+        $this->assertSame(1,$device->snapshotReads);$this->assertSame([],\Illuminate\Support\Facades\DB::getQueryLog());
+    }
+
 }

@@ -82,6 +82,35 @@ class OnuTelemetryPresentationTest extends TestCase
         $port=collect($detail['ports'])->firstWhere('customer_id',1);$this->assertTrue($port['is_online']);$this->assertNull($port['rx_power']);
     }
 
+    public function test_unmapped_customer_list_and_diagnostics_use_one_fresh_hardware_location_without_assigning_ports(): void
+    {
+        DB::table('olt_devices')->where('id',2)->update(['last_telemetry_snapshot'=>json_encode(['onu_list'=>[]])]);
+        DB::table('network_ports')->where('customer_service_id',1)->update(['customer_service_id'=>null]);
+        DB::enableQueryLog();DB::flushQueryLog();
+        $c=collect($this->customers())->firstWhere('id',1);$d=app(CustomerController::class)->diagnostics(1)->getData(true);
+        $this->assertSame(-26.2,$c['rx_power']);$this->assertSame('hardware_serial',$c['olt_resolution']);$this->assertSame(1,$c['olt_id']);
+        $this->assertNull($c['odp_id']);$this->assertNull($c['odp_port_id']);$this->assertSame('gpon-olt_1/1/16',$c['gpon_interface']);
+        $this->assertSame($c['rx_power'],$d['optical']['rx_power']);$this->assertSame($c['sampled_at'],$d['optical']['sampled_at']);
+        $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|insert|delete)\b/i',$q['query']))));
+        $this->assertNull(DB::table('network_ports')->where('id',1)->value('customer_service_id'));
+    }
+
+    public function test_unmapped_customer_with_cross_olt_serial_conflict_does_not_pick_first_or_strongest_reading(): void
+    {
+        DB::table('network_ports')->where('customer_service_id',1)->update(['customer_service_id'=>null]);
+        $c=collect($this->customers())->firstWhere('id',1);
+        $this->assertNull($c['rx_power']);$this->assertNull($c['olt_id']);$this->assertSame('olt_identity_conflict',$c['telemetry_reason']);
+    }
+
+    public function test_registration_port_owner_is_respected_when_the_service_has_no_odp(): void
+    {
+        DB::table('network_ports')->where('customer_service_id',1)->update(['customer_service_id'=>null]);
+        DB::table('ont_registrations')->where('id',1701)->update(['olt_port_id'=>1]);
+        $c=collect($this->customers())->firstWhere('id',1);
+        $this->assertNull($c['odp_id']);$this->assertSame(1,$c['olt_id']);$this->assertSame(-26.2,$c['rx_power']);
+        $this->assertArrayNotHasKey('olt_resolution',$c);
+    }
+
     public function test_diagnostics_return_unavailable_history_and_icmp_instead_of_fabricated_samples(): void
     {
         $out=app(CustomerController::class)->diagnostics(2)->getData(true);
