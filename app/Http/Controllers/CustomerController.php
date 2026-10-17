@@ -887,7 +887,7 @@ class CustomerController extends Controller
         $olt=OltDevice::where('status','active')->where('connection_mode','live')->findOrFail((int)$request->input('olt_id'));
         $port=\App\Services\Olt\ZteOnuIdentityMap::portFromIfIndex($index);
         $snapshot=$olt->last_telemetry_snapshot ?? [];
-        $inventory=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+        $inventory=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []));
         $view=new \App\Services\Olt\OnuTelemetryView([$olt]);$customersBySerial=[];
         $ambiguousServices=DB::table('network_ports')->whereNotNull('customer_service_id')->select('customer_service_id')
             ->groupBy('customer_service_id')->havingRaw('COUNT(*) > 1')->pluck('customer_service_id')->flip();
@@ -944,7 +944,7 @@ class CustomerController extends Controller
         if(!$olt)return response()->json(['status'=>'error','message'=>'OLT aktif tidak ditemukan.'],404);
         $port=\App\Services\Olt\ZteOnuIdentityMap::portFromIfIndex($index);
         $probe=\App\Services\Olt\FastOpticalProbeService::probePortOnusQuickState($olt,$port);
-        $inventory=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(array_merge($olt->last_telemetry_snapshot['onu_list'] ?? [],$olt->last_telemetry_snapshot['unconfigured_onus'] ?? []));
+        $inventory=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($olt->last_telemetry_snapshot ?? []));
         $customersBySerial=[];
         foreach(Customer::with(['services.servicePackage','services.networkPort.node.parent.parent','services.ontRegistration'])->get() as $customer) {
             foreach($customer->services as $service) {

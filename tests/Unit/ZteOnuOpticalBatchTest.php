@@ -62,4 +62,14 @@ class ZteOnuOpticalBatchTest extends TestCase
             $this->assertFalse($out['TEST00000001']['rx_available']);
         }
     }
+
+    public function test_duplicate_customer_requests_read_the_selected_physical_tuple_once(): void
+    {
+        $at=date(DATE_ATOM);$a=$this->row('TEST00000001','1/2/3',12);$b=$this->row('TEST00000001','1/4/7',2);
+        $a+=['identity_observed_at'=>$at]+\App\Services\Olt\OnuTelemetrySample::fromZteState(3,3926,$at);
+        $b+=['identity_observed_at'=>$at]+\App\Services\Olt\OnuTelemetrySample::fromZteState(65535,65535,$at);
+        $calls=[];$out=Batch::read(['TEST00000001','TEST00000001'],[$a,$b],function($oids)use(&$calls,$a){$calls[]=$oids;return $this->values($a,3926);});
+        $this->assertCount(1,$calls);$this->assertCount(4,$calls[0]);$this->assertSame(-22.15,$out['TEST00000001']['rx_power']);
+        $this->assertSame('12',$out['TEST00000001']['onu_id']);
+    }
 }

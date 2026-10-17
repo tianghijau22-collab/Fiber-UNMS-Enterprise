@@ -182,7 +182,7 @@ class OltController extends Controller
                 $device,
                 $rawDevInfo,
                 $enrichedPorts,
-                $rawOnuList,
+                array_merge($rawOnuList,$rawSnapshot['_identity_candidates'] ?? []),
                 $rawUncfg
             );
             $snapshot['polled_at'] = $rawSnapshot['polled_at'] ?? null;
@@ -308,8 +308,8 @@ class OltController extends Controller
                 $device,
                 $rawSnapshot['device_info'] ?? [],
                 $rawSnapshot['pon_ports'] ?? [],
-                $portOnus,
-                $portUncfg
+                ZteOnuIdentityMap::snapshotRows($rawSnapshot),
+                $allUncfg
             );
 
             $portFilteredOnus = array_values(array_filter($partitioned['onu_list'] ?? [], function ($o) use ($normalizedPort) {
@@ -534,7 +534,9 @@ class OltController extends Controller
         // Stored physical inventory also passes through this reader. Autofind rows have no serial-table identity.
         // A fresh polled row takes precedence over the preserved unregistered copy of that serial.
         $preservedPhysical=array_filter($driverUncfg,fn($r)=>!isset($polledSerials[strtoupper(trim((string)($r['serial_number'] ?? '')))]));
-        $identityRows = $usesZteIdentity ? array_values(ZteOnuIdentityMap::uniqueRows(array_merge($preservedPhysical,$driverOnuList))) : $driverOnuList;
+        $physicalRows=array_merge($preservedPhysical,$driverOnuList);
+        $identityGroups=$usesZteIdentity ? ZteOnuIdentityMap::groups($physicalRows):[];
+        $identityRows = $usesZteIdentity ? array_values(ZteOnuIdentityMap::uniqueRows($physicalRows)) : $driverOnuList;
         $driverOnuMap = [];
         foreach ($identityRows as $onu) {
             $sn  = strtoupper(trim((string)($onu['serial_number'] ?? '')));
@@ -578,6 +580,7 @@ class OltController extends Controller
                 'identity_source' => $liveOnu['identity_source'] ?? null,
                 'identity_observed_at' => $liveOnu['identity_observed_at'] ?? null,
                 'identity_status' => $liveOnu ? 'resolved' : 'unresolved',
+                ...ZteOnuIdentityMap::duplicateInfo($identityGroups[$sn] ?? [],$liveOnu!==null),
                 ...($sample ?? []),
                 'topology_port'   => $topologyPort,
                 'port'            => $finalPort,
@@ -618,6 +621,7 @@ class OltController extends Controller
                     ...$sample,
                     'port'                     => $unregPort,
                     'identity_status'          => 'resolved',
+                    ...ZteOnuIdentityMap::duplicateInfo($identityGroups[$sn] ?? [],true),
                     '_source'                  => 'live_snmp',
                     'identity_source'          => $onu['identity_source'] ?? null,
                     'identity_observed_at'     => $onu['identity_observed_at'] ?? null,
@@ -726,6 +730,7 @@ class OltController extends Controller
         }, $driverPonPorts);
 
         return [
+            '_identity_candidates' => $usesZteIdentity ? ZteOnuIdentityMap::duplicateEvidence($physicalRows):[],
             'device_info'       => $driverDeviceInfo,
             'pon_ports'         => $updatedPonPorts,
             'onu_list'          => $registeredOnus,
@@ -931,7 +936,7 @@ class OltController extends Controller
             $writer=app(\App\Services\Olt\OnuTelemetryWriter::class);
             $nodes=DB::table('network_nodes')->select('id','parent_node_id','olt_device_id','deleted_at')->get()->keyBy('id')->all();
             $snapshot=$device->last_telemetry_snapshot ?? [];
-            $identities=ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+            $identities=ZteOnuIdentityMap::uniqueRows(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []));
             $ambiguousBinding=false;
             $eligible=$writer->registrationCandidates([$serialNumber])->filter(function($r)use($nodes,$device,$identities,&$ambiguousBinding) {
                 $serviceOwner=\App\Services\Olt\OnuTelemetryWriter::ownerId($r->service_node_id ? (int)$r->service_node_id:null,$nodes);

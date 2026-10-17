@@ -25,7 +25,7 @@ class OnuOpticalDiagnostic
             return $finish($empty,'unavailable','unsupported_device');
 
         $snapshot=$device->last_telemetry_snapshot ?? [];
-        $rows=array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []);
+        $rows=\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []);
         $unique=ZteOnuIdentityMap::uniqueRows($rows);$candidate=$unique[$serial] ?? null;
         $hasHardwareRows=count(array_filter($rows,fn($r)=>is_array($r) && ($r['identity_source'] ?? null)===ZteOnuIdentityMap::SOURCE
             && strtoupper(trim((string)($r['serial_number'] ?? '')))===$serial))>0;

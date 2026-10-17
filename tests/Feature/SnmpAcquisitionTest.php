@@ -12,9 +12,16 @@ use Tests\TestCase;
 
 class SnmpAcquisitionTest extends TestCase
 {
-    private function cache(int $ago=0): array {return ['schema'=>2,'observed_at'=>date(DATE_ATOM,time()-$ago),'entries'=>[Identity::ifIndexFromPort('1/1/15').'_1'=>'TEST00000001']];}
+    private function cache(int $ago=0): array {return ['schema'=>3,'observed_at'=>date(DATE_ATOM,time()-$ago),'entries'=>[Identity::ifIndexFromPort('1/1/15').'_1'=>'TEST00000001']];}
     private function tables(): array {return ['sn1'=>[Identity::PRIMARY.'.'.Identity::ifIndexFromPort('1/1/15').'.1'=>'TEST00000001'],'sn2'=>[],'_complete'=>true];}
     private function olt(): OltDevice {return (new OltDevice)->forceFill(['id'=>1,'ip_address'=>'192.0.2.1','connection_mode'=>'live','snmp_version'=>'v2c','snmp_community_type'=>'public']);}
+    public function test_first_v3_refresh_failure_can_retain_unexpired_v2_hardware_evidence_without_retiming(): void
+    {
+        $previous=array_replace($this->cache(60),['schema'=>2]);Cache::put('olt_bulk_sn_map_v2_1',$previous,600);$calls=0;
+        $out=Identity::remember(1,1,function()use(&$calls){$calls++;return ['sn1'=>[],'sn2'=>[],'_complete'=>false];});
+        $this->assertSame(1,$calls);$this->assertSame($previous['observed_at'],$out['observed_at']);$this->assertSame($previous['entries'],$out['entries']);
+        $this->assertFalse(Cache::has(Identity::cacheKey(1)));$this->assertSame($previous,Cache::get('olt_bulk_sn_map_v2_1'));
+    }
     public function test_young_identity_cache_is_reused_without_querying_hardware(): void
     {
         $old=$this->cache(200);Cache::put(Identity::cacheKey(1),$old,600);

@@ -11,7 +11,7 @@ export function inventoryTelemetry(row = {}, now = Date.now()) {
   const identityAt = Date.parse(row.identity_observed_at);
   const identity = row.identity_source === 'snmp_serial_table_v2' && row.onu_id != null && row.port
     && Number.isFinite(identityAt) && identityAt <= now + 5000 && identityAt >= now - 600000;
-  return {telemetry_contract:1,identity_status:identity ? 'resolved':'unresolved',gpon_interface:identity ? row.port:null,
+  return {serial_duplicate:row.serial_duplicate,serial_resolution:row.serial_resolution,serial_locations:row.serial_locations,telemetry_contract:1,identity_status:identity ? 'resolved':'unresolved',gpon_interface:identity ? row.port:null,
     is_online:identity ? online:null,rx_power:identity ? rx:null,rx_available:identity && rx !== null,
     sampled_at:at,telemetry_source:'snapshot',telemetry_freshness:sampleFresh ? 'fresh':at && Number.isFinite(Date.parse(at)) ? 'stale':'unavailable'};
 }

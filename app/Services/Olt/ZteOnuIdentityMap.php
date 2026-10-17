@@ -15,7 +15,7 @@ class ZteOnuIdentityMap
 
     public static function cacheKey(int $oltId): string
     {
-        return "olt_bulk_sn_map_v2_{$oltId}";
+        return "olt_bulk_sn_map_v3_{$oltId}";
     }
 
     public static function portFromIfIndex(int $index): ?string
@@ -45,7 +45,7 @@ class ZteOnuIdentityMap
         return self::portFromIfIndex((int)$m[1]) !== null && (int)$m[2] <= 65535;
     }
 
-    /** Contradictory tables or multiple hardware locations never use first/last wins. */
+    /** Keep every hardware location; contradictory serials at the same tuple are rejected. */
     public static function fromTables(array $primary, array $secondary): array
     {
         $candidates = [];
@@ -60,14 +60,11 @@ class ZteOnuIdentityMap
                 if (self::validSerial($sn)) $candidates[$key][$sn] = true;
             }
         }
-        $entries = []; $locations = [];
-        foreach ($candidates as $key => $serials) {
-            foreach ($serials as $sn => $_) $locations[$sn][$key] = true;
-        }
+        $entries = [];
         foreach ($candidates as $key => $serials) {
             if (count($serials) !== 1) continue;
             $sn = array_key_first($serials);
-            if (count($locations[$sn]) === 1) $entries[$key] = $sn;
+            $entries[$key] = $sn;
         }
         return $entries;
     }
@@ -75,13 +72,11 @@ class ZteOnuIdentityMap
     /** Versioned, scalar cache only; legacy snapshot-derived maps are not accepted. */
     public static function cachedEntries(mixed $cache): array
     {
-        if (!is_array($cache) || ($cache['schema'] ?? null) !== 2 || !is_array($cache['entries'] ?? null)) return [];
+        if (!is_array($cache) || ($cache['schema'] ?? null) !== 3 || !is_array($cache['entries'] ?? null)) return [];
         $time = is_string($cache['observed_at'] ?? null) ? strtotime($cache['observed_at']) : false;
         if ($time === false || $time > time() + 5 || $time < time() - self::MAX_AGE) return [];
-        $seen = [];
         foreach ($cache['entries'] as $key => $sn) {
-            if (!is_string($key) || !self::validKey($key) || !is_string($sn) || !self::validSerial($sn) || isset($seen[$sn])) return [];
-            $seen[$sn] = true;
+            if (!is_string($key) || !self::validKey($key) || !is_string($sn) || !self::validSerial($sn)) return [];
         }
         return $cache['entries'];
     }
@@ -91,11 +86,20 @@ class ZteOnuIdentityMap
     {
         $key = self::cacheKey($oltId);
         $cache = Cache::get($key);
+        $migrating=false;
+        if($cache===null) {
+            // A failed first v3 walk may retain still-valid v2 hardware evidence without extending its age.
+            $previous=Cache::get("olt_bulk_sn_map_v2_{$oltId}");
+            if(is_array($previous) && ($previous['schema'] ?? null)===2) {
+                $previous['schema']=3;
+                if(self::cachedEntries($previous)!==[]){$cache=$previous;$migrating=true;}
+            }
+        }
         $entries = self::cachedEntries($cache);
         $age=is_array($cache) ? OltHealthMonitor::age($cache['observed_at'] ?? null):null;
         $usable=$entries!==[] && count($entries)>=max(1,$stateCount*0.8);
-        if($usable && $age!==null && $age<self::REFRESH_AFTER)return $cache;
-        $empty=['schema'=>2,'observed_at'=>null,'entries'=>[]];
+        if(!$migrating && $usable && $age!==null && $age<self::REFRESH_AFTER)return $cache;
+        $empty=['schema'=>3,'observed_at'=>null,'entries'=>[]];
         if(Cache::has($key.'_refresh_backoff'))return $usable ? $cache:$empty;
         $result=Cache::lock($key.'_refresh_lock',50)->get(function()use($key,$stateCount,$readTables,$cache,$usable,$empty){
             $latest=Cache::get($key);$latestEntries=self::cachedEntries($latest);
@@ -110,7 +114,7 @@ class ZteOnuIdentityMap
                 'previous_observed_at'=>is_array($cache) ? ($cache['observed_at'] ?? null):null,
                 'accepted'=>$accepted,'entries'=>count($new),'complete'=>($tables['_complete'] ?? true)===true],1800);
             if($accepted) {
-                $value=['schema'=>2,'observed_at'=>$at,'entries'=>$new];
+                $value=['schema'=>3,'observed_at'=>$at,'entries'=>$new];
                 Cache::put($key,$value,self::MAX_AGE);Cache::forget($key.'_refresh_backoff');return $value;
             }
             Cache::put($key.'_refresh_backoff',true,30);
@@ -120,10 +124,15 @@ class ZteOnuIdentityMap
         return is_array($result) ? $result:($usable ? $cache:$empty);
     }
 
-    /** Used when partitioning snapshots: topology records cannot establish ONU identity. */
-    public static function uniqueRows(array $rows): array
+    /** Raw duplicate evidence is separate from customer projections and the selected write ledger. */
+    public static function snapshotRows(array $snapshot): array
     {
-        $map = []; $locations = []; $serialsAtLocation = []; $blocked = [];
+        return array_merge($snapshot['_identity_candidates'] ?? [], $snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
+    }
+
+    public static function groups(array $rows): array
+    {
+        $groups = [];
         foreach ($rows as $row) {
             if (!is_array($row) || ($row['identity_source'] ?? null) !== self::SOURCE) continue;
             $sn = strtoupper(trim((string)($row['serial_number'] ?? '')));
@@ -131,17 +140,58 @@ class ZteOnuIdentityMap
             $id = $row['onu_id'] ?? $row['onu_index'] ?? null;
             if (!self::validSerial($sn) || $index === null || !ctype_digit((string)$id) || (int)$id < 1 || (int)$id > 65535) continue;
             $key = $index.'_'.(int)$id;
-            if (isset($locations[$sn]) && $locations[$sn] !== $key) $blocked[$sn] = true;
-            if (isset($serialsAtLocation[$key]) && $serialsAtLocation[$key] !== $sn) {
-                $blocked[$sn] = true;
-                $blocked[$serialsAtLocation[$key]] = true;
-            }
-            $serialsAtLocation[$key] = $sn;
-            $locations[$sn] = $key;
-            $row['port'] = self::portFromIfIndex($index);
-            $row['onu_id'] = (string)(int)$id;
-            $map[$sn] = $row;
+            $row['port'] = self::portFromIfIndex($index); $row['onu_id'] = (string)(int)$id;
+            $old = $groups[$sn][$key] ?? null;
+            // Customer projections of one physical tuple must not replace a newer hardware observation.
+            if ($old && (OnuTelemetrySample::epoch($old['sample_observed_at'] ?? null) ?? 0) > (OnuTelemetrySample::epoch($row['sample_observed_at'] ?? null) ?? 0)) continue;
+            $groups[$sn][$key] = $row;
         }
-        return array_diff_key($map, $blocked);
+        return $groups;
+    }
+
+    public static function duplicateEvidence(array $rows): array
+    {
+        $result=[];
+        $fields=array_flip(['serial_number','port','onu_id','identity_source','identity_observed_at','status','is_online','rx_power','rx_available','sample_observed_at','state_observed_at','rx_observed_at','telemetry_sample_version']);
+        foreach(self::groups($rows) as $locations) if(count($locations)>1) {
+            foreach($locations as $row)$result[]=array_intersect_key($row,$fields);
+        }
+        return $result;
+    }
+
+    public static function duplicateInfo(array $locations, bool $selected): array
+    {
+        if(count($locations)<2)return [];
+        $tuples=array_map(fn($r)=>$r['port'].':'.$r['onu_id'],array_values($locations));sort($tuples);
+        return ['serial_duplicate'=>true,'serial_resolution'=>$selected ? 'single_fresh_rx':'ambiguous','serial_locations'=>$tuples];
+    }
+
+    private static function fresh(mixed $at,int $age): bool
+    {
+        $time=OnuTelemetrySample::epoch($at);$now=microtime(true);
+        return $time!==null && $time<=$now+5 && $time>=$now-$age;
+    }
+
+    /** Select a reused serial only when exactly one current hardware tuple has a valid optical sample. */
+    public static function uniqueRows(array $rows): array
+    {
+        $groups=self::groups($rows);$owners=[];$blocked=[];$map=[];
+        foreach($groups as $sn=>$locations)foreach($locations as $key=>$row) {
+            if(isset($owners[$key]) && $owners[$key]!==$sn){$blocked[$sn]=true;$blocked[$owners[$key]]=true;}
+            $owners[$key]=$sn;
+        }
+        foreach($groups as $sn=>$locations) {
+            if(isset($blocked[$sn]))continue;
+            if(count($locations)===1){$map[$sn]=reset($locations);continue;}
+            $eligible=[];$complete=true;
+            foreach($locations as $row) {
+                // Every competing location must have current evidence. A stale competitor is not proof of absence.
+                if(!self::fresh($row['identity_observed_at'] ?? null,self::MAX_AGE) || !self::fresh($row['sample_observed_at'] ?? null,180)){$complete=false;break;}
+                $sample=OnuTelemetrySample::project($row);
+                if($sample['is_online']===true && $sample['rx_available'] && self::fresh($sample['state_observed_at'],180) && self::fresh($sample['rx_observed_at'],180))$eligible[]=$row;
+            }
+            if($complete && count($eligible)===1)$map[$sn]=array_replace($eligible[0],self::duplicateInfo($locations,true));
+        }
+        return $map;
     }
 }

@@ -310,7 +310,7 @@ class ListenOltEvents extends Command
         $targetOnt = null;
         if ($serialNumber) {
             $snapshot = $olt->last_telemetry_snapshot ?? [];
-            foreach (array_merge($snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []) as $so) {
+            foreach (\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []) as $so) {
                 if (strcasecmp($so['serial_number'] ?? '', $serialNumber) === 0 || strcasecmp($so['onu_mac'] ?? '', $serialNumber) === 0) {
                     $targetOnt = $so;
                     break;
@@ -322,7 +322,7 @@ class ListenOltEvents extends Command
 
         // Select the customer's hardware PON, never the shared ODP uplink.
         $snapshot=$olt->last_telemetry_snapshot ?? [];
-        $identities=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+        $identities=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []));
         $targetOnt=$serialNumber ? ($identities[strtoupper(trim($serialNumber))] ?? null) : null;
         if($serialNumber && !$targetOnt) return;
         $decodedIndex=$portRef ? \App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort(preg_replace('~^gpon-onu_~','gpon-olt_',$portRef)) : null;
@@ -1103,7 +1103,7 @@ class ListenOltEvents extends Command
     {
         $index=\App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort($standardPort);if($index===null)return [];
         $snapshot=$olt->last_telemetry_snapshot ?? [];
-        $rows=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+        $rows=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []));
         $result=[];
         foreach($rows as $sn=>$row) {
             $time=\App\Services\Olt\OnuTelemetrySample::epoch($row['identity_observed_at'] ?? null);

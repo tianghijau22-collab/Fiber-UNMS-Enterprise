@@ -431,7 +431,7 @@ class PollOltTelemetry extends Command
                     'ip_address'      => '—',
                 ];
 
-                $mapKey = $sn . '@' . strtolower($portName);
+                $mapKey = $sn . '@' . strtolower($portName) . ':' . $onuId;
                 $physicalOnuMap[$mapKey] = $onuItem;
                 $onusByPort[$portName][] = $onuItem;
             }
@@ -682,7 +682,7 @@ class PollOltTelemetry extends Command
                     'ip_address'      => '—',
                 ];
 
-                $mapKey = $sn . '@' . strtolower($portName);
+                $mapKey = $sn . '@' . strtolower($portName) . ':' . $onuId;
                 $physicalOnuMap[$mapKey] = $onuItem;
                 $onusByPort[$portName][] = $onuItem;
             }
@@ -951,11 +951,11 @@ class PollOltTelemetry extends Command
             $existingUnconfigured = $existingSnapshot['unconfigured_onus'] ?? [];
 
             $physicalOnuMap = [];
-            foreach (array_merge($existingRegistered, $existingUnconfigured) as $o) {
+            foreach (\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($existingSnapshot) as $o) {
                 $sn = strtoupper(trim((string)($o['serial_number'] ?? ($o['mac_address'] ?? ''))));
                 $p  = strtolower(trim((string)($o['port'] ?? ($o['detected_port'] ?? ''))));
                 if (!empty($sn)) {
-                    $key = $sn . '@' . $p;
+                    $key = $sn . '@' . $p . ':' . ($o['onu_id'] ?? '');
                     $physicalOnuMap[$key] = $o;
                 }
             }

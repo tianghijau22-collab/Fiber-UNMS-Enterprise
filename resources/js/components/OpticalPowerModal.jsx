@@ -2,6 +2,7 @@ import React, {useState, useEffect, useRef, useCallback} from 'react';
 import {createPortal} from 'react-dom';
 import {opticalDiagnostic, opticalResponseMatches} from '../lib/opticalDiagnostic.js';
 import {useStoredRefresh} from '../hooks/useStoredRefresh.js';
+import {TelemetryStamp} from './OnuTelemetry.jsx';
 const IconX = () => (
   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -158,6 +159,7 @@ export function OpticalPowerContent({onu, activeOlt, onClose, opticalData, loadi
 
         {/* Modal Body */}
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
+          {d.serial_duplicate && <div className="mb-3 rounded border border-amber-500/30 bg-amber-500/10 p-3"><TelemetryStamp value={d} /></div>}
           {error && (
             <div className="p-3.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs flex items-center justify-between">
               <span>{error}</span>

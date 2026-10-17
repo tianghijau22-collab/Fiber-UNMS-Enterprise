@@ -97,7 +97,7 @@ class OltHealthMonitor
         $out=['total'=>0,'fresh_samples'=>0,'stale_samples'=>0,'missing_samples'=>0,'unknown_state'=>0,'rx_missing_online'=>0,
             'identity_unresolved'=>0,'oldest_sample_at'=>null,'latest_sample_at'=>null];$times=[];
         $rows=array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []);
-        $identities=$zte ? ZteOnuIdentityMap::uniqueRows($rows):[];
+        $identities=$zte ? ZteOnuIdentityMap::uniqueRows(ZteOnuIdentityMap::snapshotRows($snapshot)):[];
         foreach($rows as $row) {
             if(!is_array($row))continue;$out['total']++;
             // Never reinterpret a snapshot completion time as a new per-ONU measurement.

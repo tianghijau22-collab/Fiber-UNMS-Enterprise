@@ -76,7 +76,7 @@ class OnuTelemetryWriter
     public function applyPortLoss(OltDevice $olt,string $port,string $at,string $source='point'): array
     {
         $index=ZteOnuIdentityMap::ifIndexFromPort($port);$snapshot=$olt->last_telemetry_snapshot ?? [];
-        $identities=ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+        $identities=ZteOnuIdentityMap::uniqueRows(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []));
         $rows=[];
         foreach($identities as $row)if($index!==null && ZteOnuIdentityMap::ifIndexFromPort($row['port'])===$index) {
             $row=array_replace($row,['status'=>'Offline','is_online'=>false,'rx_power'=>null,'rx_available'=>false]);
@@ -89,15 +89,16 @@ class OnuTelemetryWriter
     public static function mergePortObservations(array $preserved, array $observed): array
     {
         $result=[];
+        $duplicates=array_filter(ZteOnuIdentityMap::groups($preserved),fn($locations)=>count($locations)>1);
         foreach($preserved as $row)if($key=self::key($row))$result[$key]=$row;
-        foreach(ZteOnuIdentityMap::uniqueRows($observed) as $sn=>$row) {
+        foreach(ZteOnuIdentityMap::groups($observed) as $sn=>$locations) foreach($locations as $row) {
             $at=OnuTelemetrySample::epoch($row['identity_observed_at'] ?? null);
             if($at===null || $at<microtime(true)-600 || $at>microtime(true)+5)continue;
             foreach($result as $key=>$old) {
                 if(strtoupper(trim((string)($old['serial_number'] ?? '')))!==$sn)continue;
                 $previousAt=OnuTelemetrySample::epoch($old['identity_observed_at'] ?? null);
                 // New serial-table evidence can establish a move. Online status alone never wins a conflict.
-                if($previousAt===null || $at>$previousAt)unset($result[$key]);
+                if(($previousAt===null || $at>$previousAt) && !isset($duplicates[$sn]))unset($result[$key]);
             }
             $result[self::key($row)]=$row;
         }
@@ -114,7 +115,7 @@ class OnuTelemetryWriter
             $locked=OltDevice::whereKey($olt->id)->lockForUpdate()->firstOrFail();
             if(!self::supported($locked) || $locked->status!=='active')return $result;
             $snapshot=$locked->getAttribute('last_telemetry_snapshot') ?? [];
-            $inventory=array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []);
+            $inventory=\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []);
             $current=ZteOnuIdentityMap::uniqueRows($inventory);
             $incoming=ZteOnuIdentityMap::uniqueRows($rows);
             $nodes=DB::table('network_nodes')->select('id','parent_node_id','olt_device_id','deleted_at')->sharedLock()->get()->keyBy('id')->all();
@@ -199,6 +200,13 @@ class OnuTelemetryWriter
                 $sn=strtoupper(trim((string)($row['serial_number'] ?? '')));
                 if(isset($ledger[$sn]) && self::key($row)===$ledger[$sn]['write_tuple']) $currentBySerial[$sn]=$row;
             }
+            $incomingIdentities=ZteOnuIdentityMap::uniqueRows(ZteOnuIdentityMap::snapshotRows($incoming));
+            foreach(ZteOnuIdentityMap::groups($incoming['_identity_candidates'] ?? []) as $sn=>$locations) {
+                $ledgerAt=OnuTelemetrySample::epoch($ledger[$sn]['sample_observed_at'] ?? null) ?? 0;
+                $newer=count(array_filter($locations,fn($r)=>(OnuTelemetrySample::epoch($r['sample_observed_at'] ?? null) ?? 0)>=$ledgerAt))===count($locations);
+                if(count($locations)>1 && !isset($incomingIdentities[$sn]) && $newer)unset($ledger[$sn],$currentBySerial[$sn]);
+            }
+            $incoming['_onu_write_ledger']=$ledger;
             $seen=[];
             foreach(['onu_list','unconfigured_onus'] as $list) {
                 $existing=[];foreach($current[$list] ?? [] as $row)if($key=self::key($row))$existing[$key]=$row;
@@ -233,7 +241,7 @@ class OnuTelemetryWriter
 
     private static function overlay(array $snapshot, array $ledger): array
     {
-        foreach(['onu_list','unconfigured_onus'] as $list) {
+        foreach(['onu_list','unconfigured_onus','_identity_candidates'] as $list) {
             $rows=$snapshot[$list] ?? [];
             foreach($rows as &$row) {
                 $sn=strtoupper(trim((string)($row['serial_number'] ?? '')));$sample=$ledger[$sn] ?? null;

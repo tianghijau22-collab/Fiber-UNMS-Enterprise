@@ -193,7 +193,7 @@ class FastOpticalProbeService
         $root='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$ifName='1.3.6.1.2.1.31.1.1.1.1';
         $runner=app(SnmpWalkRunner::class);$started=OnuTelemetrySample::timestamp();$start=microtime(true);
         $snapshot=$olt->last_telemetry_snapshot ?? [];
-        $known=array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []);
+        $known=\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []);
         $scope=null;
         if(count($known)>256) {
             $discovery=$runner->walk($olt,['interfaces'=>$ifName],10,1,1,4);
@@ -245,7 +245,7 @@ class FastOpticalProbeService
         if(!$stateComplete) {
             // Old tuples select requests only. Only newly returned hardware values may update a sample.
             $snapshot=$olt->last_telemetry_snapshot ?? [];$groups=[];
-            foreach(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []) as $row) {
+            foreach(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []) as $row) {
                 $index=ZteOnuIdentityMap::ifIndexFromPort((string)($row['port'] ?? ''));$id=(string)($row['onu_id'] ?? '');
                 if($index!==null && ctype_digit($id) && (int)$id>0 && (int)$id<=65535 && !isset($states[$state.'.'.$index.'.'.(int)$id]))
                     $groups[$index][]=$state.'.'.$index.'.'.(int)$id;
@@ -537,7 +537,7 @@ class FastOpticalProbeService
     {
         $observedAt=OnuTelemetrySample::timestamp();
         $snapshot=$olt->last_telemetry_snapshot ?? [];
-        $rows=array_values(ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? [])));
+        $rows=array_values(ZteOnuIdentityMap::uniqueRows(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? [])));
         $rows=array_filter($rows,fn($r)=>($at=OnuTelemetrySample::epoch($r['identity_observed_at'] ?? null))!==null && $at>=microtime(true)-600 && $at<=microtime(true)+5);
         if(!$rows || !$serials) return [];
         $session=self::getSnmpSession($olt,1800,0);if(!$session)return [];
@@ -555,7 +555,7 @@ class FastOpticalProbeService
         $started=microtime(true);$at=OnuTelemetrySample::timestamp();
         $index=ZteOnuIdentityMap::ifIndexFromPort($standardPort);
         $snapshot=$olt->last_telemetry_snapshot ?? [];
-        $identities=ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+        $identities=ZteOnuIdentityMap::uniqueRows(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []));
         $expected=array_filter($identities,fn($r)=>$index!==null && ZteOnuIdentityMap::ifIndexFromPort($r['port'])===$index);
         $readings=$index===null ? [] : static::readSerialObservations($olt,array_keys($expected));
         $online=count(array_filter($readings,fn($r)=>$r['is_online']===true));
@@ -653,7 +653,7 @@ class FastOpticalProbeService
 
         $sampleStartedAt = OnuTelemetrySample::timestamp();
         $readings = static::readVerifiedOdpOnus($resolvedOlt, $onus->all());
-        $inventory = ZteOnuIdentityMap::uniqueRows(array_merge($resolvedOlt->last_telemetry_snapshot['onu_list'] ?? [], $resolvedOlt->last_telemetry_snapshot['unconfigured_onus'] ?? []));
+        $inventory = ZteOnuIdentityMap::uniqueRows(\App\Services\Olt\ZteOnuIdentityMap::snapshotRows($resolvedOlt->last_telemetry_snapshot ?? []));
         $writeRows=[];
         foreach($readings as $sn=>$reading) if(isset($inventory[$sn])) $writeRows[]=array_replace($inventory[$sn],$reading,OnuTelemetrySample::normalize($reading,$sampleStartedAt));
         app(OnuTelemetryWriter::class)->apply($resolvedOlt,$writeRows,$sampleStartedAt,'point');
@@ -702,7 +702,7 @@ class FastOpticalProbeService
     {
         if (!str_contains(strtolower((string)($olt->vendor_key ?: $olt->vendor)), 'zte')) return [];
         $snapshot = $olt->last_telemetry_snapshot ?? [];
-        $identities = array_merge($snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
+        $identities = \App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []);
         $serials = array_map(fn($onu) => strtoupper(trim((string)($onu->onu_serial ?: $onu->onu_mac))), $onus);
         if (ZteOnuIdentityMap::uniqueRows($identities) === []) return [];
         $session = self::getSnmpSession($olt, 1800, 0);

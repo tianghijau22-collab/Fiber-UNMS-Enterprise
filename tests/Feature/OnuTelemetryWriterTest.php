@@ -79,6 +79,35 @@ class OnuTelemetryWriterTest extends TestCase
         $this->assertSame(0,$r['updated']);$this->assertSame('active',$this->registrationStatus(1));$this->assertSame('active',$this->registrationStatus(3));
     }
 
+    public function test_reused_serial_can_display_one_sample_without_writing_both_customers_and_new_conflict_clears_winner(): void
+    {
+        $this->registration(3,1,1);$at=$this->at();
+        $active=array_replace($this->row(1,'1/2/3'),['onu_id'=>'12'],Sample::fromZteState(3,3926,$at));
+        $ghost=array_replace($this->row(1,'1/4/7'),['onu_id'=>'2'],Sample::fromZteState(65535,65535,$at));
+        $r=$this->write([$active,$ghost]);
+        $this->assertSame(1,$r['accepted']);$this->assertSame(0,$r['updated']);$this->assertSame(1,$r['ambiguous_registrations']);
+        $this->assertEquals(-25,DB::table('ont_registrations')->where('id',1)->value('rx_power'));
+        $this->assertEquals(-25,DB::table('ont_registrations')->where('id',3)->value('rx_power'));
+        $olt=OltDevice::findOrFail(1);$selected=Identity::uniqueRows([$active,$ghost])['TEST00000001'];
+        $olt->update(['last_telemetry_snapshot'=>['onu_list'=>[$selected,$selected],'_identity_candidates'=>Identity::duplicateEvidence([$active,$ghost])]]);
+        $this->assertCount(2,$this->snapshot()['_identity_candidates']);
+        $view=(new OnuTelemetryView([$olt]))->resolve(1,'TEST00000001');$this->assertSame(-22.15,$view['rx_power']);$this->assertTrue($view['serial_duplicate']);
+        $other=array_replace($ghost,Sample::fromZteState(3,4000,$this->at()));
+        $unknown=['serial_number'=>'TEST00000001','port'=>null,'onu_id'=>null,'identity_source'=>null,...Sample::project([])];
+        $olt->update(['last_telemetry_snapshot'=>['onu_list'=>[$unknown,$unknown],'_identity_candidates'=>Identity::duplicateEvidence([$active,$other])]]);
+        $view=(new OnuTelemetryView([$olt]))->resolve(1,'TEST00000001');
+        $this->assertNull($view['rx_power']);$this->assertSame('identity_conflict',$view['telemetry_reason']);
+        $this->assertArrayNotHasKey('TEST00000001',$this->snapshot()['_onu_write_ledger']);
+    }
+
+    public function test_partial_port_refresh_does_not_erase_other_known_duplicate_location(): void
+    {
+        $at=$this->at();$active=array_replace($this->row(1,'1/2/3'),Sample::fromZteState(3,3926,$at));
+        $ghost=array_replace($this->row(1,'1/4/7'),Sample::fromZteState(1,65535,$at));
+        $out=Writer::mergePortObservations([$active,$ghost],[array_replace($active,['identity_observed_at'=>$this->at(-1)])]);
+        $this->assertCount(2,$out);$this->assertSame('gpon-olt_1/2/3',Identity::uniqueRows(array_values($out))['TEST00000001']['port']);
+    }
+
     public function test_deleted_customer_or_registration_is_not_written(): void
     {
         DB::table('customers')->where('id',1)->update(['deleted_at'=>now()]);

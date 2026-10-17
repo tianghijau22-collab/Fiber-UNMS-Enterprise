@@ -11,6 +11,7 @@ class OnuTelemetryView
     public const MAX_SAMPLE_AGE = 180;
     private array $devices = [];
     private array $rows = [];
+    private array $duplicates = [];
 
     public function __construct(iterable $devices)
     {
@@ -19,8 +20,9 @@ class OnuTelemetryView
             $snapshot = $device->getAttribute('last_telemetry_snapshot') ?? [];
             $isZte = str_contains(strtolower((string)($device->vendor_key ?: $device->vendor)), 'zte');
             $this->devices[$id] = ['name'=>$device->name, 'sampled_at'=>$snapshot['polled_at'] ?? null, 'is_zte'=>$isZte];
-            $rows = array_merge($snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
+            $rows = \App\Services\Olt\ZteOnuIdentityMap::snapshotRows($snapshot ?? []);
             if ($isZte) {
+                foreach(ZteOnuIdentityMap::groups($rows) as $sn=>$locations)if(count($locations)>1)$this->duplicates[$id][$sn]=ZteOnuIdentityMap::duplicateInfo($locations,false);
                 $rows = array_values(ZteOnuIdentityMap::uniqueRows($rows));
             } else {
                 $rows = array_filter($rows, fn($r) => ($r['_source'] ?? '') === 'live_snmp');
@@ -87,10 +89,13 @@ class OnuTelemetryView
         $keys = array_values(array_unique(array_filter(array_map(fn($s) => strtoupper(trim((string)$s)), [$serial, $mac]))));
         $matches = [];
         foreach ($keys as $key) if (isset($this->rows[$oltId][$key])) $matches[] = $this->rows[$oltId][$key];
-        if (!$matches) return $view;
+        $duplicate=$this->duplicates[$oltId][strtoupper(trim((string)$serial))] ?? [];
+        $view=array_replace($view,$duplicate);
+        if (!$matches) return $duplicate ? array_replace($view,['telemetry_reason'=>'identity_conflict']):$view;
         $locations = array_unique(array_map(fn($r) => ($r['port'] ?? '').':'.($r['onu_id'] ?? ''), $matches));
         if (count($locations) !== 1) return array_replace($view, ['telemetry_reason' => 'identity_conflict']);
         $row = $matches[0];
+        if($duplicate)$view=array_replace($view,['serial_resolution'=>$row['serial_resolution'] ?? 'ambiguous']);
         $isZte = $device['is_zte'];
         if ($isZte && !self::ageIsValid($row['identity_observed_at'] ?? null, 600)) {
             $at = is_string($row['identity_observed_at'] ?? null) ? strtotime($row['identity_observed_at']) : false;

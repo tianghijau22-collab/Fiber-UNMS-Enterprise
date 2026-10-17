@@ -86,6 +86,26 @@ class OltIdentityPartitionTest extends TestCase
         }
     }
 
+    public function test_reused_serial_retains_evidence_through_repeated_partition_and_can_become_ambiguous(): void
+    {
+        $active=$this->row(1,'1/2/3',12);
+        $ghost=array_replace($this->row(1,'1/4/7',2),\App\Services\Olt\OnuTelemetrySample::fromZteState(65535,65535,now()->toIso8601String()));
+        $out=$this->partition([$active,$ghost]);
+        $this->assertSame('gpon-olt_1/2/3',$out['onu_list'][0]['port']);$this->assertSame(-26.0,$out['onu_list'][0]['rx_power']);
+        $this->assertCount(2,$out['_identity_candidates']);$this->assertTrue($out['onu_list'][0]['serial_duplicate']);
+        for($i=0;$i<3;$i++)$out=$this->partition(Identity::snapshotRows($out));
+        $this->assertCount(2,$out['_identity_candidates']);$this->assertSame('12',$out['onu_list'][0]['onu_id']);
+        $device=OltDevice::findOrFail(1);$device->last_telemetry_snapshot=$out;
+        $view=(new OnuTelemetryView([$device]))->resolve(1,'TEST00000001');
+        $this->assertTrue($view['rx_available']);$this->assertTrue($view['serial_duplicate']);$this->assertSame('single_fresh_rx',$view['serial_resolution']);
+        $this->assertFalse((new OnuTelemetryView([$device]))->resolve(2,'TEST00000001')['rx_available']);
+        $out=$this->partition([$active,$this->row(1,'1/4/7',2)]);
+        $this->assertNull($out['onu_list'][0]['rx_power']);$this->assertCount(2,$out['_identity_candidates']);
+        $device->last_telemetry_snapshot=$out;$view=(new OnuTelemetryView([$device]))->resolve(1,'TEST00000001');
+        $this->assertFalse($view['rx_available']);$this->assertSame('identity_conflict',$view['telemetry_reason']);
+        $this->assertTrue($view['serial_duplicate']);
+    }
+
     public function test_hardware_pon_one_is_valid_and_foreign_olt_customer_is_not_partitioned(): void
     {
         DB::table('network_nodes')->insert(['id'=>2,'name'=>'Foreign ODP','olt_device_id'=>2,'olt_port_ref'=>'gpon-olt_1/1/1']);

@@ -11,7 +11,7 @@ class ZteOnuOpticalBatch
         $counts = array_count_values(array_map(fn($s) => strtoupper(trim((string)$s)), $serials));
         $requests = []; $mapping = [];
         foreach ($counts as $sn => $count) {
-            if ($count !== 1 || !isset($identities[$sn])) continue;
+            if (!isset($identities[$sn])) continue;
             $row = $identities[$sn];
             $index = ZteOnuIdentityMap::ifIndexFromPort($row['port']);
             $id = $row['onu_id'];
