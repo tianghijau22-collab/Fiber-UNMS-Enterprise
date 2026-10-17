@@ -1,4 +1,5 @@
 import { nodeTelemetryState } from '../lib/onuTelemetry.js';
+import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
@@ -1384,6 +1385,7 @@ function LeafletMap({
           existing.markerType !== markerType || 
           existing.statusKey !== effStatus.key || 
           existing.opticalDbm !== effectiveBestPower || 
+          existing.opticalText !== opticalDbmText ||
           existing.isSelected !== isSelected ||
           existing.multiCount !== multiCount
         ) {
@@ -1472,6 +1474,7 @@ function LeafletMap({
           isSelected,
           statusKey: effStatus.key,
           opticalDbm: effectiveBestPower,
+          opticalText: opticalDbmText,
           multiCount,
           renderLat,
           renderLng,
@@ -2174,10 +2177,14 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreenPage, navigate]);
 
-  const fetchNodesAndCables = useCallback(async (silent = false) => {
+  const mapReadPending = useRef(false);
+  const fetchNodesAndCables = useCallback(async (silent = false, signal) => {
+    if (mapReadPending.current) return;
+    mapReadPending.current=true;
     if (!silent) setLoading(true);
     try {
-      const res = await fetch('/api/gis/map-data').then(r => r.json());
+      const res = await fetch('/api/gis/map-data',{signal}).then(r => {if (!r.ok) throw new Error('Peta gagal dimuat'); return r.json();});
+      if (signal?.aborted) return;
       if (res?.data) {
         const rawNodes = res.data.nodes;
         const rawCables = res.data.cables;
@@ -2198,6 +2205,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         setAllCables([]);
       }
     } finally {
+      mapReadPending.current=false;
       if (!silent) setLoading(false);
     }
   }, []);
@@ -2209,16 +2217,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     fetchNodesAndCables();
   }, [fetchNodesAndCables]);
 
-  // Live polling telemetry: silent fetch setiap 25 detik (hemat resource server & camera persisten)
-  useEffect(() => {
-    if (!livePolling) return;
-    const timer = setInterval(() => {
-      if (document.hidden) return;
-      fetchNodesAndCables(true);
-    }, 25000);
-
-    return () => clearInterval(timer);
-  }, [livePolling, fetchNodesAndCables]);
+  useStoredRefresh(signal=>fetchNodesAndCables(true,signal),{enabled:livePolling,intervalMs:15000});
 
   // Sub-Second Real-Time SNMP Trap & Telemetry Event Stream Listener (Polling ringan tiap 3.5s)
   const [recentTrapAlert, setRecentTrapAlert] = useState(null);
@@ -2260,7 +2259,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
   useEffect(() => {
     if (selectedNode) {
       const updated = safeAllNodes.find(n => n?.id === selectedNode.id);
-      if (updated && updated.optical_power_dbm !== selectedNode.optical_power_dbm) {
+      if (updated && updated !== selectedNode) {
         setSelectedNode(updated);
       }
     }

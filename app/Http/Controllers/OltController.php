@@ -87,6 +87,7 @@ class OltController extends Controller
 
     private function withLiveRead(Request $request,callable $read,bool $snapshotAllowed=false)
     {
+        if($snapshotAllowed && $request->boolean('stored_only'))return $read();
         $id=$request->input('device_id') ?: $request->query('device_id');
         $device=$id ? OltDevice::find((int)$id):OltDevice::first();
         $cached=$snapshotAllowed && !$request->boolean('fresh') && !$request->boolean('force') && !empty($device?->last_telemetry_snapshot);
@@ -104,14 +105,15 @@ class OltController extends Controller
         $sampleStartedAt = \App\Services\Olt\OnuTelemetrySample::timestamp();
         $vendor       = $request->input('vendor') ?: $request->query('vendor', 'zte-c300');
         $deviceId     = $request->input('device_id') ?: ($request->query('device_id') ?: null);
-        $isFresh      = $request->boolean('fresh') || $request->boolean('force');
+        $isFresh      = !$request->boolean('stored_only') && ($request->boolean('fresh') || $request->boolean('force'));
         $summaryOnly  = $request->has('summary_only') ? $request->boolean('summary_only') : true;
 
         $device = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
+        if($request->boolean('stored_only') && !$device)return response()->json(['message'=>'OLT tidak ditemukan.'],404);
 
         // 1. Jika data snapshot database sudah ada dan tidak dipaksa refresh
-        if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
-            $rawSnapshot = $device->last_telemetry_snapshot;
+        if (!$isFresh && $device && (!empty($device->last_telemetry_snapshot) || $request->boolean('stored_only'))) {
+            $rawSnapshot = $device->last_telemetry_snapshot ?? [];
             $rawPonPorts = !empty($rawSnapshot['pon_ports']) ? $rawSnapshot['pon_ports'] : [];
             $rawDevInfo  = !empty($rawSnapshot['device_info']) ? $rawSnapshot['device_info'] : [];
             if ($device->connection_mode === 'live') {
@@ -183,7 +185,7 @@ class OltController extends Controller
                 $rawOnuList,
                 $rawUncfg
             );
-            $snapshot['polled_at'] = $rawSnapshot['polled_at'] ?? now()->toIso8601String();
+            $snapshot['polled_at'] = $rawSnapshot['polled_at'] ?? null;
             return response()->json($snapshot);
         }
 
@@ -280,16 +282,15 @@ class OltController extends Controller
         $deviceId = $request->input('device_id') ?: ($request->query('device_id') ?: null);
         $device   = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
         $port     = $request->input('port') ?: ($request->query('port') ?: ($device?->last_telemetry_snapshot['pon_ports'][0]['port_id'] ?? 'gpon-olt_1/2/1'));
-        $isFresh  = $request->boolean('fresh') || $request->boolean('force');
-
-        $driver = $this->getDriver($vendor, $device?->id);
+        $isFresh  = !$request->boolean('stored_only') && ($request->boolean('fresh') || $request->boolean('force'));
+        if($request->boolean('stored_only') && !$device)return response()->json(['message'=>'OLT tidak ditemukan.'],404);
 
         $cleanPort = strtolower(trim($port));
         $normalizedPort = str_replace(['gpon_', 'epon_'], ['gpon-olt_', 'epon-olt_'], $cleanPort);
 
         // Jika tidak dipaksa fresh dan snapshot ada
-        if (!$isFresh && $device && !empty($device->last_telemetry_snapshot)) {
-            $rawSnapshot = $device->last_telemetry_snapshot;
+        if (!$isFresh && $device && (!empty($device->last_telemetry_snapshot) || $request->boolean('stored_only'))) {
+            $rawSnapshot = $device->last_telemetry_snapshot ?? [];
             $allOnus = $rawSnapshot['onu_list'] ?? [];
             $allUncfg = $rawSnapshot['unconfigured_onus'] ?? [];
 
@@ -322,11 +323,12 @@ class OltController extends Controller
                 'onu_list'          => $portFilteredOnus,
                 'unconfigured_onus' => $portUncfg,
                 'orphaned_onus'     => $partitioned['orphaned_onus'] ?? [],
-                'polled_at'         => $rawSnapshot['polled_at'] ?? now()->toIso8601String(),
+                'polled_at'         => $rawSnapshot['polled_at'] ?? null,
             ]);
         }
 
         // Live Query khusus port ini via Driver (SNMP/API)
+        $driver = $this->getDriver($vendor, $device?->id);
         $driverOnuList = $driver->getOnuListByPort($port);
         $allUncfg      = $driver->getUnconfiguredOnus();
         $driverUncfg   = array_values(array_filter($allUncfg, function ($o) use ($normalizedPort) {
@@ -920,7 +922,8 @@ class OltController extends Controller
         }
         $data=app(\App\Services\Olt\OnuOpticalDiagnostic::class)->read($device,$serialNumber,
             $request->filled('port') ? (string)$request->query('port'):null,
-            $request->filled('onu_id') ? (int)$request->query('onu_id'):null);
+            $request->filled('onu_id') ? (int)$request->query('onu_id'):null,
+            $request->boolean('stored_only'));
 
         // Customer context is selected by the explicit OLT owner, never a global first match.
         $reg=null;$registrationStatus='unlinked';

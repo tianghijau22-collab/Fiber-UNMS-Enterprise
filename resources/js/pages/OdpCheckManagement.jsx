@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../components/AuthContext';
 import OdpWatermarkCamera from '../components/OdpWatermarkCamera';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { scanOpmPowerReading } from '../utils/opmOcrScanner';
 import LoadingState from '../components/LoadingState';
+import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 
 /* ── Minimalist Clean SVG Icons ── */
 const IconCamera = () => (
@@ -139,8 +140,10 @@ export default function OdpCheckManagement() {
   }, []);
 
   // ── Fetch Measurements History & Stats ──
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const historyRequest=useRef(0);
+  const fetchData = useCallback(async (silent = false) => {
+    const token=++historyRequest.current;
+    if (silent!==true) setLoading(true);
     try {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
@@ -155,6 +158,7 @@ export default function OdpCheckManagement() {
 
       const jsonData = await resData.json();
       const jsonStats = await resStats.json();
+      if (token!==historyRequest.current) return;
 
       if (jsonData.success) {
         setMeasurements(jsonData.data.data || []);
@@ -165,15 +169,16 @@ export default function OdpCheckManagement() {
       }
     } catch (e) {
       console.error('Error fetching ODP measurements:', e);
-      showAlert('Gagal memuat data histori pengukuran.', 'error');
+      if (silent!==true) showAlert('Gagal memuat data histori pengukuran.', 'error');
     } finally {
-      setLoading(false);
+      if (token===historyRequest.current) setLoading(false);
     }
   }, [search, statusFilter, periodFilter, currentPage]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+  useStoredRefresh(()=>fetchData(true),{enabled:activeTab==='history' && !loading,intervalMs:15000,target:`${search}:${statusFilter}:${periodFilter}:${currentPage}`});
 
   // ── Refresh Geolocation Manually ──
   const handleGetLocation = () => {

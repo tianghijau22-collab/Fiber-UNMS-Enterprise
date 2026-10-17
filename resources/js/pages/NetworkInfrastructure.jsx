@@ -9,6 +9,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import SearchableSelect from '../components/SearchableSelect';
 import { dmsToDecimal, decimalToDms, parseCoordsInput } from '../utils/coordinateParser';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 import RefreshButton from '../components/RefreshButton';
 import { naturalNodeCompare } from '../utils/naturalSort';
 import { toPng } from 'html-to-image';
@@ -2628,6 +2629,7 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
   const [viewFullOdcModal, setViewFullOdcModal] = useState(null);
   const [fullOdcData, setFullOdcData] = useState(null);
   const [loadingFullOdc, setLoadingFullOdc] = useState(false);
+  const odcDetailRequest=useRef(0),odcFullRequest=useRef(0),odcListRequest=useRef(0);
 
   // Sync filterOlt with scopedOltId
   useEffect(() => {
@@ -2649,8 +2651,9 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
   }, []);
 
   // Muat ODC setiap kali filter / search / refreshKey / scopedOltId berubah
-  const fetchOdcs = useCallback(async () => {
-    setLoading(true);
+  const fetchOdcs = useCallback(async (silent = false) => {
+    const token=++odcListRequest.current;
+    if (!silent) setLoading(true);
     const params = new URLSearchParams();
     const targetOlt = filterOlt || scopedOltId;
     if (targetOlt && targetOlt !== 'all') params.append('olt_id', targetOlt);
@@ -2658,43 +2661,61 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
     if (searchQuery.trim()) params.append('search', searchQuery.trim());
     try {
       const r = await fetch(`/api/network-nodes/odc-list?${params}`);
+      if (!r.ok) throw new Error('ODC belum berhasil dimuat');
       const d = await r.json();
+      if (token!==odcListRequest.current) return;
       setOdcList(d.data ?? []);
-    } catch { setOdcList([]); }
-    finally { setLoading(false); }
+    } catch { /* Keep the last successful list. */ }
+    finally { if (token===odcListRequest.current) setLoading(false); }
   }, [filterOlt, filterPop, searchQuery, scopedOltId]);
 
-  useEffect(() => { fetchOdcs(); }, [fetchOdcs, refreshKey]);
+  useEffect(() => { fetchOdcs(); }, [fetchOdcs]);
+  useEffect(() => { if (refreshKey) fetchOdcs(true); }, [refreshKey]);
+  useStoredRefresh(() => fetchOdcs(true), { enabled: !loading, target: `${filterOlt}:${filterPop}:${searchQuery}:${scopedOltId}`, intervalMs: 15000 });
+  useStoredRefresh(async signal => {
+    const r = await fetch(`/api/network-nodes/${selectedOdc.id}/odc-ports`, { signal });
+    if (!r.ok) throw new Error('Detail ODC gagal dimuat');
+    const d = await r.json(); if (!signal.aborted) setOdcDetail(d);
+  }, { enabled: !!selectedOdc && !detailLoading && !editingPort && !savingPort, target: selectedOdc?.id });
+  useStoredRefresh(async signal => {
+    const r = await fetch(`/api/network-nodes/${viewFullOdcModal.id}/odc-ports`, { signal });
+    if (!r.ok) throw new Error('Detail ODC gagal dimuat');
+    const d = await r.json(); if (!signal.aborted) setFullOdcData(d);
+  }, { enabled: !!viewFullOdcModal && !loadingFullOdc, target: viewFullOdcModal?.id });
 
   // Muat grid port ODC
   const openOdcDetail = async (odc) => {
+    const token=++odcDetailRequest.current;
     setSelectedOdc(odc);
     setOdcDetail(null);
     setDetailLoading(true);
     try {
       const r = await fetch(`/api/network-nodes/${odc.id}/odc-ports`);
+      if (!r.ok) throw new Error('Detail ODC gagal dimuat');
       const d = await r.json();
-      setOdcDetail(d);
-    } catch { setOdcDetail(null); }
-    finally { setDetailLoading(false); }
+      if (token===odcDetailRequest.current) setOdcDetail(d);
+    } catch { /* Initial state stays empty; later successful data are preserved. */ }
+    finally { if (token===odcDetailRequest.current) setDetailLoading(false); }
   };
 
-  const closeDetail = () => { setSelectedOdc(null); setOdcDetail(null); };
+  const closeDetail = () => { ++odcDetailRequest.current;setSelectedOdc(null); setOdcDetail(null); };
 
   // Muat seluruh spesifikasi & data lengkap ODC
   const openOdcFullModal = async (odc) => {
+    const token=++odcFullRequest.current;
     setViewFullOdcModal(odc);
     setFullOdcData(null);
     setLoadingFullOdc(true);
     try {
       const r = await fetch(`/api/network-nodes/${odc.id}/odc-ports`);
+      if (!r.ok) throw new Error('Detail ODC gagal dimuat');
       const d = await r.json();
-      setFullOdcData(d);
-    } catch { setFullOdcData(null); }
-    finally { setLoadingFullOdc(false); }
+      if (token===odcFullRequest.current) setFullOdcData(d);
+    } catch { /* Preserve successful data. */ }
+    finally { if (token===odcFullRequest.current) setLoadingFullOdc(false); }
   };
 
-  const closeFullOdcModal = () => { setViewFullOdcModal(null); setFullOdcData(null); };
+  const closeFullOdcModal = () => { ++odcFullRequest.current;setViewFullOdcModal(null); setFullOdcData(null); };
 
   // Save changes to an individual ODC port
   const handleSavePort = async (portId, portData) => {
@@ -3672,6 +3693,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
   const [portsData, setPortsData] = useState([]);
   const [portLoadError, setPortLoadError] = useState(null);
   const portRequest = useRef(0);
+  const portReadPending = useRef(false);
   const [loadingPorts, setLoadingPorts] = useState(false);
   const [refreshingLiveOptical, setRefreshingLiveOptical] = useState(false);
   const [liveProbeFeedback, setLiveProbeFeedback] = useState(null);
@@ -3683,20 +3705,27 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
   const [viewFullOdpModal, setViewFullOdpModal] = useState(null);
   const [fullOdpData, setFullOdpData] = useState(null);
   const [loadingFullOdp, setLoadingFullOdp] = useState(false);
+  const odpFullRequest=useRef(0);
 
   const openOdpFullModal = async (odp) => {
+    const token=++odpFullRequest.current;
     setViewFullOdpModal(odp);
     setFullOdpData(null);
     setLoadingFullOdp(true);
     try {
-      const r = await fetch(`/api/network-nodes/${odp.id}/port-detail`);
+      const r = await fetch(`/api/network-nodes/${odp.id}/port-detail?skip_live=1`);
+      if (!r.ok) throw new Error('Detail ODP gagal dimuat');
       const d = await r.json();
-      setFullOdpData(d);
-    } catch { setFullOdpData(null); }
-    finally { setLoadingFullOdp(false); }
+      if (token===odpFullRequest.current) setFullOdpData(d);
+    } catch { /* Preserve successful data. */ }
+    finally { if (token===odpFullRequest.current) setLoadingFullOdp(false); }
   };
 
-  const closeFullOdpModal = () => { setViewFullOdpModal(null); setFullOdpData(null); };
+  const closeFullOdpModal = () => { ++odpFullRequest.current;setViewFullOdpModal(null); setFullOdpData(null); };
+  useStoredRefresh(async signal => {
+    const d = await loadOdpPortDetail(viewFullOdpModal.id, false, fetch, signal);
+    if (!signal.aborted) setFullOdpData(d);
+  }, { enabled: !!viewFullOdpModal && !loadingFullOdp, target: viewFullOdpModal?.id });
 
   // ─── Fitur Screenshot Detail Port ODP ─────────────────────────────────────
   const [capturingScreenshot, setCapturingScreenshot] = useState(false);
@@ -3921,24 +3950,27 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
     }
   };
 
-  const fetchOdpPorts = useCallback(async (odpId, isLiveRefresh = false) => {
+  const fetchOdpPorts = useCallback(async (odpId, isLiveRefresh = false, silent = false, signal) => {
+    if (silent && portReadPending.current) return;
+    portReadPending.current = true;
     const requestId = ++portRequest.current;
     setPortLoadError(null);
     if (isLiveRefresh) {
       setRefreshingLiveOptical(true);
-    } else {
+    } else if (!silent) {
       setLoadingPorts(true);
     }
     try {
-      const d = await loadOdpPortDetail(odpId, isLiveRefresh);
-      if (requestId !== portRequest.current) return;
+      const d = await loadOdpPortDetail(odpId, isLiveRefresh, fetch, signal);
+      if (signal?.aborted || requestId !== portRequest.current) return;
       setOdpDetailData(d);
       setPortsData(d.ports ?? []);
 
-      if (d.node?.used_ports != null) {
-        setSelectedOdp(prev => prev ? { ...prev, used_ports: d.node.used_ports } : null);
+      if (d.node?.id) {
+        setSelectedOdp(prev => prev && String(prev.id)===String(d.node.id) ? { ...prev, ...d.node } : prev);
       }
 
+      if (!d.live_probe) setLiveProbeFeedback(null);
       if (d.live_probe) {
         if (d.live_probe.success) {
           setLiveProbeFeedback({
@@ -3953,16 +3985,22 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
         }
       }
     } catch (error) {
-      if (requestId !== portRequest.current) return;
+      if (signal?.aborted || requestId !== portRequest.current) return;
       setPortLoadError(error.message || 'Detail port gagal dimuat. Coba lagi beberapa saat.');
       setLiveProbeFeedback(null);
     } finally {
       if (requestId === portRequest.current) {
+        portReadPending.current = false;
         setLoadingPorts(false);
         setRefreshingLiveOptical(false);
       }
     }
   }, []);
+
+  useStoredRefresh(signal => fetchOdpPorts(selectedOdp.id, false, true, signal), {
+    enabled: !!selectedOdp && !editingOdpPort && !savingOdpPort && !capturingScreenshot,
+    target: selectedOdp?.id,
+  });
 
   const openOdpDetail = (odp) => {
     setPortLoadError(null);
@@ -3977,6 +4015,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
 
   const closeOdpDetail = () => {
     ++portRequest.current;
+    portReadPending.current = false;
     setPortLoadError(null);
     setLoadingPorts(false);
     setRefreshingLiveOptical(false);
@@ -5444,10 +5483,11 @@ export default function NetworkInfrastructure() {
     if (!silent) setLoadingNodes(true);
     try {
       const r = await fetch('/api/network-nodes?per_page=10000');
+      if (!r.ok) throw new Error('Topologi tersimpan gagal dimuat');
       const d = await r.json();
       const list = d.data ?? [];
       setAllNodes(list);
-    } catch { setAllNodes([]); }
+    } catch { /* Preserve visible topology when a background request fails. */ }
     finally {
       if (!silent) setLoadingNodes(false);
     }
@@ -5512,14 +5552,13 @@ export default function NetworkInfrastructure() {
 
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const refreshAll = useCallback((silent = true) => {
-    fetchStats();
-    fetchAllNodes();
-    if (selectedPop) fetchPopCables(selectedPop.id, silent);
-    setRefreshKey(k => k + 1);
+  const refreshAll = useCallback(async (silent = true, background = false) => {
+    await Promise.all([fetchStats(), fetchAllNodes(silent), selectedPop ? fetchPopCables(selectedPop.id, silent) : Promise.resolve()]);
+    if (!background) setRefreshKey(k => k + 1);
   }, [fetchStats, fetchAllNodes, selectedPop, fetchPopCables]);
 
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(refreshAll);
+  useStoredRefresh(()=>refreshAll(true,true),{intervalMs:15000});
 
   /* Save Node (Create / Update) */
   const handleSaveNode = async (form) => {

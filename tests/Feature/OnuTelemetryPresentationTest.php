@@ -158,6 +158,44 @@ class OnuTelemetryPresentationTest extends TestCase
         $this->assertStringNotContainsString('private',json_encode($out));
     }
 
+    public function test_stored_interface_read_tracks_snapshot_updates_without_reading_hardware_or_writing_data(): void
+    {
+        DB::table('olt_devices')->where('id',1)->update(['ip_address'=>'invalid']);
+        $q=Request::create('/api/customers/probe-interface-optical','GET',['olt_id'=>1,'interface'=>'1/1/16']);
+        DB::enableQueryLog();DB::flushQueryLog();
+        $d=app(CustomerController::class)->storedInterfaceOptical($q)->getData(true);
+        $this->assertSame('snapshot',$d['source']);$this->assertCount(1,$d['data']);
+        $this->assertSame(1,$d['data'][0]['customer_id']);$this->assertSame(-26.2,$d['data'][0]['rx_power']);
+        $this->assertNull($d['summary']['probed_at']);
+        $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|insert|delete)\b/i',$q['query']))));
+        $snap=json_decode(DB::table('olt_devices')->where('id',1)->value('last_telemetry_snapshot'),true);
+        $snap['onu_list'][0]=array_replace($snap['onu_list'][0],\App\Services\Olt\OnuTelemetrySample::normalize(['is_online'=>true,'rx_power'=>-22.4],date(DATE_ATOM)));
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode($snap)]);
+        $d=app(CustomerController::class)->storedInterfaceOptical($q)->getData(true);
+        $this->assertSame(-22.4,$d['data'][0]['rx_power']);$this->assertSame($snap['onu_list'][0]['sample_observed_at'],$d['data'][0]['sampled_at']);
+        $other=app(CustomerController::class)->storedInterfaceOptical(Request::create('/stored','GET',['olt_id'=>2,'interface'=>'1/1/16']))->getData(true);
+        $this->assertSame([],$other['data']);
+    }
+
+    public function test_stored_interface_does_not_assign_an_ambiguous_customer_binding(): void
+    {
+        DB::table('network_ports')->insert(['id'=>9,'node_id'=>1,'customer_service_id'=>1,'port_number'=>4,'status'=>'used']);
+        $q=Request::create('/stored','GET',['olt_id'=>1,'interface'=>'1/1/16']);
+        $d=app(CustomerController::class)->storedInterfaceOptical($q)->getData(true);
+        $this->assertCount(1,$d['data']);$this->assertNull($d['data'][0]['customer_id']);$this->assertFalse($d['data'][0]['is_registered']);
+        $this->assertSame(-26.2,$d['data'][0]['rx_power']);
+    }
+
+    public function test_stored_bts_list_and_stats_never_seed_sample_data_when_empty(): void
+    {
+        Schema::create('bts_sites',function(Blueprint $t){$t->id();$t->string('name');$t->float('rx_power')->nullable();$t->softDeletes();});
+        $c=app(\App\Http\Controllers\BtsSiteController::class);$q=Request::create('/bts','GET',['stored_only'=>1]);
+        DB::enableQueryLog();DB::flushQueryLog();
+        $this->assertSame([],$c->index($q)->getData(true)['data']);
+        $this->assertSame(0,$c->stats($q)->getData(true)['total_bts']);
+        $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|insert|delete)\b/i',$q['query']))));
+    }
+
     public function test_unavailable_read_coordination_returns_stored_ports_without_a_freshness_upgrade(): void
     {
         $controller=new class extends NetworkNodeController {

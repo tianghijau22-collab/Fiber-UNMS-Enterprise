@@ -153,6 +153,47 @@ class OpticalDiagnosticTest extends TestCase
         $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|insert|delete)\b/i',$q['query']))));
     }
 
+    public function test_stored_optical_updates_from_new_snapshots_without_any_hardware_read(): void {
+        $first=$this->endpoint(['device_id'=>1,'stored_only'=>1]);
+        $this->assertSame('stored',$first['probe_status']);$this->assertSame('snapshot',$first['telemetry_source']);
+        $this->assertNull($first['probe_started_at']);$this->assertEquals(-26,$first['rx_power']);
+        $row=$this->row(5);$row=array_replace($row,Sample::normalize(['is_online'=>true,'rx_power'=>-24.3],$row['sample_observed_at']));
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode(['onu_list'=>[$row]])]);
+        DB::enableQueryLog();DB::flushQueryLog();
+        $second=$this->endpoint(['device_id'=>1,'stored_only'=>1]);
+        $this->assertEquals(-24.3,$second['rx_power']);$this->assertSame($row['sample_observed_at'],$second['sampled_at']);
+        $this->assertSame([],$this->runner->calls);
+        $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|insert|delete)\b/i',$q['query']))));
+    }
+
+    public function test_stored_optical_never_refreshes_a_stale_or_missing_sample(): void {
+        $row=$this->row(301);DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode(['onu_list'=>[$row]])]);
+        $d=$this->endpoint(['device_id'=>1,'stored_only'=>1]);
+        $this->assertSame('stale',$d['telemetry_freshness']);$this->assertNull($d['rx_power']);$this->assertSame($row['sample_observed_at'],$d['sampled_at']);
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>null]);
+        $d=$this->endpoint(['device_id'=>1,'stored_only'=>1]);$this->assertNull($d['sampled_at']);$this->assertNull($d['rx_power']);
+        $this->assertSame([],$this->runner->calls);
+    }
+
+    public function test_stored_hardware_and_port_reads_never_fall_back_to_driver_when_snapshot_is_missing(): void {
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>null,'ip_address'=>'invalid']);
+        $controller=new class extends OltController {
+            public function getDriver(string $vendor,?int $deviceId=null) {throw new \RuntimeException('Hardware must not be accessed');}
+        };
+        DB::enableQueryLog();DB::flushQueryLog();
+        $r=$controller->index(Request::create('/hardware','GET',['device_id'=>1,'stored_only'=>1,'fresh'=>1,'force'=>1]));
+        $this->assertSame(200,$r->getStatusCode());$d=$r->getData(true);$this->assertNull($d['polled_at']);
+        $this->assertCount(1,$d['onu_list']);$this->assertNull($d['onu_list'][0]['rx_power']);$this->assertNull($d['onu_list'][0]['sample_observed_at']);
+        $r=$controller->getPortOnus(Request::create('/port-onus','GET',['device_id'=>1,'port'=>'1/1/16','stored_only'=>1,'fresh'=>1]));
+        $this->assertSame(200,$r->getStatusCode());$d=$r->getData(true);$this->assertNull($d['polled_at']);$this->assertSame([],$d['onu_list']);
+        $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|insert|delete)\b/i',$q['query']))));
+    }
+
+    public function test_stored_read_with_unknown_device_does_not_select_a_different_olt(): void {
+        $c=app(OltController::class);$q=Request::create('/stored','GET',['device_id'=>999,'stored_only'=>1]);
+        $this->assertSame(404,$c->index($q)->getStatusCode());$this->assertSame(404,$c->getPortOnus($q)->getStatusCode());
+    }
+
     public function test_busy_olt_keeps_stored_measurement_time_and_does_not_claim_a_live_result(): void {
         $this->runner->busy=true;$row=$this->row(60);
         DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode(['onu_list'=>[$row]])]);

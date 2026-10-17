@@ -879,6 +879,53 @@ class CustomerController extends Controller
      * POST /api/customers/probe-interface-optical
      * Pengecekan redaman & status optik real-time per interface langsung dari OLT via SNMP
      */
+    public function storedInterfaceOptical(Request $request)
+    {
+        $request->validate(['olt_id'=>'required|integer|min:1','interface'=>'required|string|max:64']);
+        $index=\App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort($request->input('interface'));
+        if($index===null)return response()->json(['message'=>'Interface PON tidak valid.'],422);
+        $olt=OltDevice::where('status','active')->where('connection_mode','live')->findOrFail((int)$request->input('olt_id'));
+        $port=\App\Services\Olt\ZteOnuIdentityMap::portFromIfIndex($index);
+        $snapshot=$olt->last_telemetry_snapshot ?? [];
+        $inventory=\App\Services\Olt\ZteOnuIdentityMap::uniqueRows(array_merge($snapshot['onu_list'] ?? [],$snapshot['unconfigured_onus'] ?? []));
+        $view=new \App\Services\Olt\OnuTelemetryView([$olt]);$customersBySerial=[];
+        $ambiguousServices=DB::table('network_ports')->whereNotNull('customer_service_id')->select('customer_service_id')
+            ->groupBy('customer_service_id')->havingRaw('COUNT(*) > 1')->pluck('customer_service_id')->flip();
+        foreach(Customer::with(['services.servicePackage','services.networkPort.node.parent.parent','services.ontRegistration'])->get() as $customer) {
+            foreach($customer->services as $service) {
+                $reg=$service->ontRegistration;$node=$service->networkPort?->node;
+                if(!$reg || isset($ambiguousServices[$service->id]) || \App\Services\Olt\OnuTelemetryView::ownerId($node)!==(int)$olt->id
+                    || \App\Services\Olt\OnuTelemetryWriter::hasAliasConflict($reg,$inventory))continue;
+                $sn=strtoupper(trim((string)($reg->onu_serial ?: $reg->onu_mac)));
+                $customersBySerial[$sn][]=['customer_id'=>$customer->id,'customer_name'=>$customer->name,'customer_number'=>$customer->customer_number,
+                    'phone'=>$customer->phone,'address'=>$customer->address,'package_name'=>$service->servicePackage?->name,
+                    'service_status'=>strtoupper($customer->service_status ?: 'OPEN'),'odp_name'=>$node?->name,'odp_code'=>$node?->code,
+                    'odp_port_number'=>$service->networkPort?->port_number,'ont_registration_id'=>$reg->id];
+            }
+        }
+        $rows=[];
+        foreach($inventory as $sn=>$identity) {
+            if(\App\Services\Olt\ZteOnuIdentityMap::ifIndexFromPort($identity['port'])!==$index)continue;
+            $v=$view->resolve((int)$olt->id,$sn);$rx=$v['rx_power'];
+            $quality=$v['is_online']===false?'LOS':($rx===null?'UNKNOWN':($rx<=-28?'CRITICAL':($rx<=-25?'WARNING':'GOOD')));
+            $matches=$customersBySerial[$sn] ?? [];
+            $rows[]=array_replace($v,['onu_index'=>$v['onu_id'],'onu_port_id'=>$port.':'.$identity['onu_id'],
+                'serial_number'=>$sn,'status_label'=>$v['onu_status'],'attenuation_quality'=>$quality,
+                'is_registered'=>count($matches)===1,'customer_id'=>null,'customer_number'=>null,'customer_name'=>'ONU '.$sn,
+                'ont_registration_id'=>null],count($matches)===1?$matches[0]:[]);
+        }
+        $summary=\App\Services\Olt\OnuTelemetryView::summarize($rows);
+        return response()->json(['status'=>'success','source'=>'snapshot','complete'=>$summary['unknown_clients']===0 && count($rows)>0,
+            'olt_id'=>$olt->id,'olt_name'=>$olt->name,'interface'=>$port,'data'=>$rows,
+            'summary'=>['total_onus'=>count($rows),'online_count'=>$summary['online_clients'],'down_count'=>$summary['loss_clients'],
+                'unknown_count'=>$summary['unknown_clients'],'avg_rx_power'=>$summary['avg_rx_power'],
+                'min_rx_power'=>$summary['worst_rx_power'],'max_rx_power'=>$summary['best_rx_power'],
+                'warning_count'=>count(array_filter($rows,fn($r)=>$r['attenuation_quality']==='WARNING')),
+                'critical_count'=>count(array_filter($rows,fn($r)=>$r['attenuation_quality']==='CRITICAL')),
+                'probed_at'=>null,'probed_at_human'=>null],
+            'polled_at'=>$snapshot['polled_at'] ?? null]);
+    }
+
     public function probeInterfaceOptical(Request $request)
     {
         $id=$request->input('olt_id');

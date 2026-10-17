@@ -1,5 +1,6 @@
-export async function loadOdpPortDetail(odpId, live = false, fetcher = fetch) {
-  const response = await fetcher(`/api/network-nodes/${encodeURIComponent(odpId)}/port-detail${live ? '?live=1' : ''}`, {
+export async function loadOdpPortDetail(odpId, live = false, fetcher = fetch, signal) {
+  const response = await fetcher(`/api/network-nodes/${encodeURIComponent(odpId)}/port-detail${live ? '?live=1' : '?skip_live=1'}`, {
+    signal,
     headers: { Accept: 'application/json' },
   });
   if (!response.ok) {

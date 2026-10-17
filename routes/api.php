@@ -165,6 +165,7 @@ Route::get('customers/sobok/sync-meta', [\App\Http\Controllers\SobokImportContro
 Route::post('customers/{id}/swap-onu', [CustomerController::class, 'swapOnu']);
 Route::match(['get', 'post'], 'customers/{id}/diagnostics', [CustomerController::class, 'diagnostics']);
 Route::post('customers/probe-interface-optical', [CustomerController::class, 'probeInterfaceOptical']);
+Route::get('customers/probe-interface-optical', [CustomerController::class, 'storedInterfaceOptical']);
 Route::apiResource('customers', CustomerController::class);
 Route::get('tickets/reference-data', [TicketController::class, 'referenceData']);
 Route::post('tickets/{id}/dispatch-telegram', [TicketController::class, 'dispatchTelegram']);

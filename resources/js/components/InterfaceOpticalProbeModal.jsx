@@ -1,6 +1,7 @@
 import { onuPresentation, opticalDisplaySummary } from '../lib/onuTelemetry.js';
-import { OnuStatus } from './OnuTelemetry.jsx';
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { OnuStatus, TelemetryStamp } from './OnuTelemetry.jsx';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 import { createPortal } from 'react-dom';
 import html2canvas from 'html2canvas';
 import SearchableSelect from './SearchableSelect';
@@ -20,6 +21,27 @@ export default function InterfaceOpticalProbeModal({
   const [probeResult, setProbeResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [syncDb, setSyncDb] = useState(true);
+  const generation = useRef(0);
+  const manualPending = useRef(false);
+
+  useEffect(() => {
+    ++generation.current;setProbeResult(null);setErrorMsg(null);setLoading(false);
+  },[isOpen,selectedOlt,selectedInterface]);
+
+  useStoredRefresh(async signal => {
+    if (manualPending.current) return;
+    const token=generation.current;
+    const query=new URLSearchParams({olt_id:String(selectedOlt),interface:selectedInterface});
+    try {
+      const response=await fetch('/api/customers/probe-interface-optical?'+query,{signal,headers:{Accept:'application/json'}});
+      const data=await response.json();
+      if (!response.ok || data.status!=='success') throw new Error(data.message || 'Pembaruan tersimpan gagal dimuat.');
+      if (!signal.aborted && token===generation.current) {setProbeResult(data);setErrorMsg(null);}
+    } catch(error) {
+      if (!signal.aborted && token===generation.current) setErrorMsg('Pembaruan tersimpan gagal dimuat. Data terakhir tetap ditampilkan.');
+    }
+  },{enabled:isOpen && selectedOlt!=='all' && !!selectedOlt && !!selectedInterface && selectedInterface!=='all',
+    target:`${selectedOlt}:${selectedInterface}`,immediate:true});
 
   // Screenshot states
   const [capturingScreenshot, setCapturingScreenshot] = useState(false);
@@ -76,7 +98,13 @@ export default function InterfaceOpticalProbeModal({
       }
       setErrorMsg(null);
     }
-  }, [isOpen, initialOltId, initialInterface, olts, availableInterfaces]);
+  }, [isOpen, initialOltId, initialInterface]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (selectedOlt==='all' && olts.length===1) setSelectedOlt(olts[0].id);
+    if (!selectedInterface && availableInterfaces.length>0) setSelectedInterface(availableInterfaces[0]);
+  },[isOpen,selectedOlt,selectedInterface,olts,availableInterfaces]);
 
   // Handle ESC key to close modal
   useEffect(() => {
@@ -100,6 +128,8 @@ export default function InterfaceOpticalProbeModal({
       return;
     }
 
+    const token=++generation.current;
+    manualPending.current=true;
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -117,6 +147,7 @@ export default function InterfaceOpticalProbeModal({
       });
 
       const json = await res.json();
+      if (token!==generation.current) return;
       if (res.ok && json.status === 'success') {
         setProbeResult(json);
         if (onProbeCompleted) {
@@ -126,9 +157,10 @@ export default function InterfaceOpticalProbeModal({
         setErrorMsg(json.message || 'Gagal mengambil data redaman dari OLT.');
       }
     } catch (err) {
-      setErrorMsg(`Error koneksi: ${err.message}`);
+      if (token===generation.current) setErrorMsg(`Error koneksi: ${err.message}`);
     } finally {
-      setLoading(false);
+      manualPending.current=false;
+      if (token===generation.current) setLoading(false);
     }
   }, [selectedInterface, selectedOlt, syncDb, onProbeCompleted]);
 
@@ -304,7 +336,7 @@ export default function InterfaceOpticalProbeModal({
 
             <!-- FOOTER BRANDING -->
             <div style="padding:10px 20px;border-top:1px solid ${borderColor};background-color:${cardBg};display:flex;justify-content:space-between;align-items:center;font-size:10px;color:${textSecondary};font-family:monospace;">
-              <div>Fiber UNMS Enterprise • Optical Telemetry Engine</div>
+              <div>FONA - Fiber Optic Network Analysis</div>
               <div>Halaman ${pageIdx + 1} dari ${pages.length}</div>
             </div>
 
@@ -551,7 +583,7 @@ export default function InterfaceOpticalProbeModal({
           )}
 
           {/* DATA PRESENTATION */}
-          {loading ? (
+          {loading && !probeResult?.data ? (
             <div className="p-10 text-center space-y-3 bg-black/5 dark:bg-white/5 rounded-lg border border-black/20 dark:border-white/20">
               <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
               <div className="font-bold text-black dark:text-white text-xs sm:text-sm">
@@ -571,7 +603,7 @@ export default function InterfaceOpticalProbeModal({
                 </div>
               )}
               <div className="text-[11px] text-black/60 dark:text-white/60">
-                Waktu pembacaan: {summary?.probed_at_human ?? 'Belum tersedia'}
+                {probeResult.source==='snapshot' ? 'Pembaruan tersimpan otomatis; lihat waktu sampel pada tiap ONU.' : `Waktu pembacaan langsung: ${summary?.probed_at_human ?? 'Belum tersedia'}`}
               </div>
               {/* 1. MOBILE RESPONSIVE CARDS VIEW (md:hidden) */}
               <div className="block md:hidden space-y-2">
@@ -602,6 +634,7 @@ export default function InterfaceOpticalProbeModal({
 
                           <div className="flex items-center gap-2 shrink-0">
                             <OnuStatus value={row} />
+                            <TelemetryStamp value={row} />
 
                             <span className={`font-mono font-bold text-xs ${rxColorClass}`}>
                               {presentation.rxLabel}
@@ -674,6 +707,7 @@ export default function InterfaceOpticalProbeModal({
                             {/* Status */}
                             <td className="py-2.5 px-3 whitespace-nowrap">
                               <OnuStatus value={row} />
+                              <TelemetryStamp value={row} />
                             </td>
 
                             {/* Redaman Rx Power (Clean Pure Colored Text) */}

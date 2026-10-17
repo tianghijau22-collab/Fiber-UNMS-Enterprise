@@ -152,7 +152,7 @@ class BtsSiteController extends Controller
 
     public function index(Request $request)
     {
-        $this->autoSeedIfEmpty();
+        if(!$request->boolean('stored_only'))$this->autoSeedIfEmpty();
 
         $query = BtsSite::query();
 
@@ -194,9 +194,9 @@ class BtsSiteController extends Controller
         ]);
     }
 
-    public function stats()
+    public function stats(Request $request)
     {
-        $this->autoSeedIfEmpty();
+        if(!$request->boolean('stored_only'))$this->autoSeedIfEmpty();
 
         $total = BtsSite::count();
         $good = BtsSite::where('rx_power', '>=', -22.0)->count();

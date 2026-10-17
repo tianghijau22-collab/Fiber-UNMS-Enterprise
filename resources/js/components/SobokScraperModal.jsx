@@ -1130,7 +1130,7 @@ export default function SobokScraperModal({
                           </span>
                           {row.olt_details?.rx_power && (
                             <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1">
-                              [Live: {row.olt_details.rx_power} dBm]
+                              [Snapshot saat impor: {row.olt_details.rx_power} dBm]
                             </span>
                           )}
                         </div>

@@ -4,6 +4,7 @@ export function opticalResponseMatches(data, oltId, serial) {
     && typeof data?.serial_number==='string' && data.serial_number.trim().toUpperCase()===String(serial || '').trim().toUpperCase();
 }
 const messages = {
+  stored_sample: 'Data tersimpan diperbarui otomatis. Waktu di bawah mengikuti sampel perangkat.',
   olt_busy: 'OLT sedang dibaca oleh proses lain. Data tersimpan mempertahankan waktu aslinya; coba lagi setelah pembacaan selesai.',
   read_coordination_unavailable: 'Antrean pembacaan OLT belum tersedia. Data tersimpan mempertahankan waktu aslinya.',
   unsupported_device: 'Diagnostik langsung belum tersedia untuk perangkat ini.',

@@ -1,6 +1,7 @@
 import React, {useState, useEffect, useRef, useCallback} from 'react';
 import {createPortal} from 'react-dom';
 import {opticalDiagnostic, opticalResponseMatches} from '../lib/opticalDiagnostic.js';
+import {useStoredRefresh} from '../hooks/useStoredRefresh.js';
 const IconX = () => (
   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -20,17 +21,23 @@ export default function OpticalPowerModal({onu, activeOlt, onClose}) {
   const [copiedSn, setCopiedSn] = useState(false);
   const [clock, setClock] = useState(Date.now());
   const pending = useRef(null);
-  const fetchOptical = useCallback(async () => {
+  const fetchOptical = useCallback(async (live = false, signal) => {
+    if (!live && pending.current) return;
     pending.current?.abort();
     const controller = new AbortController();
     pending.current = controller;
-    setLoading(true); setOpticalData(null); setError(null);
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, {once:true});
+    if (signal?.aborted) controller.abort();
+    if (live) setLoading(true);
+    setError(null);
     if (!activeOlt?.id || !onu.serial_number) {
-      setError('OLT dan serial ONU harus dipilih terlebih dahulu.'); setLoading(false); return;
+      setError('OLT dan serial ONU harus dipilih terlebih dahulu.'); setLoading(false); pending.current=null; return;
     }
     const query = new URLSearchParams({device_id:String(activeOlt.id)});
+    if (!live) query.set('stored_only','1');
     const port = onu.port || onu.detected_port;
-    if (port && onu.onu_id) { query.set('port',port); query.set('onu_id',String(onu.onu_id)); }
+    if (live && port && onu.onu_id) { query.set('port',port); query.set('onu_id',String(onu.onu_id)); }
     try {
       const response = await fetch('/api/olt/optical-power/'+encodeURIComponent(onu.serial_number)+'?'+query,
         {signal:controller.signal,headers:{Accept:'application/json'}});
@@ -40,15 +47,22 @@ export default function OpticalPowerModal({onu, activeOlt, onClose}) {
       if (!controller.signal.aborted) {setOpticalData(data); setClock(Date.now());}
     } catch (err) {
       if (!controller.signal.aborted) setError(err.message || 'Koneksi ke server gagal.');
-    } finally {if (!controller.signal.aborted) setLoading(false);}
+    } finally {
+      signal?.removeEventListener('abort',abort);
+      if (pending.current===controller) {pending.current=null; if (!controller.signal.aborted) setLoading(false);}
+    }
   },[activeOlt?.id,onu.serial_number,onu.port,onu.detected_port,onu.onu_id]);
-  useEffect(() => {fetchOptical(); return () => pending.current?.abort();},[fetchOptical]);
+  useEffect(() => {
+    setOpticalData(null);setLoading(true);void fetchOptical();
+    return () => {pending.current?.abort();pending.current=null;};
+  },[fetchOptical]);
+  useStoredRefresh(signal=>fetchOptical(false,signal),{target:`${activeOlt?.id}:${onu.serial_number}`});
   useEffect(() => {const timer=setInterval(()=>setClock(Date.now()),1000);return ()=>clearInterval(timer);},[]);
   const handleCopySn = () => {
     if (onu.serial_number) {navigator.clipboard.writeText(onu.serial_number);setCopiedSn(true);}
   };
   const currentData=opticalResponseMatches(opticalData,activeOlt?.id,onu.serial_number) ? opticalData:null;
-  return createPortal(<OpticalPowerContent {...{onu,activeOlt,onClose,loading,error,copiedSn,handleCopySn,fetchOptical,clock}} opticalData={currentData} />,document.body);
+  return createPortal(<OpticalPowerContent {...{onu,activeOlt,onClose,loading,error,copiedSn,handleCopySn,clock}} fetchOptical={()=>fetchOptical(true)} opticalData={currentData} />,document.body);
 }
 
 export function OpticalPowerContent({onu, activeOlt, onClose, opticalData, loading=false, error=null, copiedSn=false, handleCopySn=()=>{}, fetchOptical=()=>{}, clock=Date.now()}) {
@@ -170,7 +184,7 @@ export function OpticalPowerContent({onu, activeOlt, onClose, opticalData, loadi
                 <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
                 Optical Rx Power Level (Kekuatan Sinyal Terima)
               </span>
-              {loading && <span className="text-indigo-600 dark:text-indigo-400 animate-pulse text-[10px]">● Polling OLT...</span>}
+              {loading && <span className="text-indigo-600 dark:text-indigo-400 animate-pulse text-[10px]">● Memuat data...</span>}
             </div>
 
             {/* High-Precision SVG Gauge */}

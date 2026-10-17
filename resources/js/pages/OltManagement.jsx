@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import OpticalPowerModal from '../components/OpticalPowerModal.jsx';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 import RefreshButton from '../components/RefreshButton';
 import VpnMikrotikBridgeModal from '../components/VpnMikrotikBridgeModal';
 import FlowingOltTopology from '../components/FlowingOltTopology.jsx';
@@ -340,10 +341,11 @@ export default function OltManagement() {
 
   // Fetch OLT Topology (ODCs & ODPs connected to this OLT)
   const fetchOltTopology = (oltId) => {
-    fetch(`/api/network-nodes/olt-topology?olt_id=${oltId}`)
+    return fetch(`/api/network-nodes/olt-topology?olt_id=${oltId}`)
+      .then(r => {if (!r.ok) throw new Error('Topology gagal dimuat'); return r;})
       .then(r => r.json())
-      .then(d => setOltTopology(d.data ?? []))
-      .catch(() => setOltTopology([]));
+      .then(d => {if (String(oltId)===String(selectedOltIdRef.current)) setOltTopology(d.data ?? []);})
+      .catch(() => {});
   };
 
   // Progressive Batch Sync Modal State (Port-by-Port Sync Wizard)
@@ -484,31 +486,24 @@ export default function OltManagement() {
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchOlts);
   const activeOlt = olts.find(o => o.id === selectedOltId);
 
-  // Silent Background Auto-Refresh dari Database Snapshot (5 detik, halus tanpa kedip)
-  useEffect(() => {
-    if (!activeOlt || isAutoPollingPaused) return;
-
-    const isModalActive = showProgressiveSyncModal || showAddOltModal || showEditOltModal || showConfigModal || showSnmpDiagModal || showSyncExternalModal || showVpnModal || selectedOnuForOptical;
-    if (isModalActive) return;
-
-    const timer = setInterval(() => {
-      if (document.hidden) return;
-      const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
-      fetchOltHardware(vk, activeOlt.id, true, false); // Snapshot telemetri hardware
-      fetchOlts(true);                                // Daftar OLT
-      fetchOltTopology(activeOlt.id);                 // Status redaman & link ODC/ODP
-    }, 5000);
-
-    return () => clearInterval(timer);
-  }, [activeOlt?.id, activeOlt?.vendor_key, activeOlt?.vendor, isAutoPollingPaused, showProgressiveSyncModal, showAddOltModal, showEditOltModal, showConfigModal, showSnmpDiagModal, showSyncExternalModal, showVpnModal, selectedOnuForOptical]);
+  const selectedOltIdRef = useRef(selectedOltId);
+  selectedOltIdRef.current=selectedOltId;
+  const hardwareRequest = useRef(0);
+  useStoredRefresh(async () => {
+    const vk=activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g,'-') || 'zte-c300';
+    await Promise.all([fetchOltHardware(vk,activeOlt.id,true,false),fetchOlts(true),fetchOltTopology(activeOlt.id)]);
+  },{enabled:!!activeOlt && !loading && !loadingPortOnus && !isPollingLive && !isAutoPollingPaused && !showProgressiveSyncModal && !showConfigModal && !showSnmpDiagModal && !showSyncExternalModal,
+    target:activeOlt?.id,intervalMs:10000});
 
   // ─── Fetch OLT Hardware Telemetry dari Database Snapshot (Instan < 10ms) ───
   const fetchOltHardware = (vendorKey, deviceId, silent = false, fresh = false) => {
+    const requestId=++hardwareRequest.current;
     if (!silent) setLoading(true);
-    const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}${fresh ? '&fresh=1' : ''}`;
-    fetch(url)
+    const url = `/api/olt/hardware?vendor=${vendorKey}&device_id=${deviceId || ''}${fresh ? '&fresh=1' : '&stored_only=1'}`;
+    return fetch(url)
       .then(r => { if (!r.ok) throw new Error('API ' + r.status); return r.json(); })
       .then(data => {
+        if (requestId!==hardwareRequest.current || String(deviceId)!==String(selectedOltIdRef.current)) return;
         setOltData(data);
         if (!silent) setLoading(false);
         setLastPolledAt(new Date());
@@ -523,9 +518,10 @@ export default function OltManagement() {
     if (!activeOlt || !portId) return;
     setLoadingPortOnus(true);
     const vk = activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
-    fetch(`/api/olt/port-onus?vendor=${vk}&device_id=${activeOlt.id}&port=${encodeURIComponent(portId)}${fresh ? '&fresh=1' : ''}`)
+    return fetch(`/api/olt/port-onus?vendor=${vk}&device_id=${activeOlt.id}&port=${encodeURIComponent(portId)}${fresh ? '&fresh=1' : '&stored_only=1'}`)
       .then(r => r.json())
       .then(res => {
+        if (String(activeOlt.id)!==String(selectedOltIdRef.current)) return;
         setLoadingPortOnus(false);
         if (res.status === 'success') {
           setOltData(prev => {

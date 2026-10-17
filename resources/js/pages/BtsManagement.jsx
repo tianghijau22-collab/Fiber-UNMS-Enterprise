@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 import { createPortal } from 'react-dom';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingState from '../components/LoadingState';
@@ -570,19 +571,23 @@ export default function BtsManagement() {
     setCurrentPage(1);
   }, [search, vendorFilter, lengthFilter, statusFilter]);
 
-  const fetchSites = () => {
-    setLoading(true);
+  const siteRequest=useRef(0);
+  const fetchSites = useCallback((silent = false) => {
+    const token=++siteRequest.current;
+    if (silent!==true) setLoading(true);
     const params = new URLSearchParams();
+    params.set('stored_only','1');
     if (search) params.append('search', search);
     if (vendorFilter !== 'ALL') params.append('vendor', vendorFilter);
     if (lengthFilter !== 'ALL') params.append('sm_length', lengthFilter);
     if (statusFilter !== 'ALL') params.append('status', statusFilter);
 
-    Promise.all([
-      fetch(`/api/bts-sites?${params.toString()}`).then(r => r.json()),
-      fetch('/api/bts-sites-stats').then(r => r.json()),
+    return Promise.all([
+      fetch(`/api/bts-sites?${params.toString()}`).then(r => {if(!r.ok)throw new Error('BTS gagal dimuat');return r.json();}),
+      fetch('/api/bts-sites-stats?stored_only=1').then(r => {if(!r.ok)throw new Error('Statistik gagal dimuat');return r.json();}),
     ])
       .then(([sitesRes, statsRes]) => {
+        if (token!==siteRequest.current) return;
         setSites(sitesRes.data || []);
         if (statsRes) setStats(statsRes);
         setLoading(false);
@@ -591,7 +596,18 @@ export default function BtsManagement() {
         console.error('Failed to fetch BTS sites:', err);
         setLoading(false);
       });
-  };
+  },[search,vendorFilter,lengthFilter,statusFilter]);
+
+  useStoredRefresh(()=>fetchSites(true),{enabled:!loading,intervalMs:15000,target:`${search}:${vendorFilter}:${lengthFilter}:${statusFilter}`});
+  useStoredRefresh(async signal => {
+    const ids=[...new Set([detailSite?.id,liveDiagModal?.id].filter(Boolean))];
+    await Promise.all(ids.map(async id=>{
+      const r=await fetch(`/api/bts-sites/${id}`,{signal});if(!r.ok)throw new Error('Detail BTS gagal dimuat');
+      const d=await r.json();if(signal.aborted||!d.success)return;
+      setDetailSite(prev=>prev?.id===id?d.data:prev);
+      setLiveDiagModal(prev=>prev?.id===id?{...prev,...d.data}:prev);
+    }));
+  },{enabled:!!(detailSite||liveDiagModal)&&!readingLive,target:`${detailSite?.id}:${liveDiagModal?.id}`});
 
   useEffect(() => {
     fetchSites();

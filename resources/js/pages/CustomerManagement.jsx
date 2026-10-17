@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchableFilterDropdown from '../components/SearchableFilterDropdown';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 import RefreshButton from '../components/RefreshButton';
 import CustomerFilterPopover from '../components/CustomerFilterPopover';
 import SobokScraperModal from '../components/SobokScraperModal.jsx';
@@ -350,7 +351,7 @@ export default function CustomerManagement() {
     if (!nodeId || odpPortsCache[nodeId] || pendingOdpFetches.current.has(nodeId)) return;
     pendingOdpFetches.current.add(nodeId);
 
-    fetch(`/api/network-nodes/${nodeId}/port-detail`)
+    fetch(`/api/network-nodes/${nodeId}/port-detail?skip_live=1`)
       .then(r => r.json())
       .then(d => {
         const ports = d.ports ?? [];
@@ -599,16 +600,15 @@ export default function CustomerManagement() {
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(silentCustomerPoll, {
     enablePolling: true,
     intervalMs: 15000,
-    shouldPause: isAnyModalOpen,
+    shouldPause: showModal || showSobokModal || confirmDialog.isOpen,
   });
 
   // Fetch Unmapped ONUs from OLT Devices
-  const fetchUnmappedOnus = async () => {
-    setLoadingDiscovery(true);
-    setDiscoverySearch('');
-    setDiscoveryPage(1);
+  const fetchUnmappedOnus = async (silent = false) => {
+    if (silent!==true) {setLoadingDiscovery(true);setDiscoverySearch('');setDiscoveryPage(1);}
     try {
       const res = await fetch('/api/customers/unmapped-onus');
+      if (!res.ok) throw new Error('Daftar ONU tersimpan gagal dimuat');
       const d = await res.json();
       setUnmappedOnus(d.data ?? []);
     } catch (e) {
@@ -617,6 +617,8 @@ export default function CustomerManagement() {
       setLoadingDiscovery(false);
     }
   };
+
+  useStoredRefresh(()=>fetchUnmappedOnus(true),{enabled:showDiscoveryModal && !loadingDiscovery && !submittingSn,intervalMs:15000});
 
   const handleOpenDiscoveryModal = () => {
     if (!isSuperAdmin) {
@@ -701,7 +703,7 @@ export default function CustomerManagement() {
     }
     setLoadingPorts(true);
     try {
-      const r = await fetch(`/api/network-nodes/${nodeId}/port-detail`);
+      const r = await fetch(`/api/network-nodes/${nodeId}/port-detail?skip_live=1`);
       const d = await r.json();
       const ports = d.ports ?? [];
       setOdpPorts(ports);

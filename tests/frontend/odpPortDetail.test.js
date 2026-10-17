@@ -22,6 +22,13 @@ test('failed HTTP requests cannot be mistaken for a successful empty port list',
   }
 });
 
+test('automatic reads explicitly skip live OLT probes and support cancellation',async()=>{
+  const controller=new AbortController();let request;
+  await loadOdpPortDetail(12,false,async(...args)=>{request=args;return {ok:true,json:async()=>({node:{id:12},ports:[]})};},controller.signal);
+  assert.equal(request[0],'/api/network-nodes/12/port-detail?skip_live=1');
+  assert.equal(request[1].signal,controller.signal);
+});
+
 test('invalid JSON, mismatched ODP and absent port arrays are errors, while genuine empty lists remain valid', async () => {
   for (const data of [null, {}, { node: { id: 99 }, ports: [] }, { node: { id: 12 }, ports: null }]) {
     await assert.rejects(loadOdpPortDetail(12, false, async () => ({ ok: true, json: async () => data })), /tidak valid/);

@@ -7,7 +7,7 @@ use App\Models\OltDevice;
 /** Read-only, selected-device optical diagnosis. Neither topology nor Rx proves ONU state. */
 class OnuOpticalDiagnostic
 {
-    public function read(OltDevice $device,string $serial,?string $hintPort=null,?int $hintId=null): array
+    public function read(OltDevice $device,string $serial,?string $hintPort=null,?int $hintId=null,bool $storedOnly=false): array
     {
         $view=(new OnuTelemetryView([$device]))->resolve((int)$device->id,$serial);
         $empty=array_replace($view,['gpon_interface'=>null,'onu_id'=>null,'identity_status'=>'unresolved',
@@ -41,6 +41,12 @@ class OnuOpticalDiagnostic
             $index=$hintIndex;$id=$hintId;
         }
         if($index===null || $id===null)return $finish($empty,'unavailable','identity_unresolved');
+
+        if($storedOnly) {
+            $stored=$view['identity_status']==='resolved' ? $view:$empty;
+            $stored['identity_observed_at']=$stored['identity_status']==='resolved' ? ($candidate['identity_observed_at'] ?? null):null;
+            return $finish($stored,'stored','stored_sample');
+        }
 
         $oids=['sn1'=>ZteOnuIdentityMap::PRIMARY.".$index.$id",'sn2'=>ZteOnuIdentityMap::SECONDARY.".$index.$id",
             'state'=>"1.3.6.1.4.1.3902.1012.3.50.11.2.1.4.$index.$id",'rx'=>"1.3.6.1.4.1.3902.1012.3.50.12.1.1.10.$index.$id.1"];
