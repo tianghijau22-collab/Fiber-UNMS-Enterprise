@@ -16,3 +16,7 @@ Perubahan:
 - Pembaruan web berkala tetap mengambil data tersimpan. Pemilihan tidak menggabungkan serial dari OLT berbeda. Kebijakan tampilan N/A sebagai Offline tetap berlaku.
 
 Validasi sebelum penerapan mencakup kasus perangkat aktif dan lokasi lama tanpa data, dua lokasi aktif, sampel kedaluwarsa, dua ID ONU pada PON yang sama, isolasi OLT, partisi berulang, perlindungan registrasi pelanggan, dan pembatalan ledger saat konflik baru muncul. Penerapan memerlukan restart terkontrol poller dan listener agar proses lama memakai kelas yang baru, setelah pencadangan diverifikasi.
+
+## Status penerapan
+
+Diterapkan dan diverifikasi 17 Oktober 2026, sekitar 16:25 WIB. Rincian bukti, cadangan, batas verifikasi, serta 22 dari 24 SN ganda yang memiliki satu Rx valid tersedia pada [laporan hasil](Hasil_Perbaikan_SN_Ganda_FONA_2026-10-17.md).
