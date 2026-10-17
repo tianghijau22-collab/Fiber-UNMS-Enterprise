@@ -122,6 +122,8 @@ export default function CustomerFilterPopover({
   filterStatus,
   filterServiceStatus,
   filterPackage,
+  filterDuplicateSn = false,
+  filterOnlineNoRx = false,
 
   // Options
   olts = [],
@@ -150,6 +152,8 @@ export default function CustomerFilterPopover({
     statusActive: false,
     serviceStatusActive: false,
     packageActive: false,
+    duplicateSn: false,
+    onlineNoRx: false,
 
     oltValue: 'all',
     interfaceValue: 'all',
@@ -170,8 +174,10 @@ export default function CustomerFilterPopover({
     if (filterStatus && filterStatus !== 'all') count++;
     if (filterServiceStatus && filterServiceStatus !== 'all') count++;
     if (filterPackage && filterPackage !== 'all') count++;
+    if (filterDuplicateSn) count++;
+    if (filterOnlineNoRx) count++;
     return count;
-  }, [filterOlt, filterInterface, filterOdc, filterOdp, filterStatus, filterServiceStatus, filterPackage]);
+  }, [filterOlt, filterInterface, filterOdc, filterOdp, filterStatus, filterServiceStatus, filterPackage, filterDuplicateSn, filterOnlineNoRx]);
 
   // Sync draft when modal opens or active filters change
   const syncDraftFromProps = () => {
@@ -183,6 +189,8 @@ export default function CustomerFilterPopover({
       statusActive: filterStatus && filterStatus !== 'all',
       serviceStatusActive: filterServiceStatus && filterServiceStatus !== 'all',
       packageActive: filterPackage && filterPackage !== 'all',
+      duplicateSn: filterDuplicateSn,
+      onlineNoRx: filterOnlineNoRx,
 
       oltValue: filterOlt || 'all',
       interfaceValue: filterInterface || 'all',
@@ -198,7 +206,7 @@ export default function CustomerFilterPopover({
     if (isOpen) {
       syncDraftFromProps();
     }
-  }, [isOpen, filterOlt, filterInterface, filterOdc, filterOdp, filterStatus, filterServiceStatus, filterPackage]);
+  }, [isOpen, filterOlt, filterInterface, filterOdc, filterOdp, filterStatus, filterServiceStatus, filterPackage, filterDuplicateSn, filterOnlineNoRx]);
 
   // Handle ESC key to close modal
   useEffect(() => {
@@ -228,6 +236,8 @@ export default function CustomerFilterPopover({
       statusValue: draft.statusActive ? draft.statusValue : 'all',
       serviceStatusValue: draft.serviceStatusActive ? draft.serviceStatusValue : 'all',
       packageValue: draft.packageActive ? draft.packageValue : 'all',
+      duplicateSn: draft.duplicateSn,
+      onlineNoRx: draft.onlineNoRx,
     });
     setIsOpen(false);
   };
@@ -242,6 +252,8 @@ export default function CustomerFilterPopover({
       statusActive: false,
       serviceStatusActive: false,
       packageActive: false,
+      duplicateSn: false,
+      onlineNoRx: false,
 
       oltValue: 'all',
       interfaceValue: 'all',
@@ -350,7 +362,7 @@ export default function CustomerFilterPopover({
               </button>
             </div>
 
-            {/* Modal Body: 7 Kriteria Filter Halaman Pelanggan */}
+            {/* Modal Body: Kriteria Filter Halaman Pelanggan */}
             <div className="divide-y divide-black/10 dark:divide-white/10 overflow-y-auto flex-1 font-sans p-2">
               
               {/* 1. OLT */}
@@ -590,6 +602,27 @@ export default function CustomerFilterPopover({
                   </div>
                 )}
               </div>
+
+              {[
+                {key: 'duplicateSn', label: 'SN ganda', description: 'SN dipakai oleh beberapa pelanggan atau terdeteksi di beberapa lokasi ONU.'},
+                {key: 'onlineNoRx', label: 'ONU Online, Rx tidak tersedia', description: 'Status asli ONU terbaca Online dari OLT, tetapi nilai Rx belum tersedia.'},
+              ].map(({key, label, description}) => (
+                <div key={key} className="p-2.5 sm:p-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      aria-label={label}
+                      checked={draft[key]}
+                      onChange={event => setDraft(previous => ({...previous, [key]: event.target.checked}))}
+                      className="w-4 h-4 mt-0.5 shrink-0 rounded border-black/40 dark:border-white/40 text-blue-600 focus:ring-0 cursor-pointer"
+                    />
+                    <span>
+                      <span className="block text-blue-600 dark:text-blue-400 font-medium text-xs">{label}</span>
+                      <span className="block mt-1 text-[11px] text-black/60 dark:text-white/60">{description}</span>
+                    </span>
+                  </label>
+                </div>
+              ))}
 
             </div>
 

@@ -1,4 +1,5 @@
 import { onuPresentation, opticalDisplaySummary } from '../lib/onuTelemetry.js';
+import {duplicateCustomerSerials, customerMatchesTelemetryFilters} from '../lib/customerTelemetryFilters.js';
 import { OnuStatus, TelemetryStamp } from '../components/OnuTelemetry.jsx';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -318,12 +319,14 @@ export default function CustomerManagement() {
   const [filterOdc, setFilterOdc] = useState('all');
   const [filterOdp, setFilterOdp] = useState('all');
   const [filterPackage, setFilterPackage] = useState('all');
+  const [filterDuplicateSn, setFilterDuplicateSn] = useState(false);
+  const [filterOnlineNoRx, setFilterOnlineNoRx] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const perPage = 8;
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterStatus, filterServiceStatus, filterOlt, filterInterface, filterOdc, filterOdp, filterPackage]);
+  }, [search, filterStatus, filterServiceStatus, filterOlt, filterInterface, filterOdc, filterOdp, filterPackage, filterDuplicateSn, filterOnlineNoRx]);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -1166,6 +1169,7 @@ export default function CustomerManagement() {
   }, [customers]);
 
   // Filtered customers (Multi-level OLT / Interface / ODC / ODP / Status / Layanan / Paket / Alamat / Search)
+  const duplicateSerials = useMemo(() => duplicateCustomerSerials(Array.isArray(customers) ? customers : []), [customers]);
   const filtered = useMemo(() => {
     const safeCustomers = Array.isArray(customers) ? customers : [];
     return safeCustomers.filter(c => {
@@ -1203,14 +1207,18 @@ export default function CustomerManagement() {
       const matchOdp = filterOdp === 'all' || String(c.odp_id) === String(filterOdp) || c.odp_name === filterOdp;
       const matchPackage = filterPackage === 'all' || c.package_name === filterPackage;
 
-      return matchSearch && matchStatus && matchService && matchOlt && matchInterface && matchOdc && matchOdp && matchPackage;
+      const matchTelemetry = customerMatchesTelemetryFilters(c, {duplicateSn: filterDuplicateSn, onlineNoRx: filterOnlineNoRx}, duplicateSerials);
+      return matchSearch && matchStatus && matchService && matchOlt && matchInterface && matchOdc && matchOdp && matchPackage && matchTelemetry;
     });
-  }, [customers, search, filterStatus, filterServiceStatus, filterOlt, filterInterface, filterOdc, filterOdp, filterPackage]);
+  }, [customers, search, filterStatus, filterServiceStatus, filterOlt, filterInterface, filterOdc, filterOdp, filterPackage, filterDuplicateSn, filterOnlineNoRx, duplicateSerials]);
 
   const totalPages = Math.ceil(filtered.length / perPage) || 1;
+  useEffect(() => {
+    setCurrentPage(page => Math.min(page, totalPages));
+  }, [totalPages]);
   const paginated = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
 
-  const isFilterActive = search || filterStatus !== 'all' || filterServiceStatus !== 'all' || filterOlt !== 'all' || filterInterface !== 'all' || filterOdc !== 'all' || filterOdp !== 'all' || filterPackage !== 'all';
+  const isFilterActive = search || filterStatus !== 'all' || filterServiceStatus !== 'all' || filterOlt !== 'all' || filterInterface !== 'all' || filterOdc !== 'all' || filterOdp !== 'all' || filterPackage !== 'all' || filterDuplicateSn || filterOnlineNoRx;
 
   const handleResetFilters = () => {
     setSearch('');
@@ -1221,6 +1229,8 @@ export default function CustomerManagement() {
     setFilterOdc('all');
     setFilterOdp('all');
     setFilterPackage('all');
+    setFilterDuplicateSn(false);
+    setFilterOnlineNoRx(false);
   };
 
   const handleApplyFilterPopover = ({
@@ -1231,6 +1241,8 @@ export default function CustomerManagement() {
     statusValue,
     serviceStatusValue,
     packageValue,
+    duplicateSn,
+    onlineNoRx,
   }) => {
     setFilterOlt(oltValue);
     setFilterInterface(interfaceValue);
@@ -1239,6 +1251,8 @@ export default function CustomerManagement() {
     setFilterStatus(statusValue);
     setFilterServiceStatus(serviceStatusValue);
     setFilterPackage(packageValue);
+    setFilterDuplicateSn(duplicateSn === true);
+    setFilterOnlineNoRx(onlineNoRx === true);
   };
 
   return (
@@ -1358,6 +1372,8 @@ export default function CustomerManagement() {
               filterStatus={filterStatus}
               filterServiceStatus={filterServiceStatus}
               filterPackage={filterPackage}
+              filterDuplicateSn={filterDuplicateSn}
+              filterOnlineNoRx={filterOnlineNoRx}
               olts={olts}
               availableInterfaces={availableInterfaces}
               availableOdcs={availableOdcs}
@@ -1388,6 +1404,18 @@ export default function CustomerManagement() {
         {isFilterActive && (
           <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
             <span className="text-[11px] font-semibold text-black/60 dark:text-white/60">Filter Aktif:</span>
+            {filterDuplicateSn && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
+                <strong>SN ganda</strong>
+                <button type="button" aria-label="Hapus filter SN ganda" onClick={() => setFilterDuplicateSn(false)} className="hover:text-rose-500 cursor-pointer font-bold ml-0.5">✕</button>
+              </span>
+            )}
+            {filterOnlineNoRx && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
+                <strong>ONU Online, Rx tidak tersedia</strong>
+                <button type="button" aria-label="Hapus filter ONU Online, Rx tidak tersedia" onClick={() => setFilterOnlineNoRx(false)} className="hover:text-rose-500 cursor-pointer font-bold ml-0.5">✕</button>
+              </span>
+            )}
             {filterOlt !== 'all' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-black/5 dark:bg-white/10 border border-black/20 dark:border-white/20 text-black dark:text-white">
                 <span>OLT: <strong>{olts.find(o => String(o.id) === String(filterOlt))?.name || filterOlt}</strong></span>
@@ -1434,6 +1462,7 @@ export default function CustomerManagement() {
         )}
 
         {/* Filter Summary Stats */}
+        {filterOnlineNoRx && <p className="text-xs text-black/60 dark:text-white/60">Filter memakai status Online dari OLT. Kolom perangkat tetap mengikuti kebijakan N/A sebagai Offline.</p>}
         <div className="flex items-center justify-between text-xs font-semibold text-black dark:text-white pt-2.5 border-t border-black/20 dark:border-white/20">
           <div>
             Menampilkan: <span className="font-bold">{filtered.length}</span> dari {customers.length} total pelanggan
