@@ -70,6 +70,18 @@ class PollOltTelemetry extends Command
     protected function pollObservedDevice(int $id,OltController $controller,string $mode,?string $port=null): int
     {
         $olt=OltDevice::find($id);if(!$olt)return 1;
+        try {
+            return \App\Services\Olt\OltReadLease::forDevice($olt,fn()=>$this->pollObservedDeviceUnlocked($id,$controller,$mode,$port));
+        } catch(\App\Services\Olt\OltReadBusy $e) {
+            self::appendWorkerLog($olt->name,'READ_COORDINATION','BUSY',$e->getMessage(),['reason'=>$e->reason,'measurement_started'=>false]);
+            // Keep the previous hardware attempt and sample untouched.
+            return $e->reason==='olt_busy' ? 2:3;
+        }
+    }
+
+    protected function pollObservedDeviceUnlocked(int $id,OltController $controller,string $mode,?string $port=null): int
+    {
+        $olt=OltDevice::find($id);if(!$olt)return 1;
         $this->pollHealth ??= app(\App\Services\Olt\OltPollingHealth::class);
         $this->pollHealth->begin($olt,$mode);$code=1;
         try {
@@ -112,6 +124,7 @@ class PollOltTelemetry extends Command
             try {
                 $exitCode=$this->pollObservedDevice((int)$device->id,$oltCtrl,$engineMode);
                 $attempt=Cache::get('olt_poll_health_v1_'.$device->id,[]);
+                if(in_array($exitCode,[2,3],true))$attempt=['result'=>$exitCode===2?'BUSY':'UNKNOWN'];
                 $durationMs = round((microtime(true) - $devStart) * 1000, 1);
 
                 // Ambil snapshot data yang baru saja diperbarui
@@ -127,10 +140,11 @@ class PollOltTelemetry extends Command
                 $onlineCount = count(array_filter($allOnus, fn($o) => ($o['status'] ?? '') === 'Online' || ($o['status'] ?? '') === 'active'));
 
                 $activeQuery = Cache::get("olt_active_querying_port_{$device->id}");
+                $measured=!in_array($exitCode,[2,3],true);
 
-                $totalPortsPolled += $activePorts;
-                $totalOnusPolled += $onusCount;
-                $totalUncfgPolled += $uncfgCount;
+                $totalPortsPolled += $measured ? $activePorts:0;
+                $totalOnusPolled += $measured ? $onusCount:0;
+                $totalUncfgPolled += $measured ? $uncfgCount:0;
 
                 $deviceReports[] = [
                     'device_id'             => $device->id,
@@ -142,10 +156,10 @@ class PollOltTelemetry extends Command
                     'db_registered_total'   => $onusCount,
                     'db_registered_online'  => $onlineCount,
                     'db_unregistered_total' => $uncfgCount,
-                    'last_port_polled'      => $activeQuery['port'] ?? null,
-                    'last_port_onu_count'   => $activeQuery['onu_count'] ?? 0,
-                    'onus_found'            => $onusCount,
-                    'uncfg_found'           => $uncfgCount,
+                    'last_port_polled'      => $measured ? ($activeQuery['port'] ?? null):null,
+                    'last_port_onu_count'   => $measured ? ($activeQuery['onu_count'] ?? 0):0,
+                    'onus_found'            => $measured ? $onusCount:0,
+                    'uncfg_found'           => $measured ? $uncfgCount:0,
                     'duration_ms'           => $durationMs,
                     'status'                => $attempt['result'] ?? 'UNKNOWN',
                     'return_code'           => $exitCode,

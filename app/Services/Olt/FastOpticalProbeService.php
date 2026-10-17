@@ -104,6 +104,11 @@ class FastOpticalProbeService
 
     public static function executeParallelSnmpBulkWalk(OltDevice $olt,array $oids,?int $maxRepetitions=null,?int $timeoutSec=null,?int $retries=null): array
     {
+        return OltReadLease::forDevice($olt,fn()=>self::executeParallelSnmpBulkWalkUnlocked($olt,$oids,$maxRepetitions,$timeoutSec,$retries));
+    }
+
+    private static function executeParallelSnmpBulkWalkUnlocked(OltDevice $olt,array $oids,?int $maxRepetitions=null,?int $timeoutSec=null,?int $retries=null): array
+    {
         $batch=app(SnmpWalkRunner::class)->walk($olt,$oids,$maxRepetitions ?? 10,$timeoutSec ?? 5,$retries ?? 2);
         self::recordWalk($olt,$batch);return $batch['tables'];
     }
@@ -152,6 +157,11 @@ class FastOpticalProbeService
     /** Point identity reads are scoped by a complete, current hardware state table. */
     public static function readIdentityTables(OltDevice $olt,array $states=[],bool $scopeComplete=false): array
     {
+        return OltReadLease::forDevice($olt,fn()=>self::readIdentityTablesUnlocked($olt,$states,$scopeComplete));
+    }
+
+    private static function readIdentityTablesUnlocked(OltDevice $olt,array $states=[],bool $scopeComplete=false): array
+    {
         $stateRoot='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$groups=[];
         if($scopeComplete)foreach($states as $oid=>$unused) {
             if(preg_match('/^'.preg_quote($stateRoot,'/').'\.([0-9]+)\.([0-9]+)$/',$oid,$m)
@@ -174,6 +184,11 @@ class FastOpticalProbeService
 
     /** Large tables use every PON named by a complete, fresh hardware ifName walk. */
     public static function readStateTables(OltDevice $olt,?int $maxRepetitions=null,?int $timeoutSec=null): array
+    {
+        return OltReadLease::forDevice($olt,fn()=>self::readStateTablesUnlocked($olt,$maxRepetitions,$timeoutSec));
+    }
+
+    private static function readStateTablesUnlocked(OltDevice $olt,?int $maxRepetitions=null,?int $timeoutSec=null): array
     {
         $root='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$ifName='1.3.6.1.2.1.31.1.1.1.1';
         $runner=app(SnmpWalkRunner::class);$started=OnuTelemetrySample::timestamp();$start=microtime(true);
@@ -217,6 +232,11 @@ class FastOpticalProbeService
     }
 
     public static function readStateRxTables(OltDevice $olt,?int $maxRepetitions=null,?int $timeoutSec=null): array
+    {
+        return OltReadLease::forDevice($olt,fn()=>self::readStateRxTablesUnlocked($olt,$maxRepetitions,$timeoutSec));
+    }
+
+    private static function readStateRxTablesUnlocked(OltDevice $olt,?int $maxRepetitions=null,?int $timeoutSec=null): array
     {
         $state='1.3.6.1.4.1.3902.1012.3.50.11.2.1.4';$rx='1.3.6.1.4.1.3902.1012.3.50.12.1.1.10';
         $b=self::readStateTables($olt,$maxRepetitions,$timeoutSec);
@@ -412,6 +432,11 @@ class FastOpticalProbeService
      */
     public static function probePortHardwareStatus(OltDevice $olt, ?array $knownPonPorts = null): array
     {
+        try { return OltReadLease::forDevice($olt,fn()=>self::probePortHardwareStatusUnlocked($olt,$knownPonPorts)); } catch(OltReadBusy $e) { return ['success'=>false,'reason'=>$e->reason,'ports'=>[],'down_ports'=>[],'up_ports'=>[],'duration_ms'=>0]; }
+    }
+
+    private static function probePortHardwareStatusUnlocked(OltDevice $olt, ?array $knownPonPorts = null): array
+    {
         $tStart = microtime(true);
 
         if (!$knownPonPorts) {
@@ -504,6 +529,11 @@ class FastOpticalProbeService
      * Memverifikasi apakah suatu port PON mengalami gangguan massal atau telah pulih massal.
      */
     public static function readSerialObservations(OltDevice $olt, array $serials): array
+    {
+        try { return OltReadLease::forDevice($olt,fn()=>self::readSerialObservationsUnlocked($olt,$serials)); } catch(OltReadBusy $e) { return []; }
+    }
+
+    private static function readSerialObservationsUnlocked(OltDevice $olt, array $serials): array
     {
         $observedAt=OnuTelemetrySample::timestamp();
         $snapshot=$olt->last_telemetry_snapshot ?? [];
@@ -664,6 +694,11 @@ class FastOpticalProbeService
         ];
     }
     protected static function readVerifiedOdpOnus(OltDevice $olt, array $onus): array
+    {
+        return OltReadLease::forDevice($olt,fn()=>self::readVerifiedOdpOnusUnlocked($olt,$onus));
+    }
+
+    private static function readVerifiedOdpOnusUnlocked(OltDevice $olt, array $onus): array
     {
         if (!str_contains(strtolower((string)($olt->vendor_key ?: $olt->vendor)), 'zte')) return [];
         $snapshot = $olt->last_telemetry_snapshot ?? [];
