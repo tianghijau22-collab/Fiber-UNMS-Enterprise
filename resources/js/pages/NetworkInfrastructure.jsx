@@ -1,4 +1,5 @@
 import { onuPresentation } from '../lib/onuTelemetry.js';
+import { loadOdpPortDetail } from '../lib/odpPortDetail.js';
 import { OnuStatus, TelemetryStamp } from '../components/OnuTelemetry.jsx';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -3669,6 +3670,8 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
   const [selectedOdp, setSelectedOdp] = useState(null);
   const [odpDetailData, setOdpDetailData] = useState(null);
   const [portsData, setPortsData] = useState([]);
+  const [portLoadError, setPortLoadError] = useState(null);
+  const portRequest = useRef(0);
   const [loadingPorts, setLoadingPorts] = useState(false);
   const [refreshingLiveOptical, setRefreshingLiveOptical] = useState(false);
   const [liveProbeFeedback, setLiveProbeFeedback] = useState(null);
@@ -3919,18 +3922,16 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
   };
 
   const fetchOdpPorts = useCallback(async (odpId, isLiveRefresh = false) => {
+    const requestId = ++portRequest.current;
+    setPortLoadError(null);
     if (isLiveRefresh) {
       setRefreshingLiveOptical(true);
     } else {
       setLoadingPorts(true);
     }
     try {
-      const url = isLiveRefresh
-        ? `/api/network-nodes/${odpId}/port-detail?live=1`
-        : `/api/network-nodes/${odpId}/port-detail`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error('API error');
-      const d = await r.json();
+      const d = await loadOdpPortDetail(odpId, isLiveRefresh);
+      if (requestId !== portRequest.current) return;
       setOdpDetailData(d);
       setPortsData(d.ports ?? []);
 
@@ -3950,18 +3951,22 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
             text: d.live_probe.reason || 'OLT tidak merespons',
           });
         }
-        setTimeout(() => setLiveProbeFeedback(null), 4500);
       }
-    } catch {
-      setOdpDetailData(null);
-      setPortsData([]);
+    } catch (error) {
+      if (requestId !== portRequest.current) return;
+      setPortLoadError(error.message || 'Detail port gagal dimuat. Coba lagi beberapa saat.');
+      setLiveProbeFeedback(null);
     } finally {
-      setLoadingPorts(false);
-      setRefreshingLiveOptical(false);
+      if (requestId === portRequest.current) {
+        setLoadingPorts(false);
+        setRefreshingLiveOptical(false);
+      }
     }
   }, []);
 
   const openOdpDetail = (odp) => {
+    setPortLoadError(null);
+    setRefreshingLiveOptical(false);
     setSelectedOdp(odp);
     setOdpDetailData(null);
     setPortsData([]);
@@ -3971,6 +3976,10 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
   };
 
   const closeOdpDetail = () => {
+    ++portRequest.current;
+    setPortLoadError(null);
+    setLoadingPorts(false);
+    setRefreshingLiveOptical(false);
     setSelectedOdp(null);
     setOdpDetailData(null);
     setPortsData([]);
@@ -4610,7 +4619,14 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
 
               {odpDetailData?.live_probe && odpDetailData.live_probe.success === false && (
                 <p className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2 text-amber-700 dark:text-amber-300">
-                  Pembacaan langsung belum lengkap. Perhatikan waktu pembaruan; sebagian kartu dapat memakai data tersimpan.
+                  {odpDetailData.live_probe.reason_code === 'olt_busy'
+                    ? 'OLT sedang dibaca oleh proses lain. Port dan data tersimpan tetap ditampilkan; perhatikan waktu pembaruan.'
+                    : 'Pembacaan langsung belum lengkap. Perhatikan waktu pembaruan; sebagian kartu dapat memakai data tersimpan.'}
+                </p>
+              )}
+              {portLoadError && (
+                <p role="alert" className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2 text-amber-700 dark:text-amber-300">
+                  {portLoadError}{portsData.length > 0 ? ' Data yang sudah dimuat tetap ditampilkan dengan waktu sebelumnya.' : ''}
                 </p>
               )}
               <div>
@@ -4633,7 +4649,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                   </div>
                 ) : portsData.length === 0 ? (
                   <div className="py-10 text-center text-black/50 dark:text-white/50">
-                    <p className="text-xs">Data port tidak ditemukan. Coba refresh.</p>
+                    <p className="text-xs">{portLoadError ? 'Detail port belum berhasil dimuat.' : 'Belum ada port yang tercatat untuk ODP ini.'}</p>
                     <button onClick={handleRefreshPorts} className="mt-2 text-xs text-indigo-500 hover:underline"> Coba Lagi</button>
                   </div>
                 ) : (

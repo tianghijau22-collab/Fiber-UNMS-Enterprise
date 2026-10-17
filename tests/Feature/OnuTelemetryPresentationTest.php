@@ -50,6 +50,16 @@ class OnuTelemetryPresentationTest extends TestCase
         return app(CustomerController::class)->index(Request::create('/api/customers'))->getData(true)['data'];
     }
 
+    private function assertStoredPortsPreserved(array $expected, array $actual): void
+    {
+        $this->assertCount(count($expected),$actual);
+        foreach($expected as $i=>$port) {
+            if($port['sample_age_seconds']!==null)$this->assertGreaterThanOrEqual($port['sample_age_seconds'],$actual[$i]['sample_age_seconds']);
+            unset($expected[$i]['sample_age_seconds'],$actual[$i]['sample_age_seconds']);
+        }
+        $this->assertSame($expected,$actual);
+    }
+
     public function test_customer_list_and_odp_ports_use_the_same_scoped_identity_and_unknown_contract(): void
     {
         $list=collect($this->customers())->keyBy('id');
@@ -102,5 +112,61 @@ class OnuTelemetryPresentationTest extends TestCase
         $node=NetworkNode::findOrFail(1);
         $data=(new \App\Http\Resources\NetworkNodeResource($node))->resolve(Request::create('/node'));
         $this->assertSame(2,$data['total_clients']);$this->assertSame(1,$data['unknown_clients']);$this->assertFalse($data['is_loss_total']);
+    }
+
+    public function test_busy_live_read_returns_all_ports_and_preserves_stored_sample_on_open_and_refresh(): void
+    {
+        DB::table('olt_devices')->where('id',1)->update(['ip_address'=>'192.0.2.239']);
+        $before=DB::table('olt_devices')->where('id',1)->value('last_telemetry_snapshot');
+        $stored=app(NetworkNodeController::class)->portDetail(Request::create('/ports','GET',['skip_live'=>1]),NetworkNode::findOrFail(1))->getData(true);
+        $control=tempnam(sys_get_temp_dir(),'odp-busy-');
+        $body='require '.var_export(base_path('vendor/autoload.php'),true).';$app=require '.var_export(base_path('bootstrap/app.php'),true).';$lease=App\\Services\\Olt\\OltReadLease::acquire("192.0.2.239");echo "HELD";flush();$until=microtime(true)+8;while(microtime(true)<$until&&file_get_contents('.var_export($control,true).')!=="exit"){usleep(10000);}';
+        $holder=new \Symfony\Component\Process\Process([PHP_BINARY,'-r',$body],base_path());
+        try {
+            $holder->start();$until=microtime(true)+3;
+            while(microtime(true)<$until&&!str_contains($holder->getOutput(),'HELD')) {if(!$holder->isRunning())break;usleep(1000);}
+            $this->assertStringContainsString('HELD',$holder->getOutput(),$holder->getErrorOutput());
+            foreach([[],['live'=>1]] as $query) {
+                DB::enableQueryLog();DB::flushQueryLog();
+                $response=app(NetworkNodeController::class)->portDetail(Request::create('/ports','GET',$query),NetworkNode::findOrFail(1));
+                $detail=$response->getData(true);
+                $this->assertSame(200,$response->getStatusCode());
+                $this->assertStoredPortsPreserved($stored['ports'],$detail['ports']);
+                $this->assertSame($stored['attenuation'],$detail['attenuation']);
+                $this->assertFalse($detail['live_probe']['success']);
+                $this->assertSame('olt_busy',$detail['live_probe']['reason_code']);
+                $this->assertSame([],$detail['live_probe']['probed_states']);
+                $this->assertArrayNotHasKey('probed_at',$detail['live_probe']);
+                $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|delete|insert)\b/i',$q['query']))));
+            }
+            $this->assertSame($before,DB::table('olt_devices')->where('id',1)->value('last_telemetry_snapshot'));
+        } finally {
+            file_put_contents($control,'exit');if($holder->isRunning())$holder->wait();unlink($control);
+        }
+    }
+
+    public function test_failed_optional_probe_does_not_hide_ports_or_expose_internal_error(): void
+    {
+        $controller=new class extends NetworkNodeController {
+            protected function probeOdpOptical(int $odpId): array { throw new \RuntimeException('private connection details'); }
+        };
+        $stored=app(NetworkNodeController::class)->portDetail(Request::create('/ports','GET',['skip_live'=>1]),NetworkNode::findOrFail(1))->getData(true);
+        $out=$controller->portDetail(Request::create('/ports'),NetworkNode::findOrFail(1))->getData(true);
+        $this->assertStoredPortsPreserved($stored['ports'],$out['ports']);
+        $this->assertSame('live_probe_failed',$out['live_probe']['reason_code']);
+        $this->assertFalse($out['live_probe']['success']);
+        $this->assertStringNotContainsString('private',json_encode($out));
+    }
+
+    public function test_unavailable_read_coordination_returns_stored_ports_without_a_freshness_upgrade(): void
+    {
+        $controller=new class extends NetworkNodeController {
+            protected function probeOdpOptical(int $odpId): array { throw new \App\Services\Olt\OltReadBusy('read_coordination_unavailable'); }
+        };
+        $stored=app(NetworkNodeController::class)->portDetail(Request::create('/ports','GET',['skip_live'=>1]),NetworkNode::findOrFail(1))->getData(true);
+        $out=$controller->portDetail(Request::create('/ports'),NetworkNode::findOrFail(1))->getData(true);
+        $this->assertStoredPortsPreserved($stored['ports'],$out['ports']);
+        $this->assertSame('read_coordination_unavailable',$out['live_probe']['reason_code']);
+        $this->assertFalse($out['live_probe']['success']);
     }
 }

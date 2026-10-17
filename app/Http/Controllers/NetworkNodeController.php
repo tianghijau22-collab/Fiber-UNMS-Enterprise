@@ -13,6 +13,7 @@ use App\Http\Requests\StoreNetworkNodeRequest;
 use App\Http\Requests\UpdateNetworkNodeRequest;
 use App\Http\Resources\NetworkNodeResource;
 use App\Services\Olt\FastOpticalProbeService;
+use App\Services\Olt\OltReadBusy;
 use App\Services\Olt\OnuTelemetryView;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -780,9 +781,24 @@ class NetworkNodeController extends Controller
     public function portDetail(Request $request, NetworkNode $networkNode)
     {
         $liveProbeResult = null;
-        // Default selalu jalankan live optical probe OLT langsung (sub-150ms) kecuali diminta skip_live=1
+        // Live telemetry is optional enrichment: contention must not hide physical ports.
         if (!$request->boolean('skip_live')) {
-            $liveProbeResult = FastOpticalProbeService::probeOdpLiveOptical($networkNode->id);
+            try {
+                $liveProbeResult = $this->probeOdpOptical($networkNode->id);
+            } catch (OltReadBusy $e) {
+                $liveProbeResult = [
+                    'success' => false, 'complete' => false,
+                    'reason' => $e->getMessage(), 'reason_code' => $e->reason,
+                    'probed_states' => [],
+                ];
+            } catch (\Throwable $e) {
+                report($e);
+                $liveProbeResult = [
+                    'success' => false, 'complete' => false,
+                    'reason' => 'Pembacaan langsung gagal. Data tersimpan ditampilkan.',
+                    'reason_code' => 'live_probe_failed', 'probed_states' => [],
+                ];
+            }
         }
 
         $node = $networkNode->load(['splitterType', 'oltDevice', 'parent']);
@@ -885,6 +901,11 @@ class NetworkNodeController extends Controller
                 'signal_status' => $summary['signal_status'],
             ]
         ]);
+    }
+
+    protected function probeOdpOptical(int $odpId): array
+    {
+        return FastOpticalProbeService::probeOdpLiveOptical($odpId);
     }
 
     /**
