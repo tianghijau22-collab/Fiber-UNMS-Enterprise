@@ -9,3 +9,7 @@ Perbaikan menggunakan indeks serial tabel perangkat yang sudah tersimpan untuk k
 Pengaitan OLT yang sudah ditetapkan tetap diprioritaskan. Port registrasi dipakai sebagai konteks eksplisit bila port layanan tidak ada. Tidak ada perubahan ODP, registrasi, status database pelanggan, konfigurasi perangkat, atau jalur penulisan telemetri. N/A tidak diisi dengan nilai lama/dugaan. Antarmuka memberi keterangan OLT terdeteksi dari SN dan topologi belum terhubung.
 
 Pembacaan ini menggunakan indeks yang dibentuk sekali dari snapshot per permintaan, tidak melakukan SNMP maupun koneksi OLT tambahan, dan mempertahankan waktu sampel asli. Pemutakhiran berkala yang sudah diterapkan tetap membaca data tersimpan.
+
+## Hasil penerapan
+
+Diterapkan dan diverifikasi sekitar 16:43 WIB. 35 layanan tanpa ODP berhasil mengenali OLT; 30 memiliki Rx valid pada snapshot. Kedua contoh konsisten pada daftar, diagnostik, dan modal. Lihat [laporan hasil dan sisa temuan](Hasil_Perbaikan_Redaman_Tanpa_ODP_FONA_2026-10-17.md), termasuk tiga benturan pengaitan serta pemeriksaan Rx SNMP 65535.
