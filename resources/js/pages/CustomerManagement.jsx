@@ -1,5 +1,5 @@
 import { onuPresentation, opticalDisplaySummary } from '../lib/onuTelemetry.js';
-import {duplicateCustomerSerials, customerMatchesTelemetryFilters} from '../lib/customerTelemetryFilters.js';
+import {duplicateCustomerSerials, customerMatchesTelemetryFilters, customerPages} from '../lib/customerTelemetryFilters.js';
 import { OnuStatus, TelemetryStamp } from '../components/OnuTelemetry.jsx';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -1212,11 +1212,13 @@ export default function CustomerManagement() {
     });
   }, [customers, search, filterStatus, filterServiceStatus, filterOlt, filterInterface, filterOdc, filterOdp, filterPackage, filterDuplicateSn, filterOnlineNoRx, duplicateSerials]);
 
-  const totalPages = Math.ceil(filtered.length / perPage) || 1;
+  const pages = useMemo(() => customerPages(filtered, perPage, filterDuplicateSn), [filtered, perPage, filterDuplicateSn]);
+  const totalPages = pages.length;
   useEffect(() => {
     setCurrentPage(page => Math.min(page, totalPages));
   }, [totalPages]);
-  const paginated = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
+  const paginated = pages[currentPage - 1] || [];
+  const pageStart = pages.slice(0, currentPage - 1).reduce((total, page) => total + page.length, 0);
 
   const isFilterActive = search || filterStatus !== 'all' || filterServiceStatus !== 'all' || filterOlt !== 'all' || filterInterface !== 'all' || filterOdc !== 'all' || filterOdp !== 'all' || filterPackage !== 'all' || filterDuplicateSn || filterOnlineNoRx;
 
@@ -1619,7 +1621,7 @@ export default function CustomerManagement() {
             {/* Desktop Pagination Bar */}
             <div className="p-4 bg-white dark:bg-black border-t border-black/30 dark:border-white/30 flex items-center justify-between text-xs text-black dark:text-white">
               <span className="font-medium">
-                Menampilkan data <strong className="font-bold">{(currentPage - 1) * perPage + 1}</strong> - <strong className="font-bold">{Math.min(currentPage * perPage, filtered.length)}</strong> dari total <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{filtered.length}</strong> pelanggan
+                Menampilkan data <strong className="font-bold">{pageStart + 1}</strong> - <strong className="font-bold">{pageStart + paginated.length}</strong> dari total <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{filtered.length}</strong> pelanggan
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -1648,7 +1650,7 @@ export default function CustomerManagement() {
           {/* Mobile Cards View */}
           <div className="block md:hidden space-y-4">
             {paginated.map((c, idx) => {
-              const globalIndex = (currentPage - 1) * perPage + idx + 1;
+              const globalIndex = pageStart + idx + 1;
               const display = onuPresentation(c);
               const rxLabel = display.rxLabel;
               const rxColorClass = display.rxColor;

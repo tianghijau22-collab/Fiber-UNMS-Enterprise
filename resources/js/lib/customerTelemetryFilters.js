@@ -27,3 +27,28 @@ export function customerMatchesTelemetryFilters(customer, {duplicateSn = false, 
   }
   return true;
 }
+
+export function customerPages(customers, pageSize = 8, groupSerials = false) {
+  const size = Math.max(1, Math.floor(pageSize) || 8);
+  if (!groupSerials) {
+    const pages = [];
+    for (let start = 0; start < customers.length; start += size) pages.push(customers.slice(start, start + size));
+    return pages.length ? pages : [[]];
+  }
+  const groups = new Map();
+  for (const [index, customer] of customers.entries()) {
+    const key = customerSerialKey(customer) || `\uffff:${index}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(customer);
+  }
+  const pages = [];
+  let page = [];
+  for (const [, group] of [...groups].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+    if (page.length && page.length + group.length > size) { pages.push(page); page = []; }
+    page.push(...group);
+    // A large group stays on one page rather than separating customers with the same serial.
+    if (page.length >= size) { pages.push(page); page = []; }
+  }
+  if (page.length) pages.push(page);
+  return pages.length ? pages : [[]];
+}
