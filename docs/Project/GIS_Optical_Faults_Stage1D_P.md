@@ -42,3 +42,24 @@ Pemeriksaan sesudah penahanan: seluruh sumber runtime dan manifest web sama deng
 | database.dump | 5,871,205 byte | `50866725df91d81634cea1d58c23770825efb0524fe23179f130a005f3ce6f9a` |
 | application.tar.gz | 9,497,781 byte | `df7de34d48805d370262b6e75d64636ee6f7fb037e1b728323b87c5ce5f44f54` |
 | system-configuration.tar.gz | 732 byte | `7af9c5e79ccf6f4036b5ff6e1f390eea425a262cc3413c739bd4b223cd1edf98` |
+
+
+## Hasil penerapan dan validasi
+
+Diverifikasi pada **2026-10-18T08:58:38+07:00**. Commit kode aplikasi: `1efe8b9b553e0fa13f1bc628a1c323027e3a349e`. GitHub diperbarui sebelum pencadangan baru dan pemasangan di VPS.
+
+Penahanan sebelumnya sudah diselesaikan setelah pengguna mengonfirmasi OLT Singkarak memang terdampak gangguan dan secara eksplisit mengizinkan pemasangan tanpa menunggunya online. Dipakai rilis baru dengan cadangan baru. Pengecualian hanya berlaku untuk OLT 3 (10.11.48.101) dan lima berkas GIS ini; dua OLT lain tetap wajib merespons. VPN, koneksi perangkat, poller, dan listener tidak diubah. Semua pemeriksaan baseline, checksum, cadangan, serta kondisi layanan tetap dijalankan.
+
+- **250 pengujian backend / 2.370 assertion**, **55 pengujian frontend**, dan **7 skenario render server** lulus. Pengujian baru mencakup Online/Rx N/A, offline, nol terukur, sinyal lemah yang tetap tersedia, data lama/tidak lengkap, urutan kabel terbalik, cabang, lingkaran, kabel paralel, OLT/PON berbeda, koordinat salah, dan berakhirnya masa berlaku bukti. Render memeriksa warna marker pada payload produksi, peta biasa/fullscreen, panel estimasi, pengamanan teks nama node, dan ringkasan data kedaluwarsa. Ini bukan pemeriksaan visual browser.
+- Build produksi lulus. 54 aset dipaketkan; 43 berkas JS/CSS melalui HTTPS cocok dengan checksum paket.
+- Data setelah penerapan: 1131 node, 1034 ODP; **101 ODP merah**, termasuk 101 ODP yang masih memiliki status asli Online tetapi semua Rx N/A. **27 ODP** memiliki bukti belum lengkap. Jumlah berubah mengikuti snapshot.
+- Tetap **83 dari 83 rute belum terhubung ke endpoint**, sehingga **0 segmen** dapat diperkirakan. Tidak ada lokasi kabel putus yang diklaim pada topologi ini. Pengguna diminta memberi contoh rangkaian nyata untuk memvalidasi pemetaan berikutnya; fitur tidak mengarang atau menyimpan hubungan kabel otomatis.
+- Pemeriksaan produksi baca-saja: 0 penulisan database, 0 pembacaan OLT; snapshot tidak berubah. Poller dan listener tetap aktif dengan PID sama; socket 162/514 aktif. Tidak ada kesalahan aplikasi baru selama verifikasi. Konfigurasi VPN/firewall, identitas dan nilai Rx pelanggan tidak berubah. Fitur tidak mengirim notifikasi eksternal.
+
+Cadangan privat: `/var/backups/fona/stage1dp-20261018T015728Z`. Database diuji dengan pg_restore; arsip aplikasi dan checksum diverifikasi sebelum pemasangan.
+
+| Berkas | Ukuran | SHA-256 |
+|---|---:|---|
+| database.dump | 5,869,398 byte | `fb33f91be0b1c4a78288fd25910793677c8c3bc93927969340ca5f1ea465b346` |
+| application.tar.gz | 9,497,781 byte | `9ddf620b0847d1f9ee5ecc5c4e83cce21342338888a08be476349314d98e9679` |
+| system-configuration.tar.gz | 732 byte | `2926d8faac0298055c65290e2f6ecd53f24b50b651373d1df6186e5091f4e147` |
