@@ -1,5 +1,5 @@
 import { nodeTelemetryState } from '../lib/onuTelemetry.js';
-import {gisOpticalState, currentGisFaults, faultCoordinates} from '../lib/gisOpticalFaults.js';
+import {gisOpticalState, gisOdpDisplayState, gisOpticalPower, gisOpticalLabel, currentGisFaults, faultCoordinates} from '../lib/gisOpticalFaults.js';
 import GisOpticalFaultPanel from '../components/GisOpticalFaultPanel.jsx';
 import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -75,9 +75,10 @@ const STATUS_META = {
 const getNodeEffectiveStatus = (node) => {
   if (!node) return { key: 'active', label: 'Aktif Normal', badge: STATUS_META.active.badge, color: '#059669', pinBg: '#059669', isLoss: false, isTotalLoss: false, isInactive: false, hasRadar: false, hasNoClients: false };
 
-  const opticalState = gisOpticalState(node);
-  if (opticalState === 'no_rx') return {
-    key: 'active_loss', label: 'Seluruh ONU N/A', badge: STATUS_META.active_loss.badge,
+  const opticalState = gisOdpDisplayState(node);
+  if (opticalState === 'no_rx' || opticalState === 'no_rx_unverified') return {
+    key: opticalState === 'no_rx_unverified' ? 'rx_missing_unverified' : 'active_loss',
+    label: opticalState === 'no_rx_unverified' ? `Seluruh Rx N/A · ${node.optical_evidence.unverified_clients} ONU belum terverifikasi` : 'Seluruh ONU N/A', badge: STATUS_META.active_loss.badge,
     color: '#ef4444', pinBg: '#ef4444', nameBorder: '#f87171', nameText: '#991b1b',
     isLoss: true, isTotalLoss: true, isInactive: false, hasRadar: true, hasNoClients: false,
   };
@@ -157,7 +158,7 @@ const getNodeEffectiveStatus = (node) => {
   }
 
   // 4. Deteksi LOSS TOTAL (Seluruh Pelanggan pada ODP Loss)
-  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+  const effectivePower = gisOpticalPower(node);
   const hasGenuineSignal = effectivePower != null && !isNaN(parseFloat(effectivePower)) && parseFloat(effectivePower) > -35.0;
   const isLossKeyword = lowerRange.includes('loss') || lowerRange.includes('los') || lowerRange.includes('rusak');
   const isPartialLoss = nodeTelemetryState(node) === 'partial' || Number(node.optical_evidence?.no_rx_clients) > 0 || lowerRange.includes('ada los') || lowerRange.includes('sebagian');
@@ -333,10 +334,10 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath, isFulls
 
   const typeMeta = TYPE_META[node.node_type] ?? TYPE_META.ODC;
   const effStatus = getNodeEffectiveStatus(node);
-  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+  const effectivePower = gisOpticalPower(node);
   const isLoss = effStatus.isTotalLoss;
   const optMeta = isLoss 
-    ? { label: 'Loss Total (Kritis)', color: '#ef4444', badge: 'text-rose-600 dark:text-rose-400 font-bold' }
+    ? { label: effStatus.label, color: '#ef4444', badge: 'text-rose-600 dark:text-rose-400 font-bold' }
     : (effStatus.hasNoClients
         ? { label: 'Belum Ada Pelanggan', color: '#64748b', badge: 'text-black/60 dark:text-white/60 font-bold' }
         : getOpticalQuality(effectivePower));
@@ -393,7 +394,7 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath, isFulls
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-xl font-bold font-mono" style={{ color: optMeta.color }}>
-                {effStatus.hasNoClients ? 'Belum Ada Pelanggan' : (node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(2)} dBm` : '—'))}
+                {gisOpticalLabel(node)}
               </span>
               <span className="text-[10px] font-mono text-black/60 dark:text-white/60">
                 {effStatus.hasNoClients ? '0 Klien Terhubung' : `${node.total_clients ?? node.used_ports} Klien Terhubung`}
@@ -1017,43 +1018,9 @@ function LeafletMap({
   // Helper to format concise optical text: redaman terkecil - redaman terbesar atau label status
   const formatCompactOptical = (node, effStatus) => {
     if (effStatus.hasNoClients) return 'Belum ada pelanggan';
-    if (effStatus.isTotalLoss) return 'Loss Total';
     if (effStatus.isInactive) return 'Nonaktif';
     if (effStatus.key === 'maintenance') return 'Maint';
-
-    if (node.rx_power_range) {
-      const lower = node.rx_power_range.toLowerCase();
-      if (lower.includes('belum ada pelanggan')) {
-        return 'Belum ada pelanggan';
-      }
-      if (lower.includes('loss total') || lower === 'los' || (lower.includes('loss') && !lower.includes('ada los'))) {
-        return 'Loss Total';
-      }
-      if (lower.includes('ada los')) {
-        const numbers = node.rx_power_range.match(/-?\d+(\.\d+)?/g);
-        if (numbers && numbers.length > 0) {
-          return `${parseFloat(numbers[0]).toFixed(1)} dBm (LOS)`;
-        }
-        return 'Ada LOS';
-      }
-      const numbers = node.rx_power_range.match(/-?\d+(\.\d+)?/g);
-      if (numbers && numbers.length >= 2) {
-        const val1 = parseFloat(numbers[0]);
-        const val2 = parseFloat(numbers[1]);
-        const minVal = Math.max(val1, val2); // redaman terbaik / terkecil e.g. -19.5
-        const maxVal = Math.min(val1, val2); // redaman terbesar e.g. -24.2
-        return `${minVal.toFixed(1)} - ${maxVal.toFixed(1)} dBm`;
-      } else if (numbers && numbers.length === 1) {
-        return `${parseFloat(numbers[0]).toFixed(1)} dBm`;
-      }
-    }
-
-    const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
-    if (effectivePower != null && !isNaN(parseFloat(effectivePower))) {
-      return `${parseFloat(effectivePower).toFixed(1)} dBm`;
-    }
-
-    return node.node_type === 'ODP' ? 'Belum ada pelanggan' : '';
+    return gisOpticalLabel(node, true);
   };
 
   // Helper: Visual Node Shapes (ODP Box, ODC Cabinet, POP NOC/Data Center)
@@ -1063,12 +1030,13 @@ function LeafletMap({
     const isNoClients = effStatus?.hasNoClients;
     
     // Status color accent for interior lights
-    const ledColor = isLoss ? '#ef4444' : (isInactive ? '#94a3b8' : '#10b981');
+    const ledColor = isLoss ? '#ef4444' : (effStatus?.key === 'unknown' ? '#64748b' : isInactive ? '#94a3b8' : effStatus?.key === 'maintenance' ? '#d97706' : '#10b981');
+    const neutralSvg = effStatus?.key === 'unknown' || isInactive ? 'style="color:#64748b"' : effStatus?.key === 'maintenance' ? 'style="color:#d97706"' : '';
 
     if (nodeType === 'ODC') {
       // Realistic ODC (Outdoor Optical Distribution Cabinet with Dual Doors, Vents, and Base)
       return `
-        <svg class="gis-node-svg gis-svg-odc ${isMini ? 'is-mini' : ''}" viewBox="0 0 28 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg class="gis-node-svg gis-svg-odc ${isMini ? 'is-mini' : ''}" ${neutralSvg} viewBox="0 0 28 30" fill="none" xmlns="http://www.w3.org/2000/svg">
           <!-- Cabinet Roof Rain Visor -->
           <path d="M4 6.5 L14 3.5 L24 6.5 H4Z" class="svg-roof" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
           <!-- Main Cabinet Enclosure -->
@@ -1099,7 +1067,7 @@ function LeafletMap({
     if (nodeType === 'POP') {
       // Realistic POP (Central Office / Data Center / NOC Server Tower with Fiber Emitter)
       return `
-        <svg class="gis-node-svg gis-svg-pop ${isMini ? 'is-mini' : ''}" viewBox="0 0 28 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg class="gis-node-svg gis-svg-pop ${isMini ? 'is-mini' : ''}" ${neutralSvg} viewBox="0 0 28 30" fill="none" xmlns="http://www.w3.org/2000/svg">
           <!-- Central Optical Emitter Antenna -->
           <line x1="14" y1="6" x2="14" y2="1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
           <circle cx="14" cy="1.5" r="1.2" fill="${ledColor}" />
@@ -1129,7 +1097,7 @@ function LeafletMap({
 
     // Default: Realistic ODP (Outdoor Optical Distribution Box with Splitters & Cable Glands)
     return `
-      <svg class="gis-node-svg gis-svg-odp ${isMini ? 'is-mini' : ''}" viewBox="0 0 26 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg class="gis-node-svg gis-svg-odp ${isMini ? 'is-mini' : ''}" ${neutralSvg} viewBox="0 0 26 28" fill="none" xmlns="http://www.w3.org/2000/svg">
         <!-- ODP Box Top Weather Hood -->
         <path d="M4 6.5 C4 4.5 5.5 3.5 8 3.5 H18 C20.5 3.5 22 4.5 22 6.5 V8 H4 V6.5Z" class="svg-hood" stroke="currentColor" stroke-width="1.2" />
         <!-- Main ODP Rugged Body -->
@@ -1165,6 +1133,7 @@ function LeafletMap({
     if (effStatus.isTotalLoss) statusCls = 'gis-circle-loss';
     else if (effStatus.isInactive) statusCls = 'gis-circle-inactive';
     else if (effStatus.key === 'maintenance') statusCls = 'gis-circle-maint';
+    else if (effStatus.key === 'unknown') statusCls = 'gis-circle-unknown';
     else if (effStatus.hasNoClients) statusCls = 'gis-circle-no-clients';
 
     const nodeTypeCls = node.node_type === 'POP' ? 'is-pop' : node.node_type === 'ODC' ? 'is-odc' : 'is-odp';
@@ -1228,8 +1197,8 @@ function LeafletMap({
           ${coNodes.map((n) => {
             const nStatus = getNodeEffectiveStatus(n);
             const nOpt = nStatus.isTotalLoss 
-              ? { label: 'Loss Total', color: '#ef4444' }
-              : (nStatus.hasNoClients ? { label: 'Belum Ada Pelanggan', color: '#64748b' } : getOpticalQuality(n.best_rx_power ?? n.optical_power_dbm));
+              ? { label: nStatus.label, color: '#ef4444' }
+              : (nStatus.hasNoClients ? { label: 'Belum Ada Pelanggan', color: '#64748b' } : getOpticalQuality(gisOpticalPower(n)));
             const nPower = formatCompactOptical(n, nStatus);
             const isThisSelected = selectedNode?.id === n.id;
             const isOdc = n.node_type === 'ODC';
@@ -1398,10 +1367,10 @@ function LeafletMap({
 
       const isSelected = selectedNode?.id === id;
       const effStatus = getNodeEffectiveStatus(node);
-      const effectiveBestPower = node.best_rx_power ?? node.optical_power_dbm;
+      const effectiveBestPower = gisOpticalPower(node);
       const isFault = effStatus.isTotalLoss;
       const optMeta = isFault 
-        ? { label: 'Loss Total (Kritis)', color: '#ef4444', pillBg: '#fff1f2', pillBorder: '#fecdd3', badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800' } 
+        ? { label: effStatus.label, color: '#ef4444', pillBg: '#fff1f2', pillBorder: '#fecdd3', badge: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800' }
         : (effStatus.hasNoClients
             ? { label: 'Belum Ada Pelanggan', color: '#64748b', pillBg: '#f8fafc', pillBorder: '#cbd5e1', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700' }
             : getOpticalQuality(effectiveBestPower));
@@ -1420,6 +1389,7 @@ function LeafletMap({
         if (
           existing.markerType !== markerType || 
           existing.statusKey !== effStatus.key || 
+          existing.statusLabel !== effStatus.label ||
           existing.opticalDbm !== effectiveBestPower || 
           existing.opticalText !== opticalDbmText ||
           existing.isSelected !== isSelected ||
@@ -1464,7 +1434,7 @@ function LeafletMap({
         const tooltipSub = effStatus.hasNoClients 
           ? '<br><span style="color:#64748b;font-weight:bold;">Belum Ada Pelanggan</span>'
           : (effStatus.isTotalLoss 
-              ? '<br><span style="color:#ef4444;font-weight:bold;">Loss Total (Semua Klien)</span>'
+              ? `<br><span style="color:#ef4444;font-weight:bold;">${effStatus.label}</span>`
               : (opticalDbmText !== '—' ? '<br>Rx: ' + opticalDbmText : ''));
 
         marker.bindTooltip(`<b>${node.name}</b> (${node.code})<br>Tipe: ${node.node_type} • Status: ${effStatus.label}${tooltipSub}${multiHint}`, {
@@ -1509,6 +1479,7 @@ function LeafletMap({
           markerType,
           isSelected,
           statusKey: effStatus.key,
+          statusLabel: effStatus.label,
           opticalDbm: effectiveBestPower,
           opticalText: opticalDbmText,
           multiCount,
@@ -1696,6 +1667,12 @@ function LeafletMap({
           display: none;
         }
 
+        .gis-circle-unknown .gis-node-svg, .gis-circle-inactive .gis-node-svg {
+          color: #64748b !important;
+        }
+        .gis-circle-maint .gis-node-svg {
+          color: #d97706 !important;
+        }
         .gis-circle-loss .gis-node-svg {
           color: #ef4444 !important;
         }
@@ -2106,11 +2083,11 @@ function GisStatCards({ nodes = [] }) {
               <span className={`text-2xl font-black leading-none ${isLoss ? 'text-rose-600 dark:text-rose-400' : 'text-black dark:text-white'}`}>
                 {lossNodes.length}
               </span>
-              <p className="text-sm font-bold text-black dark:text-white">Gangguan Loss Total</p>
+              <p className="text-sm font-bold text-black dark:text-white">Gangguan Optik ODP</p>
             </div>
             <p className="text-xs text-black/70 dark:text-white/70 mt-0.5 font-medium">
               {inactiveNodes.length > 0
-                ? `${lossNodes.length} Total Loss • ${inactiveNodes.length} Tidak Aktif (Nonaktif)`
+                ? `${lossNodes.length} Gangguan Optik • ${inactiveNodes.length} Tidak Aktif (Nonaktif)`
                 : (isLoss ? 'Perlu Investigasi Lapangan Pada Titik ODP / Jalur Terkait' : unverifiedNodes.length ? `${unverifiedNodes.length} ODP belum memiliki data optik lengkap dan terbaru` : 'Tidak ada ODP terdeteksi kehilangan seluruh nilai Rx')}
             </p>
           </div>
@@ -2802,7 +2779,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                       ? 'bg-rose-600 text-white shadow-md shadow-rose-600/50 font-bold scale-105'
                       : 'hover:bg-white/15 text-white/80 hover:text-white'
                   }`}
-                  title={faultOnlyFilter ? 'Tampilkan Semua Status' : 'Filter Hanya Gangguan Loss Total'}
+                  title={faultOnlyFilter ? 'Tampilkan Semua Status' : 'Filter Gangguan Optik ODP'}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -3405,10 +3382,10 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
               <tbody className="divide-y divide-black/10 dark:divide-white/10 text-xs">
                 {filteredNodes.map(node => {
                   const effStatus = getNodeEffectiveStatus(node);
-                  const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
+                  const effectivePower = gisOpticalPower(node);
                   const isLoss = effStatus.isTotalLoss;
                   const optMeta = isLoss 
-                    ? { label: 'Loss Total (Kritis)', color: '#ef4444', badge: 'text-rose-600 dark:text-rose-400 font-bold' }
+                    ? { label: effStatus.label, color: '#ef4444', badge: 'text-rose-600 dark:text-rose-400 font-bold' }
                     : (effStatus.hasNoClients
                         ? { label: 'Belum Ada Pelanggan', color: '#64748b', badge: 'text-black/60 dark:text-white/60 font-bold' }
                         : getOpticalQuality(effectivePower));
@@ -3436,7 +3413,7 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
                         {node.node_type === 'ODP' ? (
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono font-bold" style={{ color: optMeta.color }}>
-                              {effStatus.hasNoClients ? 'Belum Ada Pelanggan' : (node.rx_power_range ? node.rx_power_range : (effectivePower != null ? `${parseFloat(effectivePower).toFixed(2)} dBm` : '—'))}
+                              {gisOpticalLabel(node)}
                             </span>
                             <span className="text-[10px] font-bold" style={{ color: optMeta.color }}>
                               {optMeta.label}
