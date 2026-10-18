@@ -1,4 +1,6 @@
 import { nodeTelemetryState } from '../lib/onuTelemetry.js';
+import {gisOpticalState, currentGisFaults, faultCoordinates} from '../lib/gisOpticalFaults.js';
+import GisOpticalFaultPanel from '../components/GisOpticalFaultPanel.jsx';
 import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -73,6 +75,13 @@ const STATUS_META = {
 const getNodeEffectiveStatus = (node) => {
   if (!node) return { key: 'active', label: 'Aktif Normal', badge: STATUS_META.active.badge, color: '#059669', pinBg: '#059669', isLoss: false, isTotalLoss: false, isInactive: false, hasRadar: false, hasNoClients: false };
 
+  const opticalState = gisOpticalState(node);
+  if (opticalState === 'no_rx') return {
+    key: 'active_loss', label: 'Seluruh ONU N/A', badge: STATUS_META.active_loss.badge,
+    color: '#ef4444', pinBg: '#ef4444', nameBorder: '#f87171', nameText: '#991b1b',
+    isLoss: true, isTotalLoss: true, isInactive: false, hasRadar: true, hasNoClients: false,
+  };
+
   // 1. Status TIDAK AKTIF (Offline / Nonaktif) - Warna Abu-abu Netral
   if (node.status === 'inactive') {
     return {
@@ -138,7 +147,7 @@ const getNodeEffectiveStatus = (node) => {
     };
   }
 
-  if (nodeTelemetryState(node) === 'unknown') {
+  if (opticalState === 'unknown' || nodeTelemetryState(node) === 'unknown') {
     return {
       key: 'unknown', label: 'Sebagian data belum terverifikasi',
       badge: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600',
@@ -151,7 +160,7 @@ const getNodeEffectiveStatus = (node) => {
   const effectivePower = node.best_rx_power ?? node.optical_power_dbm;
   const hasGenuineSignal = effectivePower != null && !isNaN(parseFloat(effectivePower)) && parseFloat(effectivePower) > -35.0;
   const isLossKeyword = lowerRange.includes('loss') || lowerRange.includes('los') || lowerRange.includes('rusak');
-  const isPartialLoss = nodeTelemetryState(node) === 'partial' || lowerRange.includes('ada los') || lowerRange.includes('sebagian');
+  const isPartialLoss = nodeTelemetryState(node) === 'partial' || Number(node.optical_evidence?.no_rx_clients) > 0 || lowerRange.includes('ada los') || lowerRange.includes('sebagian');
 
   const isTotalLoss = isOdp && !hasNoClients && (node.telemetry_contract === 1
     ? nodeTelemetryState(node) === 'offline'
@@ -551,6 +560,8 @@ function RulerHud({ waypoints, totalMeters, onUndo, onReset, onClose }) {
 function LeafletMap({
   nodes = [],
   cables = [],
+  opticalFaults = [],
+  faultFocus = null,
   selectedNode,
   tracedPath,
   rulerActive,
@@ -576,6 +587,7 @@ function LeafletMap({
   const canvasRendererRef = useRef(null);
   const tileLayerRef = useRef(null);
   const cablesLayerGroupRef = useRef(null);
+  const faultsLayerGroupRef = useRef(null);
   const nodesLayerGroupRef = useRef(null);
   const pathHighlightLayerGroupRef = useRef(null);
   const rulerLayerGroupRef = useRef(null);
@@ -651,6 +663,7 @@ function LeafletMap({
 
         // Separate layer groups for high-performance in-place updates
         cablesLayerGroupRef.current = Lf.layerGroup().addTo(map);
+        faultsLayerGroupRef.current = Lf.layerGroup().addTo(map);
         pathHighlightLayerGroupRef.current = Lf.layerGroup().addTo(map);
         nodesLayerGroupRef.current = Lf.layerGroup().addTo(map);
         rulerLayerGroupRef.current = Lf.layerGroup().addTo(map);
@@ -677,6 +690,7 @@ function LeafletMap({
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
         cablesLayerGroupRef.current = null;
+        faultsLayerGroupRef.current = null;
         nodesLayerGroupRef.current = null;
         pathHighlightLayerGroupRef.current = null;
         rulerLayerGroupRef.current = null;
@@ -688,6 +702,10 @@ function LeafletMap({
   }, []);
 
   // 2. Synchronize Satelit Hybrid vs Vektor tile layer
+  useEffect(() => {
+    if (mapLoaded && faultFocus?.pin && mapInstanceRef.current) mapInstanceRef.current.flyTo(faultFocus.pin, 17, {duration:1.2});
+  }, [mapLoaded, faultFocus]);
+
   useEffect(() => {
     if (!mapLoaded || !mapInstanceRef.current || !leafletRef.current) return;
     const Lf = leafletRef.current;
@@ -977,6 +995,24 @@ function LeafletMap({
       }
     });
   }, [mapLoaded, safeCables]);
+
+  useEffect(() => {
+    if (!mapLoaded || !faultsLayerGroupRef.current || !leafletRef.current) return;
+    const layer = faultsLayerGroupRef.current, Lf = leafletRef.current;
+    layer.clearLayers();
+    for (const fault of opticalFaults) {
+      const {route, pin} = faultCoordinates(fault);
+      const content = () => {
+        const el = document.createElement('div');
+        el.style.maxWidth = '280px';
+        el.textContent = `Perkiraan segmen: ${fault.last_signal_node.name} → ${fault.first_no_rx_node.name}. ${fault.affected_odps} ODP / ${fault.affected_clients} pelanggan N/A. ${fault.explanation}`;
+        return el;
+      };
+      if (route.length) Lf.polyline(route, {color:'#dc2626', weight:7, opacity:0.9, dashArray:'10 8'}).addTo(layer).bindPopup(content);
+      if (pin) Lf.marker(pin, {icon:Lf.divIcon({className:'gis-fault-landmark', html:'<div style="background:#b91c1c;color:white;border:2px solid white;border-radius:50%;width:24px;height:24px;text-align:center;font-weight:bold">!</div>', iconSize:[28,28], iconAnchor:[14,14]})})
+        .addTo(layer).bindTooltip('Patokan segmen pemeriksaan · perkiraan').bindPopup(content);
+    }
+  }, [mapLoaded, opticalFaults]);
 
   // Helper to format concise optical text: redaman terkecil - redaman terbesar atau label status
   const formatCompactOptical = (node, effStatus) => {
@@ -2057,13 +2093,14 @@ function GisStatCards({ nodes = [] }) {
   });
 
   const inactiveNodes = safeNodes.filter(n => n?.status === 'inactive');
+  const unverifiedNodes = safeNodes.filter(n => n?.node_type === 'ODP' && getNodeEffectiveStatus(n).key === 'unknown');
   const isLoss = lossNodes.length > 0;
 
   return (
     <div className="w-full">
       <div className="bg-white dark:bg-black rounded-lg border border-black/70 dark:border-white/70 shadow-2xs p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors duration-300">
         <div className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full shrink-0 ${isLoss ? 'bg-rose-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`} />
+          <div className={`w-3 h-3 rounded-full shrink-0 ${isLoss ? 'bg-rose-500 animate-ping' : unverifiedNodes.length ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse'}`} />
           <div>
             <div className="flex items-center gap-2">
               <span className={`text-2xl font-black leading-none ${isLoss ? 'text-rose-600 dark:text-rose-400' : 'text-black dark:text-white'}`}>
@@ -2074,7 +2111,7 @@ function GisStatCards({ nodes = [] }) {
             <p className="text-xs text-black/70 dark:text-white/70 mt-0.5 font-medium">
               {inactiveNodes.length > 0
                 ? `${lossNodes.length} Total Loss • ${inactiveNodes.length} Tidak Aktif (Nonaktif)`
-                : (isLoss ? 'Perlu Investigasi Lapangan Pada Titik ODP / Jalur Terkait' : 'Seluruh Jalur Distribusi FO & Titik ODP Beroperasi Normal')}
+                : (isLoss ? 'Perlu Investigasi Lapangan Pada Titik ODP / Jalur Terkait' : unverifiedNodes.length ? `${unverifiedNodes.length} ODP belum memiliki data optik lengkap dan terbaru` : 'Tidak ada ODP terdeteksi kehilangan seluruh nilai Rx')}
             </p>
           </div>
         </div>
@@ -2082,9 +2119,9 @@ function GisStatCards({ nodes = [] }) {
           <span className={`text-xs font-bold px-3 py-1.5 rounded-md ${
             isLoss 
               ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/40' 
-              : 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/40'
+              : unverifiedNodes.length ? 'text-slate-600 dark:text-slate-300 bg-slate-500/10 border border-slate-500/40' : 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/40'
           }`}>
-            {isLoss ? 'Perhatian: Ada Gangguan' : 'Sistem Aman Normal'}
+            {isLoss ? 'Perhatian: Ada Gangguan' : unverifiedNodes.length ? 'Data Belum Lengkap' : 'Tidak Ada Indikasi Loss Total'}
           </span>
         </div>
       </div>
@@ -2106,6 +2143,13 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
   const [allNodes, setAllNodes] = useState([]);
   const [allCables, setAllCables] = useState([]);
+  const [opticalDiagnostics, setOpticalDiagnostics] = useState(null);
+  const [faultFocus, setFaultFocus] = useState(null);
+  const [opticalClock, setOpticalClock] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setOpticalClock(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState(null);
   const [typeFilter, setTypeFilter] = useState('');
@@ -2197,12 +2241,14 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
 
         setAllNodes(parsedNodes);
         setAllCables(parsedCables);
+        setOpticalDiagnostics(res.data.optical_diagnostics || null);
       }
     } catch (err) {
       console.warn('Failed to load GIS map data:', err);
       if (!silent) {
         setAllNodes([]);
         setAllCables([]);
+        setOpticalDiagnostics(null);
       }
     } finally {
       mapReadPending.current=false;
@@ -2210,8 +2256,16 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
     }
   }, []);
 
-  const safeAllNodes = useMemo(() => Array.isArray(allNodes) ? allNodes : (allNodes && typeof allNodes === 'object' ? Object.values(allNodes) : []), [allNodes]);
+  const safeAllNodes = useMemo(() => (Array.isArray(allNodes) ? allNodes : (allNodes && typeof allNodes === 'object' ? Object.values(allNodes) : [])).map(n => ({...n})), [allNodes, opticalClock]);
   const safeAllCables = useMemo(() => Array.isArray(allCables) ? allCables : (allCables && typeof allCables === 'object' ? Object.values(allCables) : []), [allCables]);
+  // Re-evaluate cached evidence even when background requests fail or live updates are paused.
+  const opticalFaults = useMemo(() => currentGisFaults(opticalDiagnostics || {}, safeAllNodes, opticalClock), [opticalDiagnostics, safeAllNodes, opticalClock]);
+  const visibleOpticalFaults = useMemo(() => opticalFaults.filter(f => !oltFilterParam || String(safeAllNodes.find(n => String(n.id) === String(f.first_no_rx_node.id))?.olt_device_id) === String(oltFilterParam)), [opticalFaults, oltFilterParam, safeAllNodes]);
+  const locateOpticalFault = useCallback(fault => {
+    const {pin} = faultCoordinates(fault);
+    if (pin) { setActiveView('map'); setFaultFocus({pin}); }
+  }, []);
+  const opticalPanel = <GisOpticalFaultPanel diagnostics={opticalDiagnostics} faults={visibleOpticalFaults} nodes={safeAllNodes} onLocate={locateOpticalFault} compact={isFullscreenPage} expired={safeAllNodes.some(n => n.optical_evidence?.state !== 'unknown' && n.optical_evidence?.total > 0 && gisOpticalState(n, opticalClock) === 'unknown')} />;
 
   useEffect(() => {
     fetchNodesAndCables();
@@ -2464,6 +2518,8 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
             <LeafletMap
               nodes={nodesWithCoords}
               cables={safeAllCables}
+              opticalFaults={visibleOpticalFaults}
+              faultFocus={faultFocus}
               selectedNode={selectedNode}
               tracedPath={tracedPath}
               rulerActive={rulerActive}
@@ -2880,6 +2936,8 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           </>
         )}
 
+        <div className="absolute top-20 left-3 right-16 sm:left-4 sm:right-auto sm:w-[460px] z-[1000]">{opticalPanel}</div>
+
         {/* 6. Node Detail Drawer / Bottom Sheet */}
         <NodeDetailPanel
           node={selectedNode}
@@ -3263,6 +3321,8 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
         </div>
       )}
 
+      {opticalPanel}
+
       {/* Main Content Area */}
       {loading ? (
         <LoadingState
@@ -3308,6 +3368,8 @@ export default function GisTopologyMap({ isStandaloneFullscreen = false }) {
           <LeafletMap
             nodes={nodesWithCoords}
             cables={safeAllCables}
+            opticalFaults={visibleOpticalFaults}
+            faultFocus={faultFocus}
             selectedNode={selectedNode}
             tracedPath={tracedPath}
             rulerActive={rulerActive}

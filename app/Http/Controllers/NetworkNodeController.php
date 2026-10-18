@@ -15,6 +15,7 @@ use App\Http\Resources\NetworkNodeResource;
 use App\Services\Olt\FastOpticalProbeService;
 use App\Services\Olt\OltReadBusy;
 use App\Services\Olt\OnuTelemetryView;
+use App\Services\GisOpticalFaultAnalyzer;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -263,6 +264,7 @@ class NetworkNodeController extends Controller
                 'online_clients'         => $onlineClients,
                 'loss_clients'           => $lossClients,
                 'is_loss_total'          => $isLossTotal,
+                'optical_evidence'       => $node->node_type === 'ODP' ? GisOpticalFaultAnalyzer::evidence($views, $totalClients) : null,
             ];
         }
 
@@ -278,6 +280,7 @@ class NetworkNodeController extends Controller
             'data'   => [
                 'nodes'  => $formattedNodes,
                 'cables' => $cables,
+                'optical_diagnostics' => GisOpticalFaultAnalyzer::analyze($formattedNodes, $cables),
             ],
         ];
 
