@@ -15,3 +15,23 @@ Pengambilan langsung yang berhasil tetap dapat terjadi setelah batas penundaan j
 ## Cakupan
 
 Dua berkas frontend diubah: halaman Network Infrastructure dan pembantu pembacaan detail ODP. Tidak ada perubahan backend, endpoint, pengunci, siklus polling, status ONU, identitas, VPN, atau topologi. Tampilan durasi tidak lagi mengganti angka nol/tidak tersedia dengan angka 45 ms.
+
+
+## Hasil penerapan
+
+Diverifikasi pada **2026-10-18T15:43:32+07:00**. Commit kode aplikasi: `a480759a66e835159a618abd7d63a7ad7d666be7`. GitHub diperbarui terlebih dahulu, kemudian cadangan baru diverifikasi sebelum paket dipasang.
+
+- **62 pengujian frontend** lulus, termasuk tujuh tambahan untuk percobaan ulang berurutan, batas menunggu, kesalahan selain sibuk, pembatalan saat menunggu dan ketika respons datang, deadline pada respons lambat, serta kegagalan jaringan setelah data tersimpan tampil.
+- **6 skenario render/alur modal** lulus: port tetap tampil saat menunggu/batas habis, pencegahan permintaan ganda dan tumpang tindih dengan pembaruan tersimpan, pembatalan saat ditutup, respons ODP sebelumnya diabaikan, serta durasi nol/kosong/tidak tersedia. Fixture dijalankan dengan render server dan respons simulasi; ini bukan pemeriksaan visual browser atau pembuktian bahwa setiap klik akan berhasil membaca OLT dalam 30 detik.
+- Build produksi lulus. 54 aset dipaketkan; 43 berkas JS/CSS melalui HTTPS cocok dengan checksum.
+- Pemeriksaan baca-saja pada 2 ODP menghasilkan 16 port tanpa selisih dengan database. Respons simulasi OLT sibuk mempertahankan seluruh port dan waktu sampel sama dengan respons tersimpan. **0 penulisan database, 0 pembacaan OLT** pada pemeriksaan ini; snapshot tidak berubah. Tidak dilakukan penahanan pengunci OLT produksi untuk pengujian.
+- Seluruh sumber backend, konfigurasi, serta aset lama dipertahankan. Poller dan listener aktif dengan PID sama sebelum/sesudah, tidak direstart. Socket 162/514 aktif. Tidak ditemukan kesalahan aplikasi baru dalam jendela verifikasi.
+- Pengunci lintas proses tetap berlaku. Saat OLT belum tersedia sampai batas waktu, modal tetap memberi keterangan belum berhasil dan mempertahankan nilai serta waktu data tersimpan.
+
+Cadangan privat: `/var/backups/fona/stage1dq-20261018T084137Z`. Database diperiksa melalui pg_restore; arsip aplikasi dan checksum diverifikasi sebelum pemasangan.
+
+| Berkas | Ukuran | SHA-256 |
+|---|---:|---|
+| database.dump | 5,872,574 byte | `bff13e7443cb28d40e82e6ba68130f7e3b8c9b7058aac063d382f74726f6866f` |
+| application.tar.gz | 9,954,205 byte | `28a0a8bb48d43d3a82c1b13a0b76de4393c6be533e32e90a8c38696cc3ab7923` |
+| system-configuration.tar.gz | 732 byte | `0a2d8365493265ddc3c425124513be374138e5ed966dd7628be5fb0ad457d113` |
