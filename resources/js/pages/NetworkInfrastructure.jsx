@@ -1,5 +1,5 @@
 import { onuPresentation } from '../lib/onuTelemetry.js';
-import { loadOdpPortDetail } from '../lib/odpPortDetail.js';
+import { loadOdpPortDetail, refreshOdpPortDetail } from '../lib/odpPortDetail.js';
 import { OnuStatus, TelemetryStamp } from '../components/OnuTelemetry.jsx';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -3694,6 +3694,9 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
   const [portLoadError, setPortLoadError] = useState(null);
   const portRequest = useRef(0);
   const portReadPending = useRef(false);
+  const portReadController = useRef(null);
+  const portLivePending = useRef(false);
+  useEffect(() => () => { ++portRequest.current; portReadController.current?.abort(); }, []);
   const [loadingPorts, setLoadingPorts] = useState(false);
   const [refreshingLiveOptical, setRefreshingLiveOptical] = useState(false);
   const [liveProbeFeedback, setLiveProbeFeedback] = useState(null);
@@ -3951,46 +3954,56 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
   };
 
   const fetchOdpPorts = useCallback(async (odpId, isLiveRefresh = false, silent = false, signal) => {
-    if (silent && portReadPending.current) return;
+    if (signal?.aborted || (silent && portReadPending.current) || (isLiveRefresh && portLivePending.current)) return;
+    portReadController.current?.abort();
+    const controller = new AbortController();
+    portReadController.current = controller;
+    const cancel = () => controller.abort(signal?.reason);
+    signal?.addEventListener('abort', cancel, {once:true});
+    const timeout = isLiveRefresh ? setTimeout(() => controller.abort(new DOMException('Batas waktu pembacaan langsung tercapai. Data tersimpan tetap ditampilkan.', 'TimeoutError')), 45000) : null;
     portReadPending.current = true;
+    portLivePending.current = isLiveRefresh;
     const requestId = ++portRequest.current;
+    const current = () => !controller.signal.aborted && requestId === portRequest.current;
+    const applyData = d => {
+      if (!current()) return;
+      setOdpDetailData(d);
+      setPortsData(d.ports ?? []);
+      if (d.node?.id) setSelectedOdp(prev => prev && String(prev.id) === String(d.node.id) ? {...prev, ...d.node} : prev);
+    };
     setPortLoadError(null);
     if (isLiveRefresh) {
       setRefreshingLiveOptical(true);
-    } else if (!silent) {
-      setLoadingPorts(true);
-    }
+      setLiveProbeFeedback({type:'waiting', text:'Meminta pembacaan langsung ke OLT...'});
+    } else if (!silent) setLoadingPorts(true);
     try {
-      const d = await loadOdpPortDetail(odpId, isLiveRefresh, fetch, signal);
-      if (signal?.aborted || requestId !== portRequest.current) return;
-      setOdpDetailData(d);
-      setPortsData(d.ports ?? []);
-
-      if (d.node?.id) {
-        setSelectedOdp(prev => prev && String(prev.id)===String(d.node.id) ? { ...prev, ...d.node } : prev);
-      }
-
+      const d = isLiveRefresh ? await refreshOdpPortDetail(odpId, {
+        signal:controller.signal,
+        onStored:applyData,
+        onWaiting:({attempt, maxAttempts}) => {
+          if (current()) setLiveProbeFeedback({type:'waiting', text:`Menunggu OLT tersedia · percobaan berikutnya ${attempt}/${maxAttempts}`});
+        },
+      }) : await loadOdpPortDetail(odpId, false, fetch, controller.signal);
+      if (!current()) return;
+      applyData(d);
       if (!d.live_probe) setLiveProbeFeedback(null);
       if (d.live_probe) {
         if (d.live_probe.success) {
-          setLiveProbeFeedback({
-            type: 'success',
-            text: `Realtime OLT (${d.live_probe.duration_ms || 45}ms)`,
-          });
-        } else {
-          setLiveProbeFeedback({
-            type: 'info',
-            text: d.live_probe.reason || 'OLT tidak merespons',
-          });
-        }
+          const duration = d.live_probe.duration_ms;
+          setLiveProbeFeedback({type:'success', text:Number.isFinite(duration) && duration >= 0 ? `Realtime OLT (${duration}ms)` : 'Pembacaan OLT selesai'});
+        } else setLiveProbeFeedback({type:'info', text:d.live_probe.reason || 'OLT tidak merespons'});
       }
     } catch (error) {
-      if (signal?.aborted || requestId !== portRequest.current) return;
-      setPortLoadError(error.message || 'Detail port gagal dimuat. Coba lagi beberapa saat.');
+      if (requestId !== portRequest.current || (controller.signal.aborted && controller.signal.reason?.name !== 'TimeoutError')) return;
+      setPortLoadError(controller.signal.reason?.name === 'TimeoutError' ? controller.signal.reason.message : error.message || 'Detail port gagal dimuat. Coba lagi beberapa saat.');
       setLiveProbeFeedback(null);
     } finally {
+      if (timeout !== null) clearTimeout(timeout);
+      signal?.removeEventListener('abort', cancel);
       if (requestId === portRequest.current) {
+        portReadController.current = null;
         portReadPending.current = false;
+        portLivePending.current = false;
         setLoadingPorts(false);
         setRefreshingLiveOptical(false);
       }
@@ -4015,6 +4028,9 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
 
   const closeOdpDetail = () => {
     ++portRequest.current;
+    portReadController.current?.abort();
+    portReadController.current = null;
+    portLivePending.current = false;
     portReadPending.current = false;
     setPortLoadError(null);
     setLoadingPorts(false);
@@ -4623,7 +4639,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                       ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 ring-1 ring-indigo-500/30'
                       : 'border-black/30 dark:border-white/30'
                   } disabled:opacity-50 transition-colors cursor-pointer`}
-                  title={refreshingLiveOptical ? 'Mengambil redaman realtime dari OLT...' : 'Refresh Real-time Redaman dari OLT'}
+                  title={liveProbeFeedback?.type === 'waiting' ? liveProbeFeedback.text : refreshingLiveOptical ? 'Mengambil redaman realtime dari OLT...' : 'Refresh Real-time Redaman dari OLT'}
                 >
                   <svg className={`w-4 h-4 ${loadingPorts || refreshingLiveOptical ? 'animate-spin text-indigo-600 dark:text-indigo-400' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -4659,7 +4675,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
               {odpDetailData?.live_probe && odpDetailData.live_probe.success === false && (
                 <p className="rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2 text-amber-700 dark:text-amber-300">
                   {odpDetailData.live_probe.reason_code === 'olt_busy'
-                    ? 'OLT sedang dibaca oleh proses lain. Port dan data tersimpan tetap ditampilkan; perhatikan waktu pembaruan.'
+                    ? (refreshingLiveOptical ? 'OLT sedang dibaca proses lain. Refresh akan dicoba kembali otomatis; port dan data tersimpan tetap ditampilkan.' : odpDetailData.live_probe.retry_exhausted ? 'Batas menunggu refresh selesai. Pembacaan langsung belum berhasil; data tersimpan tetap ditampilkan. Coba lagi beberapa saat.' : 'OLT sedang dibaca proses lain. Port dan data tersimpan tetap ditampilkan; perhatikan waktu pembaruan.')
                     : 'Pembacaan langsung belum lengkap. Perhatikan waktu pembaruan; sebagian kartu dapat memakai data tersimpan.'}
                 </p>
               )}
@@ -4675,7 +4691,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                   </h4>
                   {(loadingPorts || refreshingLiveOptical) && (
                     <span className="text-[10px] text-indigo-500 animate-pulse font-mono">
-                      {refreshingLiveOptical ? 'Mengambil data dari OLT...' : 'Memuat...'}
+                      {refreshingLiveOptical ? (liveProbeFeedback?.type === 'waiting' ? 'Menunggu pembacaan OLT...' : 'Mengambil data dari OLT...') : 'Memuat...'}
                     </span>
                   )}
                 </div>
