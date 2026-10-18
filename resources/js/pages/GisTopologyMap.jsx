@@ -1,6 +1,7 @@
 import { nodeTelemetryState } from '../lib/onuTelemetry.js';
 import {gisOpticalState, gisOdpDisplayState, gisOpticalPower, gisOpticalLabel, currentGisFaults, faultCoordinates} from '../lib/gisOpticalFaults.js';
 import GisOpticalFaultPanel from '../components/GisOpticalFaultPanel.jsx';
+import GisOdpCustomers from '../components/GisOdpCustomers.jsx';
 import { useStoredRefresh } from '../hooks/useStoredRefresh.js';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -402,6 +403,8 @@ function NodeDetailPanel({ node, onClose, onOpenStreetView, onTracePath, isFulls
             </div>
           </div>
         )}
+
+        {node.node_type === 'ODP' && <GisOdpCustomers key={node.id} nodeId={node.id} expectedCustomers={node.total_clients ?? node.used_ports ?? 0} />}
 
         {/* GPS Coordinates & Google Earth / Maps Navigation */}
         <div className="space-y-2">
