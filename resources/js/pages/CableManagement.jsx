@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext';
 import KmlImportModal from '../components/KmlImportModal';
 import LoadingState from '../components/LoadingState';
+import RefreshButton from '../components/RefreshButton';
 
 // TIA-598-A 12 Standard Fiber Colors
 const TIA_COLORS = [
@@ -31,11 +32,14 @@ export default function CableManagement() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState(null);
+  const [loadError, setLoadError] = useState('');
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterInstallation, setFilterInstallation] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -102,15 +106,14 @@ export default function CableManagement() {
 
   // Fetch Cables with Cores
   const fetchCables = async () => {
-    try {
-      const res = await fetch('/api/network-cables?with_cores=1');
-      if (res.ok) {
-        const json = await res.json();
-        setCables(json.data || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch cables:', err);
-    }
+    const res = await fetch('/api/network-cables?with_cores=1');
+    if (!res.ok) throw new Error(res.status === 401 || res.status === 403
+      ? 'Akses data kabel ditolak. Periksa sesi login dan hak akses Anda.'
+      : 'Data kabel gagal dimuat. Coba segarkan kembali.');
+    const json = await res.json();
+    if (!Array.isArray(json.data)) throw new Error('Respons data kabel tidak valid. Coba segarkan kembali.');
+    setCables(json.data);
+    setLoadError('');
   };
 
   // Fetch Network Nodes (POP, ODC, ODP) for dropdowns
@@ -128,15 +131,25 @@ export default function CableManagement() {
 
   const loadAllData = async () => {
     setLoading(true);
-    await Promise.all([fetchStats(), fetchCables(), fetchNodes()]);
-    setLoading(false);
+    try {
+      await Promise.all([fetchStats(), fetchCables(), fetchNodes()]);
+    } catch (err) {
+      setLoadError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchStats(), fetchCables()]);
-    setRefreshing(false);
-    showToast('Data rute kabel berhasil diperbarui', 'info');
+    try {
+      await Promise.all([fetchStats(), fetchCables()]);
+      showToast('Data rute kabel berhasil diperbarui', 'info');
+    } catch (err) {
+      setLoadError(err.message);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   useEffect(() => {
@@ -163,6 +176,20 @@ export default function CableManagement() {
       return true;
     });
   }, [cables, searchQuery, filterStatus, filterInstallation]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCables.length / pageSize));
+  const page = Math.min(currentPage, totalPages);
+  const pageStart = (page - 1) * pageSize;
+  const paginatedCables = filteredCables.slice(pageStart, pageStart + pageSize);
+  const hasFilters = Boolean(searchQuery.trim() || filterStatus !== 'all' || filterInstallation !== 'all');
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, filterStatus, filterInstallation, pageSize]);
+  useEffect(() => { setCurrentPage(previous => Math.min(previous, totalPages)); }, [totalPages]);
+  const resetFilters = () => {
+    setSearchQuery('');
+    setFilterStatus('all');
+    setFilterInstallation('all');
+    setCurrentPage(1);
+  };
 
   // Auto calculate tube count based on total cores
   const handleCoreCountChange = (val) => {
@@ -447,11 +474,11 @@ export default function CableManagement() {
   }, [matrixCableData, selectedTube]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-300 pb-12 min-w-0">
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl shadow-xl flex items-center gap-3 text-sm font-medium transition-all ${
+          className={`fixed bottom-5 right-5 z-50 px-4 py-3 rounded-md shadow-xl flex items-center gap-3 text-sm font-medium transition-all ${
             toast.type === 'error'
               ? 'bg-red-600 text-white'
               : toast.type === 'info'
@@ -465,41 +492,31 @@ export default function CableManagement() {
       )}
 
       {/* Header Banner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 rounded-2xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+            <span className="p-2 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
             </span>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-              Manajemen Kabel &amp; Core Fiber Optik
+            <h1 className="text-xl sm:text-2xl font-bold text-black dark:text-white tracking-tight">
+              Manajemen Kabel
             </h1>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Pengelolaan inventaris kabel backbone, feeder, dan distribusi serta visualisasi Core Matrix TIA-598-A
+          <p className="text-xs sm:text-sm text-black/60 dark:text-white/60 mt-1">
+            Kelola rute kabel, titik sambung, dan alokasi core fiber optik.
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all flex items-center gap-1.5"
-            title="Muat ulang data"
-          >
-            <svg className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <span>Segarkan</span>
-          </button>
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full md:w-auto">
+          <RefreshButton isRefreshing={refreshing} onRefresh={handleRefresh} label="Segarkan" className="w-full sm:w-auto" />
 
           {isSuperAdmin && (
             <button
               onClick={() => setShowKmlModal(true)}
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-md text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-all flex items-center gap-1.5"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -510,7 +527,7 @@ export default function CableManagement() {
 
           <button
             onClick={() => navigate('/cable-routes')}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 dark:hover:bg-sky-900/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 transition-all flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-md text-xs font-semibold bg-sky-50 hover:bg-sky-100 dark:bg-sky-950/40 dark:hover:bg-sky-900/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 transition-all flex items-center gap-1.5"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -524,19 +541,19 @@ export default function CableManagement() {
                 handleGenerateCode();
                 setShowAddModal(true);
               }}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-md text-xs font-bold bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 border border-black dark:border-white shadow-xs transition-all flex items-center gap-1.5"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
               </svg>
-              <span>+ Tambah Kabel Baru</span>
+              <span>Tambah Kabel</span>
             </button>
           )}
 
           {!isReadOnly && cables.length > 0 && (
             <button
               onClick={() => setShowDeleteAllModal(true)}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 transition-all flex items-center gap-1.5 shadow-2xs"
+              className="px-3.5 py-2 rounded-md text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 transition-all flex items-center gap-1.5 shadow-2xs"
               title="Hapus seluruh data bentangan kabel & core matrix"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -549,10 +566,10 @@ export default function CableManagement() {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Total Bentangan */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-xs space-y-1">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-3.5 sm:p-4 rounded-lg shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-black/60 dark:text-white/60 text-xs font-medium">
             <span>Total Bentangan</span>
             <span className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -560,17 +577,17 @@ export default function CableManagement() {
               </svg>
             </span>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+          <div className="text-xl sm:text-2xl font-bold text-black dark:text-white">
             {stats ? stats.total_cables : (loading ? '...' : 0)}
           </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="text-xs text-black/60 dark:text-white/60">
             {stats?.by_status?.active || 0} Aktif • {stats?.by_status?.maintenance || 0} Maintenance
           </div>
         </div>
 
         {/* Total Panjang */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-xs space-y-1">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-3.5 sm:p-4 rounded-lg shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-black/60 dark:text-white/60 text-xs font-medium">
             <span>Total Panjang Rute</span>
             <span className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -578,17 +595,17 @@ export default function CableManagement() {
               </svg>
             </span>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+          <div className="text-xl sm:text-2xl font-bold text-black dark:text-white">
             {stats ? `${stats.total_length_km} km` : (loading ? '...' : '0 km')}
           </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="text-xs text-black/60 dark:text-white/60">
             {stats ? Number(stats.total_length_meters).toLocaleString('id-ID') : 0} meter kabel optik
           </div>
         </div>
 
         {/* Total Kapasitas Core */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-xs space-y-1">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-3.5 sm:p-4 rounded-lg shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-black/60 dark:text-white/60 text-xs font-medium">
             <span>Kapasitas Core Optik</span>
             <span className="p-1.5 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -596,17 +613,17 @@ export default function CableManagement() {
               </svg>
             </span>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+          <div className="text-xl sm:text-2xl font-bold text-black dark:text-white">
             {stats ? `${stats.total_cores} Core` : (loading ? '...' : '0 Core')}
           </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="text-xs text-black/60 dark:text-white/60">
             {stats ? `${stats.available_cores} Tersedia (${100 - (stats.used_percentage || 0)}%)` : ''}
           </div>
         </div>
 
         {/* Utilisasi Core */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-2xl shadow-xs space-y-1">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-3.5 sm:p-4 rounded-lg shadow-xs space-y-1">
+          <div className="flex items-center justify-between text-black/60 dark:text-white/60 text-xs font-medium">
             <span>Utilisasi Core</span>
             <span className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -614,14 +631,14 @@ export default function CableManagement() {
               </svg>
             </span>
           </div>
-          <div className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white flex items-baseline gap-2">
+          <div className="text-xl sm:text-2xl font-bold text-black dark:text-white flex items-baseline gap-2">
             <span>{stats ? `${stats.used_percentage}%` : (loading ? '...' : '0%')}</span>
-            <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-normal text-black/60 dark:text-white/60">
               ({stats ? stats.used_cores : 0} Terpakai)
             </span>
           </div>
           {/* Progress Bar */}
-          <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden mt-2">
+          <div className="w-full bg-black/5 dark:bg-white/5 h-2 rounded-full overflow-hidden mt-2">
             <div
               className={`h-full transition-all duration-500 ${
                 (stats?.used_percentage || 0) > 85
@@ -637,15 +654,16 @@ export default function CableManagement() {
       </div>
 
       {/* Toolbar & Filters */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 rounded-lg shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         {/* Search */}
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 w-full md:max-w-xl">
           <input
-            type="text"
+            type="search"
+            aria-label="Cari kabel"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari kabel, kode, titik asal, atau tujuan..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-4 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
           />
           <svg className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 sm:top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -653,6 +671,7 @@ export default function CableManagement() {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
+              aria-label="Hapus pencarian"
               className="absolute right-3 top-2.5 sm:top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
             >
               ✕
@@ -662,11 +681,19 @@ export default function CableManagement() {
 
         {/* Filter Dropdowns */}
         <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-[11px] text-black/60 dark:text-white/60">
+            Tampilkan
+            <select aria-label="Jumlah baris kabel" value={pageSize} onChange={event => setPageSize(Number(event.target.value))} className="px-2 py-2 rounded-md text-xs bg-white dark:bg-black border border-black/70 dark:border-white/70 text-black dark:text-white">
+              {[10, 25, 50].map(size => <option key={size} value={size}>{size}</option>)}
+            </select>
+          </label>
+          {hasFilters && <button type="button" onClick={resetFilters} className="px-3 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-semibold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer">Reset Filter</button>}
           {/* Status Filter */}
           <select
+            aria-label="Status kabel"
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 rounded-md text-xs font-semibold bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
           >
             <option value="all">Semua Status</option>
             <option value="active">Aktif (Active)</option>
@@ -677,9 +704,10 @@ export default function CableManagement() {
 
           {/* Installation Filter */}
           <select
+            aria-label="Tipe instalasi"
             value={filterInstallation}
             onChange={(e) => setFilterInstallation(e.target.value)}
-            className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="px-3 py-2 rounded-md text-xs font-semibold bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:outline-none focus:ring-1 focus:ring-black dark:focus:ring-white"
           >
             <option value="all">Semua Tipe Instalasi</option>
             <option value="Aerial">Aerial (Udara/Tiang)</option>
@@ -690,41 +718,46 @@ export default function CableManagement() {
         </div>
       </div>
 
+      {loadError && <div role="alert" className="p-3.5 rounded-lg border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 text-xs text-rose-700 dark:text-rose-300 flex flex-wrap items-center justify-between gap-2">
+        <span>{loadError}{cables.length > 0 ? ' Data sebelumnya tetap ditampilkan.' : ''}</span>
+        <button type="button" onClick={handleRefresh} disabled={refreshing} className="font-bold underline disabled:opacity-50 cursor-pointer">Coba lagi</button>
+      </div>}
+
       {/* Main Table / Card View */}
       {loading ? (
         <LoadingState
           type="table"
           rows={6}
           title="Memuat Inventaris Kabel Fiber Optik..."
-          description="Mengambil data bentangan kabel, kapasitas core, dan redaman..."
+          description="Mengambil data bentangan kabel dan alokasi core..."
         />
       ) : (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+        <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg shadow-xs overflow-hidden">
           {filteredCables.length === 0 ? (
           <div className="py-16 text-center space-y-3">
-            <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+            <div className="w-12 h-12 mx-auto rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center text-slate-400">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
               </svg>
             </div>
-            <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">Tidak ada kabel ditemukan</h4>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-              {searchQuery || filterStatus !== 'all' || filterInstallation !== 'all'
+            <h4 className="text-base font-bold text-black dark:text-white">{loadError ? 'Data kabel belum dapat dimuat' : 'Tidak ada kabel ditemukan'}</h4>
+            <p className="text-xs text-black/60 dark:text-white/60 max-w-sm mx-auto">
+              {loadError ? 'Coba segarkan kembali untuk mengambil data kabel dari server.' : searchQuery || filterStatus !== 'all' || filterInstallation !== 'all'
                 ? 'Tidak ada bentangan kabel yang cocok dengan kriteria pencarian dan filter Anda.'
                 : 'Belum ada bentangan kabel optik yang terdaftar. Tambahkan kabel baru atau lakukan Import file KML rute kabel.'}
             </p>
-            {!isReadOnly && !searchQuery && (
+            {!isReadOnly && !hasFilters && !loadError && (
               <div className="pt-2 flex justify-center gap-2">
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all"
+                  className="px-4 py-2 rounded-md text-xs font-bold bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 border border-black dark:border-white shadow-xs transition-all"
                 >
                   + Tambah Kabel Pertama
                 </button>
                 {isSuperAdmin && (
                   <button
                     onClick={() => setShowKmlModal(true)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition-all"
+                    className="px-4 py-2 rounded-md text-xs font-bold bg-slate-100 hover:bg-black/10 dark:bg-white/10 text-black dark:text-white transition-all"
                   >
                     📥 Import File KML
                   </button>
@@ -733,20 +766,21 @@ export default function CableManagement() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto" role="region" aria-label="Tabel daftar kabel" tabIndex={0}>
+            <table className="w-full min-w-[1080px] text-left text-xs text-black dark:text-white">
+              <caption className="sr-only">Daftar kabel, titik sambung, instalasi, alokasi core, status, dan aksi.</caption>
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/40 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  <th className="px-4 py-3.5">Kabel &amp; Kode</th>
-                  <th className="px-4 py-3.5">Titik Sambung (Asal ➔ Tujuan)</th>
-                  <th className="px-4 py-3.5">Tipe &amp; Panjang</th>
-                  <th className="px-4 py-3.5">Alokasi Core</th>
-                  <th className="px-4 py-3.5">Status</th>
-                  <th className="px-4 py-3.5 text-right">Aksi</th>
+                <tr className="border-b border-black/30 dark:border-white/30 bg-white dark:bg-black text-[11px] font-bold text-black dark:text-white uppercase tracking-wider">
+                  <th scope="col" className="px-4 py-3.5">Kabel &amp; Kode</th>
+                  <th scope="col" className="px-4 py-3.5">Titik Sambung</th>
+                  <th scope="col" className="px-4 py-3.5">Instalasi &amp; Panjang</th>
+                  <th scope="col" className="px-4 py-3.5">Alokasi Core</th>
+                  <th scope="col" className="px-4 py-3.5">Status</th>
+                  <th scope="col" className="px-4 py-3.5 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
-                {filteredCables.map((cable) => {
+              <tbody className="divide-y divide-black/15 dark:divide-white/15 font-sans">
+                {paginatedCables.map((cable) => {
                   const usedCores = cable.core_count_used || 0;
                   const totalCores = cable.core_count_total || 1;
                   const usedPct = Math.round((usedCores / totalCores) * 100);
@@ -754,21 +788,21 @@ export default function CableManagement() {
                   return (
                     <tr
                       key={cable.id}
-                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30 transition-colors group"
+                      className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors group"
                     >
                       {/* Name & Code */}
                       <td className="px-4 py-3.5">
                         <div className="flex flex-col">
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-2 py-0.5 rounded-md font-mono text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                          <div className="flex flex-col gap-1 min-w-48 max-w-72">
+                            <span className="font-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
                               {cable.code}
                             </span>
-                            <span className="font-bold text-slate-900 dark:text-white text-sm">
+                            <span className="font-bold text-black dark:text-white text-xs break-words">
                               {cable.name}
                             </span>
                           </div>
                           {cable.route_description && (
-                            <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
+                            <span className="text-[11px] text-black/60 dark:text-white/60 mt-0.5 line-clamp-2">
                               {cable.route_description}
                             </span>
                           )}
@@ -780,7 +814,7 @@ export default function CableManagement() {
                         <div className="flex items-center gap-2">
                           {/* From Node */}
                           {cable.from_node ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium text-[11px]">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-black/5 dark:bg-white/5 text-black dark:text-white font-medium text-[11px]">
                               <span className={`w-1.5 h-1.5 rounded-full ${cable.from_node.type === 'POP' ? 'bg-indigo-500' : cable.from_node.type === 'ODC' ? 'bg-purple-500' : 'bg-emerald-500'}`} />
                               {cable.from_node.name}
                             </span>
@@ -792,7 +826,7 @@ export default function CableManagement() {
 
                           {/* To Node */}
                           {cable.to_node ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium text-[11px]">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-black/5 dark:bg-white/5 text-black dark:text-white font-medium text-[11px]">
                               <span className={`w-1.5 h-1.5 rounded-full ${cable.to_node.type === 'POP' ? 'bg-indigo-500' : cable.to_node.type === 'ODC' ? 'bg-purple-500' : 'bg-emerald-500'}`} />
                               {cable.to_node.name}
                             </span>
@@ -808,7 +842,7 @@ export default function CableManagement() {
                           <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold w-fit bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
                             {cable.installation_type || 'Aerial'}
                           </span>
-                          <span className="text-slate-700 dark:text-slate-300 font-medium text-[11px]">
+                          <span className="text-black dark:text-white font-medium text-[11px]">
                             {cable.length_meters >= 1000
                               ? `${(cable.length_meters / 1000).toFixed(2)} km`
                               : `${Number(cable.length_meters).toLocaleString('id-ID')} m`}
@@ -820,14 +854,14 @@ export default function CableManagement() {
                       <td className="px-4 py-3.5">
                         <div className="flex flex-col gap-1 w-32">
                           <div className="flex items-center justify-between text-[11px] font-semibold">
-                            <span className="text-slate-700 dark:text-slate-300">
+                            <span className="text-black dark:text-white">
                               {usedCores} / {totalCores} C
                             </span>
                             <span className={usedPct > 85 ? 'text-rose-500' : usedPct > 60 ? 'text-amber-500' : 'text-emerald-500'}>
                               {usedPct}%
                             </span>
                           </div>
-                          <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-black/10 dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
                             <div
                               className={`h-full ${usedPct > 85 ? 'bg-rose-500' : usedPct > 60 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                               style={{ width: `${Math.min(100, usedPct)}%` }}
@@ -839,17 +873,17 @@ export default function CableManagement() {
                       {/* Status */}
                       <td className="px-4 py-3.5">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold ${
                             cable.status === 'active'
                               ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                               : cable.status === 'maintenance'
                               ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                               : cable.status === 'damaged'
                               ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                              : 'bg-black/5 dark:bg-white/5 text-black/60 dark:text-white/60 border border-black/30 dark:border-white/30'
                           }`}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full ${cable.status === 'active' ? 'bg-emerald-500 animate-pulse' : cable.status === 'maintenance' ? 'bg-amber-500' : cable.status === 'damaged' ? 'bg-rose-500' : 'bg-slate-400'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${cable.status === 'active' ? 'bg-emerald-500' : cable.status === 'maintenance' ? 'bg-amber-500' : cable.status === 'damaged' ? 'bg-rose-500' : 'bg-slate-400'}`} />
                           {cable.status === 'active'
                             ? 'Aktif'
                             : cable.status === 'maintenance'
@@ -866,7 +900,7 @@ export default function CableManagement() {
                           {/* Core Matrix Modal */}
                           <button
                             onClick={() => openMatrixModal(cable)}
-                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 transition-all flex items-center gap-1"
+                            className="px-2.5 py-1.5 rounded-md text-[11px] font-semibold border border-indigo-300 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-all flex items-center gap-1 cursor-pointer"
                             title="Buka Core Matrix TIA-598-A"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -878,7 +912,7 @@ export default function CableManagement() {
                           {/* View in Cable Route Editor */}
                           <button
                             onClick={() => navigate(`/cable-routes?cable_id=${cable.id}`)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-950/50 transition-all"
+                            className="p-1.5 rounded-md border border-black/30 dark:border-white/30 text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer"
                             title="Lihat &amp; Petakan Rute di Peta"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -890,7 +924,7 @@ export default function CableManagement() {
                           {!isReadOnly && (
                             <button
                               onClick={() => openEditModal(cable)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-all"
+                              className="p-1.5 rounded-md border border-black/30 dark:border-white/30 text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer"
                               title="Edit Kabel"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -903,7 +937,7 @@ export default function CableManagement() {
                           {!isReadOnly && (
                             <button
                               onClick={() => setDeleteCableData(cable)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-all"
+                              className="p-1.5 rounded-md border border-black/30 dark:border-white/30 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer"
                               title="Hapus Kabel"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -920,6 +954,14 @@ export default function CableManagement() {
             </table>
           </div>
         )}
+        <div className="px-4 py-3.5 border-t border-black/20 dark:border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[11px] text-black dark:text-white">
+          <span>Menampilkan data <strong>{filteredCables.length ? pageStart + 1 : 0}</strong>–<strong>{pageStart + paginatedCables.length}</strong> dari <strong>{filteredCables.length}</strong> kabel</span>
+          <nav aria-label="Navigasi halaman kabel" className="flex items-center gap-2">
+            <button type="button" onClick={() => setCurrentPage(page - 1)} disabled={page <= 1} className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Sebelumnya</button>
+            <span className="font-semibold whitespace-nowrap">Halaman {page} dari {totalPages}</span>
+            <button type="button" onClick={() => setCurrentPage(page + 1)} disabled={page >= totalPages} className="px-3 py-1.5 rounded-md border border-black/30 dark:border-white/30 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">Berikutnya</button>
+          </nav>
+        </div>
       </div>
       )}
 
@@ -928,11 +970,11 @@ export default function CableManagement() {
       ══════════════════════════════════════════════════════════════════ */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl overflow-hidden my-8">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+          <div className="bg-white dark:bg-black rounded-lg shadow-2xl border border-black/70 dark:border-white/70 w-full max-w-2xl overflow-hidden my-8">
+            <div className="px-6 py-4 border-b border-black/70 dark:border-white/70 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Tambah Bentangan Kabel Baru</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Daftarkan rute kabel dan auto-generate alokasi core matrix standar TIA-598-A</p>
+                <h3 className="text-base font-bold text-black dark:text-white">Tambah Bentangan Kabel Baru</h3>
+                <p className="text-xs text-black/60 dark:text-white/60">Daftarkan rute kabel dan auto-generate alokasi core matrix standar TIA-598-A</p>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -946,7 +988,7 @@ export default function CableManagement() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Name */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Nama Bentangan Kabel <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -955,14 +997,14 @@ export default function CableManagement() {
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     placeholder="Contoh: Kabel Feeder POP Sudirman ke ODC Kota 01"
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   />
                 </div>
 
                 {/* Code with generator */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    <label className="text-xs font-semibold text-black dark:text-white">
                       Kode Kabel <span className="text-rose-500">*</span>
                     </label>
                     <button
@@ -979,19 +1021,19 @@ export default function CableManagement() {
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value.toUpperCase())}
                     placeholder="Contoh: KBL-FD-24C-01"
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm font-mono uppercase bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm font-mono uppercase bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   />
                 </div>
 
                 {/* Installation Type */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Tipe Instalasi <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={formInstallation}
                     onChange={(e) => setFormInstallation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   >
                     <option value="Aerial">Aerial (Udara/Tiang)</option>
                     <option value="Underground">Underground (Tanam)</option>
@@ -1002,14 +1044,14 @@ export default function CableManagement() {
 
                 {/* From Node */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Node Asal (Source) <span className="text-rose-500">*</span>
                   </label>
                   <select
                     required
                     value={formFromNodeId}
                     onChange={(e) => setFormFromNodeId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   >
                     <option value="">-- Pilih Node Asal --</option>
                     {nodes.map(n => (
@@ -1022,13 +1064,13 @@ export default function CableManagement() {
 
                 {/* To Node */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Node Tujuan (Destination)
                   </label>
                   <select
                     value={formToNodeId}
                     onChange={(e) => setFormToNodeId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   >
                     <option value="">-- Tanpa Node Tujuan (Opsional) --</option>
                     {nodes.map(n => (
@@ -1041,13 +1083,13 @@ export default function CableManagement() {
 
                 {/* Core Count */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Total Core Optik <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={formCoreCount}
                     onChange={(e) => handleCoreCountChange(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   >
                     <option value="6">6 Core (1 Tube @ 6 Core)</option>
                     <option value="12">12 Core (1 Tube @ 12 Core)</option>
@@ -1060,7 +1102,7 @@ export default function CableManagement() {
 
                 {/* Tube Count */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Jumlah Tube (Buffer) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1070,7 +1112,7 @@ export default function CableManagement() {
                     required
                     value={formTubeCount}
                     onChange={(e) => setFormTubeCount(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   />
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
                     Standar FTTH TIA-598: ~12 core per tube
@@ -1079,7 +1121,7 @@ export default function CableManagement() {
 
                 {/* Length Meters */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Panjang Bentangan Kabel (Meter) <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
@@ -1091,7 +1133,7 @@ export default function CableManagement() {
                       value={formLengthMeters}
                       onChange={(e) => setFormLengthMeters(e.target.value)}
                       placeholder="1000"
-                      className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                     />
                     <span className="absolute right-3 top-2 text-xs text-slate-400 font-semibold">
                       Meter ({formLengthMeters ? (parseFloat(formLengthMeters) / 1000).toFixed(2) : 0} km)
@@ -1101,7 +1143,7 @@ export default function CableManagement() {
 
                 {/* Route Description */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Deskripsi Rute Jalur Tiang / Duct
                   </label>
                   <input
@@ -1109,13 +1151,13 @@ export default function CableManagement() {
                     value={formRouteDesc}
                     onChange={(e) => setFormRouteDesc(e.target.value)}
                     placeholder="Contoh: Jl. Ahmad Yani - Menuju Tiang PLN #12 s/d ODC-01"
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   />
                 </div>
 
                 {/* Notes */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Catatan Teknis Tambahan
                   </label>
                   <textarea
@@ -1123,23 +1165,23 @@ export default function CableManagement() {
                     value={formNotes}
                     onChange={(e) => setFormNotes(e.target.value)}
                     placeholder="Catatan sambungan, merk kabel, redaman awal, dll..."
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+              <div className="pt-4 border-t border-black/70 dark:border-white/70 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all"
+                  className="px-4 py-2 rounded-md text-xs font-semibold bg-slate-100 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/10 text-black dark:text-white transition-all"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={formSubmitting}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-md text-xs font-bold bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 border border-black dark:border-white shadow-xs transition-all flex items-center gap-1.5"
                 >
                   {formSubmitting && (
                     <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1159,11 +1201,11 @@ export default function CableManagement() {
       ══════════════════════════════════════════════════════════════════ */}
       {editCableData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl overflow-hidden my-8">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+          <div className="bg-white dark:bg-black rounded-lg shadow-2xl border border-black/70 dark:border-white/70 w-full max-w-2xl overflow-hidden my-8">
+            <div className="px-6 py-4 border-b border-black/70 dark:border-white/70 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Edit Data Kabel</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <h3 className="text-base font-bold text-black dark:text-white">Edit Data Kabel</h3>
+                <p className="text-xs text-black/60 dark:text-white/60">
                   Perbarui spesifikasi bentangan kabel {editCableData.code}
                 </p>
               </div>
@@ -1179,7 +1221,7 @@ export default function CableManagement() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Name */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Nama Kabel <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1187,19 +1229,19 @@ export default function CableManagement() {
                     required
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   />
                 </div>
 
                 {/* Status */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Status Operasional <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   >
                     <option value="active">Aktif (Active)</option>
                     <option value="maintenance">Maintenance</option>
@@ -1210,13 +1252,13 @@ export default function CableManagement() {
 
                 {/* Installation */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Tipe Instalasi <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={editInstallation}
                     onChange={(e) => setEditInstallation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   >
                     <option value="Aerial">Aerial (Udara/Tiang)</option>
                     <option value="Underground">Underground (Tanam)</option>
@@ -1227,13 +1269,13 @@ export default function CableManagement() {
 
                 {/* From Node */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Node Asal
                   </label>
                   <select
                     value={editFromNodeId}
                     onChange={(e) => setEditFromNodeId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   >
                     <option value="">-- Tanpa Node Asal --</option>
                     {nodes.map(n => (
@@ -1246,13 +1288,13 @@ export default function CableManagement() {
 
                 {/* To Node */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Node Tujuan
                   </label>
                   <select
                     value={editToNodeId}
                     onChange={(e) => setEditToNodeId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   >
                     <option value="">-- Tanpa Node Tujuan --</option>
                     {nodes.map(n => (
@@ -1265,7 +1307,7 @@ export default function CableManagement() {
 
                 {/* Length Meters */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Panjang Bentangan (Meter) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1275,49 +1317,49 @@ export default function CableManagement() {
                     required
                     value={editLengthMeters}
                     onChange={(e) => setEditLengthMeters(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   />
                 </div>
 
                 {/* Route Description */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Deskripsi Jalur Rute
                   </label>
                   <input
                     type="text"
                     value={editRouteDesc}
                     onChange={(e) => setEditRouteDesc(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   />
                 </div>
 
                 {/* Notes */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-black dark:text-white mb-1">
                     Catatan
                   </label>
                   <textarea
                     rows={2}
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md text-xs sm:text-sm bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+              <div className="pt-4 border-t border-black/70 dark:border-white/70 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setEditCableData(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all"
+                  className="px-4 py-2 rounded-md text-xs font-semibold bg-slate-100 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/10 text-black dark:text-white transition-all"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={formSubmitting}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-md text-xs font-bold bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 border border-black dark:border-white shadow-xs transition-all flex items-center gap-1.5"
                 >
                   {formSubmitting && (
                     <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1337,19 +1379,19 @@ export default function CableManagement() {
       ══════════════════════════════════════════════════════════════════ */}
       {matrixCableData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl overflow-hidden my-6 flex flex-col max-h-[90vh]">
+          <div className="bg-white dark:bg-black rounded-lg shadow-2xl border border-black/70 dark:border-white/70 w-full max-w-4xl overflow-hidden my-6 flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
+            <div className="px-6 py-4 border-b border-black/70 dark:border-white/70 flex items-center justify-between bg-slate-50/70 dark:bg-slate-800/40">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
                     {matrixCableData.code}
                   </span>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  <h3 className="text-base font-bold text-black dark:text-white">
                     Core Matrix: {matrixCableData.name}
                   </h3>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
                   Total {matrixCableData.core_count_total || 0} Core ({matrixCableData.core_count_used || 0} Terpakai) • Standar TIA-598-A 12 Warna
                 </p>
               </div>
@@ -1362,8 +1404,8 @@ export default function CableManagement() {
             </div>
 
             {/* Tube Selector Tabs */}
-            <div className="px-6 pt-3 pb-2 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2 overflow-x-auto">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">Pilih Tube:</span>
+            <div className="px-6 pt-3 pb-2 border-b border-black/15 dark:border-white/15 bg-white dark:bg-black flex items-center gap-2 overflow-x-auto">
+              <span className="text-xs font-semibold text-black/60 dark:text-white/60 whitespace-nowrap">Pilih Tube:</span>
               {tubeNumbers.map((tubeNo) => {
                 const tubeColor = TIA_COLORS[((tubeNo - 1) % 12)];
                 const isSelected = selectedTube === tubeNo;
@@ -1374,10 +1416,10 @@ export default function CableManagement() {
                       setSelectedTube(tubeNo);
                       setEditingCore(null);
                     }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap border ${
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap border ${
                       isSelected
                         ? 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-500 text-indigo-700 dark:text-indigo-300 shadow-2xs'
-                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        : 'bg-white dark:bg-black/60 border-black/30 dark:border-white/30 text-black/60 dark:text-white/60 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     <span className={`w-2.5 h-2.5 rounded-full ${tubeColor.bg}`} />
@@ -1401,10 +1443,10 @@ export default function CableManagement() {
                   return (
                     <div
                       key={core.id}
-                      className={`p-3.5 rounded-xl border transition-all ${
+                      className={`p-3.5 rounded-md border transition-all ${
                         editingCore?.id === core.id
                           ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/20 dark:bg-indigo-950/20'
-                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+                          : 'border-black/70 dark:border-white/70 bg-white dark:bg-black/60 hover:border-slate-300 dark:hover:border-slate-700'
                       }`}
                     >
                       {/* Top row: Core Number + Color Pin */}
@@ -1414,7 +1456,7 @@ export default function CableManagement() {
                             className={`w-4 h-4 rounded-full ${colorDef.bg} border border-black/20 shadow-2xs`}
                             title={`Warna: ${colorDef.name}`}
                           />
-                          <span className="font-bold text-xs text-slate-900 dark:text-white">
+                          <span className="font-bold text-xs text-black dark:text-white">
                             Core #{core.core_number}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">({colorDef.name})</span>
@@ -1443,23 +1485,23 @@ export default function CableManagement() {
                       </div>
 
                       {/* Destination / Details */}
-                      <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] space-y-1">
-                        <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                      <div className="mt-2 pt-2 border-t border-black/15 dark:border-white/15 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between text-black/60 dark:text-white/60">
                           <span>Peruntukan:</span>
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          <span className="font-semibold text-black dark:text-white">
                             {core.destination_type || 'UNASSIGNED'}
                           </span>
                         </div>
                         {core.destination_name && (
-                          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                          <div className="flex items-center justify-between text-black/60 dark:text-white/60">
                             <span>Keterangan:</span>
-                            <span className="font-medium text-slate-700 dark:text-slate-300 text-right line-clamp-1">
+                            <span className="font-medium text-black dark:text-white text-right line-clamp-1">
                               {core.destination_name}
                             </span>
                           </div>
                         )}
                         {core.odf_cassette_label && (
-                          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                          <div className="flex items-center justify-between text-black/60 dark:text-white/60">
                             <span>ODF/Tray:</span>
                             <span className="font-mono text-[10px] text-indigo-600 dark:text-indigo-400">
                               {core.odf_cassette_label}
@@ -1470,7 +1512,7 @@ export default function CableManagement() {
 
                       {/* Edit Core Button */}
                       {!isReadOnly && (
-                        <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                        <div className="mt-2.5 pt-2 border-t border-black/15 dark:border-white/15 flex justify-end">
                           <button
                             onClick={() => openCoreEdit(core)}
                             className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
@@ -1489,11 +1531,11 @@ export default function CableManagement() {
 
               {/* Inline Core Edit Form */}
               {editingCore && (
-                <div className="mt-4 p-5 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 animate-fadeIn">
+                <div className="mt-4 p-5 rounded-lg bg-indigo-50/40 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 animate-fadeIn">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-xs sm:text-sm font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
                       <span>Konfigurasi Core #{editingCore.core_number}</span>
-                      <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                      <span className="text-xs font-normal text-black/60 dark:text-white/60">
                         (Tube #{editingCore.tube_number} - {editingCore.color})
                       </span>
                     </h4>
@@ -1509,13 +1551,13 @@ export default function CableManagement() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                       {/* Status */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        <label className="block text-[11px] font-semibold text-black dark:text-white mb-1">
                           Status Core
                         </label>
                         <select
                           value={coreStatus}
                           onChange={(e) => setCoreStatus(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          className="w-full px-3 py-1.5 rounded-md text-xs bg-white dark:bg-slate-800 border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                         >
                           <option value="available">Tersedia (Available)</option>
                           <option value="used">Terpakai (Used)</option>
@@ -1526,13 +1568,13 @@ export default function CableManagement() {
 
                       {/* Destination Type */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        <label className="block text-[11px] font-semibold text-black dark:text-white mb-1">
                           Peruntukan / Destinasi
                         </label>
                         <select
                           value={coreDestType}
                           onChange={(e) => setCoreDestType(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          className="w-full px-3 py-1.5 rounded-md text-xs bg-white dark:bg-slate-800 border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                         >
                           <option value="UNASSIGNED">Belum Ditentukan (UNASSIGNED)</option>
                           <option value="ODC">Feed ke ODC</option>
@@ -1546,7 +1588,7 @@ export default function CableManagement() {
 
                       {/* Destination Name / Pelanggan */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        <label className="block text-[11px] font-semibold text-black dark:text-white mb-1">
                           Keterangan / Nama Pelanggan
                         </label>
                         <input
@@ -1554,13 +1596,13 @@ export default function CableManagement() {
                           value={coreDestName}
                           onChange={(e) => setCoreDestName(e.target.value)}
                           placeholder="e.g. ODC-KOTA-01 atau PT ABC"
-                          className="w-full px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          className="w-full px-3 py-1.5 rounded-md text-xs bg-white dark:bg-slate-800 border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                         />
                       </div>
 
                       {/* ODF Tray Label */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        <label className="block text-[11px] font-semibold text-black dark:text-white mb-1">
                           Label Kaset ODF / Tray
                         </label>
                         <input
@@ -1568,7 +1610,7 @@ export default function CableManagement() {
                           value={coreOdfLabel}
                           onChange={(e) => setCoreOdfLabel(e.target.value)}
                           placeholder="e.g. ODF-01 Tray-A Port-12"
-                          className="w-full px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                          className="w-full px-3 py-1.5 rounded-md text-xs bg-white dark:bg-slate-800 border border-black/30 dark:border-white/30 text-black dark:text-white focus:ring-1 focus:ring-black dark:focus:ring-white focus:outline-none"
                         />
                       </div>
                     </div>
@@ -1577,14 +1619,14 @@ export default function CableManagement() {
                       <button
                         type="button"
                         onClick={() => setEditingCore(null)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all"
+                        className="px-3 py-1.5 rounded-md text-xs font-semibold bg-white hover:bg-black/5 dark:bg-white/5 dark:hover:bg-white/10 text-black dark:text-white border border-black/30 dark:border-white/30 transition-all"
                       >
                         Batal
                       </button>
                       <button
                         type="submit"
                         disabled={coreSaving}
-                        className="px-4 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all flex items-center gap-1"
+                        className="px-4 py-1.5 rounded-md text-xs font-bold bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 border border-black dark:border-white shadow-xs transition-all flex items-center gap-1"
                       >
                         {coreSaving && (
                           <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1600,7 +1642,7 @@ export default function CableManagement() {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <div className="px-6 py-3 border-t border-black/70 dark:border-white/70 bg-white dark:bg-black/40 flex items-center justify-between text-xs text-black/60 dark:text-white/60">
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Tersedia
@@ -1617,7 +1659,7 @@ export default function CableManagement() {
               </div>
               <button
                 onClick={() => setMatrixCableData(null)}
-                className="px-4 py-1.5 rounded-xl font-semibold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition-all"
+                className="px-4 py-1.5 rounded-md font-semibold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition-all"
               >
                 Tutup
               </button>
@@ -1631,7 +1673,7 @@ export default function CableManagement() {
       ══════════════════════════════════════════════════════════════════ */}
       {deleteCableData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden p-6 space-y-4">
+          <div className="bg-white dark:bg-black rounded-lg shadow-2xl border border-black/70 dark:border-white/70 w-full max-w-md overflow-hidden p-6 space-y-4">
             <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1639,11 +1681,11 @@ export default function CableManagement() {
             </div>
 
             <div className="text-center space-y-1">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-base font-bold text-black dark:text-white">
                 Hapus Bentangan Kabel?
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Apakah Anda yakin ingin menghapus bentangan kabel <strong className="text-slate-800 dark:text-slate-200">{deleteCableData.name} ({deleteCableData.code})</strong>?
+              <p className="text-xs text-black/60 dark:text-white/60">
+                Apakah Anda yakin ingin menghapus bentangan kabel <strong className="text-black dark:text-white">{deleteCableData.name} ({deleteCableData.code})</strong>?
               </p>
               <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium pt-1">
                 ⚠️ Semua data core matrix ({deleteCableData.core_count_total} core) dan rute koordinat tiang kabel ini akan dihapus secara permanen.
@@ -1654,7 +1696,7 @@ export default function CableManagement() {
               <button
                 type="button"
                 onClick={() => setDeleteCableData(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition-all"
+                className="px-4 py-2 rounded-md text-xs font-semibold bg-slate-100 hover:bg-black/10 dark:bg-white/10 text-black dark:text-white transition-all"
               >
                 Batal
               </button>
@@ -1662,7 +1704,7 @@ export default function CableManagement() {
                 type="button"
                 disabled={formSubmitting}
                 onClick={handleDeleteSubmit}
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition-all flex items-center gap-1.5"
+                className="px-5 py-2 rounded-md text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition-all flex items-center gap-1.5"
               >
                 {formSubmitting && (
                   <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1681,7 +1723,7 @@ export default function CableManagement() {
       ══════════════════════════════════════════════════════════════════ */}
       {showDeleteAllModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md overflow-hidden p-6 space-y-4">
+          <div className="bg-white dark:bg-black rounded-lg shadow-2xl border border-black/70 dark:border-white/70 w-full max-w-md overflow-hidden p-6 space-y-4">
             <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1689,13 +1731,13 @@ export default function CableManagement() {
             </div>
 
             <div className="text-center space-y-2">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-base font-bold text-black dark:text-white">
                 Hapus SEMUA Bentangan Kabel?
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-black/60 dark:text-white/60">
                 Apakah Anda yakin ingin menghapus <strong className="text-rose-600 dark:text-rose-400">SEMUA ({cables.length} bentangan kabel)</strong> dari sistem?
               </p>
-              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-left text-[11px] text-rose-700 dark:text-rose-300 space-y-1">
+              <div className="p-3 rounded-md bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-left text-[11px] text-rose-700 dark:text-rose-300 space-y-1">
                 <div className="font-bold flex items-center gap-1">
                   <span>⚠️ PERINGATAN KRITIKAL:</span>
                 </div>
@@ -1711,7 +1753,7 @@ export default function CableManagement() {
               <button
                 type="button"
                 onClick={() => setShowDeleteAllModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 transition-all"
+                className="px-4 py-2 rounded-md text-xs font-semibold bg-slate-100 hover:bg-black/10 dark:bg-white/10 text-black dark:text-white transition-all"
               >
                 Batal
               </button>
@@ -1719,7 +1761,7 @@ export default function CableManagement() {
                 type="button"
                 disabled={formSubmitting}
                 onClick={handleDeleteAllSubmit}
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition-all flex items-center gap-1.5"
+                className="px-5 py-2 rounded-md text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-sm transition-all flex items-center gap-1.5"
               >
                 {formSubmitting && (
                   <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
