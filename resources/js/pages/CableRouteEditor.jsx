@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../components/AuthContext';
 import { Link, useSearchParams } from 'react-router-dom';
 import RefreshButton from '../components/RefreshButton';
+import TopologyConnectionPreview from '../components/TopologyConnectionPreview';
 import { normalizeCable, validPoint, routeDistance, routePayload, escapeMapLabel, formatMeters } from '../lib/cableRoutes';
 
 /* ══════════════════════════════════════════════════════════════════
@@ -294,6 +295,7 @@ export default function CableRouteEditor() {
   const [pendingId, setPendingId] = useState(null);
   const [useEstimate, setUseEstimate] = useState(false);
   const [streetViewTarget, setStreetViewTarget] = useState(null);
+  const [showConnections, setShowConnections] = useState(false);
   const active = cables.find(cable => String(cable.id) === String(selectedId));
   const dirty = !!active && (useEstimate || JSON.stringify(waypoints) !== JSON.stringify(active.route_coordinates || []));
   const estimated = routeDistance(active, waypoints);
@@ -384,10 +386,13 @@ export default function CableRouteEditor() {
     return next;
   });
 
+  if (showConnections) return <TopologyConnectionPreview onBack={() => setShowConnections(false)}/>;
+
   return <div className="space-y-5 text-black dark:text-white">
     <div className={`${panel} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
       <div><h1 className="text-xl font-bold">Pemetaan Rute Kabel</h1><p className="text-xs text-black/60 dark:text-white/60 mt-1">Susun jalur tiang dari kabel yang tercatat di Cable Management.</p></div>
       <div className="flex flex-wrap gap-2">
+        <button className={button} disabled={dirty || saving || loading} title={dirty ? 'Simpan atau buang perubahan rute terlebih dahulu.' : 'Periksa calon sambungan kabel dan node dari koordinat tersimpan.'} onClick={() => setShowConnections(true)}>Pratinjau Hubungan</button>
         {!dirty && !saving && <Link className={button} to="/cable-management">Manajemen Kabel</Link>}
         <RefreshButton isRefreshing={loading || saving} onRefresh={loadCables}/>
       </div>
