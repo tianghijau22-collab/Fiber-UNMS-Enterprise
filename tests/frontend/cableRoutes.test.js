@@ -8,6 +8,17 @@ test('shared inventory coordinates preserve zero and reject absent or impossible
   assert.equal(validPoint(cable.to_node), false);
   for (const value of [null, undefined, '', ' ', 'NaN', Infinity, 91]) assert.equal(coordinate(value, 90), null);
 });
+test('KML Leaflet pairs and named editor points share a canonical draft without mutating inventory', () => {
+  const original = { route_coordinates: [[0,100],['-0.5','100.5'],{lat:-1,lng:101,name:'Tiang Lama'}] };
+  const cable = normalizeCable(original);
+  assert.deepEqual(cable.route_coordinates, [
+    {lat:0,lng:100,name:'Tiang #01'}, {lat:-0.5,lng:100.5,name:'Tiang #02'}, {lat:-1,lng:101,name:'Tiang Lama'},
+  ]);
+  assert.deepEqual(original.route_coordinates[0],[0,100]);
+  assert.ok(cable.route_coordinates.every(validPoint));
+  assert.equal(routePayload(cable,cable.route_coordinates,false).route_coordinates.length,3);
+  assert.equal(normalizeCable({route_coordinates:[[100,1]]}).route_coordinates[0].lat,null);
+});
 test('distance measures direct endpoints without waypoints and follows ordered waypoints', () => {
   const cable = { from_node: {lat:0,lng:0}, to_node: {lat:0,lng:1} };
   assert.equal(routeDistance(cable, []), 111195);

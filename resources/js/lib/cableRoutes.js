@@ -14,7 +14,14 @@ export function normalizeCable(cable) {
     lat: coordinate(value.latitude ?? value.lat, 90),
     lng: coordinate(value.longitude ?? value.lng, 180),
   } : null;
-  return { ...cable, from_node: node(cable.from_node), to_node: node(cable.to_node) };
+  // KML imports store Leaflet pairs [lat, lng]; the route editor stores named objects.
+  // Normalize in memory only. The persisted route is changed only by an explicit save.
+  const points = Array.isArray(cable.route_coordinates) ? cable.route_coordinates : [];
+  const route = points.map((point, index) => Array.isArray(point) ? {
+    lat: coordinate(point[0], 90), lng: coordinate(point[1], 180),
+    name: `Tiang #${String(index + 1).padStart(2, '0')}`,
+  } : point);
+  return { ...cable, from_node: node(cable.from_node), to_node: node(cable.to_node), route_coordinates: route };
 }
 
 export function routePoints(cable, waypoints) {
