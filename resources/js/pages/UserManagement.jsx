@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import RefreshButton from '../components/RefreshButton';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingState from '../components/LoadingState';
+import { defaultSidebarPreferences, normalizeSidebarPreferences, sidebarItems, moveSidebarItem, DEFAULT_SIDEBAR_ORDER } from '../lib/sidebarPreferences';
 
 /* ══════════════════════════════════════════════════════════════════
    ROLE BADGES & RBAC PERMISSION MATRIX DEFINITION (ZERO EMOJI)
@@ -300,8 +301,9 @@ function UserFormModal({ user, onSave, onClose, loading, error }) {
    MAIN USER MANAGEMENT COMPONENT
 ══════════════════════════════════════════════════════════════════ */
 export default function UserManagement() {
-  const { currentUser, logout, routePermissions, setRoutePermissions, fetchRoutePermissions } = useAuth();
+  const { currentUser, logout, applyNavigationSettings } = useAuth();
   const navigate = useNavigate();
+  const navigationLocation = useLocation();
 
   const isSuperAdmin = currentUser?.role === 'Super Administrator';
 
@@ -310,7 +312,7 @@ export default function UserManagement() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'matrix'
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(navigationLocation.search).get('tab') === 'matrix' ? 'matrix' : 'users');
 
   const [currentPage, setCurrentPage] = useState(1);
   const perPage = 8;
@@ -333,6 +335,37 @@ export default function UserManagement() {
   const [hasUnsavedMatrixChanges, setHasUnsavedMatrixChanges] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resettingMatrix, setResettingMatrix] = useState(false);
+  const [sidebarDraft, setSidebarDraft] = useState(defaultSidebarPreferences);
+  const [settingsVersion, setSettingsVersion] = useState('');
+  const [matrixError, setMatrixError] = useState('');
+  const [draggedMenu, setDraggedMenu] = useState(null);
+  const [dropMenu, setDropMenu] = useState(null);
+  const dragSource = useRef(null);
+  const matrixDirty = useRef(false), matrixJob = useRef(0);
+  matrixDirty.current = hasUnsavedMatrixChanges;
+  const menuOrderDisabled = !isSuperAdmin || savingMatrix || resettingMatrix || loadingMatrix || !!matrixSearch || !!matrixCategoryFilter;
+  useEffect(() => { if (new URLSearchParams(navigationLocation.search).get('tab') === 'matrix') setActiveTab('matrix'); }, [navigationLocation.search]);
+  useEffect(() => {
+    if (!hasUnsavedMatrixChanges) return;
+    const guard=e=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',guard);
+    return()=>window.removeEventListener('beforeunload',guard);
+  },[hasUnsavedMatrixChanges]);
+  const applySavedConfiguration = data => {
+    setMatrixPermissions(data.data);setSidebarDraft(normalizeSidebarPreferences(data.sidebar));setSettingsVersion(data.settings_version || '');
+    setHasUnsavedMatrixChanges(false);setMatrixError('');applyNavigationSettings(data);
+    try { localStorage.setItem('fona_navigation_revision',data.settings_version || String(Date.now())); } catch { /* Settings are already stored on the server. */ }
+  };
+  const moveMenu = (id,target) => {
+    if (menuOrderDisabled || id === target) return;
+    setSidebarDraft(previous=>({...previous,order:moveSidebarItem(previous.order,id,target)}));setHasUnsavedMatrixChanges(true);setMatrixError('');
+  };
+  const dragTarget = event => document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-sidebar-id]')?.getAttribute('data-sidebar-id');
+  const finishMenuDrag = event => {
+    const target=dragTarget(event),source=dragSource.current;
+    if(source&&target)moveMenu(source,target);
+    dragSource.current=null;setDraggedMenu(null);setDropMenu(null);
+    if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);
+  };
 
   const triggerFeedback = ({ type, message }) => {
     if (typeof window !== 'undefined' && window.showAppAlert) {
@@ -371,19 +404,22 @@ export default function UserManagement() {
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchUsers);
 
   // Fetch Matrix Permissions from Server
-  const loadMatrixPermissions = useCallback(async () => {
+  const loadMatrixPermissions = useCallback(async (discard = false) => {
+    if (matrixDirty.current && !discard) { setMatrixError('Simpan atau batalkan perubahan sebelum memuat ulang pengaturan.'); return; }
+    const token=++matrixJob.current;setMatrixError('');
     setLoadingMatrix(true);
     try {
       const res = await fetch('/api/rbac/permissions');
       const json = await res.json();
-      if (json?.data && typeof json.data === 'object') {
-        setMatrixPermissions(json.data);
-        setHasUnsavedMatrixChanges(false);
-      }
+      if (!res.ok) throw Error(json.message || 'Pengaturan gagal dimuat.');
+      if (token !== matrixJob.current) return;
+      if (!json?.data || typeof json.data !== 'object' || !json.settings_version) throw Error('Respons pengaturan tidak lengkap. Muat ulang halaman.');
+      setMatrixPermissions(json.data);setSidebarDraft(normalizeSidebarPreferences(json.sidebar));setSettingsVersion(json.settings_version);
+      setHasUnsavedMatrixChanges(false);
     } catch (err) {
-      console.error('Failed to load RBAC permissions:', err);
+      if (token === matrixJob.current) setMatrixError(err.message || 'Pengaturan gagal dimuat.');
     } finally {
-      setLoadingMatrix(false);
+      if (token === matrixJob.current) setLoadingMatrix(false);
     }
   }, []);
 
@@ -470,7 +506,11 @@ export default function UserManagement() {
   // Toggle Single Permission in Matrix
   const handleTogglePermission = (path, roleKey) => {
     if (!isSuperAdmin) return;
-    if (roleKey === 'Super Administrator') return; // Locked
+    if (savingMatrix || resettingMatrix) return;
+    if (roleKey === 'Super Administrator') {
+      setSidebarDraft(previous=>({...previous,super_admin_hidden:previous.super_admin_hidden.includes(path)?previous.super_admin_hidden.filter(id=>id!==path):[...previous.super_admin_hidden,path]}));
+      setHasUnsavedMatrixChanges(true);return;
+    }
 
     setMatrixPermissions(prev => {
       const currentList = Array.isArray(prev[path]) ? [...prev[path]] : [];
@@ -492,7 +532,7 @@ export default function UserManagement() {
 
   // Bulk Toggle for a Role across all currently filtered modules
   const handleBulkToggleRole = (roleKey, enableAll) => {
-    if (!isSuperAdmin) return;
+    if (!isSuperAdmin || savingMatrix || resettingMatrix) return;
     setMatrixPermissions(prev => {
       const next = { ...prev };
       SYSTEM_MODULES.forEach(mod => {
@@ -513,7 +553,8 @@ export default function UserManagement() {
   // Save Matrix Permissions to Backend
   const handleSaveMatrixPermissions = async () => {
     if (!isSuperAdmin) return;
-    setSavingMatrix(true);
+    if (!settingsVersion || savingMatrix || resettingMatrix) return;
+    setSavingMatrix(true);setMatrixError('');
     try {
       const res = await fetch('/api/rbac/permissions', {
         method: 'POST',
@@ -522,7 +563,7 @@ export default function UserManagement() {
           'Accept': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
         },
-        body: JSON.stringify({ permissions: matrixPermissions })
+        body: JSON.stringify({ permissions: matrixPermissions, sidebar: sidebarDraft, expected_version: settingsVersion })
       });
 
       const data = await res.json();
@@ -530,19 +571,13 @@ export default function UserManagement() {
         throw new Error(data.message || 'Gagal menyimpan hak akses halaman.');
       }
 
-      setMatrixPermissions(data.data || matrixPermissions);
-      if (setRoutePermissions) {
-        setRoutePermissions(data.data || matrixPermissions);
-      }
-      if (fetchRoutePermissions) {
-        fetchRoutePermissions();
-      }
-      setHasUnsavedMatrixChanges(false);
+      applySavedConfiguration(data);
       triggerFeedback({
         type: 'success',
-        message: 'Pengaturan hak akses halaman berhasil disimpan dan langsung diterapkan ke seluruh pengguna!'
+        message: 'Urutan menu, tampilan Super Admin, dan hak akses halaman berhasil disimpan.'
       });
     } catch (err) {
+      setMatrixError(err.message || 'Gagal menyimpan pengaturan.');
       triggerFeedback({
         type: 'error',
         message: err.message || 'Gagal menyimpan pengaturan hak akses.'
@@ -555,7 +590,8 @@ export default function UserManagement() {
   // Reset Matrix Permissions to Factory Default
   const handleResetMatrixPermissions = async () => {
     if (!isSuperAdmin) return;
-    setResettingMatrix(true);
+    if (!settingsVersion || savingMatrix || resettingMatrix) return;
+    setResettingMatrix(true);setMatrixError('');
     try {
       const res = await fetch('/api/rbac/permissions/reset', {
         method: 'POST',
@@ -563,7 +599,7 @@ export default function UserManagement() {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
-        }
+        }, body: JSON.stringify({expected_version: settingsVersion})
       });
 
       const data = await res.json();
@@ -571,20 +607,13 @@ export default function UserManagement() {
         throw new Error(data.message || 'Gagal mereset hak akses.');
       }
 
-      setMatrixPermissions(data.data || {});
-      if (setRoutePermissions) {
-        setRoutePermissions(data.data || {});
-      }
-      if (fetchRoutePermissions) {
-        fetchRoutePermissions();
-      }
-      setShowResetConfirm(false);
-      setHasUnsavedMatrixChanges(false);
+      applySavedConfiguration(data);setShowResetConfirm(false);
       triggerFeedback({
         type: 'success',
         message: 'Hak akses halaman berhasil direset ke pengaturan bawaan pabrik!'
       });
     } catch (err) {
+      setMatrixError(err.message || 'Gagal mereset pengaturan.');
       triggerFeedback({
         type: 'error',
         message: err.message || 'Gagal mereset pengaturan hak akses.'
@@ -604,7 +633,7 @@ export default function UserManagement() {
   }, []);
 
   const filteredModules = useMemo(() => {
-    return SYSTEM_MODULES.filter(mod => {
+    return sidebarItems(SYSTEM_MODULES, sidebarDraft).filter(mod => {
       if (matrixCategoryFilter && mod.category !== matrixCategoryFilter) return false;
       if (matrixSearch) {
         const s = matrixSearch.toLowerCase();
@@ -615,7 +644,7 @@ export default function UserManagement() {
       }
       return true;
     });
-  }, [matrixCategoryFilter, matrixSearch]);
+  }, [matrixCategoryFilter, matrixSearch, sidebarDraft]);
 
   return (
     <div className="space-y-5 stagger-enter">
@@ -724,7 +753,7 @@ export default function UserManagement() {
                 : 'border-transparent text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'
             }`}
           >
-            Pengaturan Hak Akses Halaman (RBAC)
+            Pengaturan Akses & Sidebar
             {hasUnsavedMatrixChanges && (
               <span className="ml-1.5 w-2 h-2 rounded-full bg-amber-500 inline-block" title="Perubahan belum disimpan" />
             )}
@@ -741,7 +770,7 @@ export default function UserManagement() {
               disabled={savingMatrix}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
             >
-              {savingMatrix ? 'Menyimpan...' : 'Simpan Izin Akses'}
+              {savingMatrix ? 'Menyimpan...' : 'Simpan Pengaturan'}
             </button>
           </div>
         )}
@@ -1015,7 +1044,7 @@ export default function UserManagement() {
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-black/10 dark:border-white/10 pb-4">
             <div>
               <h3 className="text-base sm:text-lg font-bold text-black dark:text-white flex items-center gap-2">
-                <span>Pengaturan Hak Akses Halaman (Role-Based Page Access)</span>
+                <span>Pengaturan Urutan Sidebar & Hak Akses</span>
                 {isSuperAdmin ? (
                   <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[10px] font-bold font-mono">
                     Mode Pengeditan Admin
@@ -1027,7 +1056,7 @@ export default function UserManagement() {
                 )}
               </h3>
               <p className="text-xs text-black/60 dark:text-white/60 mt-0.5">
-                Centang kotak pada peran (Role) yang diizinkan mengakses dan melihat menu halaman terkait. Perubahan akan berlaku seketika di seluruh sistem.
+                Geser pegangan menu atau gunakan tombol naik/turun. Urutan berlaku untuk semua pengguna sesuai hak aksesnya. Kolom Super Admin hanya mengatur tampilan menu; akses penuhnya tetap tersedia. Klik Simpan Pengaturan untuk menerapkan.
               </p>
             </div>
 
@@ -1045,13 +1074,13 @@ export default function UserManagement() {
                 <button
                   type="button"
                   onClick={handleSaveMatrixPermissions}
-                  disabled={savingMatrix || !hasUnsavedMatrixChanges}
+                  disabled={savingMatrix || resettingMatrix || !settingsVersion || !hasUnsavedMatrixChanges}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  <span>{savingMatrix ? 'Menyimpan...' : 'Simpan Hak Akses'}</span>
+                  <span>{savingMatrix ? 'Menyimpan...' : 'Simpan Pengaturan'}</span>
                 </button>
               </div>
             )}
@@ -1087,7 +1116,7 @@ export default function UserManagement() {
             </div>
 
             <div className="text-[11px] text-black/60 dark:text-white/60 font-mono">
-              Menampilkan <b>{filteredModules.length}</b> dari {SYSTEM_MODULES.length} halaman
+              Menampilkan <b>{filteredModules.length}</b> dari {DEFAULT_SIDEBAR_ORDER.length} menu
             </div>
           </div>
 
@@ -1119,16 +1148,19 @@ export default function UserManagement() {
             </div>
           )}
 
+          {matrixError && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{matrixError}</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs"><p className="text-black/60 dark:text-white/60">{matrixSearch||matrixCategoryFilter?'Kosongkan pencarian dan filter untuk mengubah urutan menu.':'Daftar Wilayah OLT adalah blok pintasan perangkat; aksesnya mengikuti halaman Wilayah / OLT Region.'}</p><button type="button" disabled={!isSuperAdmin||loadingMatrix||savingMatrix||resettingMatrix} className="px-3 py-2 border rounded disabled:opacity-40" onClick={()=>{setSidebarDraft(previous=>({...previous,order:[...DEFAULT_SIDEBAR_ORDER]}));setHasUnsavedMatrixChanges(true);}}>Urutan Bawaan</button></div>
+          <p className="text-[11px] text-black/60 dark:text-white/60">Menu yang disembunyikan untuk Super Admin tetap dapat dibuka melalui alamat halaman. Pintasan Atur Menu Sidebar selalu tersedia untuk mengembalikan tampilan.</p>
           {/* Matrix Table */}
           <div className="overflow-x-auto border border-black/20 dark:border-white/20 rounded-md">
-            <table className="w-full text-left text-xs">
+            <table aria-label="Urutan sidebar dan hak akses" className="w-full text-left text-xs">
               <thead className="bg-black/5 dark:bg-white/5 border-b border-black/20 dark:border-white/20 text-black dark:text-white font-bold">
                 <tr>
-                  <th className="p-3.5 min-w-[240px]">Halaman &amp; Rute Sistem</th>
+                  <th className="p-3.5 min-w-[120px]">Posisi Menu</th><th className="p-3.5 min-w-[240px]">Halaman &amp; Rute Sistem</th>
                   <th className="p-3.5 text-center min-w-[130px] bg-purple-500/5">
                     <div className="flex flex-col items-center">
                       <span className="text-purple-600 dark:text-purple-400 font-bold">Super Admin</span>
-                      <span className="text-[9px] font-mono text-purple-600/70 dark:text-purple-400/70 uppercase">Akses Penuh</span>
+                      <span className="text-[9px] font-mono text-purple-600/70 dark:text-purple-400/70 uppercase">Tampilkan menu</span>
                     </div>
                   </th>
                   {TARGET_ROLES.map(role => (
@@ -1144,13 +1176,13 @@ export default function UserManagement() {
               <tbody className="divide-y divide-black/10 dark:divide-white/10 font-medium">
                 {loadingMatrix ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-xs text-black/40 dark:text-white/40">
+                    <td colSpan={7} className="p-8 text-center text-xs text-black/40 dark:text-white/40">
                       <LoadingState type="inline" title="Memuat konfigurasi matriks hak akses..." />
                     </td>
                   </tr>
                 ) : filteredModules.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
+                    <td colSpan={7} className="p-8 text-center text-xs text-black/40 dark:text-white/40 italic">
                       Tidak ada halaman modul yang cocok dengan pencarian.
                     </td>
                   </tr>
@@ -1159,7 +1191,8 @@ export default function UserManagement() {
                     const currentRoles = Array.isArray(matrixPermissions[mod.path]) ? matrixPermissions[mod.path] : [];
 
                     return (
-                      <tr key={mod.path} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                      <tr key={mod.id} data-sidebar-id={mod.id} className={`hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${draggedMenu===mod.id?'opacity-50':''} ${dropMenu===mod.id?'outline outline-blue-500':''}`}>
+                        <td className="p-3.5"><div className="flex items-center gap-1"><span className="font-mono w-6">{sidebarDraft.order.indexOf(mod.id)+1}</span><button type="button" draggable={false} disabled={menuOrderDisabled} aria-label={`Geser ${mod.name}`} title="Geser ke posisi menu tujuan" onPointerDown={e=>{if(menuOrderDisabled||e.button!==0)return;e.preventDefault();dragSource.current=mod.id;e.currentTarget.setPointerCapture(e.pointerId);setDraggedMenu(mod.id);}} onPointerMove={e=>{if(dragSource.current)setDropMenu(dragTarget(e));}} onPointerUp={finishMenuDrag} onPointerCancel={()=>{dragSource.current=null;setDraggedMenu(null);setDropMenu(null);}} style={{touchAction:'none'}} className="px-2 py-1 border rounded cursor-grab select-none disabled:opacity-40">⠿</button><button type="button" aria-label={`Naikkan ${mod.name}`} disabled={menuOrderDisabled||sidebarDraft.order.indexOf(mod.id)===0} onClick={()=>moveMenu(mod.id,sidebarDraft.order[sidebarDraft.order.indexOf(mod.id)-1])} className="px-2 py-1 border rounded disabled:opacity-40">↑</button><button type="button" aria-label={`Turunkan ${mod.name}`} disabled={menuOrderDisabled||sidebarDraft.order.indexOf(mod.id)===sidebarDraft.order.length-1} onClick={()=>moveMenu(mod.id,sidebarDraft.order[sidebarDraft.order.indexOf(mod.id)+1])} className="px-2 py-1 border rounded disabled:opacity-40">↓</button></div></td>
                         {/* Page Info */}
                         <td className="p-3.5">
                           <div className="font-bold text-black dark:text-white flex items-center gap-2">
@@ -1176,15 +1209,7 @@ export default function UserManagement() {
                           </div>
                         </td>
 
-                        {/* Super Administrator: Locked always enabled */}
-                        <td className="p-3.5 text-center bg-purple-500/5">
-                          <div className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-mono text-[11px] font-bold">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                            <span>Terkunci</span>
-                          </div>
-                        </td>
+                        <td className="p-3.5 text-center bg-purple-500/5"><input type="checkbox" aria-label={`Tampilkan ${mod.name} untuk Super Admin`} checked={!sidebarDraft.super_admin_hidden.includes(mod.id)} disabled={!isSuperAdmin||savingMatrix||resettingMatrix} onChange={()=>handleTogglePermission(mod.id,'Super Administrator')} className="w-4 h-4"/></td>
 
                         {/* Configurable Roles */}
                         {TARGET_ROLES.map(role => {
@@ -1197,6 +1222,8 @@ export default function UserManagement() {
                                   <input
                                     type="checkbox"
                                     checked={isAllowed}
+                                    disabled={savingMatrix||resettingMatrix}
+                                    aria-label={`${role.label}: ${mod.name}`}
                                     onChange={() => handleTogglePermission(mod.path, role.key)}
                                     className="w-4 h-4 rounded border-black/30 dark:border-white/30 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                   />
@@ -1243,8 +1270,8 @@ export default function UserManagement() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={loadMatrixPermissions}
-                  disabled={!hasUnsavedMatrixChanges || savingMatrix}
+                  onClick={() => loadMatrixPermissions(true)}
+                  disabled={!hasUnsavedMatrixChanges || savingMatrix || resettingMatrix || !settingsVersion}
                   className="px-3.5 py-2 rounded-md border border-black/30 dark:border-white/30 text-xs font-semibold text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer disabled:opacity-40"
                 >
                   Batalkan Perubahan
@@ -1252,13 +1279,13 @@ export default function UserManagement() {
                 <button
                   type="button"
                   onClick={handleSaveMatrixPermissions}
-                  disabled={!hasUnsavedMatrixChanges || savingMatrix}
+                  disabled={!hasUnsavedMatrixChanges || savingMatrix || resettingMatrix || !settingsVersion}
                   className="px-5 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  <span>{savingMatrix ? 'Menyimpan ke Sistem...' : 'Simpan Perubahan Hak Akses'}</span>
+                  <span>{savingMatrix ? 'Menyimpan ke Sistem...' : 'Simpan Pengaturan'}</span>
                 </button>
               </div>
             </div>
@@ -1294,7 +1321,7 @@ export default function UserManagement() {
       <ConfirmDialog
         isOpen={showResetConfirm}
         title="Reset Hak Akses ke Bawaan"
-        message="Apakah Anda yakin ingin mereset seluruh konfigurasi izin akses halaman ke pengaturan bawaan pabrik (default)? Seluruh penyesuaian hak akses peran akan ditimpa."
+        message="Hak akses peran akan kembali ke bawaan dan draf yang belum disimpan akan dibuang. Urutan menu dan tampilan Super Admin yang sudah tersimpan tetap dipertahankan."
         confirmText={resettingMatrix ? 'Mereset...' : 'Ya, Reset ke Bawaan'}
         cancelText="Batal"
         type="warning"

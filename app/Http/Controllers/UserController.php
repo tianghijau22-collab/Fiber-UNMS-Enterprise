@@ -193,78 +193,54 @@ class UserController extends Controller
 
     public function getRoutePermissions()
     {
-        $permissions = app(\App\Services\ApiAccessPolicy::class)->permissions();
-
-        // Always guarantee Super Administrator is included for all routes
-        foreach ($permissions as $route => &$roles) {
-            if (!is_array($roles)) $roles = [];
-            if (!in_array('Super Administrator', $roles)) {
-                array_unshift($roles, 'Super Administrator');
-            }
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'data'   => $permissions,
-        ]);
+        return response()->json(app(\App\Services\SidebarPreferences::class)->snapshot());
     }
 
     public function saveRoutePermissions(Request $request)
     {
         $this->checkSuperAdmin();
-
-        $validated = $request->validate([
-            'permissions' => 'required|array',
-            'permissions.*' => 'array',
-            'permissions.*.*' => 'string',
+        $validated=$request->validate([
+            'permissions'=>'required|array','permissions.*'=>'array','permissions.*.*'=>'string',
+            'sidebar'=>'sometimes|array:order,super_admin_hidden','sidebar.order'=>'required_with:sidebar|array','sidebar.order.*'=>'string',
+            'sidebar.super_admin_hidden'=>'present_with:sidebar|array','sidebar.super_admin_hidden.*'=>'string',
+            'expected_version'=>'required_with:sidebar|nullable|string|size:64',
         ]);
-
-        $permissions = $validated['permissions'];
-
-        // Enforce Super Administrator has access to all routes
-        foreach ($permissions as $route => &$roles) {
-            if (!is_array($roles)) $roles = [];
-            if (!in_array('Super Administrator', $roles)) {
-                array_unshift($roles, 'Super Administrator');
-            }
-        }
-
-        \App\Models\SystemSetting::set('rbac_route_permissions', json_encode($permissions));
-
-        AuditLog::record(
-            'UPDATE',
-            'RBAC Permissions',
-            'Memperbarui konfigurasi hak akses rute halaman sistem per peran (Role)',
-            null,
-            $permissions
-        );
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Konfigurasi hak akses halaman berhasil disimpan!',
-            'data'    => $permissions,
-        ]);
+        $settings=app(\App\Services\SidebarPreferences::class);
+        $sidebar=isset($validated['sidebar'])?$settings->validate($validated['sidebar']):null;
+        $permissions=$validated['permissions'];
+        foreach ($permissions as &$roles) if (!in_array('Super Administrator',$roles,true)) array_unshift($roles,'Super Administrator');
+        unset($roles);
+        $result=DB::transaction(function()use($settings,$validated,$permissions,$sidebar){
+            $settings->lock();$before=$settings->snapshot();
+            if (isset($validated['expected_version'])) abort_unless(hash_equals($before['settings_version'],$validated['expected_version']),409,'Pengaturan telah diubah oleh administrator lain. Muat ulang sebelum menyimpan; draf Anda tetap tersedia.');
+            // A sidebar-only change leaves the stored RBAC permissions untouched.
+            if ($permissions!==$before['data']) \App\Models\SystemSetting::set('rbac_route_permissions',json_encode($permissions,JSON_THROW_ON_ERROR));
+            if ($sidebar!==null && $sidebar!==$before['sidebar']) \App\Models\SystemSetting::set(\App\Services\SidebarPreferences::KEY,json_encode($sidebar,JSON_THROW_ON_ERROR));
+            $after=$settings->snapshot();$this->navigationAudit($before,$after,'Memperbarui hak akses halaman dan tampilan sidebar.');return $after;
+        },3);
+        return response()->json($result+['message'=>'Pengaturan berhasil disimpan. Akses penuh Super Administrator tetap tersedia.']);
     }
 
-    public function resetRoutePermissions()
+    public function resetRoutePermissions(Request $request)
     {
         $this->checkSuperAdmin();
+        $v=$request->validate(['expected_version'=>'sometimes|string|size:64']);
+        $settings=app(\App\Services\SidebarPreferences::class);
+        $result=DB::transaction(function()use($settings,$v){
+            $settings->lock();$before=$settings->snapshot();
+            if (isset($v['expected_version'])) abort_unless(hash_equals($before['settings_version'],$v['expected_version']),409,'Pengaturan telah berubah. Muat ulang sebelum melakukan reset.');
+            \App\Models\SystemSetting::set('rbac_route_permissions',json_encode(self::getDefaultRoutePermissions(),JSON_THROW_ON_ERROR));
+            $after=$settings->snapshot();$this->navigationAudit($before,$after,'Mereset hak akses halaman; urutan dan tampilan sidebar dipertahankan.');return $after;
+        },3);
+        return response()->json($result+['message'=>'Hak akses halaman kembali ke bawaan. Pengaturan sidebar tetap dipertahankan.']);
+    }
 
-        $default = self::getDefaultRoutePermissions();
-        \App\Models\SystemSetting::set('rbac_route_permissions', json_encode($default));
-
-        AuditLog::record(
-            'UPDATE',
-            'RBAC Permissions',
-            'Mereset konfigurasi hak akses rute halaman sistem ke pengaturan bawaan (default)',
-            null,
-            $default
-        );
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Hak akses rute berhasil direset ke pengaturan bawaan pabrik!',
-            'data'    => $default,
-        ]);
+    private function navigationAudit(array $before,array $after,string $description): void
+    {
+        $user=auth()->user();
+        AuditLog::create(['user_id'=>$user->id,'user_name'=>$user->name,'user_role'=>$user->role,'action'=>'UPDATE','module'=>'RBAC Permissions',
+            'description'=>$description,'ip_address'=>request()->ip(),'user_agent'=>request()->userAgent(),
+            'old_values'=>['permissions'=>$before['data'],'sidebar'=>$before['sidebar']],
+            'new_values'=>['permissions'=>$after['data'],'sidebar'=>$after['sidebar']]]);
     }
 }

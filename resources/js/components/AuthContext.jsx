@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getDefaultPermissionsMap, isUserAuthorizedForCrud } from '../config/navigationModules.jsx';
+import { defaultSidebarPreferences, normalizeSidebarPreferences } from '../lib/sidebarPreferences';
 
 const AuthContext = createContext();
 
@@ -20,19 +21,41 @@ export function AuthProvider({ children }) {
   const [authReady, setAuthReady] = useState(false);
 
   const [routePermissions, setRoutePermissions] = useState(DEFAULT_ROUTE_ROLES);
+  const [sidebarPreferences, setSidebarPreferences] = useState(defaultSidebarPreferences);
+  const permissionRequest = useRef(null);
+  const navigationGeneration = useRef(0);
+  const applyNavigationSettings = useCallback(data => {
+    navigationGeneration.current++;
+    if (data?.data && typeof data.data==='object') setRoutePermissions(data.data);
+    setSidebarPreferences(normalizeSidebarPreferences(data?.sidebar));
+  },[]);
   const [loading, setLoading] = useState(false);
 
   const fetchRoutePermissions = useCallback(async () => {
-    try {
+    if (permissionRequest.current) return permissionRequest.current;
+    const generation=navigationGeneration.current;
+    const task=(async()=>{ try {
       const res = await fetch('/api/rbac/permissions');
+      if (!res.ok) return;
       const json = await res.json();
-      if (json?.data && typeof json.data === 'object') {
-        setRoutePermissions(json.data);
+      if (json?.data && typeof json.data === 'object' && generation===navigationGeneration.current) {
+        applyNavigationSettings(json);
       }
     } catch (err) {
       // Keep default fallback
-    }
-  }, []);
+    } })();
+    permissionRequest.current=task;
+    try { await task; } finally { if(permissionRequest.current===task)permissionRequest.current=null; }
+  }, [applyNavigationSettings]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const sync=()=>{ if (!document.hidden) fetchRoutePermissions(); };
+    const storage=event=>{if(event.key==='fona_navigation_revision')sync();};
+    window.addEventListener('focus',sync);window.addEventListener('storage',storage);document.addEventListener('visibilitychange',sync);
+    const timer=setInterval(sync,60000);
+    return()=>{clearInterval(timer);window.removeEventListener('focus',sync);window.removeEventListener('storage',storage);document.removeEventListener('visibilitychange',sync);};
+  },[currentUser?.id,fetchRoutePermissions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +65,7 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('unms_user');
       setCurrentUser(null);
       setRoutePermissions(DEFAULT_ROUTE_ROLES);
+      setSidebarPreferences(defaultSidebarPreferences());
     };
     const restoreSession = async () => {
       try {
@@ -260,6 +284,9 @@ export function AuthProvider({ children }) {
       isUserAuthorizedForCrud,
       routePermissions,
       setRoutePermissions,
+      sidebarPreferences,
+      setSidebarPreferences,
+      applyNavigationSettings,
       fetchRoutePermissions
     }}>
       {authReady ? children : <div role="status" className="p-6 text-center">Memeriksa sesi...</div>}

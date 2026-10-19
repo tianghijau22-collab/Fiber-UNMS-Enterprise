@@ -3,9 +3,10 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext.jsx';
 import { SYSTEM_NAVIGATION_MODULES } from '../config/navigationModules.jsx';
 import FonaBrandLogo from './FonaBrandLogo.jsx';
+import { sidebarItems, isSidebarItemVisible, OLT_REGION_MENU } from '../lib/sidebarPreferences';
 
 export default function Sidebar({ isOpen, onClose }) {
-  const { canAccessRoute, currentUser, logout } = useAuth();
+  const { canAccessRoute, currentUser, logout, sidebarPreferences } = useAuth();
   const [olts, setOlts] = useState([]);
   const [loadingOlts, setLoadingOlts] = useState(true);
   const location = useLocation();
@@ -18,8 +19,8 @@ export default function Sidebar({ isOpen, onClose }) {
   const activeOltId = queryParams.get('olt_id');
 
   // Filter menu items by RBAC permissions
-  const allowedNavItems = SYSTEM_NAVIGATION_MODULES.filter(item => canAccessRoute(item.path));
-  const canSeeOltRegion = canAccessRoute('/network');
+  const allowedNavItems = sidebarItems(SYSTEM_NAVIGATION_MODULES,sidebarPreferences).filter(item => isSidebarItemVisible(item,currentUser,canAccessRoute,sidebarPreferences));
+  const canSeeOltRegion = allowedNavItems.some(item => item.id === OLT_REGION_MENU);
 
   // Fetch OLTs list automatically
   useEffect(() => {
@@ -49,45 +50,8 @@ export default function Sidebar({ isOpen, onClose }) {
     navigate('/login');
   };
 
-  return (
-    <>
-      {/* Mobile Backdrop Overlay */}
-      {isOpen && (
-        <div
-          onClick={onClose}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-200"
-        />
-      )}
-
-      {/* Sidebar Drawer */}
-      <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-60 bg-white dark:bg-black text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-[#222222] flex flex-col transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {/* Brand Header */}
-        <div className="h-16 px-4 border-b border-slate-200 dark:border-[#222222] flex items-center justify-between box-border relative">
-          <NavLink to="/dashboard" onClick={onClose} className="flex items-center justify-center group py-0.5 w-full">
-            <FonaBrandLogo variant="horizontal" className="w-40 sm:w-44 h-auto" />
-          </NavLink>
-
-          {/* Close button for mobile drawer */}
-          <button
-            onClick={onClose}
-            className="lg:hidden absolute right-3 p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Navigation Links */}
-        <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
-
-          {/* ── SEKSI WILAYAH / REGIONAL OLT ("KAMAR PRIBADI PER OLT") ── */}
-          {canSeeOltRegion && (
-            <div>
+  const regionMenu = (
+            <div key={OLT_REGION_MENU} className="py-2">
               <div className="px-2 py-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center justify-between">
                 <span>Wilayah / OLT Region</span>
                 <span className="px-1.5 py-0.2 rounded bg-blue-100 dark:bg-neutral-900 text-blue-700 dark:text-blue-400 text-[10px] font-mono">{olts.length} OLT</span>
@@ -145,8 +109,45 @@ export default function Sidebar({ isOpen, onClose }) {
                 )}
               </div>
             </div>
-          )}
+  );
 
+  return (
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-200"
+        />
+      )}
+
+      {/* Sidebar Drawer */}
+      <aside
+        className={`fixed top-0 bottom-0 left-0 z-50 w-60 bg-white dark:bg-black text-slate-700 dark:text-slate-300 border-r border-slate-200 dark:border-[#222222] flex flex-col transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        {/* Brand Header */}
+        <div className="h-16 px-4 border-b border-slate-200 dark:border-[#222222] flex items-center justify-between box-border relative">
+          <NavLink to="/dashboard" onClick={onClose} className="flex items-center justify-center group py-0.5 w-full">
+            <FonaBrandLogo variant="horizontal" className="w-40 sm:w-44 h-auto" />
+          </NavLink>
+
+          {/* Close button for mobile drawer */}
+          <button
+            onClick={onClose}
+            className="lg:hidden absolute right-3 p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
+
+          {/* ── SEKSI WILAYAH / REGIONAL OLT ("KAMAR PRIBADI PER OLT") ── */}
           {/* ── MENU OPERASIONAL DOKUMENTASI & SISTEM ── */}
           <div>
             <div className="px-2 py-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
@@ -154,6 +155,7 @@ export default function Sidebar({ isOpen, onClose }) {
             </div>
             <div className="mt-1 space-y-0.5">
               {allowedNavItems.map((item) => {
+                if (item.id === OLT_REGION_MENU) return regionMenu;
                 const isExactNetworkGlobal = item.path === '/network' && location.pathname === '/network' && !activeOltId;
                 const isNormalActive = item.path !== '/network' && location.pathname === item.path;
                 const isActive = isExactNetworkGlobal || isNormalActive;
@@ -183,6 +185,7 @@ export default function Sidebar({ isOpen, onClose }) {
             </div>
           </div>
 
+          {isSuperAdmin && <NavLink to="/users?tab=matrix" onClick={onClose} className="block px-3 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400">Atur Menu Sidebar</NavLink>}
           {/* Logout button */}
           <div className="pt-2 border-t border-slate-100 dark:border-[#222222]">
             <button
