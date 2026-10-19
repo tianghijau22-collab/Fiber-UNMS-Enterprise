@@ -417,16 +417,31 @@ class NetworkCableController extends Controller
     {
         $this->checkCrudPermission();
 
-        $request->validate([
-            'route_coordinates' => 'required|array',
-            'length_meters'     => 'nullable|numeric|min:0',
+        $validated = $request->validate([
+            'route_coordinates'       => 'present|array|max:5000',
+            'route_coordinates.*'     => 'array',
+            'route_coordinates.*.lat' => 'required|numeric|between:-90,90',
+            'route_coordinates.*.lng' => 'required|numeric|between:-180,180',
+            'route_coordinates.*.name' => 'nullable|string|max:160',
+            'length_meters'           => 'nullable|numeric|min:1',
+            'expected_updated_at'     => 'nullable|date',
         ]);
 
-        $networkCable->route_coordinates = $request->route_coordinates;
-        if ($request->filled('length_meters')) {
-            $networkCable->length_meters = (float) $request->length_meters;
-        }
-        $networkCable->save();
+        $networkCable = DB::transaction(function () use ($networkCable, $validated, $request) {
+            $current = NetworkCable::whereKey($networkCable->id)->lockForUpdate()->firstOrFail();
+            if ($request->filled('expected_updated_at') &&
+                !$current->updated_at?->equalTo(\Illuminate\Support\Carbon::parse($validated['expected_updated_at']))) {
+                abort(response()->json([
+                    'message' => 'Data kabel telah berubah. Salin catatan yang diperlukan, buang perubahan lokal, lalu segarkan sebelum menyimpan ulang.',
+                ], 409));
+            }
+            $current->route_coordinates = $validated['route_coordinates'];
+            if ($request->filled('length_meters')) {
+                $current->length_meters = (float) $validated['length_meters'];
+            }
+            $current->save();
+            return $current;
+        });
 
         AuditLog::record(
             'UPDATE',
