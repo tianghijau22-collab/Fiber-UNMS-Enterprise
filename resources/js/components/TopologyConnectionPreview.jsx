@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import RefreshButton from './RefreshButton';
-import { CANDIDATE_LABELS, REVIEW_LABELS, reviewExport, meters } from '../lib/topologyCandidates';
+import { CANDIDATE_LABELS, REVIEW_LABELS, reviewExport } from '../lib/topologyCandidates';
 import { formatMeters } from '../lib/cableRoutes';
+import { nearbyNodes } from '../lib/topologyNeighborhood';
 
 const panel = 'bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4';
 const button = 'px-3 py-2 text-xs font-semibold rounded-md border border-black/70 dark:border-white/70 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -9,7 +10,10 @@ const field = 'bg-white dark:bg-black border border-black/40 dark:border-white/4
 
 function ConnectionMap({ result, candidate }) {
   const container = useRef(null), mapRef = useRef(null), leaflet = useRef(null), layers = useRef(null), context = useRef([]);
+  const surroundings = useRef([]), nodeMarkers = useRef(new Map());
   const [ready, setReady] = useState(false), [error, setError] = useState(false);
+  const [radius, setRadius] = useState(250), [showNames, setShowNames] = useState(true);
+  const neighbors = useMemo(() => nearbyNodes(result.nodes, candidate, radius), [result.nodes, candidate, radius]);
   useEffect(() => {
     let cancelled = false;
     import('leaflet').then(module => {
@@ -29,6 +33,7 @@ function ConnectionMap({ result, candidate }) {
     if (!ready || !mapRef.current || !candidate) return;
     const L = leaflet.current, group = layers.current, map = mapRef.current;
     group.clearLayers();
+    nodeMarkers.current.clear();
     const all = [];
     const popup = text => { const element = document.createElement('div'); element.textContent = text; return element; };
     result.cables.filter(c => candidate.cable_ids.some(id => String(id) === String(c.id))).forEach(cable => {
@@ -36,27 +41,43 @@ function ConnectionMap({ result, candidate }) {
       all.push(...points);
       L.polyline(points, { color: cable.cable_color || '#2563eb', weight: 5, opacity: 1 }).addTo(group).bindPopup(popup(cable.label));
     });
-    for (const node of result.nodes) {
-      if (meters(node.point, candidate.b) > 250 && String(node.id) !== String(candidate.node_id)) continue;
-      const selected = String(node.id) === String(candidate.node_id);
-      L.circleMarker([node.point.lat, node.point.lng], { radius: selected ? 10 : 5, color: selected ? '#d97706' : '#334155', fillColor: selected ? '#fbbf24' : '#fff', fillOpacity: 1, weight: 2 })
-        .addTo(group).bindTooltip(popup(`${node.node_type} · ${node.name}`), { permanent: selected, direction: 'top' });
-    }
     L.polyline([[candidate.a.lat, candidate.a.lng], [candidate.b.lat, candidate.b.lng]], { color: '#ea580c', weight: 4, dashArray: '6 6' }).addTo(group);
     for (const p of [candidate.a, candidate.b]) L.circleMarker([p.lat,p.lng], { radius: 7, color: '#ea580c', fillColor: '#fff', fillOpacity: 1 }).addTo(group);
+    for (const { node, distance, selected } of neighbors) {
+      const color = { ODP:'#2563eb', ODC:'#7c3aed', OLT:'#dc2626', CLOSURE:'#0f766e', POLE:'#475569' }[String(node.node_type).toUpperCase()] || '#475569';
+      const title = [node.node_type || 'Node', node.code, node.name || `Node ${node.id}`].filter(Boolean).join(' · ');
+      const marker = L.circleMarker([node.point.lat, node.point.lng], { radius: selected ? 10 : 7, color: selected ? '#d97706' : '#fff', fillColor: selected ? '#fbbf24' : color, fillOpacity: 1, weight: 2 })
+        .addTo(group).bindTooltip(popup(title), { permanent: showNames || selected, direction: 'top', offset:[0,-8] })
+        .bindPopup(popup(`${title} · ${formatMeters(distance)} dari titik calon terdekat${selected ? ' · Node calon sambungan' : ''}`));
+      nodeMarkers.current.set(String(node.id), marker);
+    }
     context.current = all;
+    surroundings.current = [[candidate.a.lat,candidate.a.lng], [candidate.b.lat,candidate.b.lng], ...neighbors.map(({node}) => [node.point.lat,node.point.lng])];
     map.invalidateSize();
-    map.fitBounds([[candidate.a.lat,candidate.a.lng],[candidate.b.lat,candidate.b.lng]], { padding: [55,55], maxZoom: 18 });
-  }, [ready, result, candidate]);
+    map.fitBounds(surroundings.current, { padding: [55,55], maxZoom: 18 });
+  }, [ready, result, candidate, neighbors, showNames]);
   return <div className="space-y-2">
+    <div className="flex flex-wrap items-center gap-3 text-xs">
+      <label className="flex items-center gap-2">Radius node sekitar<select aria-label="Radius node sekitar" className={field} value={radius} onChange={e => setRadius(Number(e.target.value))}>{[100,250,500].map(value => <option key={value} value={value}>{value} meter</option>)}</select></label>
+      <label className="flex items-center gap-2"><input type="checkbox" checked={showNames} onChange={e => setShowNames(e.target.checked)}/>Tampilkan nama node</label>
+    </div>
     <div className="relative h-[420px] rounded-md border border-black/40 dark:border-white/40 overflow-hidden">
       <div ref={container} className="w-full h-full"/>
       {error && <div role="alert" className="absolute inset-0 z-[500] bg-white dark:bg-black p-6 text-xs">Peta gagal dimuat. Daftar calon hubungan tetap tersedia.</div>}
     </div>
     <div className="flex flex-wrap justify-between gap-2 text-[11px] text-black/60 dark:text-white/60"><span>Peta satelit · warna garis mengikuti data kabel · jingga putus-putus: jarak calon sambungan.</span><button className={button} disabled={!ready || !candidate} onClick={() => { if (context.current.length) mapRef.current.fitBounds(context.current, { padding:[35,35], maxZoom:17 }); }}>Lihat seluruh rute</button></div>
+    <div className="flex flex-wrap gap-2"><button className={button} disabled={!ready || !candidate} onClick={() => { if (surroundings.current.length) mapRef.current.fitBounds(surroundings.current, { padding:[55,55], maxZoom:18 }); }}>Lihat node sekitar</button><button className={button} disabled={!ready || !candidate} onClick={() => mapRef.current.fitBounds([[candidate.a.lat,candidate.a.lng],[candidate.b.lat,candidate.b.lng]], { padding:[55,55], maxZoom:18 })}>Fokus calon hubungan</button></div>
     <ul aria-label="Warna kabel pada peta" className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
       {result.cables.filter(c => candidate?.cable_ids.some(id => String(id) === String(c.id))).map(cable => <li key={cable.id} className="flex items-center gap-2 min-w-0"><span aria-hidden="true" className="inline-block w-6 shrink-0 border-t-4" style={{ borderColor: cable.cable_color || '#2563eb' }}/><span className="break-words">{cable.label}{!cable.cable_color && ' (warna bawaan)'}</span></li>)}
     </ul>
+    <details open className="rounded-md border border-black/20 dark:border-white/20 p-3 text-xs">
+      <summary className="font-semibold cursor-pointer">Node sekitar ({neighbors.length})</summary>
+      <p className="text-[11px] text-black/60 dark:text-white/60 mt-2">Jarak ke titik A/B terdekat, bukan panjang kabel. Warna marker membedakan jenis node; kuning menandai node calon sambungan.</p>
+      <ul aria-label="Daftar node sekitar" className="mt-2 max-h-48 overflow-auto divide-y divide-black/10 dark:divide-white/10">
+        {neighbors.map(({node,distance,selected}) => <li key={node.id}><button className="w-full text-left flex items-start justify-between gap-3 py-2 hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-50" disabled={!ready} onClick={() => { const marker=nodeMarkers.current.get(String(node.id)); if (marker) { mapRef.current.setView(marker.getLatLng(),18); marker.openPopup(); } }}><span className="min-w-0 break-words"><b>{node.name || `Node ${node.id}`}</b><span className="block text-[11px] text-black/60 dark:text-white/60">{node.node_type || 'Node'}{node.code ? ` · ${node.code}` : ''}{selected ? ' · Calon sambungan' : ''}{distance > radius ? ' · Di luar radius' : ''}</span></span><span className="font-mono whitespace-nowrap">{formatMeters(distance)}</span></button></li>)}
+      </ul>
+      {!neighbors.length && <p className="mt-2 text-black/60 dark:text-white/60">Tidak ada node dengan koordinat valid dalam radius ini. Coba perbesar radius.</p>}
+    </details>
   </div>;
 }
 
