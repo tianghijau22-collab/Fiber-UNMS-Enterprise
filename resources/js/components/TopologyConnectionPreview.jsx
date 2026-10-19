@@ -18,7 +18,7 @@ function ConnectionMap({ result, candidate }) {
       leaflet.current = L;
       const map = L.map(container.current, { center: [-0.787, 100.654], zoom: 15 });
       mapRef.current = map;
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
+      L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { subdomains: ['0', '1', '2', '3'], maxZoom: 20, attribution: '© Google Maps' }).addTo(map);
       layers.current = L.layerGroup().addTo(map);
       setReady(true);
       map.invalidateSize();
@@ -31,10 +31,10 @@ function ConnectionMap({ result, candidate }) {
     group.clearLayers();
     const all = [];
     const popup = text => { const element = document.createElement('div'); element.textContent = text; return element; };
-    result.cables.filter(c => candidate.cable_ids.some(id => String(id) === String(c.id))).forEach((cable, index) => {
+    result.cables.filter(c => candidate.cable_ids.some(id => String(id) === String(c.id))).forEach(cable => {
       const points = cable.route.map(p => [p.lat, p.lng]);
       all.push(...points);
-      L.polyline(points, { color: index ? '#9333ea' : '#2563eb', weight: 5, opacity: 0.85 }).addTo(group).bindPopup(popup(cable.label));
+      L.polyline(points, { color: cable.cable_color || '#2563eb', weight: 5, opacity: 1 }).addTo(group).bindPopup(popup(cable.label));
     });
     for (const node of result.nodes) {
       if (meters(node.point, candidate.b) > 250 && String(node.id) !== String(candidate.node_id)) continue;
@@ -53,7 +53,10 @@ function ConnectionMap({ result, candidate }) {
       <div ref={container} className="w-full h-full"/>
       {error && <div role="alert" className="absolute inset-0 z-[500] bg-white dark:bg-black p-6 text-xs">Peta gagal dimuat. Daftar calon hubungan tetap tersedia.</div>}
     </div>
-    <div className="flex flex-wrap justify-between gap-2 text-[11px] text-black/60 dark:text-white/60"><span>Garis biru/ungu: rute tersimpan · jingga putus-putus: jarak calon sambungan.</span><button className={button} disabled={!ready || !candidate} onClick={() => { if (context.current.length) mapRef.current.fitBounds(context.current, { padding:[35,35], maxZoom:17 }); }}>Lihat seluruh rute</button></div>
+    <div className="flex flex-wrap justify-between gap-2 text-[11px] text-black/60 dark:text-white/60"><span>Peta satelit · warna garis mengikuti data kabel · jingga putus-putus: jarak calon sambungan.</span><button className={button} disabled={!ready || !candidate} onClick={() => { if (context.current.length) mapRef.current.fitBounds(context.current, { padding:[35,35], maxZoom:17 }); }}>Lihat seluruh rute</button></div>
+    <ul aria-label="Warna kabel pada peta" className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
+      {result.cables.filter(c => candidate?.cable_ids.some(id => String(id) === String(c.id))).map(cable => <li key={cable.id} className="flex items-center gap-2 min-w-0"><span aria-hidden="true" className="inline-block w-6 shrink-0 border-t-4" style={{ borderColor: cable.cable_color || '#2563eb' }}/><span className="break-words">{cable.label}{!cable.cable_color && ' (warna bawaan)'}</span></li>)}
+    </ul>
   </div>;
 }
 
