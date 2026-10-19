@@ -15,6 +15,7 @@ return [
         'NetworkPortController' => $master($networkReads, $networkWrites),
         'NetworkSplitterController' => $master($networkReads, $networkWrites),
         'NetworkCableController' => $master($networkReads, $networkWrites),
+        'TopologyConnectionController' => $master(['/cable-routes'], ['/cable-routes']),
         'NetworkCableCoreController' => $master($networkReads, $networkWrites),
         'OntRegistrationController' => $master(['/customers', '/olt-management', '/network']),
         'OltDeviceController' => $master(['/olt-management', '/network', '/customers', '/gis-map', '/field-tech', '/odp-checks', '/bts-management'], ['/olt-management']),

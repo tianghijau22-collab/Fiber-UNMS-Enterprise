@@ -40,6 +40,12 @@ Route::get('app-testing/login-banner', [\App\Http\Controllers\AppTestingControll
 
 Route::middleware(['auth:sanctum', \App\Http\Middleware\AuthorizeApiAccess::class])->group(function () {
 
+Route::get('topology-connections/prepare', [\App\Http\Controllers\TopologyConnectionController::class, 'prepare']);
+Route::get('topology-connections', [\App\Http\Controllers\TopologyConnectionController::class, 'index']);
+Route::post('topology-connections', [\App\Http\Controllers\TopologyConnectionController::class, 'store'])->middleware('throttle:30,1');
+Route::get('topology-connections/{connection}/history', [\App\Http\Controllers\TopologyConnectionController::class, 'history'])->whereNumber('connection');
+Route::post('topology-connections/{connection}/revoke', [\App\Http\Controllers\TopologyConnectionController::class, 'revoke'])->whereNumber('connection')->middleware('throttle:30,1');
+
 Route::get('/notifications', [NotificationController::class, 'index']);
 Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
 Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
