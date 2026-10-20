@@ -84,6 +84,8 @@ Route::put('/olts/{id}/connection-config', [OltDeviceController::class, 'saveCon
 Route::post('/olts/{id}/snmp-diagnostic', [OltDeviceController::class, 'snmpDiagnostic']);
 Route::delete('/olts/{id}', [OltDeviceController::class, 'destroy']);
 
+Route::get('/olt/customer-registration-options', [OltController::class, 'customerRegistrationOptions']);
+Route::post('/olt/register-customer', [OltController::class, 'registerCustomer']);
 Route::get('/olt/hardware', [OltController::class, 'index']);
 Route::get('/olt/port-onus', [OltController::class, 'getPortOnus']);
 Route::post('/olt/sync-port', [OltController::class, 'syncPort']);

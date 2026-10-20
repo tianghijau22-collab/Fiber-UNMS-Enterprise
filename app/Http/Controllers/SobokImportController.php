@@ -39,6 +39,7 @@ class SobokImportController extends Controller
                 'status'  => 'success',
                 'message' => "Berhasil menarik {$result['stats']['total_records']} data pelanggan dari Sobok.",
                 'stats'   => $result['stats'],
+                'source_meta'=>$result['source_meta']??[],
                 'data'    => $result['records'],
             ]);
         } catch (\Exception $e) {
@@ -67,175 +68,12 @@ class SobokImportController extends Controller
             'interface'       => 'nullable|string',
         ]);
 
-        try {
-            $customerNumber = trim($validated['customer_number']);
-
-            // Normalize customer number format: ensure CMN prefix is neat
-            if (preg_match('/^CMN\s*(\d+)$/i', $customerNumber, $m)) {
-                $customerNumber = sprintf('CMN %04d', (int)$m[1]);
-            } elseif (preg_match('/^\d+$/', $customerNumber)) {
-                $customerNumber = sprintf('CMN %04d', (int)$customerNumber);
-            }
-
-            // Check if customer_number already exists
-            $existsNum = Customer::where('customer_number', $customerNumber)
-                ->orWhere('customer_number', str_replace(' ', '', $customerNumber))
-                ->first();
-
-            if ($existsNum) {
-                return response()->json([
-                    'status'  => 'error',
-                    'message' => "Pelanggan dengan nomor {$customerNumber} sudah terdaftar di sistem ({$existsNum->name}).",
-                ], 422);
-            }
-
-            // Check if ONU SN already exists on another customer (record note if shared/duplicate)
-            $sn = !empty($validated['onu_serial']) ? trim($validated['onu_serial']) : null;
-            $duplicateSnNote = null;
-            if ($sn) {
-                $existsOnt = OntRegistration::where('onu_serial', $sn)->first()
-                    ?: CustomerService::where('onu_serial', $sn)->first();
-
-                if ($existsOnt) {
-                    $otherCust = $existsOnt instanceof OntRegistration
-                        ? $existsOnt->customerService?->customer
-                        : $existsOnt->customer;
-                    $otherName = $otherCust ? "{$otherCust->name} ({$otherCust->customer_number})" : "Pelanggan lain";
-                    $duplicateSnNote = "SN Kembar/Berbagi dengan {$otherName}";
-                }
-            } else {
-                $sn = sprintf('HWTC-%08X', rand(10000000, 99999999));
-            }
-
-            $created = DB::transaction(function () use ($request, $validated, $customerNumber, $sn, $duplicateSnNote) {
-                // 1. Create Customer
-                $customer = Customer::create([
-                    'customer_number' => $customerNumber,
-                    'name'            => $validated['name'],
-                    'phone'           => !empty($validated['phone']) ? $validated['phone'] : '-',
-                    'email'           => $validated['email'] ?? null,
-                    'address'         => !empty($validated['address']) ? $validated['address'] : 'Solok, Sumatera Barat',
-                    'status'          => 'active',
-                ]);
-
-                // 2. Resolve Service Package
-                $package = ServicePackage::first();
-                $packageId = $package ? $package->id : null;
-
-                // 3. Create CustomerService
-                $service = CustomerService::create([
-                    'service_number'     => CustomerService::generateUniqueServiceNumber(),
-                    'customer_id'        => $customer->id,
-                    'service_package_id' => $packageId,
-                    'status'             => 'active',
-                    'installation_date'  => now(),
-                    'activated_at'       => now(),
-                    'onu_serial'         => $sn,
-                ]);
-
-                // 4. Bind to ODP Port if ODP node selected
-                $odpId = $validated['odp_id'] ?? null;
-                $boundPort = null;
-
-                if ($odpId) {
-                    // Find first available port on this ODP
-                    $port = NetworkPort::where('node_id', $odpId)
-                        ->where(function ($q) {
-                            $q->where('status', 'available')
-                              ->orWhereNull('customer_service_id');
-                        })
-                        ->whereNull('customer_service_id')
-                        ->orderBy('port_number', 'asc')
-                        ->first();
-
-                    if ($port) {
-                        $port->update([
-                            'customer_service_id' => $service->id,
-                            'customer_name_cache' => $customer->name,
-                            'status'              => 'used',
-                        ]);
-                        NetworkPort::recalculateNodeUsedPorts($odpId);
-                        $boundPort = $port->port_number;
-                    }
-                }
-
-                // 5. Deteksi otomatis port fisik OLT, redaman riil, dan sinkronkan ODP
-                $hintInterface = $validated['interface'] ?? ($request ? $request->input('interface') : null);
-                $detected = CustomerController::resolveOnuPhysicalPortAndSync(
-                    $sn,
-                    $odpId,
-                    $hintInterface
-                );
-
-                $rxPowerVal = $detected['rx_power'] ?? ($validated['rx_power'] ?? -19.50);
-                $txPowerVal = $detected['tx_power'] ?? 2.10;
-                $statusVal  = (strtolower($detected['status']) === 'online') ? 'active' : 'active';
-
-                $notes = 'Diimpor dari Sobok' . ($detected['port'] ? " (Port OLT: {$detected['port']})" : '');
-                if ($duplicateSnNote) {
-                    $notes .= " ({$duplicateSnNote})";
-                }
-
-                OntRegistration::create([
-                    'customer_service_id' => $service->id,
-                    'onu_serial'          => $sn,
-                    'onu_type'            => $detected['vendor_model'] ?: 'HGU GPON/EPON',
-                    'status'              => $statusVal,
-                    'registered_at'       => now(),
-                    'last_online_at'      => now(),
-                    'rx_power'            => $rxPowerVal,
-                    'tx_power'            => $txPowerVal,
-                    'notes'               => $notes,
-                ]);
-
-                // Sinkronkan ke Telemetry Snapshot OLT
-                if ($detected['olt_id'] && $detected['port']) {
-                    CustomerController::injectCustomerIntoOltSnapshot($detected['olt_id'], [
-                        'customer_id'     => $customer->id,
-                        'customer_name'   => $customer->name,
-                        'customer_number' => $customer->customer_number,
-                        'serial_number'   => $sn,
-                        'port'            => $detected['port'],
-                        'rx_power'        => $rxPowerVal,
-                        'tx_power'        => $txPowerVal,
-                        'status'          => ($statusVal === 'active') ? 'Online' : 'Offline',
-                        'onu_id'          => $detected['onu_id'] ?? (string)$customer->id,
-                        'vendor_model'    => $detected['vendor_model'] ?: 'HGU GPON/EPON',
-                    ]);
-                }
-
-                AuditLog::record(
-                    'IMPORT',
-                    'Customer Management',
-                    "Menambahkan pelanggan dari Sobok: {$customer->name} ({$customer->customer_number})" . ($boundPort ? " ke Port ODP {$boundPort}" : "") . ($detected['port'] ? " [Port OLT: {$detected['port']}]" : "") . ($duplicateSnNote ? " [{$duplicateSnNote}]" : ""),
-                    null,
-                    ['customer_id' => $customer->id, 'customer_number' => $customer->customer_number, 'onu_serial' => $sn, 'olt_port' => $detected['port']]
-                );
-
-                return [
-                    'customer'   => $customer,
-                    'bound_port' => $boundPort,
-                    'olt_port'   => $detected['port'],
-                ];
-            });
-
-            $successMsg = "Pelanggan {$created['customer']->name} ({$created['customer']->customer_number}) berhasil ditambahkan ke sistem!" . ($created['bound_port'] ? " (Port ODP {$created['bound_port']})" : "");
-            if ($duplicateSnNote) {
-                $successMsg .= " ℹ️ Info: {$duplicateSnNote}";
-            }
-
-            return response()->json([
-                'status'  => 'success',
-                'message' => $successMsg,
-                'data'    => $created['customer'],
-            ]);
-        } catch (\Exception $e) {
-            Log::error("Sobok Import Single Error: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Gagal menambahkan pelanggan: ' . $e->getMessage(),
-            ], 500);
-        }
+        $validated += $request->validate([
+            'mode'=>'sometimes|in:create,fill_missing',
+            'expected_version'=>'required_if:mode,fill_missing|nullable|string|size:64',
+        ]);
+        $result=app(\App\Services\CustomerIntakeService::class)->save($validated);
+        return response()->json(['status'=>'success','message'=>$result['updated']?'Data kosong berhasil dilengkapi. Data yang sudah terisi dipertahankan.':'Pelanggan berhasil ditambahkan.','data'=>$result['customer'],'updated'=>$result['updated']]);
     }
 
     /**

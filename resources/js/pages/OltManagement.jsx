@@ -1,3 +1,4 @@
+import OltCustomerRegistrationModal from '../components/OltCustomerRegistrationModal.jsx';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
@@ -238,6 +239,8 @@ export default function OltManagement() {
   const { currentUser, hasRole } = useAuth();
   const isSuperAdmin = currentUser?.role === 'Super Administrator';
   const canCrud = isSuperAdmin;
+  const canRegisterCustomer=hasRole('Super Administrator','Operator Jaringan');
+  const [registrationTarget,setRegistrationTarget]=useState(null);
   const [olts, setOlts] = useState([]);
   const [selectedOltId, setSelectedOltId] = useState(null);
   const [loadingOltList, setLoadingOltList] = useState(true);
@@ -485,6 +488,7 @@ export default function OltManagement() {
 
   const { isRefreshing, triggerRefresh, timeAgoText } = useAutoRefresh(fetchOlts);
   const activeOlt = olts.find(o => o.id === selectedOltId);
+  useEffect(()=>setRegistrationTarget(null),[selectedOltId]);
 
   const selectedOltIdRef = useRef(selectedOltId);
   selectedOltIdRef.current=selectedOltId;
@@ -1062,6 +1066,7 @@ export default function OltManagement() {
   const [selectedOrphanedIds, setSelectedOrphanedIds] = useState([]);
   const [isDeletingOrphaned, setIsDeletingOrphaned] = useState(false);
 
+  useEffect(()=>{setSelectedOrphanedIds([]);},[selectedOltId]);
   const [unregisteredSearchQuery, setUnregisteredSearchQuery] = useState('');
   const [unregisteredPage, setUnregisteredPage] = useState(1);
   const unregisteredPerPage = 10;
@@ -1113,7 +1118,7 @@ export default function OltManagement() {
         const matchSn = (onu.onu_serial || onu.onu_mac)?.toLowerCase().includes(q);
         const matchCode = onu.customer_number?.toLowerCase().includes(q);
         const matchOdp = onu.odp_name?.toLowerCase().includes(q);
-        const matchPort = onu.olt_port?.toLowerCase().includes(q);
+        const matchPort = onu.olt_port?.toLowerCase().includes(q)||onu.orphan_reason?.toLowerCase().includes(q);
         return matchName || matchSn || matchCode || matchOdp || matchPort;
       }
       return true;
@@ -1135,12 +1140,12 @@ export default function OltManagement() {
     }
     openConfirm({
       title: 'Pembersihan Data Modem Terputus',
-      message: `Apakah Anda yakin ingin menghapus data ONU ${onu.onu_serial || onu.onu_mac} milik "${onu.customer_name}" dari database UNMS? Tindakan ini akan otomatis membebaskan port ${onu.odp_name} (${onu.odp_port}) agar dapat digunakan kembali oleh pelanggan baru.`,
+      message: `Apakah Anda yakin ingin menghapus data ONU ${onu.onu_serial || onu.onu_mac} milik "${onu.customer_name}" dari database UNMS? Tindakan ini akan otomatis membebaskan port ${onu.odp_name} (${onu.odp_port}) agar dapat digunakan kembali oleh pelanggan baru. Layanan akan ditandai berhenti; akun pelanggan tetap tersimpan.`,
       confirmLabel: 'Ya, Hapus Data',
       variant: 'danger',
       onConfirm: () => {
         setIsDeletingOrphaned(true);
-        fetch(`/api/olt/orphaned-onus/${onu.id}`, {
+        fetch(`/api/olt/orphaned-onus/${onu.id}?device_id=${selectedOltId}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
@@ -1177,7 +1182,7 @@ export default function OltManagement() {
       showNotif('Hanya Super Administrator yang berhak menghapus data ONU terputus.', 'error');
       return;
     }
-    const idsToDelete = targetIds || selectedOrphanedIds;
+    const idsToDelete = (targetIds || selectedOrphanedIds).filter(id=>(oltData?.orphaned_onus||[]).some(o=>o.id===id&&o.can_delete));
     if (!idsToDelete.length) {
       showNotif('Pilih setidaknya satu data untuk dibersihkan.', 'error');
       return;
@@ -1185,7 +1190,7 @@ export default function OltManagement() {
 
     openConfirm({
       title: `Pembersihan Masal (${idsToDelete.length} Data)`,
-      message: `Apakah Anda yakin ingin menghapus ${idsToDelete.length} data ONU terputus yang dipilih dari database UNMS? Seluruh port ODP terkait akan otomatis dibebaskan kembali.`,
+      message: `Apakah Anda yakin ingin menghapus ${idsToDelete.length} data ONU terputus yang dipilih dari database UNMS? Seluruh port ODP terkait akan otomatis dibebaskan kembali dan layanannya ditandai berhenti; akun pelanggan tetap tersimpan.`,
       confirmLabel: `Ya, Bersihkan ${idsToDelete.length} Data`,
       variant: 'danger',
       onConfirm: () => {
@@ -1197,7 +1202,7 @@ export default function OltManagement() {
             'Accept': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
           },
-          body: JSON.stringify({ ids: idsToDelete }),
+          body: JSON.stringify({ ids: idsToDelete, device_id:selectedOltId }),
         })
           .then(res => res.json())
           .then(data => {
@@ -1226,6 +1231,7 @@ export default function OltManagement() {
   // ─── RENDER ──────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 transition-colors duration-300 stagger-enter">
+      {registrationTarget && <OltCustomerRegistrationModal key={`${registrationTarget.device.id}:${registrationTarget.onu.serial_number}`} {...registrationTarget} onClose={()=>setRegistrationTarget(null)} onSaved={result=>{const device=registrationTarget.device;setRegistrationTarget(null);showNotif(result.message,'success');fetchOltHardware(device.vendor_key||'zte-c300',device.id,true,false);fetchOltTopology(device.id);}}/>}
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -2972,7 +2978,7 @@ export default function OltManagement() {
                     ? 'bg-white/20 text-white'
                     : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
                 }`}>
-                  {oltData.orphaned_onus?.length ?? 0} Perlu Pembersihan
+                  {oltData.orphaned_onus?.length ?? 0} Perlu Diperiksa
                 </span>
               </button>
             </div>
@@ -3122,12 +3128,11 @@ export default function OltManagement() {
                               >
                                 <span>Cek Power (SNMP)</span>
                               </button>
-                              <a
-                                href={`/customers?new=1&onu_sn=${encodeURIComponent(onu.serial_number || onu.mac_address)}&port=${encodeURIComponent(onu.detected_port || '')}&onu_name=${encodeURIComponent(onu.onu_name || '')}`}
+                              <button type="button" disabled={!canRegisterCustomer} onClick={()=>setRegistrationTarget({onu,device:activeOlt})}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
                               >
                                 <span>Registrasikan</span>
-                              </a>
+                              </button>
                             </td>
                           </tr>
                         );
@@ -3151,7 +3156,7 @@ export default function OltManagement() {
                             </div>
                             <div className="text-sm font-bold text-black dark:text-white">Pilih Port PON untuk Memuat ONU</div>
                             <div className="text-xs text-black/60 dark:text-white/70 leading-relaxed">
-                              Klik salah satu port PON pada visual chassis OLT di atas untuk memuat daftar ONU secara realtime (*On-Demand Lazy Loading*).
+                              Belum ada ONU baru pada data tersimpan. Pilih port PON untuk melihat rincian atau tunggu pembaruan inventaris.
                             </div>
                           </div>
                         </td>
@@ -3243,12 +3248,11 @@ export default function OltManagement() {
                               >
                                 Cek Power
                               </button>
-                              <a
-                                href={`/customers?new=1&onu_sn=${encodeURIComponent(onu.serial_number || onu.mac_address)}&port=${encodeURIComponent(onu.detected_port || '')}&onu_name=${encodeURIComponent(onu.onu_name || '')}`}
+                              <button type="button" disabled={!canRegisterCustomer} onClick={()=>setRegistrationTarget({onu,device:activeOlt})}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
                               >
                                 Registrasikan
-                              </a>
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -3275,7 +3279,7 @@ export default function OltManagement() {
               {/* Table 1 Pagination Bar */}
               <div className="p-4 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <span className="text-black/70 dark:text-white/80 font-medium">
-                  Menampilkan data <span className="font-bold text-black dark:text-white">{(unregisteredPage - 1) * unregisteredPerPage + 1}</span> - <span className="font-bold text-black dark:text-white">{Math.min(unregisteredPage * unregisteredPerPage, filteredUnregisteredOnus.length)}</span> dari total <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredUnregisteredOnus.length}</span> modem fisik
+                  Menampilkan data <span className="font-bold text-black dark:text-white">{filteredUnregisteredOnus.length ? (unregisteredPage - 1) * unregisteredPerPage + 1 : 0}</span> - <span className="font-bold text-black dark:text-white">{Math.min(unregisteredPage * unregisteredPerPage, filteredUnregisteredOnus.length)}</span> dari total <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredUnregisteredOnus.length}</span> modem fisik
                 </span>
                 <div className="flex items-center gap-2">
                   <button
@@ -3647,14 +3651,14 @@ export default function OltManagement() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-bold text-rose-950 dark:text-rose-200 text-lg">
-                        Data Pelanggan / ONU Terputus (Tidak Ditemukan di OLT)
+                        Pemeriksaan Ketidaksesuaian Data Pelanggan / ONU
                       </h3>
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-600 text-white shadow-2xs">
-                        {oltData.orphaned_onus?.length ?? 0} Perlu Pembersihan
+                        {oltData.orphaned_onus?.length ?? 0} Perlu Diperiksa
                       </span>
                     </div>
                     <p className="text-xs text-rose-700/80 dark:text-rose-300/70 mt-0.5">
-                      Daftar modem yang terdaftar di database UNMS namun <strong>sudah tidak ada di OLT fisik</strong> (misal pelanggan berhenti berlangganan). Hapus data ini untuk membebaskan port ODP dan mencegah penumpukan data.
+                      Periksa SN ganda, identitas tidak valid, serta registrasi yang belum cocok dengan inventaris OLT. N/A bukan bukti data pelanggan tidak valid. {oltData.reconciliation?.message}
                     </p>
                   </div>
 
@@ -3672,11 +3676,11 @@ export default function OltManagement() {
 
                     {isSuperAdmin && filteredOrphanedOnus.length > 0 && (
                       <button
-                        onClick={() => handleBulkDeleteOrphaned(filteredOrphanedOnus.map(o => o.id))}
-                        disabled={isDeletingOrphaned}
+                        onClick={() => handleBulkDeleteOrphaned(filteredOrphanedOnus.filter(o=>o.can_delete).map(o => o.id))}
+                        disabled={isDeletingOrphaned||!filteredOrphanedOnus.some(o=>o.can_delete)}
                         className="px-3.5 py-2 rounded-lg bg-black dark:bg-white hover:bg-black/80 dark:hover:bg-black/5 text-white dark:text-black font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                       >
-                        <span>Bersihkan Semua ({filteredOrphanedOnus.length})</span>
+                        <span>Bersihkan yang Terverifikasi ({filteredOrphanedOnus.filter(o=>o.can_delete).length})</span>
                       </button>
                     )}
                   </div>
@@ -3700,15 +3704,15 @@ export default function OltManagement() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
-                        if (selectedOrphanedIds.length === paginatedOrphanedOnus.length) {
+                        if (paginatedOrphanedOnus.some(o=>o.can_delete)&&paginatedOrphanedOnus.filter(o=>o.can_delete).every(o=>selectedOrphanedIds.includes(o.id))) {
                           setSelectedOrphanedIds([]);
                         } else {
-                          setSelectedOrphanedIds(paginatedOrphanedOnus.map(o => o.id));
+                          setSelectedOrphanedIds(paginatedOrphanedOnus.filter(o=>o.can_delete).map(o => o.id));
                         }
                       }}
                       className="px-3 py-1.5 rounded-lg border border-rose-300 dark:border-rose-800 text-xs font-bold text-rose-800 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950 transition-colors"
                     >
-                      {selectedOrphanedIds.length === paginatedOrphanedOnus.length && paginatedOrphanedOnus.length > 0 ? 'Batalkan Pilihan' : 'Pilih Semua di Halaman Ini'}
+                      {paginatedOrphanedOnus.some(o=>o.can_delete)&&paginatedOrphanedOnus.filter(o=>o.can_delete).every(o=>selectedOrphanedIds.includes(o.id)) && paginatedOrphanedOnus.length > 0 ? 'Batalkan Pilihan' : 'Pilih Semua di Halaman Ini'}
                     </button>
                   </div>
                 </div>
@@ -3722,13 +3726,13 @@ export default function OltManagement() {
                       <th className="px-5 py-3.5 w-10">
                         <input
                           type="checkbox"
-                          checked={paginatedOrphanedOnus.length > 0 && paginatedOrphanedOnus.every(o => selectedOrphanedIds.includes(o.id))}
+                          disabled={!paginatedOrphanedOnus.some(o=>o.can_delete)} checked={paginatedOrphanedOnus.some(o=>o.can_delete) && paginatedOrphanedOnus.filter(o=>o.can_delete).every(o => selectedOrphanedIds.includes(o.id))}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              const pageIds = paginatedOrphanedOnus.map(o => o.id);
+                              const pageIds = paginatedOrphanedOnus.filter(o=>o.can_delete).map(o => o.id);
                               setSelectedOrphanedIds(prev => Array.from(new Set([...prev, ...pageIds])));
                             } else {
-                              const pageIds = paginatedOrphanedOnus.map(o => o.id);
+                              const pageIds = paginatedOrphanedOnus.filter(o=>o.can_delete).map(o => o.id);
                               setSelectedOrphanedIds(prev => prev.filter(id => !pageIds.includes(id)));
                             }
                           }}
@@ -3754,7 +3758,7 @@ export default function OltManagement() {
                             <td className="px-5 py-3.5">
                               <input
                                 type="checkbox"
-                                checked={isChecked}
+                                disabled={!onu.can_delete} checked={isChecked}
                                 onChange={() => {
                                   setSelectedOrphanedIds(prev =>
                                     prev.includes(onu.id) ? prev.filter(id => id !== onu.id) : [...prev, onu.id]
@@ -3790,7 +3794,7 @@ export default function OltManagement() {
                             </td>
                             <td className="px-5 py-3.5">
                               <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-                                Tidak Ditemukan di OLT (Terputus)
+                                {onu.orphan_reason}
                               </span>
                             </td>
                             <td className="px-5 py-3.5 text-xs text-black/70 dark:text-white/70">
@@ -3805,7 +3809,7 @@ export default function OltManagement() {
                                   Pelanggan
                                 </a>
                               )}
-                              {isSuperAdmin && (
+                              {isSuperAdmin && onu.can_delete && (
                                 <button
                                   onClick={() => handleDeleteOrphaned(onu)}
                                   className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors shadow-2xs cursor-pointer"
@@ -3821,7 +3825,7 @@ export default function OltManagement() {
                     ) : (
                       <tr>
                         <td colSpan={8} className="px-6 py-8 text-center text-emerald-600 dark:text-emerald-400 text-sm font-semibold">
-                          Bersih! Seluruh data ONU di database UNMS sinkron dengan perangkat OLT.
+                          Tidak ada ketidaksesuaian yang terdeteksi pada data tersimpan saat ini. Perhatikan kelengkapan inventaris OLT.
                         </td>
                       </tr>
                     )}
@@ -3843,7 +3847,7 @@ export default function OltManagement() {
                             <label className="flex items-center gap-2 cursor-pointer">
                               <input
                                 type="checkbox"
-                                checked={isChecked}
+                                disabled={!onu.can_delete} checked={isChecked}
                                 onChange={() => {
                                   setSelectedOrphanedIds(prev =>
                                     prev.includes(onu.id) ? prev.filter(id => id !== onu.id) : [...prev, onu.id]
@@ -3885,7 +3889,7 @@ export default function OltManagement() {
                             <span className="text-black/60 dark:text-white/70 font-semibold">Indikasi</span>
                             <span className="col-span-2">
                               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-                                Tidak di OLT (Terputus)
+                                {onu.orphan_reason}
                               </span>
                             </span>
                           </div>
@@ -3902,7 +3906,7 @@ export default function OltManagement() {
                                   Pelanggan
                                 </a>
                               )}
-                              {isSuperAdmin && (
+                              {isSuperAdmin && onu.can_delete && (
                                 <button
                                   onClick={() => handleDeleteOrphaned(onu)}
                                   className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer"
@@ -3918,7 +3922,7 @@ export default function OltManagement() {
                   })
                 ) : (
                   <div className="p-6 text-center text-emerald-600 text-xs font-bold">
-                    Bersih! Seluruh data ONU di database UNMS sinkron dengan perangkat OLT.
+                    Tidak ada ketidaksesuaian yang terdeteksi pada data tersimpan saat ini. Perhatikan kelengkapan inventaris OLT.
                   </div>
                 )}
               </div>
@@ -3926,7 +3930,7 @@ export default function OltManagement() {
               {/* Table 3 Pagination Bar */}
               <div className="p-4 bg-rose-50/50 dark:bg-rose-950/30 border-t border-rose-200 dark:border-rose-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <span className="text-black/70 dark:text-white/80 font-medium">
-                  Menampilkan data <span className="font-bold text-black dark:text-white">{(orphanedPage - 1) * orphanedPerPage + 1}</span> - <span className="font-bold text-black dark:text-white">{Math.min(orphanedPage * orphanedPerPage, filteredOrphanedOnus.length)}</span> dari total <span className="font-bold text-rose-600 dark:text-rose-400">{filteredOrphanedOnus.length}</span> data terputus
+                  Menampilkan data <span className="font-bold text-black dark:text-white">{filteredOrphanedOnus.length ? (orphanedPage - 1) * orphanedPerPage + 1 : 0}</span> - <span className="font-bold text-black dark:text-white">{Math.min(orphanedPage * orphanedPerPage, filteredOrphanedOnus.length)}</span> dari total <span className="font-bold text-rose-600 dark:text-rose-400">{filteredOrphanedOnus.length}</span> data terputus
                 </span>
                 <div className="flex items-center gap-2">
                   <button

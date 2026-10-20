@@ -317,6 +317,8 @@ export default function SobokScraperModal({
 
   // Data & Stats
   const [records, setRecords] = useState([]);
+  const [sourceMeta,setSourceMeta]=useState(null);
+  const [batchResult,setBatchResult]=useState(null);
   const [stats, setStats] = useState({
     total_records: 0,
     valid_cmn_count: 0,
@@ -387,6 +389,7 @@ export default function SobokScraperModal({
       if (json.status === 'success') {
         setRecords(json.data || []);
         setStats(json.stats || {});
+        setSourceMeta(json.source_meta||null);setBatchResult(null);
         setHasScraped(true);
         setSelectedIds(new Set());
         setRowOverrides({});
@@ -440,6 +443,8 @@ export default function SobokScraperModal({
       let matchUnms = true;
       if (filterUnmsStatus === 'new') matchUnms = !item.already_exists && item.import_status !== 'imported';
       else if (filterUnmsStatus === 'exists') matchUnms = item.already_exists || item.import_status === 'imported';
+      else if(filterUnmsStatus==='repair')matchUnms=item.can_repair&&item.import_status!=='imported';
+      else if(filterUnmsStatus==='review')matchUnms=(item.repair_conflicts||[]).length>0||item.odp_match_status==='unmatched';
 
       return matchSearch && matchOlt && matchOltValidation && matchOdp && matchId && matchUnms;
     });
@@ -464,7 +469,7 @@ export default function SobokScraperModal({
   };
 
   // Single record import execution
-  const handleImportSingle = async (row) => {
+  const handleImportSingle = async (row,repair=false) => {
     const overrides = rowOverrides[row.id] || {};
     const finalCustNumber = overrides.customer_number !== undefined
       ? overrides.customer_number
@@ -488,9 +493,9 @@ export default function SobokScraperModal({
         address: overrides.address || row.address,
         odp_id: finalOdpId,
         onu_serial: row.onu_serial,
-        rx_power: row.rx_power,
         phone: row.phone || '-',
         interface: row.interface || null,
+        ...(repair?{mode:'fill_missing',expected_version:row.repair_version}:{}),
       };
 
       const res = await fetch('/api/customers/sobok/import-single', {
@@ -500,7 +505,7 @@ export default function SobokScraperModal({
       });
 
       const json = await res.json();
-      if (json.status === 'success') {
+      if (res.ok && json.status === 'success') {
         // Mark row as imported in-place
         setRecords(prev => prev.map(r => {
           if (r.id === row.id) {
@@ -508,6 +513,7 @@ export default function SobokScraperModal({
               ...r,
               already_exists: true,
               import_status: 'imported',
+              can_repair:false,repair_changes:[],
               exists_by: 'Baru Saja Diimpor',
             };
           }
@@ -524,11 +530,14 @@ export default function SobokScraperModal({
         if (onCustomerImported) {
           onCustomerImported(json.data);
         }
+        return true;
       } else {
-        setRowErrors(prev => ({ ...prev, [row.id]: json.message || 'Gagal menambahkan data' }));
+        setRowErrors(prev => ({ ...prev, [row.id]: Object.values(json.errors||{}).flat().join(' ')||json.message || 'Gagal menambahkan data' }));
+        return false;
       }
     } catch (err) {
       setRowErrors(prev => ({ ...prev, [row.id]: err.message || 'Koneksi error' }));
+      return false;
     } finally {
       setSubmittingRowId(null);
     }
@@ -543,10 +552,10 @@ export default function SobokScraperModal({
     let successCount = 0;
 
     for (const row of selectedRows) {
-      await handleImportSingle(row);
-      successCount++;
+      if(await handleImportSingle(row))successCount++;
     }
 
+    setBatchResult({success:successCount,failed:selectedRows.length-successCount});
     setIsBatchImporting(false);
   };
 
@@ -607,7 +616,7 @@ export default function SobokScraperModal({
             <button
               type="button"
               onClick={handleScrape}
-              disabled={isScraping}
+              disabled={isScraping||isBatchImporting||submittingRowId!==null}
               className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
             >
               {isScraping ? (
@@ -624,7 +633,7 @@ export default function SobokScraperModal({
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={onClose} disabled={isBatchImporting||submittingRowId!==null}
               className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -666,7 +675,7 @@ export default function SobokScraperModal({
             <div className="text-xl font-black font-mono text-teal-600 dark:text-teal-400 mt-0.5">
               {stats.registered_in_olt_count?.toLocaleString() || 0}
             </div>
-            <span className="text-[10px] text-teal-500">SN Ada di OLT ({stats.not_in_olt_count || 0} tidak ada)</span>
+            <span className="text-[10px] text-teal-500">SN Ada di OLT ({stats.not_in_olt_count || 0} belum terverifikasi)</span>
           </div>
 
           <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
@@ -749,7 +758,7 @@ export default function SobokScraperModal({
                 >
                   <option value="all">Semua SN ({records.length.toLocaleString()})</option>
                   <option value="in_olt">🟢 Terdaftar di OLT ({stats.registered_in_olt_count || 0})</option>
-                  <option value="not_in_olt">⚪ Tidak di OLT ({stats.not_in_olt_count || 0})</option>
+                  <option value="not_in_olt">⚪ Belum terverifikasi di OLT ({stats.not_in_olt_count || 0})</option>
                 </select>
               </div>
 
@@ -791,7 +800,7 @@ export default function SobokScraperModal({
                 >
                   <option value="all">Semua Status</option>
                   <option value="new">Belum Ada (Baru)</option>
-                  <option value="exists">Sudah Terdaftar</option>
+                  <option value="repair">Data kosong dapat dilengkapi ({records.filter(r=>r.can_repair).length})</option><option value="review">Perlu pemeriksaan manual</option><option value="exists">Sudah Terdaftar</option>
                 </select>
               </div>
             </div>
@@ -836,7 +845,7 @@ export default function SobokScraperModal({
                 <button
                   type="button"
                   onClick={handleBatchImport}
-                  disabled={isBatchImporting}
+                  disabled={isBatchImporting||submittingRowId!==null}
                   className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   {isBatchImporting ? (
@@ -891,7 +900,7 @@ export default function SobokScraperModal({
                   <th className="p-3 font-bold text-slate-700 dark:text-slate-300">Titik ODP</th>
                   <th className="p-3 font-bold text-slate-700 dark:text-slate-300">Alamat / Daerah</th>
                   <th className="p-3 font-bold text-slate-700 dark:text-slate-300">Serial Number (SN) &amp; Interface</th>
-                  <th className="p-3 font-bold text-slate-700 dark:text-slate-300">Redaman</th>
+                  <th className="p-3 font-bold text-slate-700 dark:text-slate-300">Redaman Tersimpan OLT</th>
                   <th className="p-3 font-bold text-slate-700 dark:text-slate-300 text-center w-48">Aksi Verifikasi</th>
                 </tr>
               </thead>
@@ -958,6 +967,8 @@ export default function SobokScraperModal({
                         <div className="font-bold text-slate-900 dark:text-white">
                           {row.name || '—'}
                         </div>
+                        {(row.repair_conflicts||[]).map((reason,i)=><p key={i} className="text-xs text-amber-700 dark:text-amber-300">{reason}</p>)}
+                        {row.odp_match_status==='unmatched'&&<p className="text-xs text-amber-700 dark:text-amber-300">ODP belum cocok secara pasti; pilih manual sebelum menghubungkan.</p>}
                         {rowErr && (
                           <div className="text-[10px] text-rose-500 font-semibold mt-0.5">
                             ⚠️ {rowErr}
@@ -967,7 +978,7 @@ export default function SobokScraperModal({
 
                       {/* ODP */}
                       <td className="p-3 min-w-[220px] max-w-[280px]">
-                        {isAlreadyExists ? (
+                        {isAlreadyExists && !row.allow_odp_assignment ? (
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5">
                               <span className="px-2 py-0.5 rounded-md font-mono font-bold text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
@@ -1105,7 +1116,7 @@ export default function SobokScraperModal({
                           ) : (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-medium bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                              <span>Tdk Ada di OLT</span>
+                              <span>Belum Terverifikasi</span>
                             </span>
                           )}
                           {row.is_duplicate_sn && (
@@ -1138,18 +1149,18 @@ export default function SobokScraperModal({
 
                       {/* Redaman */}
                       <td className="p-3">
-                        {row.redaman ? (
+                        {row.olt_details?.rx_power != null ? (
                           <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            {row.redaman}
+                            {Number(row.olt_details.rx_power).toFixed(2)} dBm
                           </span>
                         ) : (
-                          <span className="text-slate-400 font-mono">—</span>
+                          <span className="text-slate-400 font-mono">N/A</span>
                         )}
                       </td>
 
                       {/* Per-Row Action Button */}
                       <td className="p-3 text-center">
-                        {isAlreadyExists ? (
+                        {isAlreadyExists && (row.can_repair||(row.allow_odp_assignment&&selectedOdpId&&selectedOdpId!=='none')) && row.import_status!=='imported' ? <div className="space-y-2"><p className="text-xs text-amber-700 dark:text-amber-300">Isi yang kosong: {[...(row.repair_changes||[]),...(row.allow_odp_assignment&&selectedOdpId&&selectedOdpId!=='none'&&!row.repair_changes?.includes('hubungan port ODP')?['hubungan port ODP']:[])].join(', ')}.</p><button type="button" disabled={submittingRowId!==null||isBatchImporting} onClick={()=>handleImportSingle(row,true)} className="px-3 py-2 rounded bg-blue-600 text-white disabled:opacity-50">Lengkapi Data Kosong</button></div> : isAlreadyExists ? (
                           <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold text-[11px]">
                             <span>✓</span>
                             <span>Sudah di Sistem</span>
@@ -1157,8 +1168,8 @@ export default function SobokScraperModal({
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleImportSingle(row)}
-                            disabled={isRowSubmitting}
+                            onClick={() => handleImportSingle(row,false)}
+                            disabled={submittingRowId!==null||isBatchImporting}
                             className="w-full py-1.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                           >
                             {isRowSubmitting ? (
@@ -1183,6 +1194,7 @@ export default function SobokScraperModal({
           )}
         </div>
 
+        {(sourceMeta||batchResult)&&<div role="status" className="px-4 py-2 border-t text-xs text-slate-700 dark:text-slate-300">{sourceMeta&&<p>Sumber: {sourceMeta.source_data_rows} baris · terbaca {sourceMeta.parsed_records} · duplikat identik {sourceMeta.identical_duplicates} · gagal diparse {sourceMeta.rejected_rows}. Penarikan hanya membuat pratinjau; penyimpanan dilakukan melalui Tambahkan atau Lengkapi.</p>}{batchResult&&<p>Hasil pilihan: {batchResult.success} berhasil, {batchResult.failed} gagal. Baris gagal tetap tersedia untuk diperiksa.</p>}<p>Lengkapi Data Kosong hanya mengisi bagian yang kosong; SN, ODP, serta data yang sudah terisi tidak diganti otomatis.</p></div>}
         {/* Modal Footer / Pagination */}
         <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
           <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">

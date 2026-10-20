@@ -22,6 +22,30 @@ use Illuminate\Support\Facades\DB;
 
 class OltController extends Controller
 {
+    public function customerRegistrationOptions(Request $request)
+    {
+        $v=$request->validate(['device_id'=>'required|integer|exists:olt_devices,id']);
+        $ids=\App\Services\Olt\OnuTelemetryWriter::ownerNodeIds((int)$v['device_id']);
+        $nodes=NetworkNode::whereIn('id',$ids)->where('node_type','ODP')->with(['ports'=>fn($q)=>$q->where('status','available')->whereNull('customer_service_id')->whereNull('connected_to_port_id')->where(fn($q)=>$q->whereNull('destination_label')->orWhere('destination_label',''))->where(fn($q)=>$q->whereNull('customer_name_cache')->orWhere('customer_name_cache',''))])->get();
+        return response()->json(['data'=>$nodes->map(fn($n)=>['id'=>$n->id,'name'=>$n->name,'ports'=>$n->ports->map(fn($p)=>['id'=>$p->id,'number'=>$p->port_number])->values()])->values()]);
+    }
+
+    public function registerCustomer(Request $request)
+    {
+        $v=$request->validate(['device_id'=>'required|integer|exists:olt_devices,id','onu_serial'=>'required|string|max:100','interface'=>'required|string|max:100','onu_id'=>'nullable|string|max:20','name'=>'required|string|max:255','customer_number'=>'required|string|max:50','phone'=>'nullable|string|max:50','address'=>'nullable|string|max:2000','odp_id'=>'required|integer|exists:network_nodes,id','odp_port_id'=>'required|integer|exists:network_ports,id']);
+        $device=OltDevice::findOrFail($v['device_id']);$sn=strtoupper(trim($v['onu_serial']));
+        $rows=ZteOnuIdentityMap::snapshotRows($device->last_telemetry_snapshot??[]);
+        $matches=array_filter($rows,fn($row)=>strtoupper(trim($row['serial_number']??''))===$sn && ZteOnuIdentityMap::ifIndexFromPort($row['port']??$row['detected_port']??'')===ZteOnuIdentityMap::ifIndexFromPort($v['interface']));
+        $row=collect($matches)->sortByDesc('identity_observed_at')->first();
+        $age=$row? \App\Services\Olt\OltHealthMonitor::age($row['identity_observed_at']??$row['detected_at']??null):null;
+        abort_unless($row && $age!==null && $age<=600 && ($v['onu_id']??'')===(string)($row['onu_id']??$row['onu_index']??''),409,'Identitas ONU berubah atau belum terverifikasi. Muat ulang data tersimpan dan pilih ONU kembali.');
+        abort_unless(ZteOnuIdentityMap::ifIndexFromPort($v['interface'])!==null,422,'Interface ONU tidak valid.');
+        $existing=OntRegistration::whereRaw('UPPER(TRIM(onu_serial)) = ?',[$sn])->whereHas('customerService.customer')->exists();
+        abort_if($existing,409,'SN sudah terhubung ke pelanggan. Gunakan pratinjau Tarik Data Pelanggan untuk memeriksa layanan yang ada.');
+        $result=app(\App\Services\CustomerIntakeService::class)->save($v);
+        return response()->json(['status'=>'success','message'=>'Pelanggan terdaftar di FONA. Data redaman tetap bersumber dari OLT.','data'=>$result['customer']],201);
+    }
+
     public function getDriver(string $vendor, ?int $deviceId = null)
     {
         $device = $deviceId ? OltDevice::find($deviceId) : null;
@@ -506,10 +530,8 @@ class OltController extends Controller
         ->whereHas('customerService.customer');
 
         if ($device) {
-            $query->where(function ($q) use ($device) {
-                $q->whereHas('customerService.networkPort.node', fn($sq) => $sq->where('olt_device_id', $device->id))
-                  ->orWhereHas('oltPort.node', fn($sq) => $sq->where('olt_device_id', $device->id));
-            });
+            $nodeIds=\App\Services\Olt\OnuTelemetryWriter::ownerNodeIds((int)$device->id);
+            $query->where(fn($q)=>$q->whereHas('customerService.networkPort',fn($p)=>$p->whereIn('node_id',$nodeIds))->orWhereHas('oltPort',fn($p)=>$p->whereIn('node_id',$nodeIds)));
         }
 
         $dbOnts = $query->get();
@@ -557,7 +579,7 @@ class OltController extends Controller
                 $liveOnu = $driverOnuMap[$mac];
             }
 
-            $matchedOntIds[] = $ont->id;
+            if($liveOnu!==null)$matchedOntIds[] = $ont->id;
             $customerName = $ont->customerService?->customer?->name ?: ('Pelanggan #' . $ont->id);
             $customerCode = $ont->customerService?->customer?->customer_number ?: ('CUST-' . $ont->id);
 
@@ -659,14 +681,17 @@ class OltController extends Controller
 
         // 4. Kategori 3: Orphaned ONUs (Ada di UNMS tapi tidak ditemukan di OLT fisik)
         $orphanedOnus = [];
+        $reconciler=new \App\Services\Olt\OltRegistrationReconciler($device,$identityGroups,$dbOnts);
         foreach ($dbOnts as $ont) {
-            if (!in_array($ont->id, $matchedOntIds)) {
+            $sn=strtoupper(trim((string)$ont->onu_serial));
+            $issue=$reconciler->issue($ont,in_array($ont->id,$matchedOntIds));
+            if ($issue!==null) {
                 $customerName = $ont->customerService?->customer?->name ?: ('Pelanggan #' . $ont->id);
                 $customerCode = $ont->customerService?->customer?->customer_number ?: ('CUST-' . $ont->id);
                 $node         = $ont->customerService?->networkPort?->node ?: $ont->oltPort?->node;
                 $portNumber   = $ont->customerService?->networkPort?->port_number;
                 $oltName      = $device?->name ?: ($node?->oltDevice?->name ?: 'OLT Utama');
-                $oltPortRef   = $node?->olt_port_ref ?: 'epon_0/1';
+                $oltPortRef   = $node?->olt_port_ref ?: null;
 
                 $orphanedOnus[] = [
                     'id'                  => $ont->id,
@@ -684,7 +709,7 @@ class OltController extends Controller
                     'registered_at'       => $ont->registered_at?->format('d M Y H:i') ?: ($ont->created_at?->format('d M Y H:i') ?: '—'),
                     'last_online_at'      => $ont->last_online_at?->format('d M Y H:i') ?: 'Tidak Pernah Online',
                     'unms_status'         => $ont->status ?: 'inactive',
-                    'orphan_reason'       => 'Tidak Ditemukan di OLT (Telah Dihapus dari Perangkat OLT / Putus Berlangganan)',
+                    ...$issue,
                 ];
             }
         }
@@ -736,6 +761,7 @@ class OltController extends Controller
             'onu_list'          => $registeredOnus,
             'unconfigured_onus' => $unregisteredOnus,
             'orphaned_onus'     => $orphanedOnus,
+            'reconciliation'=>$reconciler->coverage(),
             'polled_at'         => now()->toIso8601String(),
         ];
     }
@@ -971,77 +997,7 @@ class OltController extends Controller
      */
     public function computeOrphanedOnus(?OltDevice $device, array $activeOnuList = [], array $activeUncfg = []): array
     {
-        // Kumpulkan semua serial number & MAC yang AKTIF atau terdeteksi di OLT
-        $activeSerials = collect($activeOnuList)
-            ->pluck('serial_number')
-            ->merge(collect($activeUncfg)->pluck('serial_number'))
-            ->merge(collect($activeUncfg)->pluck('mac_address'))
-            ->filter()
-            ->map(fn($s) => strtoupper(trim((string)$s)))
-            ->unique()
-            ->values();
-
-        // Ambil data registrasi ONT di database UNMS
-        $query = OntRegistration::with([
-            'customerService.customer',
-            'customerService.networkPort.node',
-            'oltPort.node'
-        ]);
-
-        if ($device) {
-            $query->whereHas('customerService.networkPort.node', function ($q) use ($device) {
-                $q->where('olt_device_id', $device->id);
-            });
-        }
-
-        $dbOnts = $query->get();
-        $orphaned = [];
-
-        foreach ($dbOnts as $reg) {
-            $sn  = strtoupper(trim((string)$reg->onu_serial));
-            $mac = strtoupper(trim((string)$reg->onu_mac));
-
-            // Jika SN atau MAC tidak ditemukan di OLT fisik sama sekali
-            $isFoundOnOlt = false;
-            if (!empty($sn) && $activeSerials->contains($sn)) {
-                $isFoundOnOlt = true;
-            }
-            if (!empty($mac) && $activeSerials->contains($mac)) {
-                $isFoundOnOlt = true;
-            }
-
-            if (!$isFoundOnOlt) {
-                $customerName = $reg->customerService?->customer?->name ?: ('Pelanggan #' . $reg->id);
-                $customerCode = $reg->customerService?->customer?->customer_number ?: ('CUST-' . $reg->id);
-                $customerId   = $reg->customerService?->customer?->id;
-                $serviceId    = $reg->customerService?->id;
-                $node         = $reg->customerService?->networkPort?->node ?: $reg->oltPort?->node;
-                $portNumber   = $reg->customerService?->networkPort?->port_number;
-                $oltName      = $device?->name ?: ($node?->oltDevice?->name ?: 'OLT Utama');
-                $oltPortRef   = $node?->olt_port_ref ?: 'epon_0/1';
-
-                $orphaned[] = [
-                    'id'                  => $reg->id,
-                    'customer_id'         => $customerId,
-                    'customer_name'       => $customerName,
-                    'customer_number'     => $customerCode,
-                    'service_id'          => $serviceId,
-                    'onu_serial'          => $reg->onu_serial,
-                    'onu_mac'             => $reg->onu_mac,
-                    'onu_type'            => $reg->onu_type ?: 'HGU EPON/GPON',
-                    'odp_name'            => $node?->name ?: 'ODP Tidak Diketahui',
-                    'odp_port'            => $portNumber ? "Port {$portNumber}" : '—',
-                    'olt_name'            => $oltName,
-                    'olt_port'            => $oltPortRef,
-                    'registered_at'       => $reg->registered_at?->format('d M Y H:i') ?: ($reg->created_at?->format('d M Y H:i') ?: '—'),
-                    'last_online_at'      => $reg->last_online_at?->format('d M Y H:i') ?: 'Tidak Pernah Online',
-                    'unms_status'         => $reg->status ?: 'inactive',
-                    'orphan_reason'       => 'Tidak Ditemukan di OLT (Telah Dihapus dari Perangkat OLT / Putus Berlangganan)',
-                ];
-            }
-        }
-
-        return $orphaned;
+        return $this->processAndPartitionTelemetry($device,[],[],$activeOnuList,$activeUncfg)['orphaned_onus'];
     }
 
     public function getOrphanedOnus(Request $request)
@@ -1059,8 +1015,19 @@ class OltController extends Controller
         ]);
     }
 
+    private function requireVerifiedMissing(Request $request,array $ids): void
+    {
+        abort_unless(auth()->user()?->role==='Super Administrator',403);
+        $v=$request->validate(['device_id'=>'required|integer|exists:olt_devices,id']);
+        $device=OltDevice::findOrFail($v['device_id']);$snap=$device->last_telemetry_snapshot??[];
+        $rows=$this->computeOrphanedOnus($device,array_merge($snap['onu_list']??[],$snap['_identity_candidates']??[]),$snap['unconfigured_onus']??[]);
+        $eligible=collect($rows)->where('can_delete',true)->pluck('id')->all();
+        abort_unless(array_diff($ids,$eligible)===[],409,'Pembersihan ditolak: data belum terbukti tidak ada dalam inventaris OLT terbaru. Periksa ulang; N/A atau SN ganda bukan alasan penghapusan.');
+    }
+
     public function deleteOrphanedOnu(Request $request, $id)
     {
+        $this->requireVerifiedMissing($request,[(int)$id]);
         $reg = OntRegistration::with(['customerService.networkPort', 'customerService.customer'])->findOrFail($id);
         $sn = $reg->onu_serial ?: $reg->onu_mac;
         $custName = $reg->customerService?->customer?->name ?: "Pelanggan #{$reg->id}";
@@ -1071,6 +1038,7 @@ class OltController extends Controller
                 $reg->customerService->networkPort->update([
                     'status' => 'available',
                     'customer_service_id' => null,
+                        'customer_name_cache'=>null,
                 ]);
             }
 
@@ -1095,6 +1063,7 @@ class OltController extends Controller
             );
         });
 
+        \App\Services\Olt\OnuTelemetryWriter::invalidate();
         return response()->json([
             'success' => true,
             'message' => "Data ONU {$sn} milik {$custName} berhasil dibersihkan dari sistem UNMS dan port ODP telah dibebaskan.",
@@ -1109,6 +1078,7 @@ class OltController extends Controller
         ]);
 
         $ids = $request->input('ids', []);
+        $this->requireVerifiedMissing($request,array_map('intval',$ids));
         if (empty($ids)) {
             return response()->json(['success' => false, 'message' => 'Tidak ada data yang dipilih.'], 400);
         }
@@ -1126,6 +1096,7 @@ class OltController extends Controller
                     $reg->customerService->networkPort->update([
                         'status' => 'available',
                         'customer_service_id' => null,
+                        'customer_name_cache'=>null,
                     ]);
                 }
 
@@ -1148,6 +1119,7 @@ class OltController extends Controller
             );
         });
 
+        \App\Services\Olt\OnuTelemetryWriter::invalidate();
         return response()->json([
             'success' => true,
             'deleted_count' => $deletedCount,

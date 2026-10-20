@@ -23,6 +23,7 @@ class SobokScraperService
     ];
 
     protected ?string $lastUsedDomain = null;
+    protected array $parseMeta = [];
 
     /**
      * Dapatkan domain aktif yang terakhir berhasil digunakan
@@ -59,6 +60,7 @@ class SobokScraperService
                 // 4. Enrich & Match with Fiber-UNMS Database
                 $enriched = $this->enrichAndMatchRecords($parsedRecords);
                 $enriched['domain_used'] = $domain;
+                $enriched['source_meta']=$this->parseMeta;
 
                 return $enriched;
             } finally {
@@ -389,61 +391,28 @@ class SobokScraperService
      */
     protected function parseHtml(string $html): array
     {
-        $records = [];
-        $dom = new DOMDocument();
-        libxml_use_internal_errors(true);
-        $dom->loadHTML($html);
-        libxml_clear_errors();
-
-        $xpath = new DOMXPath($dom);
-        $rows = $xpath->query('//table//tr');
-
-        if (!$rows || $rows->length === 0) {
-            return [];
+        $records=[];$dom=new DOMDocument();$previous=libxml_use_internal_errors(true);
+        try{$dom->loadHTML('<?xml encoding="UTF-8">'.$html);libxml_clear_errors();}finally{libxml_use_internal_errors($previous);}
+        $x=new DOMXPath($dom);$table=null;$columns=[];
+        $aliases=['idpelanggan'=>'raw_id','namapelanggan'=>'name','odp'=>'raw_odp','daerah'=>'address','alamat'=>'address','olt'=>'olt','serialnumber'=>'onu_serial','sn'=>'onu_serial','interface'=>'interface','portonu'=>'port_onu','vlanid'=>'vlan_id','redaman'=>'redaman'];
+        foreach($x->query('//table') as $candidate){
+            $headers=$x->query('./thead/tr/th|./tr/th|./tbody/tr/th',$candidate);$map=[];
+            foreach($headers as $i=>$h){$key=strtolower(preg_replace('/[^a-zA-Z0-9]/','',$h->textContent));if(isset($aliases[$key]))$map[$aliases[$key]]=$i;}
+            if(isset($map['raw_id'],$map['name'],$map['onu_serial'])){$table=$candidate;$columns=$map;break;}
         }
-
-        foreach ($rows as $tr) {
-            $tds = $xpath->query('.//td', $tr);
-            if ($tds->length < 8) {
-                continue;
-            }
-
-            $rawId       = trim($tds->item(0)->textContent ?? '');
-            $name        = trim($tds->item(1)->textContent ?? '');
-            $odp         = trim($tds->item(2)->textContent ?? '');
-            $address     = trim($tds->item(3)->textContent ?? '');
-            $olt         = trim($tds->item(4)->textContent ?? '');
-            $sn          = trim($tds->item(5)->textContent ?? '');
-            $interface   = trim($tds->item(6)->textContent ?? '');
-            $portOnu     = trim($tds->item(7)->textContent ?? '');
-            $vlanId      = $tds->length > 8 ? trim($tds->item(8)->textContent ?? '') : '';
-            $redaman     = $tds->length > 9 ? trim($tds->item(9)->textContent ?? '') : '';
-
-            // Clean redaman value e.g. "-19.50 dBm" -> -19.50
-            $rxPower = null;
-            if (preg_match('/-?\d+(\.\d+)?/', $redaman, $rm)) {
-                $rxPower = (float) $rm[0];
-            }
-
-            if (empty($name) && empty($sn) && empty($rawId)) {
-                continue;
-            }
-
-            $records[] = [
-                'raw_id'      => $rawId,
-                'name'        => $name,
-                'raw_odp'     => $odp,
-                'address'     => $address,
-                'olt'         => $olt,
-                'onu_serial'  => $sn,
-                'interface'   => $interface,
-                'port_onu'    => $portOnu,
-                'vlan_id'     => $vlanId,
-                'redaman'     => $redaman,
-                'rx_power'    => $rxPower,
-            ];
+        if(!$table)throw new \RuntimeException('Tabel pelanggan sumber tidak dikenali. Tidak ada data yang diimpor; periksa perubahan format atau sesi login sumber.');
+        $rejected=0;$seen=[];$duplicates=0;
+        foreach($x->query('./tbody/tr|./tr',$table) as $tr){
+            $cells=$x->query('./td',$tr);if($cells->length===0)continue;
+            if($cells->length<=max($columns)){$rejected++;continue;}
+            $row=array_fill_keys(['raw_id','name','raw_odp','address','olt','onu_serial','interface','port_onu','vlan_id','redaman'],'');
+            foreach($columns as $field=>$index)$row[$field]=trim(preg_replace('/\s+/u',' ',$cells->item($index)->textContent));
+            if($row['raw_id']===''||$row['name']===''){$rejected++;continue;}
+            $row['rx_power']=preg_match('/^\s*(-\d+(?:[.,]\d+)?)\s*(?:dBm)?\s*$/i',$row['redaman'],$m)?(float)str_replace(',','.',$m[1]):null;
+            $key=hash('sha256',json_encode($row));if(isset($seen[$key])){$duplicates++;continue;}$seen[$key]=true;$records[]=$row;
         }
-
+        $this->parseMeta=['source_data_rows'=>count($records)+$rejected+$duplicates,'parsed_records'=>count($records),'rejected_rows'=>$rejected,'identical_duplicates'=>$duplicates];
+        if(!$records)throw new \RuntimeException('Sumber tidak mengembalikan data pelanggan yang dapat dibaca.');
         return $records;
     }
 
@@ -453,10 +422,8 @@ class SobokScraperService
     protected function enrichAndMatchRecords(array $records): array
     {
         // 1. Preload UNMS customer numbers & ONU serial numbers for ultra-fast lookup
-        $existingCustomerNumbers = Customer::pluck('customer_number')
-            ->map(fn($num) => strtoupper(str_replace(' ', '', trim($num))))
-            ->flip()
-            ->all();
+        $existingCustomers=Customer::with('services.ontRegistration','services.networkPort')->get();
+        $customersByNumber=$existingCustomers->groupBy(fn($c)=>CustomerIntakeService::numberKey($c->customer_number));
 
         $existingSnCustomerMap = [];
         $servicesWithSn = CustomerService::whereNotNull('onu_serial')
@@ -474,47 +441,10 @@ class SobokScraperService
             ->select('id', 'name', 'code', 'total_ports', 'used_ports')
             ->get();
 
-        // Index ODP nodes by extracted digits and exact uppercase names
-        $odpMapByNum = [];
-        $odpMapByName = [];
-        foreach ($odpNodes as $node) {
-            $nameClean = strtoupper(str_replace([' ', '-', '_'], '', $node->name));
-            $codeClean = strtoupper(str_replace([' ', '-', '_'], '', $node->code ?? ''));
-            $odpMapByName[$nameClean] = $node;
-            if ($codeClean) {
-                $odpMapByName[$codeClean] = $node;
-            }
+        $odpMapByName=[];
+        foreach($odpNodes as $node)foreach(array_unique([CustomerIntakeService::odpKey($node->name),CustomerIntakeService::odpKey($node->code)]) as $key)if($key!=='')$odpMapByName[$key][$node->id]=$node;
 
-            if (preg_match('/(\d+)/', $node->name, $nm)) {
-                $odpMapByNum[(int)$nm[1]] = $node;
-            } elseif ($node->code && preg_match('/(\d+)/', $node->code, $nm)) {
-                $odpMapByNum[(int)$nm[1]] = $node;
-            }
-        }
-
-        // 3. Preload all live ONUs detected across OLT devices (from telemetry snapshots)
-        $oltOnuMap = [];
-        $oltDevices = \App\Models\OltDevice::whereNotNull('last_telemetry_snapshot')->get();
-        foreach ($oltDevices as $dev) {
-            $snap = $dev->last_telemetry_snapshot ?? [];
-            $onus = array_merge($snap['onu_list'] ?? [], $snap['unconfigured_onus'] ?? []);
-            foreach ($onus as $so) {
-                $snKey = strtoupper(trim($so['serial_number'] ?? ''));
-                if ($snKey) {
-                    $oltOnuMap[$snKey] = [
-                        'olt_id'         => $dev->id,
-                        'olt_name'       => $dev->name,
-                        'port'           => $so['port'] ?? ($so['interface'] ?? ($so['detected_port'] ?? null)),
-                        'status'         => $so['status'] ?? ($so['onu_status'] ?? 'Online'),
-                        'rx_power'       => $so['rx_power'] ?? null,
-                        'tx_power'       => $so['tx_power'] ?? null,
-                        'distance'       => $so['distance_meters'] ?? null,
-                        'vendor'         => $so['vendor'] ?? null,
-                        'model'          => $so['model'] ?? null,
-                    ];
-                }
-            }
-        }
+        $telemetry=\App\Services\Olt\OnuTelemetryView::load();
 
         $stats = [
             'total_records'             => count($records),
@@ -541,12 +471,12 @@ class SobokScraperService
 
             if (preg_match('/^CMN\s*(\d+)$/i', $cleanRawId, $m)) {
                 $num = (int)$m[1];
-                $normalizedId = sprintf('CMN%04d', $num);
+                $normalizedId = CustomerIntakeService::numberKey($cleanRawId);
                 $stats['valid_cmn_count']++;
             } elseif (preg_match('/^\d+$/', $cleanRawId)) {
                 // Pure numeric ID like "8061" or "77"
                 $num = (int)$cleanRawId;
-                $normalizedId = sprintf('CMN%04d', $num);
+                $normalizedId = CustomerIntakeService::numberKey($cleanRawId);
                 $needsNormalization = true;
                 $stats['needs_normalization_count']++;
             } else {
@@ -567,26 +497,18 @@ class SobokScraperService
 
             if ($hasOdp) {
                 $stats['has_odp_count']++;
-                $cleanOdpStr = strtoupper(str_replace([' ', '-', '_'], '', $rawOdp));
-
-                if (isset($odpMapByName[$cleanOdpStr])) {
-                    $matchedOdp = $odpMapByName[$cleanOdpStr];
-                } elseif (preg_match('/(\d+)/', $rawOdp, $odpNumMatch)) {
-                    $targetNum = (int)$odpNumMatch[1];
-                    if (isset($odpMapByNum[$targetNum])) {
-                        $matchedOdp = $odpMapByNum[$targetNum];
-                    }
-                }
+                $matches=$odpMapByName[CustomerIntakeService::odpKey($rawOdp)]??[];
+                if(count($matches)===1)$matchedOdp=reset($matches);
             } else {
                 $stats['no_odp_count']++;
             }
 
             // UNMS Check (Existing in UNMS?)
-            $lookupId1 = strtoupper(str_replace(' ', '', $normalizedId));
-            $lookupId2 = strtoupper(str_replace(' ', '', $cleanRawId));
             $lookupSn  = strtoupper(trim($row['onu_serial']));
 
-            $existsById = isset($existingCustomerNumbers[$lookupId1]) || isset($existingCustomerNumbers[$lookupId2]);
+            $customerMatches=$customersByNumber->get(CustomerIntakeService::numberKey($rawId),collect());
+            $existsById=$customerMatches->isNotEmpty();
+            $repair=$customerMatches->count()===1?CustomerIntakeService::preview($customerMatches->first(),['onu_serial'=>$row['onu_serial'],'name'=>$row['name'],'address'=>$row['address'],'odp_id'=>$matchedOdp?->id]):['can_repair'=>false,'repair_changes'=>[],'repair_conflicts'=>$customerMatches->count()>1?['ID pelanggan ganda; periksa manual.']:[]];
             $alreadyExists = $existsById;
 
             $isDuplicateSn = !$existsById && !empty($lookupSn) && isset($existingSnCustomerMap[$lookupSn]);
@@ -600,8 +522,10 @@ class SobokScraperService
 
             // OLT Validation (Is Modem SN registered on physical OLT?)
             $cleanSn = strtoupper(trim($row['onu_serial'] ?? ''));
-            $isRegisteredInOlt = !empty($cleanSn) && isset($oltOnuMap[$cleanSn]);
-            $oltDetails = $isRegisteredInOlt ? $oltOnuMap[$cleanSn] : null;
+            $isRegisteredInOlt=false;
+            $resolved=$telemetry->resolveUnmapped($cleanSn);
+            $isRegisteredInOlt=$resolved['identity_status']==='resolved';
+            $oltDetails=$isRegisteredInOlt?array_replace($resolved,['port'=>$resolved['gpon_interface'],'status'=>$resolved['onu_status']]):null;
 
             if ($isRegisteredInOlt) {
                 $stats['registered_in_olt_count']++;
@@ -610,6 +534,8 @@ class SobokScraperService
             }
 
             $enrichedRecords[] = array_merge($row, [
+                ...$repair,
+                'odp_match_status'=>$matchedOdp?'matched':($hasOdp?'unmatched':'none'),
                 'id'                     => $index + 1,
                 'normalized_id'          => $normalizedId,
                 'needs_normalization'    => $needsNormalization,
