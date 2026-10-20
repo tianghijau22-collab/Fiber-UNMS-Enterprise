@@ -127,7 +127,7 @@ class ZteOnuIdentityMap
     /** Raw duplicate evidence is separate from customer projections and the selected write ledger. */
     public static function snapshotRows(array $snapshot): array
     {
-        return array_merge($snapshot['_identity_candidates'] ?? [], $snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
+        return array_merge($snapshot['_identity_candidates'] ?? [], $snapshot['_registration_review_onus'] ?? [], $snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
     }
 
     public static function groups(array $rows): array

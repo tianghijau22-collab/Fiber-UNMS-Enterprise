@@ -206,7 +206,7 @@ class OltController extends Controller
                 $device,
                 $rawDevInfo,
                 $enrichedPorts,
-                array_merge($rawOnuList,$rawSnapshot['_identity_candidates'] ?? []),
+                ZteOnuIdentityMap::snapshotRows($rawSnapshot),
                 $rawUncfg
             );
             $snapshot['polled_at'] = $rawSnapshot['polled_at'] ?? null;
@@ -315,18 +315,7 @@ class OltController extends Controller
         // Jika tidak dipaksa fresh dan snapshot ada
         if (!$isFresh && $device && (!empty($device->last_telemetry_snapshot) || $request->boolean('stored_only'))) {
             $rawSnapshot = $device->last_telemetry_snapshot ?? [];
-            $allOnus = $rawSnapshot['onu_list'] ?? [];
             $allUncfg = $rawSnapshot['unconfigured_onus'] ?? [];
-
-            $portOnus = array_values(array_filter($allOnus, function ($o) use ($normalizedPort) {
-                $p = strtolower($o['port'] ?? ($o['detected_port'] ?? ''));
-                return $this->portsMatch($p, $normalizedPort);
-            }));
-
-            $portUncfg = array_values(array_filter($allUncfg, function ($o) use ($normalizedPort) {
-                $p = strtolower($o['detected_port'] ?? ($o['port'] ?? ''));
-                return $this->portsMatch($p, $normalizedPort);
-            }));
 
             $partitioned = $this->processAndPartitionTelemetry(
                 $device,
@@ -345,7 +334,7 @@ class OltController extends Controller
                 'status'            => 'success',
                 'port'              => $port,
                 'onu_list'          => $portFilteredOnus,
-                'unconfigured_onus' => $portUncfg,
+                'unconfigured_onus' => array_values(array_filter($partitioned['unconfigured_onus'] ?? [],fn($o)=>$this->portsMatch((string)($o['detected_port'] ?? $o['port'] ?? ''),$normalizedPort))),
                 'orphaned_onus'     => $partitioned['orphaned_onus'] ?? [],
                 'polled_at'         => $rawSnapshot['polled_at'] ?? null,
             ]);
@@ -373,7 +362,7 @@ class OltController extends Controller
             return $this->portsMatch($p, $normalizedPort);
         }));
 
-        // Tambahkan ONU fisik yang belum terikat customer namun terdeteksi di driverOnuList
+        // Preserve physical rows for the existing snapshot writer. HTTP categories are rebuilt after commit.
         $matchedSns = array_map(fn($o) => strtoupper(trim((string)($o['serial_number'] ?? ''))), $freshPortOnus);
         foreach ($driverOnuList as $dOnu) {
             $dSn = strtoupper(trim((string)($dOnu['serial_number'] ?? '')));
@@ -441,6 +430,11 @@ class OltController extends Controller
             $driverUncfg=array_values(array_filter($committed['unconfigured_onus'] ?? [],fn($o)=>$this->portsMatch((string)($o['port'] ?? $o['detected_port'] ?? ''),$normalizedPort)));
             \App\Services\Olt\OnuTelemetryWriter::invalidate();
         }
+
+        $readSnapshot=$device?->last_telemetry_snapshot ?? [];
+        $partitioned=$this->processAndPartitionTelemetry($device,[],[],array_merge(ZteOnuIdentityMap::snapshotRows($readSnapshot),$driverOnuList),$readSnapshot['unconfigured_onus'] ?? $driverUncfg);
+        $freshPortOnus=array_values(array_filter($partitioned['onu_list'],fn($o)=>$this->portsMatch((string)($o['port'] ?? ''),$normalizedPort)));
+        $driverUncfg=array_values(array_filter($partitioned['unconfigured_onus'],fn($o)=>$this->portsMatch((string)($o['detected_port'] ?? $o['port'] ?? ''),$normalizedPort)));
 
         return response()->json([
             'status'            => 'success',
@@ -519,27 +513,13 @@ class OltController extends Controller
      */
     public function processAndPartitionTelemetry(?OltDevice $device, array $driverDeviceInfo, array $driverPonPorts, array $driverOnuList, array $driverUncfg): array
     {
-        // 1. Ambil seluruh data ONT di database UNMS yang sudah terhubung ke Pelanggan
-        $query = OntRegistration::with([
-            'customerService.customer',
-            'customerService.networkPort.node',
-            'customerService.servicePackage',
-            'oltPort.node'
-        ])
-        ->whereNotNull('customer_service_id')
-        ->whereHas('customerService.customer');
-
-        if ($device) {
-            $nodeIds=\App\Services\Olt\OnuTelemetryWriter::ownerNodeIds((int)$device->id);
-            $query->where(fn($q)=>$q->whereHas('customerService.networkPort',fn($p)=>$p->whereIn('node_id',$nodeIds))->orWhereHas('oltPort',fn($p)=>$p->whereIn('node_id',$nodeIds)));
-        }
-
-        $dbOnts = $query->get();
+        $registrationIndex=new \App\Services\Olt\OltCustomerRegistrationIndex($device,array_merge($driverOnuList,$driverUncfg));
+        $dbOnts=$registrationIndex->scoped();
 
         // Buat map pencarian berdasarkan Serial Number & MAC Address
         $registeredMap = [];
         foreach ($dbOnts as $ont) {
-            $sn  = strtoupper(trim((string)$ont->onu_serial));
+            $sn  = strtoupper(trim((string)($ont->onu_serial ?: $ont->customerService?->onu_serial)));
             $mac = strtoupper(trim((string)$ont->onu_mac));
             if (!empty($sn)) $registeredMap[$sn] = $ont;
             if (!empty($mac)) $registeredMap[$mac] = $ont;
@@ -569,7 +549,7 @@ class OltController extends Controller
 
         // 2. Kategori 1: Seluruh ONU terdaftar di database UNMS (Customer)
         foreach ($dbOnts as $ont) {
-            $sn  = strtoupper(trim((string)$ont->onu_serial));
+            $sn  = strtoupper(trim((string)($ont->onu_serial ?: $ont->customerService?->onu_serial)));
             $mac = strtoupper(trim((string)$ont->onu_mac));
 
             $liveOnu = null;
@@ -598,6 +578,8 @@ class OltController extends Controller
             $registeredOnus[] = [
                 '_source'         => $liveOnu ? 'live_snmp' : 'database',
                 'ont_id'          => $ont->id,
+                'registration_scope'=>$registrationIndex->inferred($ont)?'hardware_serial':'topology',
+                'registration_note'=>$registrationIndex->inferred($ont)?'Terdaftar di Customers · OLT dikenali dari SN; hubungan ODP/OLT belum diisi.':null,
                 'onu_id'          => $liveOnu['onu_id'] ?? ($liveOnu['onu_index'] ?? null),
                 'identity_source' => $liveOnu['identity_source'] ?? null,
                 'identity_observed_at' => $liveOnu['identity_observed_at'] ?? null,
@@ -609,7 +591,7 @@ class OltController extends Controller
                 'customer_id'     => $ont->customerService?->customer?->id,
                 'customer_name'   => $customerName,
                 'customer_number' => $customerCode,
-                'serial_number'   => $ont->onu_serial,
+                'serial_number'   => $ont->onu_serial ?: $ont->customerService?->onu_serial,
                 'mac_address'     => $ont->onu_mac,
                 'status'          => $statusClean,
                 'rx_power'        => $rxPower,
@@ -634,7 +616,7 @@ class OltController extends Controller
                 continue;
             }
 
-            $isRegistered = (!empty($sn) && isset($registeredMap[$sn])) || (!empty($mac) && isset($registeredMap[$mac]));
+            $isRegistered = $registrationIndex->known($sn,$mac);
             if (!$isRegistered) {
                 $seenUnregSns[$sn] = true;
                 $unregPort = $onu['port'] ?? ($onu['detected_port'] ?? null);
@@ -671,7 +653,7 @@ class OltController extends Controller
             if (!empty($uSn) && in_array($uSn, $existingUncfgSns)) {
                 continue;
             }
-            if (!empty($uSn) && isset($registeredMap[$uSn])) {
+            if (!empty($uSn) && $registrationIndex->known($uSn,(string)($uncfg['mac_address'] ?? $uncfg['onu_mac'] ?? ''))) {
                 continue;
             }
             // Autofind proves detection only; it cannot establish registered ONU state or Rx.
@@ -683,7 +665,7 @@ class OltController extends Controller
         $orphanedOnus = [];
         $reconciler=new \App\Services\Olt\OltRegistrationReconciler($device,$identityGroups,$dbOnts);
         foreach ($dbOnts as $ont) {
-            $sn=strtoupper(trim((string)$ont->onu_serial));
+            $sn=strtoupper(trim((string)($ont->onu_serial ?: $ont->customerService?->onu_serial)));
             $issue=$reconciler->issue($ont,in_array($ont->id,$matchedOntIds));
             if ($issue!==null) {
                 $customerName = $ont->customerService?->customer?->name ?: ('Pelanggan #' . $ont->id);
@@ -713,6 +695,8 @@ class OltController extends Controller
                 ];
             }
         }
+
+        $orphanedOnus=array_values(collect(array_merge($orphanedOnus,$registrationIndex->reviews($physicalRows,$dbOnts)))->unique('id')->all());
 
         // 5. Perbarui hitungan port PON
         $updatedPonPorts = array_map(function ($port) use ($registeredOnus, $unregisteredOnus) {
@@ -756,6 +740,7 @@ class OltController extends Controller
 
         return [
             '_identity_candidates' => $usesZteIdentity ? ZteOnuIdentityMap::duplicateEvidence($physicalRows):[],
+            '_registration_review_onus'=>array_values(array_filter($physicalRows,fn($row)=>$registrationIndex->known((string)($row['serial_number']??''),(string)($row['mac_address']??''))&&!isset($registeredMap[strtoupper(trim((string)($row['serial_number']??'')))]))),
             'device_info'       => $driverDeviceInfo,
             'pon_ports'         => $updatedPonPorts,
             'onu_list'          => $registeredOnus,
@@ -1006,7 +991,7 @@ class OltController extends Controller
         $device   = $deviceId ? OltDevice::find((int)$deviceId) : OltDevice::first();
         $snapshot = $device?->last_telemetry_snapshot;
 
-        $orphaned = $this->computeOrphanedOnus($device, $snapshot['onu_list'] ?? [], $snapshot['unconfigured_onus'] ?? []);
+        $orphaned = $this->computeOrphanedOnus($device, ZteOnuIdentityMap::snapshotRows($snapshot ?? []), $snapshot['unconfigured_onus'] ?? []);
 
         return response()->json([
             'success'       => true,
@@ -1020,7 +1005,7 @@ class OltController extends Controller
         abort_unless(auth()->user()?->role==='Super Administrator',403);
         $v=$request->validate(['device_id'=>'required|integer|exists:olt_devices,id']);
         $device=OltDevice::findOrFail($v['device_id']);$snap=$device->last_telemetry_snapshot??[];
-        $rows=$this->computeOrphanedOnus($device,array_merge($snap['onu_list']??[],$snap['_identity_candidates']??[]),$snap['unconfigured_onus']??[]);
+        $rows=$this->computeOrphanedOnus($device,ZteOnuIdentityMap::snapshotRows($snap),$snap['unconfigured_onus']??[]);
         $eligible=collect($rows)->where('can_delete',true)->pluck('id')->all();
         abort_unless(array_diff($ids,$eligible)===[],409,'Pembersihan ditolak: data belum terbukti tidak ada dalam inventaris OLT terbaru. Periksa ulang; N/A atau SN ganda bukan alasan penghapusan.');
     }

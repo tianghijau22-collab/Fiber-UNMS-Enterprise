@@ -3093,7 +3093,7 @@ export default function OltManagement() {
                       paginatedUnregisteredOnus.map((onu, idx) => {
                         const globalIndex = (unregisteredPage - 1) * unregisteredPerPage + idx + 1;
                         return (
-                          <tr key={onu.serial_number || idx} className="hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+                          <tr key={onu.ont_id || onu.serial_number || idx} className="hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
                             <td className="px-5 py-3.5 font-mono text-xs text-black/50 dark:text-white/60 font-semibold">{globalIndex}</td>
                             <td className="px-5 py-3.5 font-bold text-black dark:text-white">
                               {onu.onu_name || 'ONU Tanpa Nama'}
@@ -3178,7 +3178,7 @@ export default function OltManagement() {
                   paginatedUnregisteredOnus.map((onu, idx) => {
                     const globalIndex = (unregisteredPage - 1) * unregisteredPerPage + idx + 1;
                     return (
-                      <div key={onu.serial_number || idx} className="bg-white dark:bg-black rounded-lg border border-black/20 dark:border-white/20 shadow-xs overflow-hidden">
+                      <div key={onu.ont_id || onu.serial_number || idx} className="bg-white dark:bg-black rounded-lg border border-black/20 dark:border-white/20 shadow-xs overflow-hidden">
                         <div className="divide-y divide-slate-200 dark:divide-white/10 text-xs">
                           {/* Row 1: # Index */}
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-black/5 dark:bg-white/5">
@@ -3466,10 +3466,11 @@ export default function OltManagement() {
                       paginatedRegisteredOnus.map((onu, idx) => {
                         const globalIndex = (registeredPage - 1) * registeredPerPage + idx + 1;
                         return (
-                          <tr key={onu.serial_number || idx} className="hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
+                          <tr key={onu.ont_id || onu.serial_number || idx} className="hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
                             <td className="px-5 py-3.5 font-mono text-xs text-black/50 dark:text-white/60 font-semibold">{globalIndex}</td>
                             <td className="px-5 py-3.5">
                               <div className="font-bold text-black dark:text-white">{onu.customer_name}</div>
+                              {onu.registration_note && <p className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">{onu.registration_note}</p>}
                               {onu.customer_number && (
                                 <div className="text-[11px] font-mono text-black/50 dark:text-white/60">{onu.customer_number}</div>
                               )}
@@ -3512,12 +3513,12 @@ export default function OltManagement() {
                             <span className="text-sm font-bold text-black/80 dark:text-white/90">
                               {selectedPortFilter
                                 ? `Tidak ada ONU terdaftar pada Port ${formatShortPort(selectedPortFilter)}`
-                                : 'Belum ada data ONU terdaftar pada OLT ini'}
+                                : onuSearchQuery || onuStatusFilter !== 'all' ? 'Tidak ada ONU yang cocok dengan pencarian atau filter.' : 'Belum ada data ONU terdaftar pada OLT ini'}
                             </span>
                             <span className="text-xs text-black/50 dark:text-white/60">
                               {selectedPortFilter
                                 ? 'Pilih port PON lain atau tekan tombol "Refresh / Sync Port" untuk memindai fisik OLT.'
-                                : 'Silakan daftarkan pelanggan atau registrasikan modem dari tab Belum Terdaftar.'}
+                                : onuSearchQuery ? 'Coba periksa SN, nama, atau hapus filter pencarian.' : 'Silakan periksa daftar ONU fisik dan hasil pemeriksaan data.'}
                             </span>
                           </div>
                         </td>
@@ -3533,7 +3534,7 @@ export default function OltManagement() {
                   paginatedRegisteredOnus.map((onu, idx) => {
                     const globalIndex = (registeredPage - 1) * registeredPerPage + idx + 1;
                     return (
-                      <div key={onu.serial_number || idx} className="bg-white dark:bg-black rounded-lg border border-black/20 dark:border-white/20 shadow-xs overflow-hidden">
+                      <div key={onu.ont_id || onu.serial_number || idx} className="bg-white dark:bg-black rounded-lg border border-black/20 dark:border-white/20 shadow-xs overflow-hidden">
                         <div className="divide-y divide-slate-200 dark:divide-white/10 text-xs">
                           {/* Row 1: # Index */}
                           <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center bg-black/5 dark:bg-white/5">
@@ -3546,6 +3547,7 @@ export default function OltManagement() {
                             <span className="text-black/60 dark:text-white/70 font-semibold">Nama Pelanggan</span>
                             <span className="col-span-2 font-bold text-black dark:text-white uppercase">
                               {onu.customer_name}
+                              {onu.registration_note && <span className="block mt-1 text-[11px] font-normal normal-case text-blue-600 dark:text-blue-400">{onu.registration_note}</span>}
                             </span>
                           </div>
 
@@ -3607,7 +3609,7 @@ export default function OltManagement() {
                   <div className="p-6 text-center text-black/50 dark:text-white/60 text-xs">
                     {selectedPortFilter
                       ? `Tidak ada ONU terdaftar pada Port ${formatShortPort(selectedPortFilter)}.`
-                      : 'Belum ada data ONU terdaftar pada OLT ini.'}
+                      : onuSearchQuery || onuStatusFilter !== 'all' ? 'Tidak ada ONU yang cocok dengan pencarian atau filter.' : 'Belum ada data ONU terdaftar pada OLT ini.'}
                   </div>
                 )}
               </div>
@@ -3615,7 +3617,7 @@ export default function OltManagement() {
               {/* Table 2 Pagination Bar */}
               <div className="p-4 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <span className="text-black/70 dark:text-white/80 font-medium">
-                  Menampilkan data <span className="font-bold text-black dark:text-white">{(registeredPage - 1) * registeredPerPage + 1}</span> - <span className="font-bold text-black dark:text-white">{Math.min(registeredPage * registeredPerPage, filteredOnus.length)}</span> dari total <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredOnus.length}</span> ONU terdaftar
+                  Menampilkan data <span className="font-bold text-black dark:text-white">{filteredOnus.length ? (registeredPage - 1) * registeredPerPage + 1 : 0}</span> - <span className="font-bold text-black dark:text-white">{Math.min(registeredPage * registeredPerPage, filteredOnus.length)}</span> dari total <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredOnus.length}</span> ONU terdaftar
                 </span>
                 <div className="flex items-center gap-2">
                   <button

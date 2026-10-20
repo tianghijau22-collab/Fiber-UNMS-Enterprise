@@ -27,7 +27,7 @@ class OltIdentityPartitionTest extends TestCase
         Schema::create('olt_devices', function(Blueprint $t){$t->id();$t->string('name');$t->string('vendor_key');$t->string('connection_mode');$t->string('status');$t->string('ip_address');$t->json('last_telemetry_snapshot')->nullable();$t->timestamps();});
         foreach([1,2] as $id)DB::table('olt_devices')->insert(['id'=>$id,'name'=>'Fixture OLT '.$id,'vendor_key'=>'zte-c320','connection_mode'=>'live','status'=>'active','ip_address'=>'192.0.2.'.$id]);
         Schema::create('customers', function(Blueprint $t){$t->id();$t->string('name');$t->string('customer_number');$t->softDeletes();});
-        Schema::create('customer_services', function(Blueprint $t){$t->id();$t->integer('customer_id');$t->integer('service_package_id')->nullable();$t->string('ip_address')->nullable();$t->softDeletes();});
+        Schema::create('customer_services', function(Blueprint $t){$t->id();$t->integer('customer_id');$t->string('onu_serial')->nullable();$t->integer('service_package_id')->nullable();$t->string('ip_address')->nullable();$t->softDeletes();});
         Schema::create('service_packages', function(Blueprint $t){$t->id();});
         Schema::create('network_nodes', function(Blueprint $t){$t->id();$t->string('name');$t->integer('parent_node_id')->nullable();$t->integer('splitter_type_id')->nullable();$t->integer('olt_device_id');$t->string('olt_port_ref');$t->softDeletes();});
         Schema::create('network_ports', function(Blueprint $t){$t->id();$t->integer('node_id');$t->integer('customer_service_id');$t->integer('port_number');});
@@ -129,6 +129,79 @@ class OltIdentityPartitionTest extends TestCase
         $this->assertSame('preserved',Cache::get('unrelated_session_fixture'));
         $this->assertSame([],Identity::remember(2,1,fn()=>['sn1'=>[],'sn2'=>[]])['entries']);
         $this->assertSame($cold,Cache::get(Identity::cacheKey(1)));
+    }
+
+    public function test_unbound_customer_is_registered_from_unique_hardware_without_topology_writes(): void
+    {
+        DB::table('network_ports')->where('customer_service_id',1)->delete();
+        DB::enableQueryLog();DB::flushQueryLog();
+        $out=$this->partition([$this->row(1,'1/4/3',1)]);
+        $r=collect($out['onu_list'])->firstWhere('ont_id',1701);
+        $this->assertNotNull($r);$this->assertSame('hardware_serial',$r['registration_scope']);
+        $this->assertSame('gpon-olt_1/4/3',$r['port']);$this->assertSame('1',$r['onu_id']);$this->assertSame(-26.0,$r['rx_power']);
+        $this->assertCount(0,$out['unconfigured_onus']);
+        $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|delete|insert)\b/i',$q['query']))));
+    }
+
+    public function test_unbound_offline_customer_remains_registered_without_rx(): void
+    {
+        DB::table('network_ports')->where('customer_service_id',1)->delete();
+        $row=array_replace($this->row(1,'1/4/3',1),\App\Services\Olt\OnuTelemetrySample::fromZteState(1,65535,now()->toIso8601String()));
+        $out=$this->partition([$row]);$r=collect($out['onu_list'])->firstWhere('ont_id',1701);
+        $this->assertSame('hardware_serial',$r['registration_scope']);$this->assertNull($r['rx_power']);
+        $this->assertCount(0,$out['unconfigured_onus']);
+    }
+
+    public function test_known_foreign_owner_is_reviewed_instead_of_offered_for_registration_and_survives_roundtrips(): void
+    {
+        DB::table('network_nodes')->where('id',1)->update(['olt_device_id'=>2]);
+        $out=$this->partition([$this->row(1,'1/4/3',1)]);
+        for($i=0;$i<3;$i++){
+            $this->assertCount(0,$out['onu_list']);$this->assertCount(0,$out['unconfigured_onus']);
+            $this->assertCount(1,$out['orphaned_onus']);$this->assertFalse($out['orphaned_onus'][0]['can_delete']);
+            $this->assertSame('registered_other_olt',$out['orphaned_onus'][0]['issue_code']);
+            $this->assertCount(1,$out['_registration_review_onus']);
+            $out=$this->partition(Identity::snapshotRows($out));
+        }
+    }
+
+    public function test_ambiguous_or_stale_unbound_owner_is_known_but_requires_review(): void
+    {
+        DB::table('network_ports')->where('customer_service_id',1)->delete();
+        $row=$this->row(1,'1/4/3',1);
+        DB::table('olt_devices')->where('id',2)->update(['last_telemetry_snapshot'=>json_encode(['onu_list'=>[$row]])]);
+        $out=$this->partition([$row]);
+        $this->assertNull(collect($out['onu_list'])->firstWhere('ont_id',1701));
+        $this->assertCount(0,$out['unconfigured_onus']);$this->assertFalse($out['orphaned_onus'][0]['can_delete']);
+        DB::table('olt_devices')->where('id',2)->update(['last_telemetry_snapshot'=>null]);
+        $row['identity_observed_at']=now()->subMinutes(11)->toIso8601String();
+        $out=$this->partition([$row]);$this->assertCount(0,$out['unconfigured_onus']);
+        $this->assertSame('registration_scope_unverified',collect($out['orphaned_onus'])->firstWhere('id',1701)['issue_code']);
+    }
+
+    public function test_multiple_registered_customers_with_same_serial_are_retained_and_service_only_record_is_not_new(): void
+    {
+        DB::table('network_ports')->delete();
+        DB::table('ont_registrations')->where('id',1702)->update(['onu_serial'=>'TEST00000001']);
+        $out=$this->partition([$this->row(1,'1/4/3',1)]);
+        $this->assertSame([1701,1702],array_column($out['onu_list'],'ont_id'));$this->assertCount(0,$out['unconfigured_onus']);
+        DB::table('ont_registrations')->where('id',1702)->delete();
+        DB::table('customer_services')->where('id',2)->update(['onu_serial'=>'TEST00000002']);
+        $out=$this->partition([$this->row(2,'1/4/3',2)]);
+        $this->assertCount(0,$out['unconfigured_onus']);$this->assertSame('service:2',$out['orphaned_onus'][0]['id']);
+        $this->assertFalse($out['orphaned_onus'][0]['can_delete']);
+    }
+
+    public function test_stored_port_read_reclassifies_old_unregistered_snapshot_without_hardware_or_writes(): void
+    {
+        DB::table('network_ports')->where('customer_service_id',1)->delete();
+        DB::table('olt_devices')->where('id',1)->update(['last_telemetry_snapshot'=>json_encode(['unconfigured_onus'=>[$this->row(1,'1/4/3',1)]])]);
+        DB::enableQueryLog();DB::flushQueryLog();
+        $controller=app(OltController::class);
+        $r=$controller->getPortOnus(\Illuminate\Http\Request::create('/api/olt/port-onus','GET',['device_id'=>1,'port'=>'gpon-olt_1/4/3','stored_only'=>1]))->getData(true);
+        $this->assertCount(1,$r['onu_list']);$this->assertSame(1701,$r['onu_list'][0]['ont_id']);
+        $this->assertCount(0,$r['unconfigured_onus']);
+        $this->assertSame([],array_values(array_filter(DB::getQueryLog(),fn($q)=>preg_match('/^\s*(update|delete|insert)\b/i',$q['query']))));
     }
 
     private function opticalFixture(bool $secondSerialMismatch=false): void
