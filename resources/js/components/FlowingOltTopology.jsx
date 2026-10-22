@@ -10,7 +10,7 @@ export default function FlowingOltTopology({
   oltTopology = [],
   onClearPortFilter = null,
 }) {
-  const [isSectionCollapsed, setIsSectionCollapsed] = useState(false);
+  const [isSectionCollapsed, setIsSectionCollapsed] = useState(true);
   const [expandedOdcs, setExpandedOdcs] = useState({});
   const [activePortTab, setActivePortTab] = useState('all');
 
@@ -51,19 +51,19 @@ export default function FlowingOltTopology({
   const totalOdps = portOdcs.reduce((acc, o) => acc + (o.odps?.length || 0), 0);
 
   return (
-    <div className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-7 shadow-xs dark:shadow-2xl space-y-5 relative overflow-hidden transition-colors">
+    <div className={`bg-white dark:bg-black text-black dark:text-white border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs relative overflow-hidden transition-colors ${!isSectionCollapsed ? 'space-y-5' : ''}`}>
       {/* Background Ambient Optical Grid & Glow */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1e293b14_1px,transparent_1px),linear-gradient(to_bottom,#1e293b14_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none opacity-60" />
-      <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-48 bg-indigo-500/10 dark:bg-blue-600/10 blur-3xl pointer-events-none rounded-full" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none opacity-60" />
+      <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-48 bg-indigo-500/10 blur-3xl pointer-events-none rounded-full" />
       
       {/* ── HEADER & COLLAPSE BUTTON ── */}
-      <div className="relative z-10 flex items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800/80 pb-4">
+      <div className={`relative z-10 flex items-center justify-between gap-4 ${!isSectionCollapsed ? 'border-b border-black/10 dark:border-white/10 pb-4' : ''}`}>
         <div className="flex items-center gap-3">
           <span className="relative flex h-3.5 w-3.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
           </span>
-          <h3 className="font-extrabold text-slate-950 dark:text-white text-lg tracking-tight uppercase">
+          <h3 className="font-extrabold text-black dark:text-white text-base sm:text-lg tracking-tight uppercase">
             ODC &amp; ODP TOPOLOGI
           </h3>
         </div>
@@ -71,11 +71,11 @@ export default function FlowingOltTopology({
         {/* Header Right: KPI + Button Lipat/Tutup */}
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Quick Metrics KPI: ODC & ODP count */}
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300 shadow-2xs">
-            <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">ODC:</span>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 text-xs font-mono text-black dark:text-white shadow-2xs">
+            <span className="text-black/50 dark:text-white/50 text-[11px] font-medium">ODC:</span>
             <span className="font-bold text-indigo-600 dark:text-indigo-400">{totalOdcs}</span>
-            <span className="text-slate-300 dark:text-slate-700">|</span>
-            <span className="text-slate-500 dark:text-slate-400 text-[11px] font-medium">ODP:</span>
+            <span className="text-black/20 dark:text-white/20">|</span>
+            <span className="text-black/50 dark:text-white/50 text-[11px] font-medium">ODP:</span>
             <span className="font-bold text-indigo-600 dark:text-indigo-400">{totalOdps}</span>
           </div>
 
@@ -83,7 +83,7 @@ export default function FlowingOltTopology({
           <button
             type="button"
             onClick={() => setIsSectionCollapsed(!isSectionCollapsed)}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            className="px-3 py-1.5 rounded-md bg-white dark:bg-black hover:bg-black/5 dark:hover:bg-white/10 border border-black/30 dark:border-white/30 text-xs font-bold text-black dark:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
           >
             <span>{isSectionCollapsed ? 'Buka' : 'Tutup'}</span>
             <span className="text-[10px]">{isSectionCollapsed ? '▼' : '▲'}</span>

@@ -223,10 +223,10 @@ export default function InterfaceOpticalProbeModal({
         String(now.getDate()).padStart(2, '0');
       const timeStr = String(now.getHours()).padStart(2, '0') +
         String(now.getMinutes()).padStart(2, '0');
-      const observed = new Date(probeResult?.summary?.probed_at);
-      const formattedDate = Number.isFinite(observed.getTime())
-        ? observed.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'medium' }) + ' WIB'
-        : 'Waktu data belum tersedia';
+
+
+
+
 
       for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
         setScreenshotProgressText(`Memproses Hal ${pageIdx + 1} dari ${pages.length}...`);
@@ -299,7 +299,7 @@ export default function InterfaceOpticalProbeModal({
                     LAPORAN REDAMAN PORT PON ${probeResult?.interface || selectedInterface}
                   </div>
                   <div style="font-size:11px;font-family:monospace;color:${textSecondary};margin-top:2px;">
-                    OLT: <strong style="color:${textPrimary};">${oltDisplayName}</strong> &nbsp;•&nbsp; Waktu: ${formattedDate}
+                    OLT: <strong style="color:${textPrimary};">${oltDisplayName}</strong>
                   </div>
                 </div>
                 <div style="text-align:right;">

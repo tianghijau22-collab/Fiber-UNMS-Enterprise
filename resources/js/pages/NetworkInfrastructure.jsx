@@ -17,6 +17,7 @@ import KmlImportModal from '../components/KmlImportModal';
 import OdcFilterPopover from '../components/OdcFilterPopover';
 import OdpFilterPopover from '../components/OdpFilterPopover';
 import LoadingState from '../components/LoadingState';
+import MaintenanceInfographicCard from '../components/MaintenanceInfographicCard';
 
 /* ══════════════════════════════════════════════════════════════════
    AUTO CODE GENERATOR HELPERS
@@ -3684,8 +3685,87 @@ function OdcTabContent({ onAddNode, onAddMsNode, onEditNode, onDeleteNode, onDel
 /* ══════════════════════════════════════════════════════════════════
    TAB 3: ODP (OPTICAL DISTRIBUTION POINT)
 ══════════════════════════════════════════════════════════════════ */
+const formatTimeWib = (date = new Date()) => {
+  const d = date instanceof Date ? date : new Date(date);
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${hours}.${minutes} WIB`;
+};
+
+const formatDateIndo = (date = new Date()) => {
+  const d = date instanceof Date ? date : new Date(date);
+  return new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }).format(d);
+};
+
+const calculateEstimatedEndTime = (startTimeStr, durationStr) => {
+  if (!startTimeStr) return '';
+  const match = startTimeStr.match(/(\d{1,2})[:.](\d{2})/);
+  if (!match) return '';
+
+  const now = new Date();
+  const baseDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parseInt(match[1], 10), parseInt(match[2], 10), 0);
+
+  const durLower = (durationStr || '').toLowerCase().trim();
+  if (durLower.includes('hari ini')) {
+    return '23.59 WIB';
+  }
+
+  let addMinutes = 60; // default 1 jam
+  if (durLower.includes('30 menit')) {
+    addMinutes = 30;
+  } else if (durLower.includes('45 menit')) {
+    addMinutes = 45;
+  } else if (durLower.includes('15 menit')) {
+    addMinutes = 15;
+  } else if (durLower.includes('jam')) {
+    const hoursMatch = durLower.match(/(\d+(\.\d+)?)\s*jam/);
+    if (hoursMatch) {
+      addMinutes = Math.round(parseFloat(hoursMatch[1]) * 60);
+    }
+  } else if (durLower.includes('menit')) {
+    const minMatch = durLower.match(/(\d+)\s*menit/);
+    if (minMatch) {
+      addMinutes = parseInt(minMatch[1], 10);
+    }
+  }
+
+  const targetDate = new Date(baseDate.getTime() + addMinutes * 60000);
+  return formatTimeWib(targetDate);
+};
+
+const calculateElapsedDuration = (startTimeStr, endTimeStr) => {
+  if (!startTimeStr || !endTimeStr) return '1 Jam';
+  const startMatch = startTimeStr.match(/(\d{1,2})[:.](\d{2})/);
+  const endMatch = endTimeStr.match(/(\d{1,2})[:.](\d{2})/);
+  if (!startMatch || !endMatch) return '1 Jam';
+
+  let startMinutes = parseInt(startMatch[1], 10) * 60 + parseInt(startMatch[2], 10);
+  let endMinutes = parseInt(endMatch[1], 10) * 60 + parseInt(endMatch[2], 10);
+
+  if (endMinutes < startMinutes) {
+    endMinutes += 24 * 60;
+  }
+
+  const diffMinutes = Math.max(1, endMinutes - startMinutes);
+  const hours = Math.floor(diffMinutes / 60);
+  const mins = diffMinutes % 60;
+
+  if (hours > 0 && mins > 0) {
+    return `${hours} Jam ${mins} Menit`;
+  } else if (hours > 0) {
+    return `${hours} Jam`;
+  } else {
+    return `${mins} Menit`;
+  }
+};
+
 function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllNodes, refreshKey, onRefreshGlobal, onOpenKmlModal }) {
-  const { hasRole } = useAuth();
+  const { currentUser, hasRole } = useAuth();
   const canCrud = hasRole('Super Administrator', 'Operator Jaringan');
 
   const [selectedOdp, setSelectedOdp] = useState(null);
@@ -3873,25 +3953,93 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
   const [loadingMaintenanceInfo, setLoadingMaintenanceInfo] = useState(false);
   const [submittingMaintenance, setSubmittingMaintenance] = useState(false);
   const [maintenanceDuration, setMaintenanceDuration] = useState('1 Jam');
+  const [maintenanceStartTime, setMaintenanceStartTime] = useState('');
+  const [maintenanceEndTime, setMaintenanceEndTime] = useState('');
+  const [maintenanceDate, setMaintenanceDate] = useState('');
   const [maintenanceNotes, setMaintenanceNotes] = useState('');
   const [sendTelegramNotif, setSendTelegramNotif] = useState(true);
   const [maintenanceSuccessToast, setMaintenanceSuccessToast] = useState(null);
+  const [photoBefore, setPhotoBefore] = useState(null);
+  const [photoAfter, setPhotoAfter] = useState(null);
+  const [workType, setWorkType] = useState('Pemeliharaan Terjadwal');
+  const [affectedAreasInput, setAffectedAreasInput] = useState('');
+  const [showInfographicPreview, setShowInfographicPreview] = useState(false);
+  const [capturingInfographic, setCapturingInfographic] = useState(false);
+
+  const handleDurationChange = (newDur) => {
+    setMaintenanceDuration(newDur);
+    if (maintenanceModalNode?.status !== 'maintenance') {
+      const computedEnd = calculateEstimatedEndTime(maintenanceStartTime, newDur);
+      if (computedEnd) setMaintenanceEndTime(computedEnd);
+    }
+  };
+
+  const handleStartTimeChange = (newStartTime) => {
+    setMaintenanceStartTime(newStartTime);
+    if (maintenanceModalNode?.status !== 'maintenance') {
+      const computedEnd = calculateEstimatedEndTime(newStartTime, maintenanceDuration);
+      if (computedEnd) setMaintenanceEndTime(computedEnd);
+    }
+  };
 
   const openMaintenanceModal = async (odp) => {
     setMaintenanceModalNode(odp);
     setMaintenanceInfo(null);
     setLoadingMaintenanceInfo(true);
-    setMaintenanceDuration('1 Jam');
-    setMaintenanceNotes(
-      odp.status === 'maintenance'
-        ? 'Pemeliharaan telah selesai dilakukan. Seluruh port dan layanan pelanggan kembali beroperasi normal.'
-        : 'Pemeliharaan rutin dan perbaikan kabel splitter ODP'
+
+    const now = new Date();
+    const currentTimeStr = formatTimeWib(now);
+    const currentDateStr = formatDateIndo(now);
+    setMaintenanceDate(currentDateStr);
+
+    setPhotoBefore(null);
+    setPhotoAfter(null);
+    setShowInfographicPreview(false);
+    setAffectedAreasInput(
+      odp.name ? `ODP ${odp.name}, ${odp.address || 'Area Pelanggan Terkait'}` : ''
     );
+
+    if (odp.status === 'maintenance') {
+      setWorkType('Pemulihan & Normalisasi Jaringan');
+      setMaintenanceNotes(
+        'Pemeliharaan telah selesai dilakukan. Seluruh port dan layanan pelanggan kembali beroperasi normal.'
+      );
+      setMaintenanceEndTime(currentTimeStr);
+      setMaintenanceStartTime('');
+      setMaintenanceDuration('1 Jam');
+    } else {
+      const defaultDur = '1 Jam';
+      setWorkType('Pemeliharaan Terjadwal');
+      setMaintenanceNotes('Pemeliharaan rutin dan perbaikan kabel splitter ODP');
+      setMaintenanceStartTime(currentTimeStr);
+      setMaintenanceDuration(defaultDur);
+      setMaintenanceEndTime(calculateEstimatedEndTime(currentTimeStr, defaultDur));
+    }
+
     try {
       const res = await fetch(`/api/network-nodes/${odp.id}/maintenance`);
       const data = await res.json();
       if (res.ok && data.status === 'success') {
         setMaintenanceInfo(data);
+        if (data.server_date) setMaintenanceDate(data.server_date);
+
+        if (odp.status === 'maintenance') {
+          const lastM = data.last_maintenance;
+          const sTime = lastM?.start_time || '';
+          if (sTime) {
+            setMaintenanceStartTime(sTime);
+            const actualDur = calculateElapsedDuration(sTime, currentTimeStr);
+            setMaintenanceDuration(actualDur);
+          } else {
+            const oneHourAgo = new Date(now.getTime() - 60 * 60000);
+            setMaintenanceStartTime(formatTimeWib(oneHourAgo));
+            setMaintenanceDuration('1 Jam');
+          }
+          if (lastM?.work_type) setWorkType(lastM.work_type);
+          if (lastM?.affected_areas && Array.isArray(lastM.affected_areas) && lastM.affected_areas.length > 0) {
+            setAffectedAreasInput(lastM.affected_areas.join(', '));
+          }
+        }
       } else {
         setMaintenanceInfo(null);
       }
@@ -3905,12 +4053,64 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
   const closeMaintenanceModal = () => {
     setMaintenanceModalNode(null);
     setMaintenanceInfo(null);
+    setPhotoBefore(null);
+    setPhotoAfter(null);
+    setShowInfographicPreview(false);
+  };
+
+  const handlePhotoUpload = (e, slot) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (slot === 'before') setPhotoBefore(event.target.result);
+      if (slot === 'after') setPhotoAfter(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDownloadInfographic = async () => {
+    const cardElement = document.getElementById('maintenance-infographic-render-root');
+    if (!cardElement) return;
+    setCapturingInfographic(true);
+    try {
+      const dataUrl = await toPng(cardElement, {
+        pixelRatio: 2,
+        quality: 0.95,
+        backgroundColor: '#ffffff',
+      });
+      const link = document.createElement('a');
+      link.download = `Infografis_Maintenance_${(maintenanceModalNode?.name || 'ODP').replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      alert('Gagal mengunduh gambar: ' + (err?.message || 'Error'));
+    } finally {
+      setCapturingInfographic(false);
+    }
   };
 
   const handleToggleMaintenance = async (action) => {
     if (!maintenanceModalNode) return;
     setSubmittingMaintenance(true);
     try {
+      // Tangkap gambar infografis jika notifikasi diaktifkan
+      let maintenanceImage = null;
+      if (sendTelegramNotif) {
+        const cardElement = document.getElementById('maintenance-infographic-render-root');
+        if (cardElement) {
+          try {
+            maintenanceImage = await toPng(cardElement, {
+              pixelRatio: 2,
+              quality: 0.95,
+              backgroundColor: '#ffffff',
+            });
+          } catch (captureErr) {
+            console.warn('Gagal merender infografis, melanjutkan dengan teks:', captureErr);
+          }
+        }
+      }
+
       const res = await fetch(`/api/network-nodes/${maintenanceModalNode.id}/maintenance`, {
         method: 'POST',
         headers: {
@@ -3923,6 +4123,11 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
           notes: maintenanceNotes,
           estimated_duration: maintenanceDuration,
           send_notification: sendTelegramNotif,
+          maintenance_image: maintenanceImage,
+          work_type: workType,
+          affected_areas: affectedAreasInput ? affectedAreasInput.split(',').map(s => s.trim()).filter(Boolean) : [],
+          start_time: maintenanceStartTime,
+          end_time: maintenanceEndTime,
         }),
       });
       const data = await res.json();
@@ -5074,31 +5279,32 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
       {maintenanceModalNode && createPortal(
         <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/60 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen" onClick={closeMaintenanceModal}>
           <div
-            className="relative w-full max-w-2xl bg-white dark:bg-black rounded-lg sm:rounded-xl shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
+            className="relative w-full max-w-xl bg-white dark:bg-black rounded-lg shadow-2xl border border-black/70 dark:border-white/70 my-auto max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150 text-black dark:text-white"
             onClick={e => e.stopPropagation()}
           >
-            
             {/* Modal Header */}
-            <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-black/20 dark:border-white/20">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-md bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
+            <div className="bg-white dark:bg-black text-black dark:text-white px-5 py-3.5 flex items-center justify-between shrink-0 border-b border-black/20 dark:border-white/20">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${maintenanceModalNode.status === 'maintenance' ? 'bg-amber-400' : 'bg-emerald-400'} opacity-75`}></span>
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${maintenanceModalNode.status === 'maintenance' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-sm sm:text-base font-bold text-black dark:text-white tracking-tight">
                       {maintenanceModalNode.status === 'maintenance'
-                        ? 'Kelola / Selesaikan Maintenance ODP'
-                        : 'Mulai Maintenance ODP & Kirim Alert'}
+                        ? 'Kelola Pemeliharaan ODP'
+                        : 'Mulai Pemeliharaan ODP'}
                     </h3>
-                    <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 uppercase tracking-wider">
-                      ODP NODE
+                    <span className={`px-2 py-0.5 text-[9px] font-mono font-bold rounded ${
+                      maintenanceModalNode.status === 'maintenance'
+                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                        : 'bg-black/5 dark:bg-white/10 text-black/70 dark:text-white/70 border border-black/20 dark:border-white/20'
+                    }`}>
+                      {maintenanceModalNode.status === 'maintenance' ? 'MAINTENANCE' : 'NORMAL'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-black/70 dark:text-white/70 font-mono mt-0.5">
+                  <p className="text-[11px] text-black/60 dark:text-white/60 font-mono truncate mt-0.5">
                     {maintenanceModalNode.name}
                   </p>
                 </div>
@@ -5106,7 +5312,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
               <button
                 onClick={closeMaintenanceModal}
                 disabled={submittingMaintenance}
-                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold transition-colors disabled:opacity-50 cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white font-bold transition-colors disabled:opacity-50 cursor-pointer shrink-0"
               >
                 ✕
               </button>
@@ -5116,104 +5322,97 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
             <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 text-xs">
               {/* Status Alert Banner */}
               {maintenanceModalNode.status === 'maintenance' ? (
-                <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-400 dark:border-amber-600/60 text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
-                  <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div>
-                    <h5 className="font-bold text-xs uppercase tracking-wide">Status ODP: Sedang Dalam Maintenance</h5>
-                    <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
-                      ODP ini saat ini tercatat dalam masa pemeliharaan teknis. Klik tombol <strong>Selesaikan Maintenance</strong> di bawah jika pekerjaan telah rampung agar status kembali <strong>Aktif</strong> dan notifikasi pemulihan dikirim ke sistem &amp; Telegram NOC.
-                    </p>
+                <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/30 flex items-start gap-2.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mt-1 animate-pulse"></span>
+                  <div className="flex-1">
+                    <span className="font-bold text-xs text-amber-700 dark:text-amber-300 block">
+                      ODP Sedang Dalam Masa Pemeliharaan
+                    </span>
+                    <span className="text-[11px] text-black/70 dark:text-white/70 block mt-0.5 leading-relaxed">
+                      Pekerjaan teknis sedang berjalan. Klik tombol <strong>Selesaikan Maintenance</strong> di bawah setelah pekerjaan rampung untuk memulihkan status ke Normal.
+                    </span>
                   </div>
                 </div>
               ) : (
-                <div className="p-3.5 rounded-lg bg-amber-500/10 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
-                  <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <h5 className="font-bold text-xs uppercase tracking-wide">Pemberitahuan Pemeliharaan Jaringan</h5>
-                    <p className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">
-                      Mengaktifkan maintenance akan mengubah status ODP menjadi <span className="font-bold text-amber-700 dark:text-amber-400">Maintenance</span> dan secara otomatis mendistribusikan notifikasi alert siaran ke seluruh pengguna sistem UNMS serta kanal Telegram NOC mengenai detail pemeliharaan beserta jumlah pelanggan terdampak.
-                    </p>
+                <div className="p-3 rounded-md bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 flex items-start gap-2.5">
+                  <span className="w-2 h-2 rounded-full bg-black/40 dark:bg-white/40 shrink-0 mt-1"></span>
+                  <div className="flex-1">
+                    <span className="font-bold text-xs text-black dark:text-white block">
+                      Pemberitahuan Pemeliharaan Jaringan
+                    </span>
+                    <span className="text-[11px] text-black/60 dark:text-white/60 block mt-0.5 leading-relaxed">
+                      Mengaktifkan mode ini akan mengubah status ODP menjadi <strong className="text-amber-600 dark:text-amber-400">Maintenance</strong> dan mendistribusikan notifikasi alert siaran ke teknisi NOC mengenai pelanggan terdampak.
+                    </span>
                   </div>
                 </div>
               )}
 
               {/* Node Specifications & Affected Customers Summary */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="bg-black/5 dark:bg-white/5 p-3 rounded-lg border border-black/20 dark:border-white/20">
-                  <span className="text-black/50 dark:text-white/50 text-[10px] block font-medium">Upstream ODC</span>
-                  <span className="font-bold text-black dark:text-white text-xs block mt-0.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                <div className="bg-black/5 dark:bg-white/5 p-2.5 rounded-md border border-black/20 dark:border-white/20">
+                  <span className="text-black/50 dark:text-white/50 text-[10px] block font-medium uppercase tracking-wider">Upstream ODC</span>
+                  <span className="font-bold text-black dark:text-white text-xs block mt-0.5 truncate">
                     {maintenanceInfo?.node?.parent_name || maintenanceModalNode.parent_node?.name || '—'}
                   </span>
                 </div>
-                <div className="bg-black/5 dark:bg-white/5 p-3 rounded-lg border border-black/20 dark:border-white/20">
-                  <span className="text-black/50 dark:text-white/50 text-[10px] block font-medium">OLT &amp; Interface PON</span>
-                  <span className="font-bold text-black dark:text-white text-xs block mt-0.5">
-                    {maintenanceInfo?.node?.olt_device || maintenanceModalNode.olt_device?.name || 'Auto-Detect OLT'}
+                <div className="bg-black/5 dark:bg-white/5 p-2.5 rounded-md border border-black/20 dark:border-white/20">
+                  <span className="text-black/50 dark:text-white/50 text-[10px] block font-medium uppercase tracking-wider">Interface PON</span>
+                  <span className="font-bold text-black dark:text-white text-xs block mt-0.5 truncate">
+                    {maintenanceInfo?.node?.olt_device || maintenanceModalNode.olt_device?.name || 'OLT'}
                   </span>
-                  <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold block">
+                  <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-semibold block truncate">
                     {displayInterface(maintenanceInfo?.node?.olt_port_ref || maintenanceModalNode.olt_port_ref)}
                   </span>
                 </div>
-                <div className="bg-black/5 dark:bg-white/5 p-3 rounded-lg border border-amber-500/40 flex flex-col justify-center">
-                  <span className="text-amber-600 dark:text-amber-400 text-[10px] block font-bold uppercase tracking-wider">
-                    Pelanggan Terdampak
-                  </span>
-                  <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                <div className="col-span-2 sm:col-span-1 bg-black/5 dark:bg-white/5 p-2.5 rounded-md border border-black/20 dark:border-white/20 flex flex-col justify-center">
+                  <span className="text-black/50 dark:text-white/50 text-[10px] block font-medium uppercase tracking-wider">Pelanggan Terdampak</span>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-lg font-black text-black dark:text-white font-mono">
                       {loadingMaintenanceInfo ? '...' : (maintenanceInfo?.impacted_count ?? 0)}
                     </span>
-                    <span className="text-xs font-semibold text-amber-600/80 dark:text-amber-400/80">
-                      Pelanggan
-                    </span>
+                    <span className="text-[11px] text-black/60 dark:text-white/60">Pelanggan</span>
                   </div>
                 </div>
               </div>
 
               {/* Impacted Customers Table */}
-              <div className="bg-black/5 dark:bg-white/5 rounded-lg p-3.5 sm:p-4 border border-black/20 dark:border-white/20 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-black dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                    <svg className="w-4 h-4 text-black/50 dark:text-white/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                    <span>Daftar Pelanggan Terhubung Pada Node Ini</span>
-                  </h4>
-                  <span className="text-[10px] text-black/50 dark:text-white/50 font-mono">
-                    {loadingMaintenanceInfo ? 'Memuat...' : `${maintenanceInfo?.impacted_count ?? 0} Pelanggan`}
+              <div className="rounded-md border border-black/20 dark:border-white/20 overflow-hidden">
+                <div className="px-3 py-2 bg-black/5 dark:bg-white/5 border-b border-black/10 dark:border-white/10 flex items-center justify-between text-xs">
+                  <span className="font-bold text-black dark:text-white text-[11px] uppercase tracking-wider">
+                    Pelanggan Terhubung
+                  </span>
+                  <span className="text-[10px] font-mono text-black/60 dark:text-white/60">
+                    {loadingMaintenanceInfo ? 'Memeriksa...' : `${maintenanceInfo?.impacted_count ?? 0} Pelanggan`}
                   </span>
                 </div>
 
                 {loadingMaintenanceInfo ? (
-                  <div className="py-6 text-center text-black/50 dark:text-white/50 space-y-2">
-                    <div className="w-5 h-5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    <p className="text-[11px]">Memeriksa daftar pelanggan terdampak pada ODP...</p>
+                  <div className="py-6 text-center text-black/50 dark:text-white/50 space-y-1.5">
+                    <div className="w-4 h-4 border-2 border-black/30 dark:border-white/30 border-t-amber-500 rounded-full animate-spin mx-auto"></div>
+                    <p className="text-[11px]">Memeriksa daftar pelanggan...</p>
                   </div>
                 ) : maintenanceInfo?.impacted_customers?.length > 0 ? (
-                  <div className="max-h-44 overflow-y-auto rounded-md border border-black/20 dark:border-white/20 bg-white dark:bg-black">
+                  <div className="max-h-36 overflow-y-auto">
                     <table className="w-full text-left text-[11px]">
-                      <thead className="bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70 font-semibold sticky top-0">
+                      <thead className="bg-black/[0.03] dark:bg-white/[0.03] text-black/60 dark:text-white/60 font-semibold sticky top-0 border-b border-black/10 dark:border-white/10">
                         <tr>
-                          <th className="py-1.5 px-3">Nomor Port</th>
+                          <th className="py-1.5 px-3">Port</th>
                           <th className="py-1.5 px-3">ID Pelanggan</th>
-                          <th className="py-1.5 px-3">Nama Pelanggan</th>
+                          <th className="py-1.5 px-3">Nama</th>
                           <th className="py-1.5 px-3 text-right">Redaman</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-black/20 dark:divide-white/20 text-black dark:text-white">
+                      <tbody className="divide-y divide-black/10 dark:divide-white/10 text-black dark:text-white font-mono">
                         {maintenanceInfo.impacted_customers.map((c, i) => (
                           <tr key={i} className="hover:bg-black/5 dark:hover:bg-white/5">
-                            <td className="py-1.5 px-3 font-mono font-bold text-black/70 dark:text-white/70">P-{c.port_number}</td>
-                            <td className="py-1.5 px-3 font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                            <td className="py-1.5 px-3 font-bold text-black/70 dark:text-white/70">P-{c.port_number}</td>
+                            <td className="py-1.5 px-3 font-semibold text-indigo-600 dark:text-indigo-400">
                               {c.customer_number && c.customer_number !== '—' ? c.customer_number : (c.service_number !== '—' ? c.service_number : '—')}
                             </td>
-                            <td className="py-1.5 px-3 font-semibold text-black dark:text-white">
+                            <td className="py-1.5 px-3 font-sans font-medium text-black dark:text-white truncate max-w-[140px]">
                               {c.name}
                             </td>
-                            <td className="py-1.5 px-3 text-right font-mono text-[10px]">
+                            <td className="py-1.5 px-3 text-right text-[10px]">
                               {c.rx_power != null && isFinite(Number(c.rx_power))
                                 ? `${parseFloat(c.rx_power).toFixed(2)} dBm`
                                 : '—'}
@@ -5224,80 +5423,327 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                     </table>
                   </div>
                 ) : (
-                  <div className="py-4 text-center text-black/50 dark:text-white/50 bg-white dark:bg-black rounded-md border border-dashed border-black/30 dark:border-white/30">
-                    <p className="text-[11px] font-medium">Tidak ada pelanggan aktif yang terhubung pada port ODP ini.</p>
+                  <div className="py-4 text-center text-black/50 dark:text-white/50 text-[11px]">
+                    Tidak ada pelanggan aktif yang terhubung pada port ODP ini.
                   </div>
                 )}
               </div>
 
               {/* Maintenance Settings Form */}
               <div className="space-y-3 pt-1">
-                {/* Estimated Duration */}
-                <div>
-                  <label className="block text-[11px] font-bold text-black dark:text-white mb-1.5 uppercase tracking-wide">
-                    Estimasi Durasi Pengerjaan
-                  </label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {['30 Menit', '1 Jam', '2 Jam', '4 Jam', 'Selesai Hari Ini'].map(dur => (
-                      <button
-                        key={dur}
-                        type="button"
-                        onClick={() => setMaintenanceDuration(dur)}
-                        className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                          maintenanceDuration === dur
-                            ? 'bg-amber-600 text-white shadow-xs'
-                            : 'bg-white dark:bg-black text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 border border-black/30 dark:border-white/30'
-                        }`}
-                      >
-                        {dur}
-                      </button>
-                    ))}
+                {/* Jadwal & Waktu Pelaksanaan */}
+                <div className="p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/15 dark:border-white/15 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 text-black/70 dark:text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-[11px] font-bold text-black dark:text-white uppercase tracking-wide">
+                        Jadwal &amp; Waktu Pelaksanaan
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Otomatis
+                    </span>
                   </div>
-                  <input
-                    type="text"
-                    value={maintenanceDuration}
-                    onChange={e => setMaintenanceDuration(e.target.value)}
-                    placeholder="Atau ketik durasi kustom (misal: 3 Jam, Sampai Pukul 17:00 WIB)"
-                    className="w-full px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs sm:text-sm text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-amber-500 transition-all font-medium"
-                  />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-black/70 dark:text-white/70 mb-1">
+                        Waktu Mulai
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={maintenanceStartTime}
+                          onChange={e => handleStartTimeChange(e.target.value)}
+                          placeholder="Contoh: 22.50 WIB"
+                          className="w-full pl-2.5 pr-14 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs font-mono font-bold text-black dark:text-white focus:outline-none focus:border-black dark:focus:border-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleStartTimeChange(formatTimeWib(new Date()))}
+                          title="Set ke jam saat ini"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-black dark:text-white cursor-pointer"
+                        >
+                          Sekarang
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-black/70 dark:text-white/70 mb-1">
+                        {maintenanceModalNode.status === 'maintenance' ? 'Waktu Selesai (Aktual)' : 'Estimasi Selesai'}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={maintenanceEndTime}
+                          onChange={e => setMaintenanceEndTime(e.target.value)}
+                          placeholder="Contoh: 23.50 WIB"
+                          className="w-full pl-2.5 pr-18 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs font-mono font-bold text-black dark:text-white focus:outline-none focus:border-black dark:focus:border-white"
+                        />
+                        {maintenanceModalNode.status !== 'maintenance' && (
+                          <button
+                            type="button"
+                            onClick={() => setMaintenanceEndTime(calculateEstimatedEndTime(maintenanceStartTime, maintenanceDuration))}
+                            title="Hitung ulang otomatis berdasarkan durasi"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-black dark:text-white cursor-pointer"
+                          >
+                            Hitung Ulang
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold text-black/70 dark:text-white/70">
+                        {maintenanceModalNode.status === 'maintenance' ? 'Total Durasi Pengerjaan' : 'Pilihan Estimasi Durasi'}
+                      </label>
+                      <span className="text-[10px] font-mono text-black/50 dark:text-white/50 font-bold">
+                        {maintenanceDuration}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {['30 Menit', '1 Jam', '2 Jam', '4 Jam', 'Hari Ini'].map(dur => (
+                        <button
+                          key={dur}
+                          type="button"
+                          onClick={() => handleDurationChange(dur)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                            maintenanceDuration === dur
+                              ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs font-bold'
+                              : 'bg-white dark:bg-black text-black dark:text-white hover:bg-black/10 dark:hover:bg-white/10 border border-black/20 dark:border-white/20'
+                          }`}
+                        >
+                          {dur}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      value={maintenanceDuration}
+                      onChange={e => handleDurationChange(e.target.value)}
+                      placeholder="Atau ketik durasi kustom (contoh: 3 Jam, 45 Menit)"
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white font-medium"
+                    />
+                  </div>
                 </div>
 
                 {/* Maintenance Notes */}
                 <div>
                   <label className="block text-[11px] font-bold text-black dark:text-white mb-1.5 uppercase tracking-wide">
-                    Keterangan / Rincian Pekerjaan Pemeliharaan
+                    Keterangan / Rincian Pekerjaan
                   </label>
                   <textarea
-                    rows={3}
+                    rows={2}
                     value={maintenanceNotes}
                     onChange={e => setMaintenanceNotes(e.target.value)}
-                    placeholder="Contoh: Perbaikan kabel distribusi fiber optic, penggantian pigtail splitter ODP, perapihan kabel dropcore..."
-                    className="w-full px-3 py-2 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs sm:text-sm text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-amber-500 transition-all font-medium"
+                    placeholder="Contoh: Perbaikan kabel distribusi fiber optic, penggantian pigtail splitter ODP..."
+                    className="w-full px-3 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none focus:border-black dark:focus:border-white transition-all font-medium"
                   />
                 </div>
 
+                {/* Form Tambahan Infografis: Jenis & Wilayah */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-black dark:text-white mb-1 uppercase tracking-wide">
+                      Jenis Pemeliharaan
+                    </label>
+                    <select
+                      value={workType}
+                      onChange={e => setWorkType(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white font-medium focus:outline-none"
+                    >
+                      <option value="Pemeliharaan Terjadwal">Pemeliharaan Terjadwal</option>
+                      <option value="Perbaikan Fisik &amp; Splicing">Perbaikan Fisik &amp; Splicing</option>
+                      <option value="Penataan Kabel &amp; Splitter">Penataan Kabel &amp; Splitter</option>
+                      <option value="Optimasi Redaman ODP">Optimasi Redaman ODP</option>
+                      <option value="Perbaikan Darurat (Emergency)">Perbaikan Darurat (Emergency)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-black dark:text-white mb-1 uppercase tracking-wide">
+                      Wilayah / Area Terdampak
+                    </label>
+                    <input
+                      type="text"
+                      value={affectedAreasInput}
+                      onChange={e => setAffectedAreasInput(e.target.value)}
+                      placeholder="Pisahkan dengan koma (contoh: Wilayah A, Dusun B)"
+                      className="w-full px-3 py-1.5 bg-white dark:bg-black border border-black/30 dark:border-white/30 rounded-md text-xs text-black dark:text-white font-medium focus:outline-none placeholder-black/40 dark:placeholder-white/40"
+                    />
+                  </div>
+                </div>
+
+                {/* Upload Foto Dokumentasi Pekerjaan */}
+                <div>
+                  <label className="block text-[11px] font-bold text-black dark:text-white mb-1.5 uppercase tracking-wide">
+                    Foto Dokumentasi Pekerjaan (Opsional)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {/* Foto Pemeriksaan */}
+                    <div className="p-2.5 rounded-md border border-dashed border-black/30 dark:border-white/30 bg-black/[0.02] dark:bg-white/[0.02]">
+                      <span className="text-[10px] font-bold text-black/60 dark:text-white/60 block mb-1">
+                        Foto Pemeriksaan (Sebelum)
+                      </span>
+                      {photoBefore ? (
+                        <div className="relative rounded overflow-hidden h-20 group">
+                          <img src={photoBefore} alt="Pemeriksaan" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setPhotoBefore(null)}
+                            className="absolute top-1 right-1 bg-black/70 text-white rounded p-1 text-[10px] hover:bg-black cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center h-20 rounded border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-center p-2 transition-colors">
+                          <svg className="w-5 h-5 text-black/40 dark:text-white/40 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          </svg>
+                          <span className="text-[10px] text-black/60 dark:text-white/60 font-medium">Unggah Foto</span>
+                          <input type="file" accept="image/*" className="hidden" onChange={e => handlePhotoUpload(e, 'before')} />
+                        </label>
+                      )}
+                    </div>
+
+                    {/* Foto Perbaikan */}
+                    <div className="p-2.5 rounded-md border border-dashed border-black/30 dark:border-white/30 bg-black/[0.02] dark:bg-white/[0.02]">
+                      <span className="text-[10px] font-bold text-black/60 dark:text-white/60 block mb-1">
+                        Foto Perbaikan (Sesudah)
+                      </span>
+                      {photoAfter ? (
+                        <div className="relative rounded overflow-hidden h-20 group">
+                          <img src={photoAfter} alt="Perbaikan" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setPhotoAfter(null)}
+                            className="absolute top-1 right-1 bg-black/70 text-white rounded p-1 text-[10px] hover:bg-black cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center h-20 rounded border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-center p-2 transition-colors">
+                          <svg className="w-5 h-5 text-black/40 dark:text-white/40 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          </svg>
+                          <span className="text-[10px] text-black/60 dark:text-white/60 font-medium">Unggah Foto</span>
+                          <input type="file" accept="image/*" className="hidden" onChange={e => handlePhotoUpload(e, 'after')} />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tombol Toggle Preview & Unduh Infografis */}
+                <div className="p-2.5 rounded-md border border-black/20 dark:border-white/20 bg-black/[0.02] dark:bg-white/[0.02] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🖼️</span>
+                    <div>
+                      <span className="font-bold text-black dark:text-white text-xs block">
+                        Template Gambar Infografis
+                      </span>
+                      <span className="text-[10px] text-black/50 dark:text-white/50 block">
+                        Didesain otomatis untuk disiarkan ke Telegram NOC &amp; WhatsApp
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowInfographicPreview(!showInfographicPreview)}
+                      className="px-2.5 py-1 rounded text-xs font-semibold border border-black/30 dark:border-white/30 text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      {showInfographicPreview ? 'Tutup Preview' : 'Lihat Desain'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={capturingInfographic}
+                      onClick={handleDownloadInfographic}
+                      className="px-2.5 py-1 rounded text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <span>Unduh PNG</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Preview Box Infografis Jika Diaktifkan */}
+                {showInfographicPreview && (
+                  <div className="p-3 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] text-black/60 dark:text-white/60 font-mono">
+                      <span>Pratinjau Desain Gambar FONA (Rasio 4:5 HD)</span>
+                      <span>Ukuran Render: 780px</span>
+                    </div>
+                    <div className="w-full overflow-x-auto flex justify-center py-2 bg-slate-200/50 dark:bg-neutral-900 rounded-md">
+                      <div className="transform scale-[0.6] sm:scale-[0.7] origin-top">
+                        <MaintenanceInfographicCard
+                          node={maintenanceModalNode}
+                          action={maintenanceModalNode.status === 'maintenance' ? 'end' : 'start'}
+                          workType={workType}
+                          notes={maintenanceNotes}
+                          duration={maintenanceDuration}
+                          startTime={maintenanceStartTime}
+                          endTime={maintenanceEndTime}
+                          dateString={maintenanceDate}
+                          affectedAreas={affectedAreasInput ? affectedAreasInput.split(',').map(s => s.trim()).filter(Boolean) : []}
+                          photoBefore={photoBefore}
+                          photoAfter={photoAfter}
+                          impactedCount={maintenanceInfo?.impacted_count ?? 0}
+                          technicianName={currentUser?.name ? `${currentUser.name} (${currentUser.role || 'Teknisi'})` : 'Tim Jointer / Teknisi Jaringan'}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Broadcast Telegram & System Notification Checkbox */}
-                <label className="flex items-center gap-2.5 p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                <label className="flex items-center gap-2.5 p-2.5 rounded-md bg-black/5 dark:bg-white/5 border border-black/20 dark:border-white/20 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
                   <input
                     type="checkbox"
                     checked={sendTelegramNotif}
                     onChange={e => setSendTelegramNotif(e.target.checked)}
-                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-black/30 dark:border-white/30"
+                    className="w-4 h-4 rounded text-black dark:text-white focus:ring-black dark:focus:ring-white border-black/30 dark:border-white/30"
                   />
                   <div className="flex-1">
                     <span className="font-bold text-black dark:text-white text-xs block">
-                      Kirim Pesan Alert ke Notifikasi Sistem &amp; Telegram NOC
+                      Kirim Infografis Gambar &amp; Pesan Alert ke Telegram NOC
                     </span>
                     <span className="text-[10px] text-black/50 dark:text-white/50 block">
-                      Otomatis membuat notifikasi siaran (Broadcast) dan mengirim pesan detail ke bot Telegram NOC dengan rincian {maintenanceInfo?.impacted_count ?? 0} pelanggan terdampak.
+                      Otomatis merender template infografis HD dan mengirimkannya langsung ke bot Telegram NOC.
                     </span>
                   </div>
                 </label>
               </div>
+
+              {/* Offscreen Render Root untuk Tangkapan Layar Otomatis saat Preview Ditutup */}
+              <div style={{ position: 'fixed', left: '-9999px', top: '0', pointerEvents: 'none', zIndex: -100 }}>
+                <MaintenanceInfographicCard
+                  node={maintenanceModalNode}
+                  action={maintenanceModalNode.status === 'maintenance' ? 'end' : 'start'}
+                  workType={workType}
+                  notes={maintenanceNotes}
+                  duration={maintenanceDuration}
+                  startTime={maintenanceStartTime}
+                  endTime={maintenanceEndTime}
+                  dateString={maintenanceDate}
+                  affectedAreas={affectedAreasInput ? affectedAreasInput.split(',').map(s => s.trim()).filter(Boolean) : []}
+                  photoBefore={photoBefore}
+                  photoAfter={photoAfter}
+                  impactedCount={maintenanceInfo?.impacted_count ?? 0}
+                  technicianName={currentUser?.name ? `${currentUser.name} (${currentUser.role || 'Teknisi'})` : 'Tim Jointer / Teknisi Jaringan'}
+                />
+              </div>
             </div>
 
             {/* Pinned Modal Footer Actions */}
-            <div className="px-5 py-3.5 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex items-center justify-between flex-shrink-0">
+            <div className="px-5 py-3 bg-black/5 dark:bg-white/5 border-t border-black/20 dark:border-white/20 flex items-center justify-between shrink-0">
               <button
                 type="button"
                 onClick={closeMaintenanceModal}
@@ -5313,7 +5759,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                     type="button"
                     disabled={submittingMaintenance}
                     onClick={() => handleToggleMaintenance('end')}
-                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-md shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-md shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
                     {submittingMaintenance ? (
                       <>
@@ -5323,9 +5769,9 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                     ) : (
                       <>
                         <svg className="w-4 h-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span>Selesaikan Maintenance &amp; Pulihkan Normal</span>
+                        <span>Selesaikan Maintenance</span>
                       </>
                     )}
                   </button>
@@ -5334,12 +5780,12 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                     type="button"
                     disabled={submittingMaintenance}
                     onClick={() => handleToggleMaintenance('start')}
-                    className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-md shadow-md shadow-amber-600/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-md shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
                     {submittingMaintenance ? (
                       <>
                         <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        <span>Mengirim Alert &amp; Memulai...</span>
+                        <span>Memproses...</span>
                       </>
                     ) : (
                       <>
@@ -5347,7 +5793,7 @@ function OdpTabContent({ odps, onAddNode, onEditNode, onDeleteNode, onDeleteAllN
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span>Mulai Maintenance &amp; Kirim Alert</span>
+                        <span>Mulai Maintenance</span>
                       </>
                     )}
                   </button>
@@ -5806,13 +6252,13 @@ export default function NetworkInfrastructure() {
 
 
       {/* ── Top Header Banner ──────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-5 rounded-lg shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-3 w-full">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-black dark:text-white tracking-tight font-sans">
-            Data POP - ODC - ODP
+            Data Infrastruktur
           </h1>
         </div>
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 ml-auto">
           {isSuperAdmin && (
             <button
               type="button"
@@ -5829,7 +6275,8 @@ export default function NetworkInfrastructure() {
             isRefreshing={isRefreshing}
             onRefresh={triggerRefresh}
             lastUpdatedText={timeAgoText}
-            label="Segarkan Infrastruktur"
+            label=""
+            title={`Segarkan Infrastruktur${timeAgoText ? ` (${timeAgoText})` : ''}`}
           />
         </div>
       </div>

@@ -144,19 +144,21 @@ export default function Dashboard() {
   };
 
   // 2. Optical Signal Power Distribution Chart
+  const rxRangeDescriptions = [
+    'Sangat Baik (> -19 dBm)',
+    'Normal (-19 ~ -24 dBm)',
+    'Warning (-24 ~ -27 dBm)',
+    'Kritis (< -27 dBm)',
+    'LOS / Offline (Loss of Signal)',
+  ];
+
   const rxPowerData = useMemo(() => {
     const rx = metrics?.rx_power;
     return {
-      labels: [
-        'Sangat Baik (> -19 dBm)',
-        'Normal (-19~-24 dBm)',
-        'Warning (-24~-27 dBm)',
-        'Kritis (< -27 dBm)',
-        'LOS / Offline'
-      ],
+      labels: ['Sangat Baik', 'Normal', 'Warning', 'Kritis', 'LOS'],
       datasets: [
         {
-          label: 'Jumlah Modem / ODP',
+          label: 'Jumlah ONU',
           data: [
             rx?.sangat_baik ?? 0,
             rx?.normal ?? 0,
@@ -185,104 +187,33 @@ export default function Dashboard() {
     maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
-      tooltip: { padding: 10, cornerRadius: 6 }
-    },
-    scales: {
-      y: {
-        grid: { color: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' },
-        ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 } }
-      },
-      x: {
-        grid: { display: false },
-        ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 } }
+      tooltip: {
+        padding: 10,
+        cornerRadius: 6,
+        callbacks: {
+          title: (items) => {
+            if (!items.length) return '';
+            const idx = items[0].dataIndex;
+            return rxRangeDescriptions[idx] || items[0].label;
+          },
+          label: (context) => ` Jumlah: ${context.parsed.y} ONU`
+        }
       }
-    }
-  }), [isDark]);
-
-  // 3. Weekly Incident & MTTR Trend Chart
-  const weeklyTrendData = useMemo(() => {
-    const trend = metrics?.weekly_incident_trend ?? {
-      dates: ['19 Agu', '20 Agu', '21 Agu', '22 Agu', '23 Agu', '24 Agu', '25 Agu'],
-      new_incidents: [0, 0, 0, 0, 0, 0, 0],
-      resolved_incidents: [0, 0, 0, 0, 0, 0, 0],
-      avg_mttr_minutes: [0, 0, 0, 0, 0, 0, 0],
-    };
-
-    return {
-      labels: trend.dates,
-      datasets: [
-        {
-          type: 'line',
-          label: 'Rata-Rata Waktu MTTR (Menit)',
-          data: trend.avg_mttr_minutes,
-          borderColor: '#818cf8',
-          backgroundColor: 'rgba(129, 140, 248, 0.1)',
-          borderWidth: 2,
-          pointBackgroundColor: '#6366f1',
-          pointRadius: 4,
-          fill: true,
-          tension: 0.3,
-          yAxisID: 'y1',
-        },
-        {
-          type: 'bar',
-          label: 'Insiden Baru',
-          data: trend.new_incidents,
-          backgroundColor: '#f43f5e',
-          borderRadius: 4,
-          borderWidth: 0,
-          yAxisID: 'y',
-        },
-        {
-          type: 'bar',
-          label: 'Tiket Diselesaikan',
-          data: trend.resolved_incidents,
-          backgroundColor: '#10b981',
-          borderRadius: 4,
-          borderWidth: 0,
-          yAxisID: 'y',
-        }
-      ]
-    };
-  }, [metrics]);
-
-  const weeklyTrendOptions = useMemo(() => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      mode: 'index',
-      intersect: false,
-    },
-    plugins: {
-      legend: {
-        position: 'top',
-        labels: {
-          color: isDark ? '#ffffff' : '#000000',
-          font: { size: 10, weight: 'bold' },
-          boxWidth: 12,
-          usePointStyle: true,
-        }
-      },
-      tooltip: { padding: 10, cornerRadius: 6 }
     },
     scales: {
       y: {
-        type: 'linear',
-        display: true,
-        position: 'left',
         grid: { color: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' },
-        ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 }, stepSize: 1 }
-      },
-      y1: {
-        type: 'linear',
-        display: true,
-        position: 'right',
-        grid: { drawOnChartArea: false },
         ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 } }
       },
       x: {
         grid: { display: false },
-        ticks: { color: isDark ? '#ffffff' : '#000000', font: { size: 10 } }
+        ticks: {
+          color: isDark ? '#ffffff' : '#000000',
+          font: { size: 11, weight: 'bold' },
+          maxRotation: 0,
+          minRotation: 0,
+          autoSkip: false
+        }
       }
     }
   }), [isDark]);
@@ -427,76 +358,23 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── SECTION 2: CHARTS (DISTRIBUSI SINYAL OPTICAL POWER & TREN INSIDEN / MTTR) ─────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left (6 Cols): Distribusi Sinyal Optical Power ONU */}
-        <div className="lg:col-span-6 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-black dark:text-white">
-                Distribusi Sinyal Optical Power ONU
-              </h3>
-              <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                Avg: {avgPowerDbm ? `${parseFloat(avgPowerDbm).toFixed(2)} dBm` : '—'}
-              </span>
-            </div>
-            <div className="h-56 w-full">
-              <Bar data={rxPowerData} options={barChartOptions} />
-            </div>
+      {/* ── SECTION 2: CHARTS (DISTRIBUSI REDAMAN) ─────── */}
+      <div className="w-full bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-black dark:text-white">
+              Distribusi Redaman
+            </h3>
           </div>
-          <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 flex items-center justify-between text-xs text-black/70 dark:text-white/70">
-            <span>Rata-Rata Redaman Seluruh ONU</span>
-            <span className="font-bold text-black dark:text-white font-mono">
-              {avgPowerDbm ? `${parseFloat(avgPowerDbm).toFixed(2)} dBm (Real-Time)` : 'Data Belum Tersedia'}
-            </span>
+          <div className="h-56 w-full">
+            <Bar data={rxPowerData} options={barChartOptions} />
           </div>
         </div>
-
-        {/* Right (6 Cols): Tren Insiden & Waktu Pemulihan (Weekly SLA & MTTR Trend) */}
-        <div className="lg:col-span-6 bg-white dark:bg-black border border-black/70 dark:border-white/70 rounded-lg p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-black dark:text-white">
-                  Tren Insiden &amp; Waktu Pemulihan (7 Hari Terakhir)
-                </h3>
-                <p className="text-xs text-black/70 dark:text-white/70 mt-0.5">
-                  Statistik tiket gangguan masuk vs diselesaikan beserta MTTR
-                </p>
-              </div>
-              <Link
-                to="/tickets"
-                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-              >
-                Daftar Tiket →
-              </Link>
-            </div>
-
-            <div className="h-56 w-full">
-              <Bar data={weeklyTrendData} options={weeklyTrendOptions} />
-            </div>
-          </div>
-
-          <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 grid grid-cols-3 gap-2 text-center text-xs">
-            <div>
-              <span className="text-[10px] text-black/60 dark:text-white/60 block font-semibold uppercase">Total Tiket 7 Hari</span>
-              <span className="font-bold text-black dark:text-white font-mono">
-                {metrics?.weekly_incident_trend?.new_incidents?.reduce((a, b) => a + b, 0) ?? 0} Tiket
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-black/60 dark:text-white/60 block font-semibold uppercase">Terselesaikan</span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                {metrics?.weekly_incident_trend?.resolved_incidents?.reduce((a, b) => a + b, 0) ?? 0} Tiket
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-black/60 dark:text-white/60 block font-semibold uppercase">Rata-Rata MTTR</span>
-              <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">
-                ~32 Menit
-              </span>
-            </div>
-          </div>
+        <div className="mt-3 pt-3 border-t border-black/10 dark:border-white/10 flex items-center justify-between text-xs text-black/70 dark:text-white/70">
+          <span>Rata-Rata Redaman</span>
+          <span className="font-bold text-black dark:text-white font-mono">
+            {avgPowerDbm ? `${parseFloat(avgPowerDbm).toFixed(2)} dBm (Real-Time)` : 'Data Belum Tersedia'}
+          </span>
         </div>
       </div>
 
@@ -632,11 +510,8 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-sm font-bold text-black dark:text-white">
-                  Log Peringatan &amp; Gangguan Real-Time
+                  Log Peringatan
                 </h3>
-                <p className="text-xs text-black/70 dark:text-white/70 mt-0.5">
-                  Feed insiden otomatis terhubung dengan sistem tiket
-                </p>
               </div>
 
               {/* Filter Tabs */}
@@ -691,9 +566,9 @@ export default function Dashboard() {
                   return (
                     <div
                       key={alert.id}
-                      className="p-3 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 flex items-center justify-between gap-3 transition-all"
+                      className="p-3 rounded-lg border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 transition-all"
                     >
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className={`w-2 h-2 rounded-full ${dotColor} shrink-0 ${isCrit ? 'animate-ping' : ''}`}></span>
                           <span className="font-bold text-xs text-black dark:text-white truncate">
@@ -718,13 +593,6 @@ export default function Dashboard() {
                           )}
                         </div>
                       </div>
-
-                      <Link
-                        to="/otdr-tracing"
-                        className="shrink-0 px-2.5 py-1 rounded-md text-xs font-semibold bg-white dark:bg-black border border-black/30 dark:border-white/30 text-black dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                      >
-                        Tracing OTDR
-                      </Link>
                     </div>
                   );
                 })

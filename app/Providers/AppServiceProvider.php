@@ -23,6 +23,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('ai-chat', fn (Request $request) => [
+            Limit::perMinute(12)->by('ai-user:'.($request->user()?->id ?? $request->ip())),
+            Limit::perMinute(60)->by('ai-provider-global'),
+        ]);
+
         RateLimiter::for('login', function (Request $request) {
             $identity = hash('sha256', mb_strtolower(trim((string) $request->input('username', ''))));
 

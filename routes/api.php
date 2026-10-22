@@ -259,6 +259,13 @@ Route::put('popup-alerts/{id}', [\App\Http\Controllers\PopupAlertController::cla
 Route::patch('popup-alerts/{id}/toggle', [\App\Http\Controllers\PopupAlertController::class, 'toggleActive']);
 Route::delete('popup-alerts/{id}', [\App\Http\Controllers\PopupAlertController::class, 'destroy']);
 
+// FONA AI Copilot (Network Operations Intelligence Assistant)
+Route::get('ai-assistant/history', [\App\Http\Controllers\AiAssistantController::class, 'getHistory']);
+Route::delete('ai-assistant/history', [\App\Http\Controllers\AiAssistantController::class, 'clearHistory']);
+Route::post('ai-assistant/chat', [\App\Http\Controllers\AiAssistantController::class, 'chat'])->middleware('throttle:ai-chat');
+Route::get('ai-assistant/settings', [\App\Http\Controllers\AiAssistantController::class, 'getSettings']);
+Route::post('ai-assistant/settings', [\App\Http\Controllers\AiAssistantController::class, 'updateSettings']);
+
 });
 
 

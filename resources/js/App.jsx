@@ -9,6 +9,7 @@ import VoiceCallManager from './components/VoiceCallManager.jsx';
 import PageTransitionWrapper from './components/PageTransitionWrapper.jsx';
 import GlobalAlertModal from './components/GlobalAlertModal.jsx';
 import UserPopupAnnouncementModal from './components/UserPopupAnnouncementModal.jsx';
+import AiAssistantWidget from './components/AiAssistantWidget.jsx';
 
 // Route-based Code Splitting (On-demand Lazy Loading)
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
@@ -153,6 +154,9 @@ function AppContent() {
 
       {/* Real-Time WebRTC In-App Voice Call Engine */}
       <VoiceCallManager currentUser={currentUser} />
+
+      {/* FONA AI Copilot (Network Operations Intelligence Assistant) */}
+      <AiAssistantWidget key={currentUser?.id ?? 'guest'} currentUser={currentUser} />
     </div>
   );
 }

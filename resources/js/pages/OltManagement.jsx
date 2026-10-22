@@ -1234,9 +1234,9 @@ export default function OltManagement() {
       {registrationTarget && <OltCustomerRegistrationModal key={`${registrationTarget.device.id}:${registrationTarget.onu.serial_number}`} {...registrationTarget} onClose={()=>setRegistrationTarget(null)} onSaved={result=>{const device=registrationTarget.device;setRegistrationTarget(null);showNotif(result.message,'success');fetchOltHardware(device.vendor_key||'zte-c300',device.id,true,false);fetchOltTopology(device.id);}}/>}
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-black border border-black/70 dark:border-white/70 p-4 sm:p-5 rounded-lg shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-black dark:text-white tracking-tight font-sans">
+          <h1 className="text-xl sm:text-2xl font-black text-black dark:text-white tracking-tight font-sans">
             Manajemen Perangkat OLT
           </h1>
           <div className="flex items-center flex-wrap gap-2 mt-1">
@@ -1255,9 +1255,9 @@ export default function OltManagement() {
         </div>
 
         {/* Action Buttons Toolbar - Fully Responsive Grid/Flex */}
-        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 w-full lg:w-auto">
+        <div className="flex items-center gap-2 flex-wrap shrink-0 sm:ml-auto">
           {/* Live Real-Time Database Telemetry Status Indicator */}
-          <div className="flex items-center justify-between sm:justify-start gap-2 px-3 py-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 shadow-2xs">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 shadow-2xs">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -1277,7 +1277,7 @@ export default function OltManagement() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+          
             <RefreshButton
               isRefreshing={isRefreshing}
               onRefresh={() => {
@@ -1288,8 +1288,9 @@ export default function OltManagement() {
                 }
               }}
               lastUpdatedText={timeAgoText}
-              label="Segarkan OLT"
-              className="w-full sm:w-auto"
+              label=""
+            title={`Segarkan OLT${timeAgoText ? ` (${timeAgoText})` : ''}`}
+
             />
             {isSuperAdmin && activeOlt && (
               <button
@@ -1334,7 +1335,6 @@ export default function OltManagement() {
                 {disconnectingId === activeOlt.id ? <Spinner /> : <span>Hentikan SNMP</span>}
               </button>
             )}
-          </div>
         </div>
       </div>
 

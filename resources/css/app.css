@@ -437,6 +437,51 @@ article[class*="rounded-"] {
   animation: beamSlide 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+/* ── Modern High-End Loader & Shimmer Animations ── */
+@keyframes laserSweep {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(60%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes skeletonWave {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-laser-sweep {
+  animation: laserSweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-shimmer::after {
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.04) 50%,
+    transparent 100%
+  );
+  animation: skeletonWave 1.6s ease-in-out infinite;
+  content: '';
+  pointer-events: none;
+}
+
+.dark .skeleton-shimmer::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
+  );
+}
+
 /* ── Centered Alert / CRUD Popup Spring Animations ── */
 @keyframes alertModalPopIn {
   0% {
