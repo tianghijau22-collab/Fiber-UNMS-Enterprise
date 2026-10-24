@@ -93,6 +93,10 @@ class PollOltTelemetry extends Command
             return $code;
         } finally {
             $a=$this->pollHealth->finish($olt,$code);
+            // Retry legacy offline sources through the same collector, without a second scheduler probe.
+            if ($olt->status === 'offline' && ($a['connection']['status'] ?? '') === 'RESPONDING') {
+                OltDevice::whereKey($olt->id)->where('status', 'offline')->update(['status'=>'active']);
+            }
             $query=Cache::get('olt_active_querying_port_'.$id,[]);
             if(is_array($query))Cache::put('olt_active_querying_port_'.$id,array_replace($query,['status'=>$a['result'],'finished_at'=>$a['finished_at']]),60);
             self::appendWorkerLog($olt->name,'HEALTH',$a['result'],'Hasil pembacaan: '.$a['result'],[
@@ -106,7 +110,7 @@ class PollOltTelemetry extends Command
     protected function dispatchSinglePortParallel(OltController $oltCtrl, string $engineMode = 'slot_parallel'): int
     {
         $cycleStart = microtime(true);
-        $devices = OltDevice::where('status', 'active')->get();
+        $devices = OltDevice::whereIn('status', ['active', 'offline'])->get();
 
         if ($devices->isEmpty()) {
             $this->info('No active OLT devices found.');
@@ -235,7 +239,7 @@ class PollOltTelemetry extends Command
         if (time() - $lastMassCheck >= 20) {
             Cache::put('last_mass_client_down_check_ts', time(), 120);
             try {
-                \App\Services\OpticalFaultLocalizationService::detectMassClientDown(2, 100.0);
+                \App\Jobs\EvaluateStoredOpticalFaults::dispatch();
             } catch (\Throwable $e) {
                 // Ignore error
             }

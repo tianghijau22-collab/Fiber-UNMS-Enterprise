@@ -115,7 +115,7 @@ class FaultTracingController extends Controller {
     }
 
     public function opticalDiagnostics() {
-        $diagnostics = \App\Services\OpticalFaultLocalizationService::runDiagnostic();
+        $diagnostics = \App\Services\OpticalFaultLocalizationService::preview();
         return response()->json([
             'status' => 'success',
             'data'   => $diagnostics,

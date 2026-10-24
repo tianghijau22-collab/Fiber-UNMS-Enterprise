@@ -16,6 +16,7 @@ use App\Services\Olt\FastOpticalProbeService;
 use App\Services\Olt\OltReadBusy;
 use App\Services\Olt\OnuTelemetryView;
 use App\Services\GisOpticalFaultAnalyzer;
+use App\Services\NetworkOpticalEvidence;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -83,25 +84,7 @@ class NetworkNodeController extends Controller
 
         $telemetry = OnuTelemetryView::load();
 
-        // 3. Batch Query: Semua ONT registrations yang terhubung ke node_id
-        $ontsByNode = DB::table('ont_registrations')
-            ->join('customer_services as telemetry_services', 'telemetry_services.id', '=', 'ont_registrations.customer_service_id')
-            ->join('customers as telemetry_customers', 'telemetry_customers.id', '=', 'telemetry_services.customer_id')
-            ->whereNull('telemetry_services.deleted_at')
-            ->whereNull('telemetry_customers.deleted_at')
-            ->join('network_ports', 'network_ports.customer_service_id', '=', 'ont_registrations.customer_service_id')
-            ->whereIn('network_ports.node_id', $nodeIds)
-            ->whereNull('ont_registrations.deleted_at')
-            ->select('network_ports.node_id', 'ont_registrations.onu_serial', 'ont_registrations.onu_mac', 'ont_registrations.status', 'ont_registrations.rx_power')
-            ->get()
-            ->groupBy('node_id');
-
-        // 3b. Batch Query: Port yang terpakai / memiliki customer di node_id
-        $portsByNode = DB::table('network_ports')
-            ->whereIn('node_id', $nodeIds)
-            ->select('node_id', 'status', 'customer_service_id', 'customer_name_cache')
-            ->get()
-            ->groupBy('node_id');
+        $optical = app(NetworkOpticalEvidence::class)->observe($nodes, $telemetry)['observations'];
 
         // 4. Batch Query untuk Customer Services (Auto-detected interface)
         $custServicesByNode = DB::table('network_ports')
@@ -121,17 +104,8 @@ class NetworkNodeController extends Controller
         // 5. Transform nodes in memory
         $formattedNodes = [];
         foreach ($nodes as $node) {
-            $nodeOnts = $ontsByNode->get($node->id) ?? collect();
-            $nodePorts = $portsByNode->get($node->id) ?? collect();
-
-            $usedPortCount = OnuTelemetryView::occupiedPortCount($nodePorts);
-            $totalClients = max($nodeOnts->count(), $usedPortCount);
-
-            $views = [];
-            foreach ($nodeOnts as $ont) {
-                $views[] = $telemetry->forNode($node, $ont->onu_serial, $ont->onu_mac);
-            }
-            $summary = OnuTelemetryView::summarize($views, $totalClients);
+            $summary = $optical[$node->id]['summary'];
+            $totalClients = $summary['total'];
             $powers = $summary['powers'];
             $hasLoss = $summary['has_loss'];
             $onlineClients = $summary['online_clients'];
@@ -275,7 +249,7 @@ class NetworkNodeController extends Controller
                 'online_clients'         => $onlineClients,
                 'loss_clients'           => $lossClients,
                 'is_loss_total'          => $isLossTotal,
-                'optical_evidence'       => $node->node_type === 'ODP' ? GisOpticalFaultAnalyzer::evidence($views, $totalClients) : null,
+                'optical_evidence'       => $node->node_type === 'ODP' ? $optical[$node->id]['evidence'] : null,
             ];
         }
 

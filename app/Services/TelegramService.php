@@ -98,7 +98,7 @@ class TelegramService
         $combined   = $titleUpper . ' ' . $bodyUpper;
 
         // 1. Explicit Mass Types
-        if (in_array($typeUpper, ['MASS_OUTAGE', 'MASS_RECOVERY', 'FIBER_CUT', 'BROADCAST'])) {
+        if (in_array($typeUpper, ['MASS_OUTAGE', 'MASS_RECOVERY', 'OPTICAL_SEGMENT_INDICATION', 'OPTICAL_SEGMENT_RECOVERY', 'SOURCE_UNAVAILABLE', 'SOURCE_RECOVERY', 'FIBER_CUT', 'BROADCAST'])) {
             return true;
         }
 

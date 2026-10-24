@@ -2,477 +2,211 @@
 
 namespace App\Services;
 
-use App\Models\NetworkNode;
-use App\Models\NetworkPort;
-use App\Models\OntRegistration;
-use App\Models\AppNotification;
-use App\Models\AuditLog;
-use Illuminate\Support\Facades\Log;
+use App\Jobs\PublishOpticalFaultNotification;
+use Illuminate\Support\Facades\Cache;
 
+/** GIS and automatic ODP/segment alarms consume the same stored observations. */
 class OpticalFaultLocalizationService
 {
-    /**
-     * Jalankan diagnosa komprehensif:
-     * 1. Deteksi Klien Mati Massal per ODP / Interface PON
-     * 2. Lokalisasi Titik Putus Jalur Berdasarkan Batas Redaman ODP Terakhir
-     */
-    public static function runDiagnostic(): array
-    {
-        $massOutages = static::detectMassClientDown();
-        $boundaryBreaks = static::localizeOpticalBreakBoundaries();
+    public const STATE_KEY = 'optical_fault_state_v2';
+    public const LOCK_KEY = 'optical_fault_evaluation_v2';
 
-        return [
-            'timestamp'             => now()->format('Y-m-d H:i:s'),
-            'mass_outages_detected' => count($massOutages),
-            'mass_outages'          => $massOutages,
-            'boundary_breaks_count' => count($boundaryBreaks),
-            'boundary_breaks'       => $boundaryBreaks,
-        ];
+    public static function preview(): array
+    {
+        return app(self::class)->describe(app(NetworkOpticalEvidence::class)->capture());
     }
 
-    /**
-     * 1. Deteksi Client Mati Massal pada ODP atau Port PON OLT
-     */
+    public static function runDiagnostic(): array { return app(self::class)->evaluate(); }
+
+    /** Compatibility: thresholds now follow the all-N/A GIS evidence contract. */
     public static function detectMassClientDown(int $minThreshold = 2, float $downPercentageThreshold = 100.0): array
     {
-        $alerts = [];
-
-        // 🚀 OPTIMIZED: 1 single query untuk mengambil seluruh ONU yang terhubung ke ODP beserta relasinya
-        $allOnus = \Illuminate\Support\Facades\DB::table('ont_registrations')
-            ->join('customer_services', 'customer_services.id', '=', 'ont_registrations.customer_service_id')
-            ->join('customers', 'customers.id', '=', 'customer_services.customer_id')
-            ->join('network_ports', 'network_ports.customer_service_id', '=', 'customer_services.id')
-            ->join('network_nodes as odp', 'odp.id', '=', 'network_ports.node_id')
-            ->leftJoin('network_nodes as odc', 'odc.id', '=', 'odp.parent_node_id')
-            ->leftJoin('olt_devices', 'olt_devices.id', '=', 'odp.olt_device_id')
-            ->where('odp.node_type', 'ODP')
-            ->select([
-                'odp.id as odp_id',
-                'odp.name as odp_name',
-                'odp.code as odp_code',
-                'odp.olt_port_ref',
-                'odc.name as odc_name',
-                'olt_devices.name as olt_name',
-                'ont_registrations.id as ont_id',
-                'ont_registrations.onu_serial',
-                'ont_registrations.onu_mac',
-                'ont_registrations.status',
-                'ont_registrations.rx_power',
-                'customers.id as customer_id',
-                'customers.customer_number',
-                'customers.name as customer_name',
-            ])
-            ->get();
-
-        $groupedByOdp = $allOnus->groupBy('odp_id');
-
-        foreach ($groupedByOdp as $odpId => $onus) {
-            $totalOnus = $onus->count();
-            if ($totalOnus < $minThreshold) {
-                continue;
-            }
-
-            $first = $onus->first();
-            $odpName = $first->odp_name;
-            $odpCode = $first->odp_code;
-            $odcName = $first->odc_name ?: 'ODC Induk';
-            $oltName = $first->olt_name ?: 'OLT';
-            $portRef = $first->olt_port_ref ?: 'PON Port';
-            $massKey = "notif_mass_down_{$odpId}";
-
-            // Hitung ONU yang down / LOS / offline
-            $downOnus = $onus->filter(function ($onu) {
-                return $onu->status !== 'active' 
-                    || $onu->rx_power === null 
-                    || !is_numeric($onu->rx_power)
-                    || (float)$onu->rx_power <= -32.0;
-            });
-
-            $downCount = $downOnus->count();
-            $onlineCount = max(0, $totalOnus - $downCount);
-            $pctVal = $totalOnus > 0 ? round(($downCount / $totalOnus) * 100.0, 1) : 0;
-
-            // 🎯 POLA CERDAS ODP:
-            // 1. 100% Total Loss (Seluruh pelanggan pada ODP down)
-            // 2. Parsial Berat (>= 80% down DAN hanya 1 s/d 3 modem yang masih ON)
-            $isOdpDown = ($totalOnus >= 2 && $downCount === $totalOnus)
-                || ($totalOnus >= 4 && $pctVal >= 80.0 && $onlineCount <= 3);
-
-            if ($isOdpDown) {
-                // Anti-spam key: hanya evaluasi jika belum dalam cooldown
-                if (!\Illuminate\Support\Facades\Cache::has($massKey)) {
-                    // 🚀 LIVE PROBE VERIFICATION: Verifikasi langsung ke OLT fisik (~35ms)
-                    // Jangan percaya 100% pada database statis jika OLT melaporkan pelanggan sebenarnya hidup!
-                    $liveProbe = \App\Services\Olt\FastOpticalProbeService::probeOdpStatus($odpId);
-                    if (empty($liveProbe['success'])) {
-                        // 🛡️ TRANSIT SAFEGUARD: Probe SNMP ke OLT tidak merespons (kemungkinan timeout / paket UDP drop di VPN).
-                        // JANGAN kirim notifikasi gangguan massal jika belum terverifikasi oleh OLT!
-                        \Illuminate\Support\Facades\Log::warning("[OpticalFaultLocalization] Skip alert ODP #{$odpId} ({$odpName}): Live probe SNMP timeout/unreachable.");
-                        continue;
-                    }
-
-                    if (!$liveProbe['is_odp_down']) {
-                        // OLT fisik membuktikan ODP ini TIDAK down (mayoritas pelanggan sehat)!
-                        // Batalkan alert palsu, reset counter, dan sinkronkan data aktif ke DB
-                        \Illuminate\Support\Facades\Cache::forget("odp_down_confirm_count_{$odpId}");
-                        \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('active', null, $odpId);
-                        continue;
-                    }
-
-                    // 🛡️ ANTI-FLAPPING CONFIRMATION: Butuh minimal 2x siklus kegagalan berturut-turut
-                    $confirmCount = (int)\Illuminate\Support\Facades\Cache::get("odp_down_confirm_count_{$odpId}", 0) + 1;
-                    \Illuminate\Support\Facades\Cache::put("odp_down_confirm_count_{$odpId}", $confirmCount, 180);
-
-                    if ($confirmCount < 2) {
-                        \Illuminate\Support\Facades\Log::info("[OpticalFaultLocalization] ODP #{$odpId} ({$odpName}) terdeteksi down 1x, menunggu konfirmasi siklus berikutnya...");
-                        continue;
-                    }
-
-                    $downCount = $liveProbe['down_count'];
-                    $onlineCount = $liveProbe['online_count'];
-                    $pctVal = $liveProbe['pct_down'];
-                    $probeStates = $liveProbe['onu_states'] ?? [];
-
-                    $alertItem = [
-                        'odp_id'          => $odpId,
-                        'odp_name'        => $odpName,
-                        'odp_code'        => $odpCode,
-                        'odc_name'        => $odcName,
-                        'olt_name'        => $oltName,
-                        'olt_port_ref'    => $portRef,
-                        'total_clients'   => $totalOnus,
-                        'down_clients'    => $downCount,
-                        'down_percentage' => $pctVal,
-                        'sample_onus'     => $downOnus->take(10)->pluck('onu_serial')->toArray(),
-                    ];
-                    $alerts[] = $alertItem;
-
-                    \Illuminate\Support\Facades\Cache::put($massKey, true, now()->addHours(12));
-
-                    // 🛡️ HIERARCHY GUARD: Jika Interface OLT induk sedang dalam status Gangguan Massal Interface
-                    $isParentInterfaceInMassOutage = false;
-                    if (!empty($portRef)) {
-                        $cleanP = strtolower(trim($portRef));
-                        $allDevs = \App\Models\OltDevice::all(['id']);
-                        foreach ($allDevs as $dev) {
-                            if (\Illuminate\Support\Facades\Cache::has("interface_in_mass_outage_{$dev->id}_{$cleanP}") ||
-                                \Illuminate\Support\Facades\Cache::has("interface_in_mass_outage_{$dev->id}_gpon-olt_{$cleanP}")) {
-                                $isParentInterfaceInMassOutage = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!$isParentInterfaceInMassOutage) {
-                        $cleanOdpTitle = preg_match('/^odp/i', $odpName) ? $odpName : "ODP {$odpName}";
-
-                        // Susun daftar seluruh pelanggan beserta nilai redaman riil hasil probe
-                        $clientLines = [];
-                        $onlineSerials = [];
-                        $idx = 1;
-                        foreach ($onus as $onu) {
-                            $cName = $onu->customer_name ?: "Pelanggan #{$onu->ont_id}";
-                            $cId   = $onu->customer_number ?: ($onu->customer_id ? "ID-{$onu->customer_id}" : "ID-{$onu->ont_id}");
-                            $sn    = strtoupper(trim((string)($onu->onu_serial ?: ($onu->onu_mac ?: '—'))));
-
-                            $isDown = true;
-                            $rxVal = -40.00;
-                            if (isset($probeStates[$sn])) {
-                                $isDown = !$probeStates[$sn]['is_online'];
-                                $rxVal = $probeStates[$sn]['rx_power'] ?? ($isDown ? -40.00 : null);
-                            } else {
-                                $isDown = ($onu->status !== 'active' || $onu->rx_power === null || !is_numeric($onu->rx_power) || (float)$onu->rx_power <= -32.0);
-                                $rxVal = $isDown ? -40.00 : (float)$onu->rx_power;
-                            }
-
-                            if ($isDown) {
-                                $badge = "🔴";
-                                $rxStr = "-40.00 dBm (LOS)";
-                            } else {
-                                $badge = "🟢";
-                                $onlineSerials[] = $sn;
-                                $rxStr = $rxVal !== null ? number_format($rxVal, 2, '.', '') . " dBm (ONLINE)" : "ONLINE";
-                            }
-
-                            $clientLines[] = "{$idx}. {$badge} [{$cId}] <b>{$cName}</b>\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
-                            $idx++;
-                        }
-                        $clientListText = implode("\n", $clientLines);
-
-                        // 💾 Bulk sync hanya ke yang offline (exclude modem online!)
-                        \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('inactive', null, $odpId, -40.00, $onlineSerials);
-
-                        if ($downCount === $totalOnus || $onlineCount === 0) {
-                            $smartOdpTitle = "🚨 ALARM GANGGUAN MASSAL: {$cleanOdpTitle} (100% TOTAL LOSS)";
-                            $terdampakOdpText = "🔴 <b>{$totalOnus} dari {$totalOnus} Pelanggan (100% TOTAL LOSS)</b>";
-                        } else {
-                            $smartOdpTitle = "🚨 ALARM GANGGUAN MASSAL: {$cleanOdpTitle} ({$pctVal}% LOSS • {$onlineCount} MODEM MASIH ON)";
-                            $terdampakOdpText = "🔴 <b>{$downCount} dari {$totalOnus} Pelanggan ({$pctVal}% LOSS • {$onlineCount} Masih ON)</b>";
-                        }
-
-                        $cleanMassMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
-                                        "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
-                                        "<b>• Klien Terdampak:</b> {$terdampakOdpText}\n\n" .
-                                        "<b>Daftar Klien pada ODP:</b>\n" .
-                                        "{$clientListText}\n\n" .
-                                        "<i>Status: Terdeteksi indikasi gangguan fisik kabel distribusi pada splitter ODP.</i>";
-
-                        AppNotification::notifyAll(
-                            $smartOdpTitle,
-                            $cleanMassMsg,
-                            'MASS_OUTAGE',
-                            '/network',
-                            'MASS_OUTAGE',
-                            true,
-                            'POLL_TELEMETRY'
-                        );
-                    }
-                    \Illuminate\Support\Facades\Cache::forget('dashboard_metrics_payload');
-                }
-            } else {
-                // 🟢 PEMULIHAN ODP: Jika sebelumnya tercatat gangguan massal
-                if (\Illuminate\Support\Facades\Cache::has($massKey)) {
-                    // 🚀 LIVE PROBE RECOVERY VERIFICATION:
-                    // JANGAN langsung kirim pemulihan jika hanya 1-2 pelanggan yang pulih!
-                    // Wajib verifikasi via SNMP ke OLT bahwa minimal 70% pelanggan sudah ON
-                    $probeRec = \App\Services\Olt\FastOpticalProbeService::probeOdpStatus($odpId, null, null, true);
-                    if (empty($probeRec['success'])) {
-                        continue;
-                    }
-                    $probeOnline = $probeRec['online_count'] ?? $onlineCount;
-                    $probeStates = $probeRec['onu_states'] ?? [];
-
-                    $minRecoveryCount = (int)ceil($totalOnus * 0.70);
-                    if ($probeOnline < $minRecoveryCount) {
-                        // Masih belum memenuhi syarat pemulihan massal (masih dianggap gangguan)
-                        continue;
-                    }
-
-                    \Illuminate\Support\Facades\Cache::forget($massKey);
-                    \Illuminate\Support\Facades\Cache::forget("odp_down_confirm_count_{$odpId}");
-                    \Illuminate\Support\Facades\Cache::forget('dashboard_metrics_payload');
-
-                    // 💾 Bulk sync DB ke active
-                    \App\Services\Olt\FastOpticalProbeService::instantBulkDbSync('active', null, $odpId);
-
-                    // Jika port induk sedang dalam pemulihan massal interface, jangan kirim per ODP agar tidak spam
-                    $isParentInterfaceInMassOutage = false;
-                    if (!empty($portRef)) {
-                        $cleanP = strtolower(trim($portRef));
-                        $allDevs = \App\Models\OltDevice::all(['id']);
-                        foreach ($allDevs as $dev) {
-                            if (\Illuminate\Support\Facades\Cache::has("interface_in_mass_outage_{$dev->id}_{$cleanP}") ||
-                                \Illuminate\Support\Facades\Cache::has("interface_in_mass_outage_{$dev->id}_gpon-olt_{$cleanP}")) {
-                                $isParentInterfaceInMassOutage = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!$isParentInterfaceInMassOutage) {
-                        $cleanOdpTitle = preg_match('/^odp/i', $odpName) ? $odpName : "ODP {$odpName}";
-
-                        $clientRecoveryLines = [];
-                        $idx = 1;
-                        foreach ($onus as $onu) {
-                            $cName = $onu->customer_name ?: "Pelanggan #{$onu->ont_id}";
-                            $cId   = $onu->customer_number ?: ($onu->customer_id ? "ID-{$onu->customer_id}" : "ID-{$onu->ont_id}");
-                            $sn    = strtoupper(trim((string)($onu->onu_serial ?: ($onu->onu_mac ?: '—'))));
-
-                            $isUp = true;
-                            $rxVal = null;
-                            if (isset($probeStates[$sn])) {
-                                $isUp = $probeStates[$sn]['is_online'];
-                                $rxVal = $probeStates[$sn]['rx_power'] ?? null;
-                            } else {
-                                $isUp = ($onu->status === 'active' && is_numeric($onu->rx_power) && (float)$onu->rx_power > -32.0);
-                                $rxVal = (float)$onu->rx_power;
-                            }
-
-                            $badge = $isUp ? "🟢" : "🔴";
-                            if ($isUp && $rxVal !== null && $rxVal > -35.0) {
-                                $rxStr = number_format($rxVal, 2, '.', '') . " dBm (ONLINE)";
-                            } else {
-                                $rxStr = $isUp ? "Pulih Normal" : "-40.00 dBm (LOS)";
-                            }
-                            $clientRecoveryLines[] = "{$idx}. {$badge} [{$cId}] <b>{$cName}</b>\n   └ SN: <code>{$sn}</code> • <code>{$rxStr}</code>";
-                            $idx++;
-                        }
-                        $recoveryDetailText = implode("\n", $clientRecoveryLines);
-
-                        $smartRecTitle = ($probeOnline === $totalOnus)
-                            ? "🟢 PEMULIHAN GANGGUAN MASSAL: {$cleanOdpTitle} (100% PULIH NORMAL)"
-                            : "🟢 PEMULIHAN GANGGUAN MASSAL: {$cleanOdpTitle} ({$probeOnline}/{$totalOnus} KLIEN ONLINE)";
-
-                        $cleanRecoveryMsg = "<b>• Node ODP:</b> {$cleanOdpTitle}\n" .
-                                            "<b>• Interface OLT:</b> <code>{$portRef}</code>\n" .
-                                            "<b>• Status:</b> 🟢 <b>LAYANAN ODP PULIH ({$probeOnline}/{$totalOnus} Klien Online)</b>\n\n" .
-                                            "<b>Daftar Seluruh Pelanggan pada ODP:</b>\n" .
-                                            "{$recoveryDetailText}\n\n" .
-                                            "<i>Koneksi optik pada splitter ODP {$cleanOdpTitle} telah kembali normal dan stabil.</i>";
-
-                        AppNotification::notifyAll(
-                            $smartRecTitle,
-                            $cleanRecoveryMsg,
-                            'MASS_RECOVERY',
-                            '/network',
-                            'MASS_RECOVERY',
-                            true,
-                            'POLL_TELEMETRY'
-                        );
-                    }
-                }
-            }
-        }
-
-        return $alerts;
+        return self::runDiagnostic()['mass_outages'];
     }
 
-    /**
-     * 2. Lokalisasi Titik Putus Jalur Distribusi Berdasarkan Batas Redaman:
-     * Menemukan ODP terakhir yang memiliki sinyal optik normal dan ODP berikutnya yang redamannya hilang (LOS/Mati).
-     */
-    public static function localizeOpticalBreakBoundaries(): array
+    public static function localizeOpticalBreakBoundaries(): array { return self::preview()['boundary_breaks']; }
+
+    public function describe(array $data): array
     {
-        $detectedBreaks = [];
-        $currentBreakKeys = [];
-
-        // Ambil ODC sebagai pusat distribusi
-        $odcs = NetworkNode::where('node_type', 'ODC')->with(['children'])->get();
-
-        foreach ($odcs as $odc) {
-            $childOdps = $odc->children()->where('node_type', 'ODP')->orderBy('id', 'asc')->get();
-            if ($childOdps->count() < 2) {
-                continue;
+        $outages = [];
+        foreach ($data['nodes'] as $node) {
+            $e = $node['optical_evidence'];
+            if ($this->operating($node) && $e['state'] === 'no_rx' && $e['total'] >= 2) {
+                $outages[] = ['odp_id'=>$node['id'], 'odp_name'=>$node['name'], 'odp_code'=>$node['code'],
+                    'total_clients'=>$e['total'], 'down_clients'=>$e['no_rx_clients'], 'down_percentage'=>100,
+                    'sampled_at'=>$e['sampled_at'], 'evidence'=>$e];
             }
+        }
+        return ['timestamp'=>now()->toIso8601String(), 'evaluation_status'=>'PREVIEW',
+            'mass_outages_detected'=>count($outages), 'mass_outages'=>$outages,
+            'boundary_breaks_count'=>count($data['diagnostics']['faults']), 'boundary_breaks'=>$data['diagnostics']['faults'],
+            'coverage'=>$data['diagnostics']['coverage'], 'sources'=>$data['sources'], 'notifications_sent'=>0];
+    }
 
-            // Hitung status rata-rata redaman daya optik untuk tiap ODP
-            $odpStatusList = [];
-            foreach ($childOdps as $odp) {
-                $onus = OntRegistration::whereHas('customerService.networkPort', function ($q) use ($odp) {
-                    $q->where('node_id', $odp->id);
-                })->get();
-
-                $total = $onus->count();
-                $onlineCount = $onus->where('status', 'active')->filter(function ($o) {
-                    return $o->rx_power !== null && $o->rx_power > -28.0;
-                })->count();
-
-                $avgPower = $onus->where('rx_power', '!=', null)->avg('rx_power');
-
-                $isAlive = $total === 0 
-                    ? ($odp->status === 'active') // Jika belum ada client, gunakan status node
-                    : ($onlineCount > 0);
-
-                $odpStatusList[] = [
-                    'odp'        => $odp,
-                    'is_alive'   => $isAlive,
-                    'avg_power'  => $avgPower ? round($avgPower, 2) : ($isAlive ? -20.5 : -40.0),
-                    'total_onus' => $total,
-                    'online_onus'=> $onlineCount,
-                ];
+    public function evaluate(): array
+    {
+        $lock = Cache::lock(self::LOCK_KEY, 30);
+        if (!$lock->get()) return $this->skipped('BUSY');
+        $jobs = [];
+        try {
+            $state = Cache::get(self::STATE_KEY, ['records'=>[], 'evaluated_at'=>0]);
+            if (time() - ($state['evaluated_at'] ?? 0) < 2) return $this->skipped('THROTTLED');
+            $data = app(NetworkOpticalEvidence::class)->capture();
+            $result = $this->describe($data);
+            $nodes = array_column($data['nodes'], null, 'id');
+            $vpnDown = ($data['network_status'] ?? '') === 'DISCONNECTED';
+            if ($vpnDown) {
+                $this->advance($state, 'source:vpn', 'down', now()->toIso8601String(), 'vpn',
+                    ['kind'=>'source', 'name'=>'Jalur VPN', 'reason'=>'Interface VPN tidak tersedia'], []);
+            } elseif (($data['network_status'] ?? '') === 'AVAILABLE') {
+                // An available interface alone does not prove restored communication.
+                $responding = array_filter($data['sources'], fn($s)=>$s['status'] === 'available');
+                $at = $responding ? min(array_column($responding, 'sampled_at')) : null;
+                $this->advance($state, 'source:vpn', $responding ? 'up' : 'unknown', $at, 'vpn',
+                    ['kind'=>'source', 'name'=>'Jalur VPN', 'reason'=>'Interface tersedia dan OLT kembali merespons'], []);
+            } else {
+                $this->advance($state, 'source:vpn', 'unknown', null, 'vpn', ['kind'=>'source', 'name'=>'Jalur VPN'], []);
             }
-
-            // Cari batas (Boundary) transisi dari ODP Hidup ke ODP Mati berturut-turut
-            for ($i = 0; $i < count($odpStatusList) - 1; $i++) {
-                $current = $odpStatusList[$i];
-                $next    = $odpStatusList[$i + 1];
-
-                // Jika ODP saat ini MASIH ADA SINYAL (Alive), tetapi ODP berikutnya MATI TOTAL (Dead)
-                if ($current['is_alive'] && !$next['is_alive']) {
-                    // Hitung berapa ODP berikutnya yang ikut mati pada jalur ini
-                    $affectedOdps = [];
-                    $totalAffectedClients = 0;
-
-                    for ($j = $i + 1; $j < count($odpStatusList); $j++) {
-                        if (!$odpStatusList[$j]['is_alive']) {
-                            $affectedOdps[] = $odpStatusList[$j]['odp']->name;
-                            $totalAffectedClients += $odpStatusList[$j]['total_onus'];
-                        } else {
-                            break;
-                        }
+            foreach ($data['sources'] as $source) {
+                $condition = $vpnDown || $source['reason'] === 'source_not_live' ? 'unknown'
+                    : match ($source['status']) { 'available'=>'up', 'unavailable'=>'down', default=>'unknown' };
+                $this->advance($state, 'source:olt:'.$source['id'], $condition, $source['sampled_at'], 'olt:'.$source['id'],
+                    ['kind'=>'source', 'name'=>$source['name'], 'reason'=>$source['reason']], []);
+            }
+            foreach ($data['nodes'] as $node) {
+                if ($node['node_type'] !== 'ODP') continue;
+                $o = $data['observations'][$node['id']]; $e = $o['evidence'];
+                $condition = $this->operating($node) && $e['total'] >= 2 ? $this->condition($e) : 'unknown';
+                $suppressed = false;
+                foreach ($e['pon_keys'] as $pon) {
+                    [$owner, $port] = explode(':', $pon, 2);
+                    if (Cache::has('interface_in_mass_outage_'.$owner.'_'.$port)
+                        || Cache::has('interface_in_mass_outage_'.$owner.'_gpon-olt_'.$port)) $suppressed = true;
+                }
+                $this->advance($state, 'odp:'.$node['id'], $condition, $e['sampled_at'], $o['members'],
+                    ['kind'=>'odp', 'name'=>$node['name'], 'evidence'=>$e], $o['clients'], $suppressed);
+            }
+            $faults = array_column($data['diagnostics']['faults'], null, 'id');
+            $cables = array_column($data['cables'], null, 'id');
+            $graph = [];
+            foreach ($cables as $c) $graph[] = [$c['id'], $c['from_node_id'], $c['to_node_id'], $c['status']];
+            sort($graph); $graphSignature = hash('sha256', json_encode($graph));
+            foreach ($faults as $id => $fault) {
+                $ids = [$fault['last_signal_node']['id'], ...$fault['affected_node_ids']];
+                $members = $this->segmentMembers($fault, $cables, $data['observations']);
+                $key = 'segment:'.$id;
+                if (!isset($state['records'][$key]) && ($state['graph_signature'] ?? null) === $graphSignature) {
+                    $wasHealthy = true;
+                    foreach ($ids as $nodeId) {
+                        $before = $state['previous_nodes'][$nodeId] ?? [];
+                        if (($before['state'] ?? '') !== 'signal' || ($before['members'] ?? null) !== $data['observations'][$nodeId]['members']) $wasHealthy = false;
                     }
-
-                    $lastHealthyOdp = $current['odp'];
-                    $firstDeadOdp   = $next['odp'];
-
-                    $breakKey = "break_{$odc->id}_{$lastHealthyOdp->id}_{$firstDeadOdp->id}";
-                    $currentBreakKeys[] = $breakKey;
-
-                    $breakInfo = [
-                        'break_key'              => $breakKey,
-                        'odc_id'                 => $odc->id,
-                        'odc_name'               => $odc->name,
-                        'last_healthy_odp_id'    => $lastHealthyOdp->id,
-                        'last_healthy_odp'       => $lastHealthyOdp->name,
-                        'last_healthy_power_dbm' => $current['avg_power'],
-                        'first_dead_odp_id'      => $firstDeadOdp->id,
-                        'first_dead_odp'         => $firstDeadOdp->name,
-                        'estimated_break_sector' => "Antara {$lastHealthyOdp->name} dan {$firstDeadOdp->name}",
-                        'affected_odp_list'      => $affectedOdps,
-                        'affected_odp_count'     => count($affectedOdps),
-                        'affected_client_count'  => $totalAffectedClients,
-                        'last_healthy_coords'    => [$lastHealthyOdp->latitude, $lastHealthyOdp->longitude],
-                        'first_dead_coords'      => [$firstDeadOdp->latitude, $firstDeadOdp->longitude],
-                    ];
-
-                    $detectedBreaks[] = $breakInfo;
-
-                    // Siarkan Notifikasi Pintar Lokalisasi Jalur Putus (HANYA SEKALI, ANTI-SPAM)
-                    $notifKey = "notif_cable_break_{$odc->id}_{$lastHealthyOdp->id}_{$firstDeadOdp->id}";
-                    if (!\Illuminate\Support\Facades\Cache::has($notifKey)) {
-                        \Illuminate\Support\Facades\Cache::put($notifKey, $breakInfo, now()->addHours(12));
-
-                        $affectedNames = implode(', ', array_slice($affectedOdps, 0, 4));
-                        if (count($affectedOdps) > 4) {
-                            $affectedNames .= ' dkk.';
-                        }
-
-                        $cleanBreakMsg = "<b>• Jalur Distribusi:</b> ODC {$odc->name}\n" .
-                                         "<b>• Batas Putus Kabel:</b> <b>{$lastHealthyOdp->name}</b> ➔ <b>{$firstDeadOdp->name}</b>\n" .
-                                         "<b>• Titik Sinyal Terakhir:</b> {$lastHealthyOdp->name} (Rx: <code>{$current['avg_power']} dBm</code>)\n" .
-                                         "<b>• Titik Hilang Sinyal:</b> {$firstDeadOdp->name} (🔴 LOS / Mati)\n" .
-                                         "<b>• Estimasi Terdampak:</b> " . count($affectedOdps) . " ODP ({$affectedNames}) & {$totalAffectedClients} Pelanggan";
-
-                        AppNotification::notifyAll(
-                            "🚨 LOKALISASI PUTUS KABEL: {$lastHealthyOdp->name} ➔ {$firstDeadOdp->name}",
-                            $cleanBreakMsg,
-                            'NOC',
-                            '/otdr-tracing'
-                        );
-                    }
+                    if ($wasHealthy) $state['records'][$key] = ['active'=>false, 'notified'=>false, 'initialized'=>true, 'members'=>$members, 'pending'=>null];
+                }
+                $this->advance($state, $key, 'down', min(array_map(fn($id)=>$nodes[$id]['optical_evidence']['sampled_at'], $ids)),
+                    $members, ['kind'=>'segment', 'name'=>$fault['last_signal_node']['name'].' → '.$fault['first_no_rx_node']['name'], 'fault'=>$fault], []);
+            }
+            // Missing candidates can mean stale data or topology edits, not restored signal.
+            foreach ($state['records'] as $key => $record) {
+                if (!str_starts_with($key, 'segment:') || isset($faults[substr($key, 8)])) continue;
+                $context = $record['context']; $fault = $context['fault'];
+                $ids = [$fault['last_signal_node']['id'], ...$fault['affected_node_ids']];
+                $complete = isset($cables[$fault['cable_id']])
+                    && $this->segmentMembers($fault, $cables, $data['observations']) === ($record['members'] ?? null);
+                foreach ($ids as $id) {
+                    if (!isset($nodes[$id]) || !$this->operating($nodes[$id]) || $this->condition($nodes[$id]['optical_evidence']) !== 'up') $complete = false;
+                }
+                $at = $complete ? min(array_map(fn($id)=>$nodes[$id]['optical_evidence']['sampled_at'], $ids)) : null;
+                $this->advance($state, $key, $complete ? 'up' : 'unknown', $at, $record['members'] ?? '', $context, []);
+            }
+            foreach ($state['records'] as $key => &$record) {
+                if ((str_starts_with($key, 'odp:') && !isset($nodes[(int) substr($key, 4)]))
+                    || (str_starts_with($key, 'source:olt:') && !isset($data['sources'][(int) substr($key, 11)]))) {
+                    $record['condition'] = 'unknown';
+                    unset($record['pending_notification']);
+                }
+                if (isset($record['pending_notification']) && $record['condition'] === ($record['active'] ? 'down' : 'up')
+                    && time() - ($record['last_dispatch_at'] ?? 0) >= 60) {
+                    $record['last_dispatch_at'] = time();
+                    $jobs[] = $record['pending_notification'];
                 }
             }
-        }
+            unset($record);
+            $state['graph_signature'] = $graphSignature;
+            $state['previous_nodes'] = [];
+            foreach ($data['nodes'] as $node) $state['previous_nodes'][$node['id']] = [
+                'members'=>$data['observations'][$node['id']]['members'], 'state'=>$node['optical_evidence']['state']];
+            $state['evaluated_at'] = time();
+            Cache::forever(self::STATE_KEY, $state);
+            $result['evaluation_status'] = 'EVALUATED';
+            $result['notifications_queued'] = count($jobs);
+        } finally { $lock->release(); }
+        foreach ($jobs as $job) PublishOpticalFaultNotification::dispatch($job);
+        return $result;
+    }
 
-        // Cek Pemulihan: Jika break yang sebelumnya aktif sekarang sudah tersambung kembali
-        $activeBreaksMap = \Illuminate\Support\Facades\Cache::get('active_cable_breaks_map', []);
-        foreach ($activeBreaksMap as $oldKey => $oldBreak) {
-            if (!in_array($oldKey, $currentBreakKeys)) {
-                // Kabel telah pulih / disambung kembali
-                $recoveryMsg = "<b>• Jalur Distribusi:</b> ODC {$oldBreak['odc_name']}\n" .
-                               "<b>• Segmen:</b> {$oldBreak['last_healthy_odp']} ➔ {$oldBreak['first_dead_odp']}\n" .
-                               "<b>• Status:</b> 🟢 NORMAL (Kabel Selesai Disambung)\n\n" .
-                               "<i>Sinyal optik pada segmen ini telah kembali normal dan pelanggan telah terhubung kembali.</i>";
+    private function condition(array $evidence): string
+    {
+        if (($evidence['source_status'] ?? '') !== 'available' || $evidence['unverified_clients'] > 0) return 'unknown';
+        if ($evidence['state'] === 'no_rx') return 'down';
+        return $evidence['total'] > 0 && $evidence['signal_clients'] === $evidence['total'] ? 'up' : 'partial';
+    }
 
-                AppNotification::notifyAll(
-                    "🟢 PEMULIHAN KABEL OPTIK: {$oldBreak['last_healthy_odp']} ➔ {$oldBreak['first_dead_odp']}",
-                    $recoveryMsg,
-                    'NOC',
-                    '/otdr-tracing'
-                );
+    private function operating(array $node): bool
+    {
+        return $node['node_type'] === 'ODP' && !in_array($node['status'], ['inactive', 'maintenance'], true);
+    }
 
-                \Illuminate\Support\Facades\Cache::forget("notif_cable_break_{$oldBreak['odc_id']}_{$oldBreak['last_healthy_odp_id']}_{$oldBreak['first_dead_odp_id']}");
+    private function segmentMembers(array $fault, array $cables, array $observations): string
+    {
+        $edges = [];
+        foreach ($cables as $c) $edges[] = [$c['id'], $c['from_node_id'], $c['to_node_id'], $c['status']];
+        sort($edges);
+        $members = [];
+        foreach ([$fault['last_signal_node']['id'], ...$fault['affected_node_ids']] as $id) $members[$id] = $observations[$id]['members'] ?? null;
+        return hash('sha256', json_encode([$edges, $members]));
+    }
+
+    private function advance(array &$state, string $key, string $condition, ?string $at, string $members, array $context, array $clients, bool $suppressed = false): void
+    {
+        $previous = $state['records'][$key] ?? null;
+        $next = OpticalFaultState::advance($previous, $condition, $at, $members);
+        $record = $next['record']; $record['context'] = $context;
+        if ($next['transition']) {
+            unset($record['pending_notification']);
+            if (!$suppressed && ($next['transition'] === 'outage' || ($previous['notified'] ?? false))) {
+                $record['pending_notification'] = ['key'=>$key, 'token'=>bin2hex(random_bytes(16)), 'transition'=>$next['transition'],
+                    'context'=>$context, 'clients'=>$clients, 'sampled_at'=>$at];
+                $record['last_dispatch_at'] = 0;
             }
+            if ($next['transition'] === 'outage') $record['notified'] = false;
         }
+        if (($record['members'] ?? null) !== ($previous['members'] ?? null)) unset($record['pending_notification']);
+        $state['records'][$key] = $record;
+    }
 
-        // Simpan snapshot break aktif terkini
-        $newBreaksMap = [];
-        foreach ($detectedBreaks as $db) {
-            $newBreaksMap[$db['break_key']] = $db;
-        }
-        \Illuminate\Support\Facades\Cache::put('active_cable_breaks_map', $newBreaksMap, now()->addHours(24));
+    public static function deliveryCurrent(array $event): bool
+    {
+        $state = Cache::get(self::STATE_KEY, []);
+        $record = $state['records'][$event['key']] ?? [];
+        return ($record['pending_notification']['token'] ?? null) === $event['token']
+            && ($record['condition'] ?? '') === ($event['transition'] === 'outage' ? 'down' : 'up');
+    }
 
-        return $detectedBreaks;
+    public static function delivered(array $event): void
+    {
+        Cache::lock(self::LOCK_KEY, 30)->block(5, function () use ($event) {
+            $state = Cache::get(self::STATE_KEY, []);
+            if (($state['records'][$event['key']]['pending_notification']['token'] ?? null) !== $event['token']) return;
+            $state['records'][$event['key']]['notified'] = $event['transition'] === 'outage';
+            unset($state['records'][$event['key']]['pending_notification']);
+            Cache::forever(self::STATE_KEY, $state);
+        });
+    }
+
+    private function skipped(string $status): array
+    {
+        return ['evaluation_status'=>$status, 'mass_outages'=>[], 'mass_outages_detected'=>0,
+            'boundary_breaks'=>[], 'boundary_breaks_count'=>0, 'notifications_sent'=>0, 'notifications_queued'=>0];
     }
 }

@@ -29,7 +29,10 @@ class OltListenerStabilityTest extends TestCase
         Http::fake();
         Http::preventStrayRequests();
         // Use the framework's real serialization path, with the production class restriction.
-        Cache::swap(new Repository(new ArrayStore(true, false)));
+        $manager = new \Illuminate\Cache\CacheManager($this->app);
+        $manager->extend('serialized_fixture', fn() => new Repository(new ArrayStore(true, false)));
+        config(['cache.default'=>'serialized_fixture', 'cache.stores.serialized_fixture'=>['driver'=>'serialized_fixture']]);
+        Cache::swap($manager);
         Schema::create('olt_devices', function (Blueprint $table) {
             $table->id(); $table->string('name');
         });
@@ -144,51 +147,18 @@ class OltListenerStabilityTest extends TestCase
         $this->assertSame(['throw', 'valid'], $listener->received);
     }
 
-    #[RunInSeparateProcess]
-    #[PreserveGlobalState(false)]
-    public function test_mass_loss_and_recovery_consume_warm_arrays_without_object_access(): void
+    public function test_loss_and_recovery_coalesce_into_one_stored_evaluation_without_new_probes(): void
     {
-        $fast = \Mockery::mock('alias:App\\Services\\Olt\\FastOpticalProbeService');
-        $states = [
-            'TEST00000001' => ['is_online' => false, 'rx_power' => -40.0],
-            'TEST00000002' => ['is_online' => false, 'rx_power' => -40.0],
-        ];
-        $fast->shouldReceive('probeOdpStatus')->once()->with(2, null, 'gpon-olt_1/1/15')->andReturn(['success' => true, 'is_odp_down' => true, 'down_count' => 2, 'onu_states' => $states]);
-        $fast->shouldReceive('instantBulkDbSync')->once()->with('inactive', null, 2, -40.0, []);
-        $fast->shouldReceive('probeOdpStatus')->once()->with(2, null, 'gpon-olt_1/1/15', true)->andReturn(['success' => true, 'online_count' => 2, 'onu_states' => array_map(fn () => ['is_online' => true, 'rx_power' => -25.09], $states)]);
-        $fast->shouldReceive('instantBulkDbSync')->once()->with('active', null, 2);
-        $notifications = \Mockery::mock('alias:App\\Models\\AppNotification');
-        $notifications->shouldReceive('notifyAll')->once()->withArgs(fn ($title, $body, $type) => $type === 'MASS_OUTAGE' && str_contains($body, 'Customer fixture 1'));
-        $notifications->shouldReceive('notifyAll')->once()->withArgs(fn ($title, $body, $type) => $type === 'MASS_RECOVERY' && str_contains($body, 'Customer fixture 2'));
-        app(OdpTopologyCache::class)->get(2);
+        \Illuminate\Support\Facades\Bus::fake([\App\Jobs\EvaluateStoredOpticalFaults::class]);
         $listener = $this->listener();
         $listener->correlate(true, false);
-        $this->assertTrue(Cache::has('notif_mass_down_2'));
         $listener->correlate(false, true);
-        $this->assertFalse(Cache::has('notif_mass_down_2'));
+        $listener->correlate(false, false);
+        \Illuminate\Support\Facades\Bus::assertDispatchedTimes(\App\Jobs\EvaluateStoredOpticalFaults::class, 1);
         Http::assertNothingSent();
         $this->assertDatabaseCount('ont_registrations', 2);
     }
 
-    #[RunInSeparateProcess]
-    #[PreserveGlobalState(false)]
-    public function test_incomplete_probe_cannot_use_stale_database_to_raise_or_clear_mass_alarm(): void
-    {
-        $fast = \Mockery::mock('alias:App\\Services\\Olt\\FastOpticalProbeService');
-        $fast->shouldReceive('probeOdpStatus')->twice()->andReturn(['success'=>false,'complete'=>false,'unknown_count'=>1,'online_count'=>1,'is_odp_down'=>false]);
-        $fast->shouldNotReceive('instantBulkDbSync');
-        $notifications=\Mockery::mock('alias:App\\Models\\AppNotification');$notifications->shouldNotReceive('notifyAll');
-        app(OdpTopologyCache::class)->get(2);
-        $listener=$this->listener();
-        DB::table('ont_registrations')->update(['status'=>'inactive','rx_power'=>-40]);
-        $listener->correlate(true,false);
-        $this->assertFalse(Cache::has('notif_mass_down_2'));
-        Cache::put('notif_mass_down_2',true,600);
-        DB::table('ont_registrations')->update(['status'=>'active','rx_power'=>-25]);
-        $listener->correlate(false,true);
-        $this->assertTrue(Cache::has('notif_mass_down_2'));
-        Http::assertNothingSent();
-    }
 }
 
 class ListenerStabilityHarness extends ListenOltEvents

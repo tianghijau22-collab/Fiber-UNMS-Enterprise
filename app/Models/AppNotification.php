@@ -81,7 +81,7 @@ class AppNotification extends Model
         }
 
         // Whitelist Notifikasi yang Diizinkan
-        $isAllowed = in_array($upperType, ['MASS_OUTAGE', 'MASS_RECOVERY', 'BROADCAST', 'ANNOUNCEMENT', 'MAINTENANCE', 'SYSTEM_MAINTENANCE', 'GLOBAL'])
+        $isAllowed = in_array($upperType, ['MASS_OUTAGE', 'MASS_RECOVERY', 'OPTICAL_SEGMENT_INDICATION', 'OPTICAL_SEGMENT_RECOVERY', 'SOURCE_UNAVAILABLE', 'SOURCE_RECOVERY', 'BROADCAST', 'ANNOUNCEMENT', 'MAINTENANCE', 'SYSTEM_MAINTENANCE', 'GLOBAL'])
             || str_contains($upperTitle, 'GANGGUAN MASSAL')
             || str_contains($upperTitle, 'PEMULIHAN GANGGUAN MASSAL')
             || str_contains($upperTitle, 'PEMELIHARAAN')
