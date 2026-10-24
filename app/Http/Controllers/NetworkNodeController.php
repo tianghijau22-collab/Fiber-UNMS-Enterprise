@@ -34,6 +34,17 @@ class NetworkNodeController extends Controller
         }
     }
 
+    private function checkMaintenancePermission()
+    {
+        $user = auth()->user();
+        abort_unless($user, 401);
+        if ($user && !in_array($user->role, ['Super Administrator', 'Operator Jaringan', 'Teknisi Jointer'])) {
+            abort(response()->json([
+                'message' => "Akses Ditolak: Peran {$user->role} tidak memiliki izin untuk mengelola status pemeliharaan (maintenance) ODP."
+            ], 403));
+        }
+    }
+
     /**
      * Endpoint Khusus GIS Map Berkecepatan Tinggi (Sub-50ms Response)
      * Mengeliminasi 2.000+ query N+1 menjadi hanya 2 query SQL terpadu
@@ -523,6 +534,9 @@ class NetworkNodeController extends Controller
             }
             if ($request->filled('pop_id')) {
                 $q->where('parent_node_id', $request->pop_id);
+            }
+            if ($request->filled('status') && $request->status !== 'all') {
+                $q->where('status', $request->status);
             }
             if ($request->filled('search')) {
                 $s = $request->search;
@@ -1331,22 +1345,65 @@ class NetworkNodeController extends Controller
     }
 
     /**
-     * Ambil informasi ODP dan daftar seluruh pelanggan terdampak untuk persiapan Maintenance
-     * GET /api/network-nodes/{networkNode}/maintenance
+     * Helper: Resolusi cakupan hirarki Maintenance (Level ODC / ODP-MS mencakup seluruh ODP anak & pelanggan di bawahnya)
      */
-    public function maintenanceInfo(NetworkNode $networkNode)
+    private function resolveMaintenanceScope(NetworkNode $node): array
     {
-        $node = $networkNode->load(['splitterType', 'oltDevice', 'parent']);
+        $directChildren = NetworkNode::with('splitterType')
+            ->where('parent_node_id', $node->id)
+            ->whereIn('node_type', ['ODP', 'ODC'])
+            ->orderByRaw("NULLIF(substring(name from '\d+'), '')::bigint ASC NULLS LAST, name ASC")
+            ->get();
+
+        $isOdcLevel = ($node->node_type === 'ODC') || $directChildren->isNotEmpty();
+
+        // Jika ada ODC Anak di bawah ODC Induk, ambil juga ODP di bawah ODC Anak tersebut
+        $directOdcIds = $directChildren->where('node_type', 'ODC')->pluck('id')->toArray();
+        $grandChildOdps = collect();
+        if (!empty($directOdcIds)) {
+            $grandChildOdps = NetworkNode::with('splitterType')
+                ->whereIn('parent_node_id', $directOdcIds)
+                ->where('node_type', 'ODP')
+                ->orderByRaw("NULLIF(substring(name from '\d+'), '')::bigint ASC NULLS LAST, name ASC")
+                ->get();
+        }
+
+        $childOdps = $directChildren->where('node_type', 'ODP')->concat($grandChildOdps)->unique('id')->values();
+        $allDescendantIds = $directChildren->pluck('id')
+            ->concat($grandChildOdps->pluck('id'))
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // Target node IDs untuk pencarian port pelanggan
+        $targetPortNodeIds = $isOdcLevel
+            ? array_values(array_unique(array_merge([$node->id], $childOdps->pluck('id')->toArray())))
+            : [$node->id];
 
         $ports = DB::table('network_ports')
-            ->leftJoin('customer_services', 'network_ports.customer_service_id', '=', 'customer_services.id')
-            ->leftJoin('customers', 'customer_services.customer_id', '=', 'customers.id')
+            ->join('network_nodes as port_node', 'network_ports.node_id', '=', 'port_node.id')
+            ->leftJoin('customer_services', function ($join) {
+                $join->on('network_ports.customer_service_id', '=', 'customer_services.id')
+                     ->whereNull('customer_services.deleted_at');
+            })
+            ->leftJoin('customers', function ($join) {
+                $join->on('customer_services.customer_id', '=', 'customers.id')
+                     ->whereNull('customers.deleted_at');
+            })
             ->leftJoin('service_packages', 'customer_services.service_package_id', '=', 'service_packages.id')
-            ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
-            ->where('network_ports.node_id', $node->id)
+            ->leftJoin('ont_registrations', function ($join) {
+                $join->on('ont_registrations.customer_service_id', '=', 'customer_services.id')
+                     ->whereNull('ont_registrations.deleted_at');
+            })
+            ->whereIn('network_ports.node_id', $targetPortNodeIds)
+            ->orderByRaw("NULLIF(substring(port_node.name from '\d+'), '')::bigint ASC NULLS LAST, port_node.name ASC")
             ->orderByRaw('CAST(network_ports.port_number AS integer) ASC NULLS LAST')
             ->select(
                 'network_ports.id as port_id',
+                'network_ports.node_id as odp_id',
+                'port_node.name as odp_name',
+                'port_node.code as odp_code',
+                'port_node.node_type as port_node_type',
                 'network_ports.port_number',
                 'network_ports.status as port_status',
                 'network_ports.customer_service_id',
@@ -1365,11 +1422,25 @@ class NetworkNodeController extends Controller
             ->get();
 
         $impactedCustomers = [];
+        $customerCountByOdp = [];
+
         foreach ($ports as $p) {
+            // Untuk node bertipe ODC murni, port fisik ODC adalah port distribusi splitter ke ODP (bukan port akhir pelanggan),
+            // kecuali memang ada customer_service_id atau customer_name yang terhubung langsung.
+            if ($p->port_node_type === 'ODC' && !$p->customer_service_id && !$p->customer_id && !$p->customer_name_cache) {
+                continue;
+            }
+
             $name = $p->customer_name ?: ($p->customer_name_cache ?: null);
-            if ($name || $p->customer_service_id || $p->port_status === 'used') {
+            if ($name || $p->customer_service_id || ($p->port_node_type === 'ODP' && $p->port_status === 'used')) {
+                $odpId = (int) $p->odp_id;
+                $customerCountByOdp[$odpId] = ($customerCountByOdp[$odpId] ?? 0) + 1;
+
                 $impactedCustomers[] = [
                     'port_id'         => $p->port_id,
+                    'odp_id'          => $odpId,
+                    'odp_name'        => $p->odp_name,
+                    'odp_code'        => $p->odp_code,
                     'port_number'     => $p->port_number,
                     'name'            => $name ?: "Port {$p->port_number}",
                     'customer_number' => $p->customer_number ?: '—',
@@ -1383,16 +1454,64 @@ class NetworkNodeController extends Controller
             }
         }
 
+        $impactedOdps = $childOdps->map(function ($odp) use ($customerCountByOdp) {
+            $splitterRatio = $odp->splitterType?->ratio
+                ?: (is_array($odp->splitter_config) ? implode(', ', $odp->splitter_config) : ($odp->splitter_config ?: '1:8'));
+            return [
+                'id'             => $odp->id,
+                'name'           => $odp->name,
+                'code'           => $odp->code,
+                'status'         => $odp->status,
+                'address'        => $odp->address,
+                'total_ports'    => $odp->total_ports,
+                'used_ports'     => $odp->used_ports,
+                'splitter_ratio' => $splitterRatio,
+                'customer_count' => $customerCountByOdp[$odp->id] ?? (int) $odp->used_ports,
+            ];
+        })->values()->toArray();
+
+        return [
+            'is_odc_level'       => $isOdcLevel,
+            'all_descendant_ids' => $allDescendantIds,
+            'impacted_odps'      => $impactedOdps,
+            'impacted_odp_count' => count($impactedOdps),
+            'impacted_customers' => $impactedCustomers,
+            'impacted_count'     => count($impactedCustomers),
+        ];
+    }
+
+    /**
+     * Ambil informasi ODC / ODP beserta daftar ODP anak & seluruh pelanggan terdampak untuk persiapan Maintenance
+     * GET /api/network-nodes/{networkNode}/maintenance
+     */
+    public function maintenanceInfo(NetworkNode $networkNode)
+    {
+        $node = $networkNode->load(['splitterType', 'oltDevice', 'parent']);
+        $scope = $this->resolveMaintenanceScope($node);
+
         $autoData = $node->getAutoDetectedInterfaceAndOlt();
         $effectivePortRef = $node->olt_port_ref ?: ($autoData['port_ref'] ?: ($node->parent?->olt_port_ref ?: '—'));
         $oltDeviceName = $node->oltDevice?->name ?: ($autoData['olt_device']['name'] ?? ($node->parent?->oltDevice?->name ?? 'Auto-Detect OLT'));
 
+        $lastMaintenanceLog = null;
+        if ($node->status === 'maintenance') {
+            $lastMaintenanceLog = AuditLog::where('module', 'Infrastruktur Jaringan')
+                ->where('action', 'UPDATE')
+                ->whereJsonContains('details->node_id', $node->id)
+                ->whereJsonContains('details->action', 'start')
+                ->latest()
+                ->first();
+        }
+
+        $now = now();
         return response()->json([
             'status' => 'success',
             'node'   => [
                 'id'           => $node->id,
                 'name'         => $node->name,
                 'code'         => $node->code,
+                'node_type'    => $node->node_type,
+                'is_odc_level' => $scope['is_odc_level'],
                 'status'       => $node->status,
                 'address'      => $node->address,
                 'total_ports'  => $node->total_ports,
@@ -1400,19 +1519,32 @@ class NetworkNodeController extends Controller
                 'olt_device'   => $oltDeviceName,
                 'olt_port_ref' => $effectivePortRef,
                 'parent_name'  => $node->parent?->name ?? '—',
+                'odp_count'    => $scope['impacted_odp_count'],
             ],
-            'impacted_count'     => count($impactedCustomers),
-            'impacted_customers' => $impactedCustomers,
+            'server_time'         => $now->format('H.i') . ' WIB',
+            'server_date'         => $now->locale('id')->isoFormat('dddd, D MMMM Y'),
+            'last_maintenance'    => $lastMaintenanceLog ? [
+                'started_at'          => $lastMaintenanceLog->created_at?->toIso8601String(),
+                'start_time'          => $lastMaintenanceLog->details['start_time'] ?? ($lastMaintenanceLog->created_at?->format('H.i') . ' WIB'),
+                'estimated_duration'  => $lastMaintenanceLog->details['estimated_duration'] ?? '1 Jam',
+                'work_type'           => $lastMaintenanceLog->details['work_type'] ?? 'Pemeliharaan Terjadwal',
+                'notes'               => $lastMaintenanceLog->details['notes'] ?? '',
+                'affected_areas'      => $lastMaintenanceLog->details['affected_areas'] ?? [],
+            ] : null,
+            'impacted_odp_count' => $scope['impacted_odp_count'],
+            'impacted_odps'      => $scope['impacted_odps'],
+            'impacted_count'     => $scope['impacted_count'],
+            'impacted_customers' => $scope['impacted_customers'],
         ]);
     }
 
     /**
-     * Mulai atau Selesaikan Maintenance ODP dan kirimkan Notifikasi Alert Sistem & Telegram
+     * Mulai atau Selesaikan Maintenance ODC / ODP dan kirimkan Notifikasi Alert Sistem & Telegram
      * POST /api/network-nodes/{networkNode}/maintenance
      */
     public function toggleMaintenance(Request $request, NetworkNode $networkNode)
     {
-        $this->checkCrudPermission();
+        $this->checkMaintenancePermission();
         $node = $networkNode->load(['splitterType', 'oltDevice', 'parent']);
 
         $validated = $request->validate([
@@ -1420,6 +1552,13 @@ class NetworkNodeController extends Controller
             'notes'              => 'nullable|string|max:1000',
             'estimated_duration' => 'nullable|string|max:100',
             'send_notification'  => 'nullable|boolean',
+            'maintenance_image'  => 'nullable|string',
+            'work_type'          => 'nullable|string|max:150',
+            'affected_areas'     => 'nullable|array',
+            'affected_areas.*'   => 'string|max:100',
+            'start_time'         => 'nullable|string|max:50',
+            'end_time'           => 'nullable|string|max:50',
+            'ticket_number'      => 'nullable|string|max:50',
         ]);
 
         $action = $validated['action'];
@@ -1427,48 +1566,14 @@ class NetworkNodeController extends Controller
         $estimatedDuration = trim($validated['estimated_duration'] ?? '1 Jam');
         $sendNotif = $request->boolean('send_notification', true);
 
-        // Ambil data pelanggan terdampak
-        $ports = DB::table('network_ports')
-            ->leftJoin('customer_services', 'network_ports.customer_service_id', '=', 'customer_services.id')
-            ->leftJoin('customers', 'customer_services.customer_id', '=', 'customers.id')
-            ->leftJoin('service_packages', 'customer_services.service_package_id', '=', 'service_packages.id')
-            ->leftJoin('ont_registrations', 'ont_registrations.customer_service_id', '=', 'customer_services.id')
-            ->where('network_ports.node_id', $node->id)
-            ->orderByRaw('CAST(network_ports.port_number AS integer) ASC NULLS LAST')
-            ->select(
-                'network_ports.id as port_id',
-                'network_ports.port_number',
-                'network_ports.status as port_status',
-                'network_ports.customer_service_id',
-                'network_ports.customer_name_cache',
-                'customers.id as customer_id',
-                'customers.customer_number',
-                'customers.name as customer_name',
-                'customers.phone as customer_phone',
-                'customer_services.id as service_id',
-                'customer_services.service_number',
-                'ont_registrations.onu_serial',
-                'ont_registrations.rx_power'
-            )
-            ->get();
-
-        $impactedCustomers = [];
-        foreach ($ports as $p) {
-            $name = $p->customer_name ?: ($p->customer_name_cache ?: null);
-            if ($name || $p->customer_service_id || $p->port_status === 'used') {
-                $impactedCustomers[] = [
-                    'port_number'     => $p->port_number,
-                    'name'            => $name ?: "Port {$p->port_number}",
-                    'customer_number' => $p->customer_number ?: '—',
-                    'service_number'  => $p->service_number ?: '—',
-                    'phone'           => $p->customer_phone ?: '—',
-                    'onu_serial'      => $p->onu_serial ?: '—',
-                    'rx_power'        => $p->rx_power,
-                ];
-            }
-        }
-
-        $impactedCount = count($impactedCustomers);
+        $scope = $this->resolveMaintenanceScope($node);
+        $isOdcLevel = $scope['is_odc_level'];
+        $allDescendantIds = $scope['all_descendant_ids'];
+        $impactedOdps = $scope['impacted_odps'];
+        $impactedOdpCount = $scope['impacted_odp_count'];
+        $impactedCustomers = $scope['impacted_customers'];
+        $impactedCount = $scope['impacted_count'];
+        $nodeTypeLabel = $node->node_type === 'ODC' ? 'ODC' : ($isOdcLevel ? 'ODP/MS' : 'ODP');
 
         $autoData = $node->getAutoDetectedInterfaceAndOlt();
         $oltPort = $node->olt_port_ref ?: ($autoData['port_ref'] ?: ($node->parent?->olt_port_ref ?: '—'));
@@ -1476,49 +1581,170 @@ class NetworkNodeController extends Controller
 
         if ($action === 'start') {
             $node->status = 'maintenance';
-            $defaultNotes = $notes ?: 'Pemeliharaan rutin / perbaikan jaringan & splitter ODP';
+            $defaultNotes = $notes ?: ($isOdcLevel
+                ? "Pemeliharaan distribusi {$nodeTypeLabel} {$node->name} beserta {$impactedOdpCount} ODP di bawahnya"
+                : 'Pemeliharaan rutin / perbaikan jaringan & splitter ODP');
         } else {
             $node->status = 'active';
             $defaultNotes = $notes ?: 'Pemeliharaan telah selesai dilakukan. Layanan kembali beroperasi normal.';
         }
         $node->save();
 
+        // Cascade status pemeliharaan ke seluruh ODP & ODC anak di bawah ODC ini
+        if ($isOdcLevel && !empty($allDescendantIds)) {
+            if ($action === 'start') {
+                NetworkNode::whereIn('id', $allDescendantIds)
+                    ->where('status', '!=', 'damaged')
+                    ->update(['status' => 'maintenance']);
+            } else {
+                NetworkNode::whereIn('id', $allDescendantIds)
+                    ->where('status', 'maintenance')
+                    ->update(['status' => 'active']);
+            }
+        }
+
+        $startTime = trim($validated['start_time'] ?? '');
+        $endTime = trim($validated['end_time'] ?? '');
+        $workType = trim($validated['work_type'] ?? ($action === 'start' ? 'Pemeliharaan Terjadwal' : 'Pemulihan & Normalisasi Jaringan'));
+        $ticketCode = $validated['ticket_number'] ?? ('MT-' . now()->format('Ymd') . '-' . str_pad($node->id, 3, '0', STR_PAD_LEFT));
+
         if ($sendNotif) {
             if ($action === 'start') {
-                $title = "🛠️ PEMBERITAHUAN MAINTENANCE: ODP {$node->name} ({$impactedCount} Pelanggan Terdampak)";
-                $body = "⚠️ PEMBERITAHUAN PEMELIHARAAN JARINGAN (MAINTENANCE)\n\n"
-                      . "• Node: {$node->name}\n"
-                      . "• Lokasi: " . ($node->address ?: 'Sesuai Data Jaringan') . "\n"
-                      . "• OLT / Interface: {$oltName} ({$oltPort})\n"
-                      . "• Estimasi Waktu Pengerjaan: {$estimatedDuration}\n"
-                      . "• Total Pelanggan Terdampak: {$impactedCount} Pelanggan\n"
-                      . "• Keterangan Pekerjaan: {$defaultNotes}\n\n";
+                if ($isOdcLevel) {
+                    $title = "🛠️ PEMBERITAHUAN MAINTENANCE {$nodeTypeLabel}: {$node->name} ({$impactedOdpCount} ODP • {$impactedCount} Pelanggan Terdampak)";
+                    $body = "⚠️ PEMBERITAHUAN PEMELIHARAAN JARINGAN LEVEL {$nodeTypeLabel}\n\n"
+                          . "• Nomor Tiket: #{$ticketCode}\n"
+                          . "• Node Distribusi: {$nodeTypeLabel} {$node->name} ({$node->code})\n"
+                          . "• Induk POP: " . ($node->parent?->name ?: '—') . "\n"
+                          . "• Lokasi: " . ($node->address ?: 'Sesuai Data Jaringan') . "\n"
+                          . "• OLT / Interface: {$oltName} ({$oltPort})\n"
+                          . "• Jenis Pekerjaan: {$workType}\n"
+                          . ($startTime ? "• Waktu Mulai: {$startTime}\n" : "")
+                          . ($endTime ? "• Perkiraan Selesai: {$endTime}\n" : "")
+                          . "• Estimasi Durasi: {$estimatedDuration}\n"
+                          . "• Cakupan Dampak: {$impactedOdpCount} ODP & {$impactedCount} Pelanggan Terdampak\n"
+                          . "• Keterangan Pekerjaan: {$defaultNotes}\n\n";
 
-                if ($impactedCount > 0) {
-                    $body .= "📋 Daftar Pelanggan Terdampak:\n";
-                    $listSlice = array_slice($impactedCustomers, 0, 15);
-                    foreach ($listSlice as $idx => $c) {
-                        $custPrefix = ($c['customer_number'] !== '—' && $c['customer_number']) ? "[{$c['customer_number']}] " : "";
-                        $body .= ($idx + 1) . ". [P-{$c['port_number']}] {$custPrefix}{$c['name']}\n";
+                    if ($impactedOdpCount > 0) {
+                        $body .= "📦 Daftar ODP Terdampak ({$impactedOdpCount} ODP):\n";
+                        $odpSlice = array_slice($impactedOdps, 0, 15);
+                        foreach ($odpSlice as $idx => $odpItem) {
+                            $body .= ($idx + 1) . ". {$odpItem['name']} ({$odpItem['customer_count']} Pelanggan)\n";
+                        }
+                        if ($impactedOdpCount > 15) {
+                            $remOdp = $impactedOdpCount - 15;
+                            $body .= "... dan {$remOdp} ODP lainnya.\n";
+                        }
+                        $body .= "\n";
                     }
-                    if ($impactedCount > 15) {
-                        $remaining = $impactedCount - 15;
-                        $body .= "... dan {$remaining} pelanggan lainnya.\n";
+
+                    if ($impactedCount > 0) {
+                        $body .= "📋 Daftar Pelanggan Terdampak:\n";
+                        $listSlice = array_slice($impactedCustomers, 0, 15);
+                        foreach ($listSlice as $idx => $c) {
+                            $custPrefix = ($c['customer_number'] !== '—' && $c['customer_number']) ? "[{$c['customer_number']}] " : "";
+                            $odpPrefix = !empty($c['odp_name']) ? "{$c['odp_name']} • " : "";
+                            $body .= ($idx + 1) . ". [{$odpPrefix}P-{$c['port_number']}] {$custPrefix}{$c['name']}\n";
+                        }
+                        if ($impactedCount > 15) {
+                            $remaining = $impactedCount - 15;
+                            $body .= "... dan {$remaining} pelanggan lainnya.\n";
+                        }
+                    } else {
+                        $body .= "ℹ️ Tidak ada pelanggan aktif pada cakupan {$nodeTypeLabel} ini.\n";
                     }
+
+                    $body .= "\nMohon maaf atas ketidaknyamanan yang ditimbulkan selama proses pemeliharaan berlangsung.";
                 } else {
-                    $body .= "ℹ️ Tidak ada pelanggan aktif pada node ini.\n";
-                }
+                    $title = "🛠️ PEMBERITAHUAN MAINTENANCE: ODP {$node->name} ({$impactedCount} Pelanggan Terdampak)";
+                    $body = "⚠️ PEMBERITAHUAN PEMELIHARAAN JARINGAN (MAINTENANCE)\n\n"
+                          . "• Nomor Tiket: #{$ticketCode}\n"
+                          . "• Node: {$node->name}\n"
+                          . "• Lokasi: " . ($node->address ?: 'Sesuai Data Jaringan') . "\n"
+                          . "• OLT / Interface: {$oltName} ({$oltPort})\n"
+                          . "• Jenis Pekerjaan: {$workType}\n"
+                          . ($startTime ? "• Waktu Mulai: {$startTime}\n" : "")
+                          . ($endTime ? "• Perkiraan Selesai: {$endTime}\n" : "")
+                          . "• Estimasi Durasi: {$estimatedDuration}\n"
+                          . "• Total Pelanggan Terdampak: {$impactedCount} Pelanggan\n"
+                          . "• Keterangan Pekerjaan: {$defaultNotes}\n\n";
 
-                $body .= "\nMohon maaf atas ketidaknyamanan yang ditimbulkan selama proses pemeliharaan berlangsung.";
+                    if ($impactedCount > 0) {
+                        $body .= "📋 Daftar Pelanggan Terdampak:\n";
+                        $listSlice = array_slice($impactedCustomers, 0, 15);
+                        foreach ($listSlice as $idx => $c) {
+                            $custPrefix = ($c['customer_number'] !== '—' && $c['customer_number']) ? "[{$c['customer_number']}] " : "";
+                            $body .= ($idx + 1) . ". [P-{$c['port_number']}] {$custPrefix}{$c['name']}\n";
+                        }
+                        if ($impactedCount > 15) {
+                            $remaining = $impactedCount - 15;
+                            $body .= "... dan {$remaining} pelanggan lainnya.\n";
+                        }
+                    } else {
+                        $body .= "ℹ️ Tidak ada pelanggan aktif pada node ini.\n";
+                    }
+
+                    $body .= "\nMohon maaf atas ketidaknyamanan yang ditimbulkan selama proses pemeliharaan berlangsung.";
+                }
             } else {
-                $title = "🟢 PEMELIHARAAN SELESAI: ODP {$node->name} Kembali Normal";
-                $body = "✅ PEMELIHARAAN JARINGAN SELESAI\n\n"
-                      . "• Node: {$node->name}\n"
-                      . "• Status: Kembali Aktif & Normal\n"
-                      . "• OLT / Interface: {$oltName} ({$oltPort})\n"
-                      . "• Total Pelanggan Terhubung: {$impactedCount} Pelanggan\n"
-                      . "• Catatan: {$defaultNotes}\n\n"
-                      . "Seluruh layanan pelanggan pada node {$node->name} telah pulih dan dapat digunakan normal.";
+                if ($isOdcLevel) {
+                    $title = "🟢 PEMELIHARAAN {$nodeTypeLabel} SELESAI: {$node->name} ({$impactedOdpCount} ODP Kembali Normal)";
+                    $body = "✅ PEMELIHARAAN JARINGAN LEVEL {$nodeTypeLabel} SELESAI\n\n"
+                          . "• Nomor Tiket: #{$ticketCode}\n"
+                          . "• Node Distribusi: {$nodeTypeLabel} {$node->name}\n"
+                          . "• Status: Kembali Aktif & Normal\n"
+                          . "• OLT / Interface: {$oltName} ({$oltPort})\n"
+                          . "• Jenis Pekerjaan: {$workType}\n"
+                          . ($startTime ? "• Waktu Mulai: {$startTime}\n" : "")
+                          . ($endTime ? "• Selesai Aktual: {$endTime}\n" : "")
+                          . "• Total Durasi: {$estimatedDuration}\n"
+                          . "• Cakupan Pulih: {$impactedOdpCount} ODP & {$impactedCount} Pelanggan Terhubung\n"
+                          . "• Catatan: {$defaultNotes}\n\n"
+                          . "Seluruh ODP dan layanan pelanggan di bawah {$nodeTypeLabel} {$node->name} telah pulih dan beroperasi normal.";
+                } else {
+                    $title = "🟢 PEMELIHARAAN SELESAI: ODP {$node->name} Kembali Normal";
+                    $body = "✅ PEMELIHARAAN JARINGAN SELESAI\n\n"
+                          . "• Nomor Tiket: #{$ticketCode}\n"
+                          . "• Node: {$node->name}\n"
+                          . "• Status: Kembali Aktif & Normal\n"
+                          . "• OLT / Interface: {$oltName} ({$oltPort})\n"
+                          . "• Jenis Pekerjaan: {$workType}\n"
+                          . ($startTime ? "• Waktu Mulai: {$startTime}\n" : "")
+                          . ($endTime ? "• Selesai Aktual: {$endTime}\n" : "")
+                          . "• Total Durasi: {$estimatedDuration}\n"
+                          . "• Total Pelanggan Terhubung: {$impactedCount} Pelanggan\n"
+                          . "• Catatan: {$defaultNotes}\n\n"
+                          . "Seluruh layanan pelanggan pada node {$node->name} telah pulih dan dapat digunakan normal.";
+                }
+            }
+
+            $announcementImageUrl = null;
+            if ($request->filled('maintenance_image')) {
+                try {
+                    $imgData = $request->input('maintenance_image');
+                    if (preg_match('/^data:image\/(\w+);base64,/', $imgData, $typeMatches)) {
+                        $imgData = substr($imgData, strpos($imgData, ',') + 1);
+                        $type = strtolower($typeMatches[1]);
+                        $imgDecoded = base64_decode($imgData);
+                        if ($imgDecoded !== false) {
+                            $dir = storage_path('app/public/maintenance_images');
+                            if (!file_exists($dir)) {
+                                mkdir($dir, 0755, true);
+                            }
+                            $ticketCode = $validated['ticket_number'] ?? ('MT-' . now()->format('Ymd') . '-' . str_pad($node->id, 3, '0', STR_PAD_LEFT));
+                            $fileName = "{$ticketCode}_{$action}_" . time() . ".{$type}";
+                            $filePath = "{$dir}/{$fileName}";
+                            file_put_contents($filePath, $imgDecoded);
+                            $announcementImageUrl = "/storage/maintenance_images/{$fileName}";
+
+                            // Kirim infografis gambar beresolusi tinggi ke Telegram NOC
+                            $caption = "<b>{$title}</b>\n\n" . $body;
+                            \App\Services\TelegramService::sendMaintenancePhoto($filePath, $caption);
+                        }
+                    }
+                } catch (\Throwable $imgErr) {
+                    \Illuminate\Support\Facades\Log::warning("Gagal menyimpan infografis maintenance {$nodeTypeLabel}: " . $imgErr->getMessage());
+                }
             }
 
             AppNotification::notifyAll(
@@ -1527,38 +1753,60 @@ class NetworkNodeController extends Controller
                 'MAINTENANCE',
                 '/network',
                 'MAINTENANCE',
-                true,
-                'SYSTEM'
+                empty($announcementImageUrl),
+                'SYSTEM',
+                $announcementImageUrl
             );
         }
 
         AuditLog::record(
             'UPDATE',
             'Infrastruktur Jaringan',
-            ($action === 'start' ? "Memulai maintenance" : "Menyelesaikan maintenance") . " pada ODP {$node->name} - {$impactedCount} pelanggan terdampak",
+            ($action === 'start' ? "Memulai maintenance" : "Menyelesaikan maintenance")
+                . " pada {$nodeTypeLabel} {$node->name}"
+                . ($isOdcLevel ? " ({$impactedOdpCount} ODP & {$impactedCount} pelanggan terdampak)" : " - {$impactedCount} pelanggan terdampak"),
             null,
             [
                 'node_id'            => $node->id,
                 'node_name'          => $node->name,
                 'node_code'          => $node->code,
+                'node_type'          => $node->node_type,
+                'is_odc_level'       => $isOdcLevel,
                 'action'             => $action,
                 'status'             => $node->status,
+                'impacted_odp_count' => $impactedOdpCount,
+                'cascaded_node_ids'  => $allDescendantIds,
                 'impacted_count'     => $impactedCount,
                 'notes'              => $defaultNotes,
                 'estimated_duration' => $estimatedDuration,
+                'start_time'         => $startTime,
+                'end_time'           => $endTime,
+                'work_type'          => $workType,
+                'ticket_number'      => $ticketCode,
+                'affected_areas'     => $validated['affected_areas'] ?? [],
             ]
         );
 
         Cache::forget('gis_map_data_payload_v2');
         Cache::forget('dashboard_metrics_payload');
         Cache::forget('gis_topology_hierarchy_all');
+        Cache::forget('network_nodes_simple_all');
+        Cache::forget('network_nodes_simple_ODC');
+        Cache::forget('network_nodes_simple_ODP');
 
         return response()->json([
             'status'             => 'success',
             'message'            => $action === 'start'
-                ? "Maintenance untuk ODP {$node->name} berhasil diaktifkan. Notifikasi siaran ({$impactedCount} pelanggan terdampak) telah dikirim."
-                : "Maintenance untuk ODP {$node->name} telah diselesaikan. Node kembali aktif normal.",
+                ? ($isOdcLevel
+                    ? "Maintenance untuk {$nodeTypeLabel} {$node->name} berhasil diaktifkan. Seluruh {$impactedOdpCount} ODP di bawahnya dan notifikasi siaran ({$impactedCount} pelanggan terdampak) telah diperbarui."
+                    : "Maintenance untuk ODP {$node->name} berhasil diaktifkan. Notifikasi siaran ({$impactedCount} pelanggan terdampak) telah dikirim.")
+                : ($isOdcLevel
+                    ? "Maintenance untuk {$nodeTypeLabel} {$node->name} telah diselesaikan. {$nodeTypeLabel} beserta {$impactedOdpCount} ODP di bawahnya kembali aktif normal."
+                    : "Maintenance untuk ODP {$node->name} telah diselesaikan. Node kembali aktif normal."),
             'node'               => $this->formatNode($node),
+            'is_odc_level'       => $isOdcLevel,
+            'impacted_odp_count' => $impactedOdpCount,
+            'impacted_odps'      => $impactedOdps,
             'impacted_count'     => $impactedCount,
             'impacted_customers' => $impactedCustomers,
         ]);

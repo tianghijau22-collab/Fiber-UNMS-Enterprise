@@ -867,6 +867,96 @@ class TelegramService
         }
     }
 
+    /**
+     * Kirim Infografis / Foto Pengumuman Maintenance ke Telegram
+     */
+    public static function sendMaintenancePhoto(string $photoPath, string $caption): array
+    {
+        try {
+            $enabled = SystemSetting::get('telegram_enabled', env('TELEGRAM_ENABLED', 'false'));
+            if ($enabled !== 'true' && $enabled !== true && $enabled !== '1') {
+                return ['success' => false, 'message' => 'Telegram dinonaktifkan'];
+            }
+
+            $botToken = SystemSetting::get('telegram_bot_token', env('TELEGRAM_BOT_TOKEN'));
+            if (empty($botToken)) {
+                return ['success' => false, 'message' => 'Bot token kosong'];
+            }
+
+            $targetChatIds = static::getActiveChatIdsForTopic('MAINTENANCE');
+            if (empty($targetChatIds)) {
+                $fallback = SystemSetting::get('telegram_chat_id', env('TELEGRAM_CHAT_ID'));
+                if (!empty($fallback)) {
+                    $targetChatIds = [$fallback];
+                }
+            }
+
+            if (empty($targetChatIds)) {
+                return ['success' => false, 'message' => 'Chat ID Telegram belum dikonfigurasi'];
+            }
+
+            if (!file_exists($photoPath) || !is_readable($photoPath)) {
+                return ['success' => false, 'message' => 'File gambar tidak ditemukan'];
+            }
+
+            $fileContents = file_get_contents($photoPath);
+            $filename = basename($photoPath);
+
+            // Batasi panjang caption foto maksimal 1020 karakter sesuai batasan Telegram Bot API
+            $safeCaption = $caption;
+            $overflowText = null;
+            if (mb_strlen($safeCaption) > 1020) {
+                $safeCaption = mb_substr($caption, 0, 1010) . '...';
+                $overflowText = "📋 <b>Lanjutan Rincian Pelanggan Terdampak:</b>\n\n" . mb_substr($caption, 1010);
+            }
+
+            $successCount = 0;
+            foreach ($targetChatIds as $chatId) {
+                try {
+                    $res = Http::timeout(25)->attach(
+                        'photo',
+                        $fileContents,
+                        $filename
+                    )->post("https://api.telegram.org/bot{$botToken}/sendPhoto", [
+                        'chat_id'    => $chatId,
+                        'caption'    => $safeCaption,
+                        'parse_mode' => 'HTML',
+                    ]);
+
+                    if ($res->successful()) {
+                        $successCount++;
+                        // Jika ada teks lanjutan yang melebihi batas caption 1024 karakter foto, kirim via pesan teks
+                        if (!empty($overflowText)) {
+                            Http::timeout(10)->post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+                                'chat_id'    => $chatId,
+                                'text'       => $overflowText,
+                                'parse_mode' => 'HTML',
+                            ]);
+                        }
+                    } else {
+                        Log::warning("Telegram sendPhoto Maintenance error pada Chat ID {$chatId}: " . $res->body());
+                        // Fallback jika pengiriman foto ditolak, kirim via pesan teks
+                        Http::timeout(10)->post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+                            'chat_id'    => $chatId,
+                            'text'       => $caption,
+                            'parse_mode' => 'HTML',
+                        ]);
+                    }
+                } catch (\Throwable $err) {
+                    Log::warning("Telegram sendPhoto Exception pada Chat ID {$chatId}: " . $err->getMessage());
+                }
+            }
+
+            return [
+                'success'    => $successCount > 0,
+                'sent_count' => $successCount,
+            ];
+        } catch (\Throwable $e) {
+            Log::error('sendMaintenancePhoto Error: ' . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
     public static function testConnection(string $botToken, string $chatId): array
     {
         $timeStr = now()->format('d/m/Y, H.i.s');
