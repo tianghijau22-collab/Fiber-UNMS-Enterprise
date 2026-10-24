@@ -698,6 +698,31 @@ class OltController extends Controller
 
         $orphanedOnus=array_values(collect(array_merge($orphanedOnus,$registrationIndex->reviews($physicalRows,$dbOnts)))->unique('id')->all());
 
+        // Reuse the same selected hardware identity and sample as the registered inventory.
+        // The ODP uplink remains topology only, never a substitute for an ONU interface.
+        $registeredById = array_column($registeredOnus, null, 'ont_id');
+        $reviewFields = array_flip(['port','onu_id','identity_source','identity_observed_at','identity_status',
+            'serial_duplicate','serial_resolution','serial_locations','telemetry_sample_version',
+            'sample_observed_at','state_observed_at','rx_observed_at','rx_available','rx_power','is_online','status']);
+        foreach ($orphanedOnus as &$review) {
+            $inventoryRow = $registeredById[$review['id']] ?? null;
+            if ($inventoryRow === null) {
+                $sn = strtoupper(trim((string)($review['onu_serial'] ?? '')));
+                $mac = strtoupper(trim((string)($review['onu_mac'] ?? '')));
+                $physical = $driverOnuMap[$sn] ?? ($mac !== '' ? ($driverOnuMap[$mac] ?? null) : null);
+                $inventoryRow = [
+                    'port'=>$physical['port'] ?? null, 'onu_id'=>$physical['onu_id'] ?? null,
+                    'identity_source'=>$physical['identity_source'] ?? null,
+                    'identity_observed_at'=>$physical['identity_observed_at'] ?? null,
+                    'identity_status'=>$physical ? 'resolved' : 'unresolved',
+                    ...ZteOnuIdentityMap::duplicateInfo($identityGroups[$sn] ?? [], $physical !== null),
+                    ...\App\Services\Olt\OnuTelemetrySample::project($physical ?? []),
+                ];
+            }
+            $review['review_telemetry'] = array_intersect_key($inventoryRow, $reviewFields);
+        }
+        unset($review);
+
         // 5. Perbarui hitungan port PON
         $updatedPonPorts = array_map(function ($port) use ($registeredOnus, $unregisteredOnus) {
             $portId = $port['port_id'] ?? '';

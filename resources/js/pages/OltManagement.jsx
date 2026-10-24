@@ -1,5 +1,6 @@
 import OltCustomerRegistrationModal from '../components/OltCustomerRegistrationModal.jsx';
 import OltMismatchCustomerActions from '../components/OltMismatchCustomerActions.jsx';
+import { ReviewInterface, ReviewRxPower } from '../components/OltReviewTelemetry.jsx';
 import { duplicateCustomerTarget, deleteDuplicateCustomer } from '../lib/oltMismatchCustomers.js';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -1114,7 +1115,7 @@ export default function OltManagement() {
 
   const filteredOrphanedOnus = useMemo(() => {
     return (oltData?.orphaned_onus || []).filter(onu => {
-      if (!isPortMatching(onu.olt_port, selectedPortFilter)) {
+      if (!isPortMatching(onu.review_telemetry?.port || onu.olt_port, selectedPortFilter)) {
         return false;
       }
       if (orphanedSearchQuery) {
@@ -1123,7 +1124,7 @@ export default function OltManagement() {
         const matchSn = (onu.onu_serial || onu.onu_mac)?.toLowerCase().includes(q);
         const matchCode = onu.customer_number?.toLowerCase().includes(q);
         const matchOdp = onu.odp_name?.toLowerCase().includes(q);
-        const matchPort = onu.olt_port?.toLowerCase().includes(q)||onu.orphan_reason?.toLowerCase().includes(q);
+        const matchPort = onu.review_telemetry?.port?.toLowerCase().includes(q) || onu.olt_port?.toLowerCase().includes(q)||onu.orphan_reason?.toLowerCase().includes(q);
         return matchName || matchSn || matchCode || matchOdp || matchPort;
       }
       return true;
@@ -3775,7 +3776,7 @@ export default function OltManagement() {
 
               {/* Desktop Table View (hidden on mobile md:block) */}
               <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left text-sm text-black/70 dark:text-white/90">
+                <table className="w-full min-w-[1600px] text-left text-sm text-black/70 dark:text-white/90">
                   <thead className="bg-rose-100/50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-900/60 text-xs uppercase font-bold text-rose-900 dark:text-rose-300 tracking-wider">
                     <tr>
                       <th className="px-5 py-3.5 w-10">
@@ -3798,7 +3799,9 @@ export default function OltManagement() {
                       <th className="px-5 py-3.5">Nama Pelanggan / ID</th>
                       <th className="px-5 py-3.5">ODP &amp; Port</th>
                       <th className="px-5 py-3.5">Serial Number / MAC</th>
-                      <th className="px-5 py-3.5">Status &amp; Indikasi</th>
+                      <th className="px-5 py-3.5">Port Interface</th>
+                      <th className="px-5 py-3.5">Redaman Rx Power</th>
+                      <th className="px-5 py-3.5 min-w-60">Status &amp; Indikasi</th>
                       <th className="px-5 py-3.5">Terakhir Terdaftar</th>
                       <th className="px-5 py-3.5 text-right">Aksi Pembersihan</th>
                     </tr>
@@ -3847,6 +3850,8 @@ export default function OltManagement() {
                                 )}
                               </div>
                             </td>
+                            <td className="px-5 py-3.5"><ReviewInterface onu={onu} /></td>
+                            <td className="px-5 py-3.5"><ReviewRxPower onu={onu} /></td>
                             <td className="px-5 py-3.5">
                               <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
                                 {onu.orphan_reason}
@@ -3872,7 +3877,7 @@ export default function OltManagement() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={8} className="px-6 py-8 text-center text-emerald-600 dark:text-emerald-400 text-sm font-semibold">
+                        <td colSpan={10} className="px-6 py-8 text-center text-emerald-600 dark:text-emerald-400 text-sm font-semibold">
                           Tidak ada ketidaksesuaian yang terdeteksi pada data tersimpan saat ini. Perhatikan kelengkapan inventaris OLT.
                         </td>
                       </tr>
@@ -3930,6 +3935,15 @@ export default function OltManagement() {
                             <span className="col-span-2 font-mono font-bold text-black dark:text-white">
                               {onu.onu_serial || onu.onu_mac}
                             </span>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-black/60 dark:text-white/70 font-semibold">Port Interface</span>
+                            <div className="col-span-2"><ReviewInterface onu={onu} /></div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 px-4 py-2.5 items-center">
+                            <span className="text-black/60 dark:text-white/70 font-semibold">Redaman Rx Power</span>
+                            <div className="col-span-2"><ReviewRxPower onu={onu} /></div>
                           </div>
 
                           {/* Row 5: Status Indikasi */}

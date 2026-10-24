@@ -52,6 +52,47 @@ class OltIdentityPartitionTest extends TestCase
         return ['_source'=>'live_snmp','identity_source'=>Identity::SOURCE,'identity_observed_at'=>now()->toIso8601String(),'serial_number'=>'TEST0000000'.$sn,'port'=>$port,'onu_id'=>$id,'status'=>'Online','rx_power'=>-26.0,...\App\Services\Olt\OnuTelemetrySample::normalize(['status'=>'Online','rx_power'=>-26.0],now()->toIso8601String())];
     }
 
+    public function test_duplicate_customer_review_uses_hardware_interface_and_sample_not_odp_uplink(): void
+    {
+        DB::table('ont_registrations')->where('id',1702)->update(['onu_serial'=>'TEST00000001']);
+        $out=$this->partition([$this->row(1,'1/2/3',12)]);
+        $reviews=collect($out['orphaned_onus'])->where('issue_code','duplicate_customer_serial')->values();
+        $this->assertCount(2,$reviews);
+        foreach($reviews as $row){
+            $this->assertSame('gpon-olt_1/1/15',$row['olt_port']);
+            $this->assertSame('gpon-olt_1/2/3',$row['review_telemetry']['port']);
+            $this->assertSame('12',$row['review_telemetry']['onu_id']);
+            $this->assertSame(-26.0,$row['review_telemetry']['rx_power']);
+            $this->assertTrue($row['review_telemetry']['rx_available']);
+            $this->assertSame($out['onu_list'][0]['sample_observed_at'],$row['review_telemetry']['sample_observed_at']);
+        }
+    }
+
+    public function test_review_does_not_resurrect_registration_rx_when_hardware_identity_is_missing_or_ambiguous(): void
+    {
+        DB::table('ont_registrations')->where('id',1702)->update(['onu_serial'=>'TEST00000001','rx_power'=>-17.5]);
+        foreach([[],[$this->row(1,'1/2/3',12),$this->row(1,'1/4/7',2)]] as $input){
+            $out=$this->partition($input);
+            foreach($out['orphaned_onus'] as $row){
+                $this->assertNull($row['review_telemetry']['port']);
+                $this->assertNull($row['review_telemetry']['rx_power']);
+                $this->assertFalse($row['review_telemetry']['rx_available']);
+            }
+        }
+    }
+
+    public function test_review_of_foreign_customer_uses_observation_on_selected_olt_and_keeps_review_classification(): void
+    {
+        DB::table('network_nodes')->insert(['id'=>2,'name'=>'Foreign ODP','olt_device_id'=>2,'olt_port_ref'=>'gpon-olt_1/1/1']);
+        DB::table('network_ports')->where('id',2)->update(['node_id'=>2]);
+        $out=$this->partition([$this->row(2,'1/6/7',11)]);
+        $row=collect($out['orphaned_onus'])->firstWhere('id',1702);
+        $this->assertSame('registered_other_olt',$row['issue_code']);
+        $this->assertFalse($row['can_delete']);
+        $this->assertSame('gpon-olt_1/6/7',$row['review_telemetry']['port']);
+        $this->assertSame(-26.0,$row['review_telemetry']['rx_power']);
+    }
+
     public function test_one_odp_retains_two_individual_pons_and_never_uses_registration_ids(): void
     {
         $out=$this->partition([$this->row(1,'1/1/15',1),$this->row(2,'1/1/16',2)]);
