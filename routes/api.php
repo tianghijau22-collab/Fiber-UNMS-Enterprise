@@ -40,6 +40,11 @@ Route::get('app-testing/login-banner', [\App\Http\Controllers\AppTestingControll
 
 Route::middleware(['auth:sanctum', \App\Http\Middleware\AuthorizeApiAccess::class])->group(function () {
 
+Route::get('monitoring/incidents', [\App\Http\Controllers\MonitoringIncidentController::class, 'index']);
+Route::get('monitoring/incidents/{incident}', [\App\Http\Controllers\MonitoringIncidentController::class, 'show'])->whereNumber('incident');
+Route::post('monitoring/incidents/{incident}/ticket', [\App\Http\Controllers\MonitoringIncidentController::class, 'createTicket'])->whereNumber('incident')->middleware('throttle:30,1');
+Route::post('monitoring/deliveries/{delivery}/retry', [\App\Http\Controllers\MonitoringIncidentController::class, 'retry'])->whereNumber('delivery')->middleware('throttle:30,1');
+
 Route::get('topology-connections/prepare', [\App\Http\Controllers\TopologyConnectionController::class, 'prepare']);
 Route::get('topology-connections', [\App\Http\Controllers\TopologyConnectionController::class, 'index']);
 Route::post('topology-connections', [\App\Http\Controllers\TopologyConnectionController::class, 'store'])->middleware('throttle:30,1');

@@ -22,6 +22,7 @@ return [
         'OltController' => $master(['/olt-management', '/network', '/field-tech', '/odp-checks', '/bts-management'], ['/olt-management']),
         'BtsSiteController' => $master(['/bts-management']),
         'TicketController' => ['pages' => ['/tickets', '/field-tech']],
+        'MonitoringIncidentController' => ['pages'=>['/system-alerts','/gis-map','/tickets'], 'write_pages'=>['/system-alerts','/tickets'], 'write_roles'=>$operators],
         'OdpMeasurementController' => ['pages' => ['/odp-checks', '/field-tech']],
         'InventoryController' => ['pages' => ['/inventory']],
         'FaultTracingController' => ['pages' => ['/otdr-tracing', '/field-tech']],

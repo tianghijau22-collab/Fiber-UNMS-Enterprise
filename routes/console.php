@@ -17,6 +17,11 @@ Schedule::command('fona:diagnose-optical')
     ->withoutOverlapping(2)
     ->name('fona:stored-optical-diagnostics');
 
+Schedule::command('fona:dispatch-optical-outbox')
+    ->everyMinute()
+    ->withoutOverlapping(2)
+    ->name('fona:optical-outbox-recovery');
+
 // ─── Schedule Sync Status Layanan Sobok (Setiap 5 Menit) ────────────
 Schedule::command('sobok:sync-status')
     ->everyFiveMinutes()

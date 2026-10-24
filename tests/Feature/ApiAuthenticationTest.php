@@ -90,7 +90,7 @@ class ApiAuthenticationTest extends TestCase
             ], ['X-User-Id' => '1', 'X-User-Role' => 'Super Administrator'])->assertUnauthorized();
             $count++;
         }
-        $this->assertSame(221, $count);
+        $this->assertSame(225, $count);
         $this->assertDatabaseCount('users', 0);
         $this->assertDatabaseCount('audit_logs', 0);
     }

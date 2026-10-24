@@ -69,7 +69,7 @@ class FcmService
             $base64Signature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
             $jwt = $signatureInput . '.' . $base64Signature;
 
-            $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
+            $response = Http::asForm()->connectTimeout(3)->timeout(8)->post('https://oauth2.googleapis.com/token', [
                 'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
                 'assertion'  => $jwt,
             ]);
@@ -163,7 +163,7 @@ class FcmService
         ];
 
         try {
-            $response = Http::withToken($token)
+            $response = Http::withToken($token)->connectTimeout(3)->timeout(8)
                 ->withHeaders(['Content-Type' => 'application/json; UTF-8'])
                 ->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", $payload);
 

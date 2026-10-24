@@ -113,6 +113,7 @@ class TicketController extends Controller
 
         $validated = $request->validate([
             'title'             => 'required|string|max:255',
+            'monitoring_incident_id' => 'nullable|integer|exists:monitoring_incidents,id',
             'description'       => 'nullable|string',
             'category'          => 'required|string',
             'status'            => 'required|string|in:Open,In Progress,Resolved,Closed',
@@ -123,6 +124,10 @@ class TicketController extends Controller
             'dispatch_telegram' => 'nullable|boolean',
         ]);
 
+        if (!empty($validated['monitoring_incident_id'])) abort_unless($isOperatorOrAdmin, 403);
+        $requestKey = $request->header('Idempotency-Key');
+        if ($requestKey !== null) validator(['key'=>$requestKey], ['key'=>'required|string|min:8|max:128|regex:/^[A-Za-z0-9._:-]+$/D'])->validate();
+
         // Support multi-tag technicians array
         if ($request->has('technician_names') && is_array($request->technician_names)) {
             $validated['technician_name'] = implode(', ', array_filter($request->technician_names));
@@ -131,11 +136,6 @@ class TicketController extends Controller
 
         // Default prioritas sistem
         $validated['priority'] = 'Normal';
-
-        // Auto-generate ticket number
-        $year = date('Y');
-        $count = Ticket::whereYear('created_at', $year)->count() + 1;
-        $validated['ticket_number'] = sprintf('TICK-%s-%04d', $year, $count);
 
         $creatorName = $currentUser?->name ?? $request->input('created_by_name') ?? 'Super Administrator';
         unset($validated['created_by_name']);
@@ -159,7 +159,9 @@ class TicketController extends Controller
         $dispatchTelegram = $request->boolean('dispatch_telegram', false);
         unset($validated['dispatch_telegram']);
 
-        $ticket = Ticket::create($validated);
+        $creation = app(\App\Services\TicketCreationService::class)->create($validated, (int) $currentUser->id, $requestKey);
+        $ticket = $creation['ticket'];
+        if (!$creation['created']) return response()->json(['status'=>'success','message'=>'Permintaan ini sudah diproses; tiket yang sama dikembalikan.', 'replayed'=>true, 'data'=>$ticket->load(['networkNode'])]);
 
         AuditLog::record(
             'CREATE',

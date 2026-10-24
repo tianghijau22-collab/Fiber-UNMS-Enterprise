@@ -13,6 +13,7 @@ class AppNotification extends Model
     protected $table = 'system_notifications';
 
     protected $fillable = [
+        'monitoring_event_id',
         'user_id',
         'type',
         'title',

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../components/AuthContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingState from '../components/LoadingState';
+import { ticketSubmissionAttempt } from '../lib/ticketSubmission';
 
 /* ══════════════════════════════════════════════════════════════════
    BADGES & HELPERS (Clean Enterprise Styling)
@@ -959,6 +960,8 @@ export default function TicketManagement() {
   const [ticketToDelete, setTicketToDelete] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState(null);
+  const ticketSubmission = useRef(null);
+  const ticketSubmitBusy = useRef(false);
 
   const showToast = (msg, type = 'success') => {
     if (typeof window !== 'undefined' && window.showAppAlert) {
@@ -1016,6 +1019,8 @@ export default function TicketManagement() {
   }, [fetchTickets]);
 
   const handleCreateTicket = async (formData) => {
+    if (ticketSubmitBusy.current) return;
+    ticketSubmitBusy.current = true;
     setModalLoading(true);
     setModalError(null);
     try {
@@ -1023,24 +1028,28 @@ export default function TicketManagement() {
         ...formData,
         created_by_name: currentUser?.name || 'Administrator',
       };
+      ticketSubmission.current = ticketSubmissionAttempt(ticketSubmission.current, JSON.stringify(payload));
       const res = await fetch('/api/tickets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Idempotency-Key': ticketSubmission.current.key },
+        body: ticketSubmission.current.body,
       });
       const json = await res.json();
       if (res.ok && json.status === 'success') {
+        ticketSubmission.current = null;
         showToast(json.message || 'Tiket jointer berhasil dibuat!');
         setShowCreateModal(false);
         fetchTickets();
         loadReferenceData();
       } else {
+        if (res.status === 422) ticketSubmission.current = null;
         setModalError(json.errors || json.message || 'Gagal membuat tiket');
       }
     } catch (err) {
       console.error(err);
-      setModalError('Terjadi kesalahan jaringan');
+      setModalError(err.message?.startsWith('Hasil percobaan') ? err.message : 'Terjadi kesalahan jaringan. Coba kembali dengan isi tiket yang sama.');
     } finally {
+      ticketSubmitBusy.current = false;
       setModalLoading(false);
     }
   };
@@ -1514,7 +1523,11 @@ export default function TicketManagement() {
           nodes={nodes}
           technicians={technicians}
           onSave={handleCreateTicket}
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => {
+            if (ticketSubmitBusy.current) return;
+            ticketSubmission.current = null;
+            setShowCreateModal(false);
+          }}
           loading={modalLoading}
           error={modalError}
         />

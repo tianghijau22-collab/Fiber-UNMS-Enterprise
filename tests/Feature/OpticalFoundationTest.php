@@ -19,12 +19,17 @@ use Tests\TestCase;
 
 class OpticalFoundationTest extends TestCase
 {
+    use \Tests\Support\MonitoringSchema;
     protected function setUp(): void
     {
         parent::setUp();
         $this->assertSame('sqlite', config('database.default'));
         $this->assertSame(':memory:', config('database.connections.sqlite.database'));
-        Http::fake(); Http::preventStrayRequests(); Bus::fake([Publish::class]);
+        $this->monitoringSchema();
+        Http::fake(); Http::preventStrayRequests(); Bus::fake([\App\Jobs\DeliverOpticalOutbox::class]);
+        $transport = \Mockery::mock(\App\Services\OpticalDeliveryTransport::class);
+        $transport->shouldReceive('destinations')->andReturn(['telegram_enabled'=>false, 'telegram_token_present'=>false, 'telegram_recipients'=>[], 'fcm_configured'=>false]);
+        $this->app->instance(\App\Services\OpticalDeliveryTransport::class, $transport);
     }
 
     private function at(int $ago = 0): string { return date(DATE_ATOM, time() - $ago); }
@@ -59,12 +64,17 @@ class OpticalFoundationTest extends TestCase
         $repository = \Mockery::mock(Evidence::class); $repository->shouldReceive('capture')->once()->andReturn($data);
         $this->app->instance(Evidence::class, $repository);
         $state = Cache::get(Detector::STATE_KEY, ['records'=>[]]); $state['evaluated_at'] = 0; Cache::forever(Detector::STATE_KEY, $state);
+        $checkpoint = DB::table('monitoring_checkpoints')->first();
+        if ($checkpoint) {
+            $saved = json_decode($checkpoint->payload, true); $saved['evaluated_at'] = 0;
+            DB::table('monitoring_checkpoints')->update(['payload'=>json_encode($saved)]);
+        }
         return Detector::runDiagnostic();
     }
 
     private function dispatched(): array
     {
-        return Bus::dispatched(Publish::class)->map(fn($item)=>$item->event)->all();
+        return DB::table('monitoring_events')->whereIn('transition', ['outage','recovered'])->get()->map(function($e) { $p = json_decode($e->payload, true); if ($p['transition'] === 'recovered') $p['transition'] = 'recovery'; return $p; })->all();
     }
 
     public function test_background_evaluation_consumes_stored_evidence_and_keeps_a_unique_burst_key(): void
@@ -93,13 +103,13 @@ class OpticalFoundationTest extends TestCase
         $this->evaluate($this->fixture('up', 60));
         $this->evaluate($this->fixture('down', 50));
         $this->evaluate($this->fixture('down', 50)); Bus::assertNothingDispatched();
-        $this->evaluate($this->fixture('down', 40)); Bus::assertDispatchedTimes(Publish::class, 1);
+        $this->evaluate($this->fixture('down', 40)); $this->assertCount(1, $this->dispatched());
         $event = $this->dispatched()[0]; Detector::delivered($event);
         $this->evaluate($this->fixture('unknown', 30));
         $this->evaluate($this->fixture('partial', 25));
         $this->assertTrue(Cache::get(Detector::STATE_KEY)['records']['odp:1']['active']);
         $this->evaluate($this->fixture('up', 15));
-        $this->evaluate($this->fixture('up', 5)); Bus::assertDispatchedTimes(Publish::class, 2);
+        $this->evaluate($this->fixture('up', 5)); $this->assertCount(2, $this->dispatched());
         $this->assertSame('recovery', $this->dispatched()[1]['transition']);
         $this->assertFalse(Detector::deliveryCurrent($event)); Http::assertNothingSent();
     }
@@ -109,7 +119,7 @@ class OpticalFoundationTest extends TestCase
         $this->evaluate($this->fixture('down', 40));
         $this->evaluate($this->fixture('down', 30));
         $this->evaluate($this->fixture('up', 20));
-        $this->evaluate($this->fixture('up', 10)); Bus::assertNothingDispatched();
+        $this->evaluate($this->fixture('up', 10)); Bus::assertNothingDispatched(); $this->assertDatabaseCount('monitoring_deliveries', 0);
     }
 
     public function test_segment_disappearance_and_topology_edits_cannot_announce_cable_recovery(): void
@@ -153,15 +163,11 @@ class OpticalFoundationTest extends TestCase
         $data = $this->fixture('up', 10); $data['nodes'] = []; $data['observations'] = [];
         $this->evaluate($data);
         $this->assertFalse(Detector::deliveryCurrent($event));
-        Bus::assertDispatchedTimes(Publish::class, 1);
+        $this->assertCount(1, $this->dispatched());
     }
 
     public function test_new_typed_notifications_are_accepted_without_broadening_individual_alerts(): void
     {
-        Schema::create('system_notifications', function(Blueprint $t) {
-            $t->id(); $t->integer('user_id')->nullable(); foreach (['type','title','body','url','icon','image_url'] as $f) $t->text($f)->nullable();
-            $t->boolean('is_read')->default(false); $t->timestamps(); $t->softDeletes();
-        });
         // Avoid any credential access or external push while exercising the real notification policy/database.
         Cache::put('firebase_fcm_access_token', '', 60);
         foreach (['OPTICAL_SEGMENT_INDICATION','OPTICAL_SEGMENT_RECOVERY','SOURCE_UNAVAILABLE','SOURCE_RECOVERY'] as $type) {
@@ -180,7 +186,7 @@ class OpticalFoundationTest extends TestCase
             $data['sources'][1] = array_replace($data['sources'][1], ['status'=>'unavailable', 'reason'=>'olt_not_responding']);
             $this->evaluate($data);
         }
-        Bus::assertDispatchedTimes(Publish::class, 1);
+        $this->assertCount(1, $this->dispatched());
         $event = $this->dispatched()[0]; $this->assertSame('source', $event['context']['kind']);
         [$title, $body, $type] = Publish::message($event);
         $this->assertSame('SOURCE_UNAVAILABLE', $type); $this->assertStringContainsString('bukan bukti kabel putus', $body);
@@ -191,11 +197,11 @@ class OpticalFoundationTest extends TestCase
     {
         $this->evaluate($this->fixture('up', 60)); $this->evaluate($this->fixture('down', 45)); $this->evaluate($this->fixture('down', 30));
         $event = $this->dispatched()[0];
-        $job = new class($event) extends Publish {
-            public int $calls = 0;
-            protected function publish(string $title, string $body, string $type): bool { $this->calls++; return true; }
-        };
-        $job->handle(); $job->handle(); $this->assertSame(1, $job->calls);
+        $id = DB::table('monitoring_deliveries')->where('channel','web')->value('id');
+        $this->app->forgetInstance(\App\Services\OpticalDeliveryTransport::class);
+        app(\App\Services\OpticalOutbox::class)->process($id);
+        app(\App\Services\OpticalOutbox::class)->process($id);
+        $this->assertDatabaseCount('system_notifications', 1);
         [$title, $body] = Publish::message($event);
         $this->assertStringContainsString('&lt;1&gt;', $title);
         $this->assertStringNotContainsString('-40.00', $body);
