@@ -14,6 +14,16 @@ export function MarkdownRenderer({ content }) {
   let inCodeBlock = false;
   let codeBuffer = [];
   let listBuffer = [];
+  let orderedBuffer = [];
+  let tableBuffer = [];
+
+  const formatInline = (text) => aiInlineTokens(text).map((token, index) => {
+    if (token.type === 'strong') return <strong key={index} className="font-bold">{token.text}</strong>;
+    if (token.type === 'em') return <em key={index}>{token.text}</em>;
+    if (token.type === 'code') return <code key={index} className="px-1 py-0.5 rounded bg-black/5 dark:bg-white/10 font-mono">{token.text}</code>;
+    if (token.type === 'link') return <a key={index} href={token.href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{token.text}</a>;
+    return <React.Fragment key={index}>{token.text}</React.Fragment>;
+  });
 
   const flushList = (key) => {
     if (listBuffer.length > 0) {
@@ -26,15 +36,55 @@ export function MarkdownRenderer({ content }) {
       );
       listBuffer = [];
     }
+    if (orderedBuffer.length > 0) {
+      elements.push(
+        <ol key={`ol-${key}`} className="list-decimal pl-5 my-1.5 space-y-1 text-xs text-black/85 dark:text-white/85">
+          {orderedBuffer.map((item, idx) => (
+            <li key={idx}>{formatInline(item)}</li>
+          ))}
+        </ol>
+      );
+      orderedBuffer = [];
+    }
   };
 
-  const formatInline = (text) => aiInlineTokens(text).map((token, index) => {
-    if (token.type === 'strong') return <strong key={index} className="font-bold">{token.text}</strong>;
-    if (token.type === 'em') return <em key={index}>{token.text}</em>;
-    if (token.type === 'code') return <code key={index} className="px-1 py-0.5 rounded bg-black/5 dark:bg-white/10 font-mono">{token.text}</code>;
-    if (token.type === 'link') return <a key={index} href={token.href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{token.text}</a>;
-    return <React.Fragment key={index}>{token.text}</React.Fragment>;
-  });
+  const flushTable = (key) => {
+    if (tableBuffer.length > 0) {
+      const parsedRows = tableBuffer
+        .map(row => row.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim()))
+        .filter(cells => !cells.every(c => /^[:\-\s]*$/.test(c)));
+      if (parsedRows.length > 0) {
+        const [header, ...body] = parsedRows;
+        elements.push(
+          <div key={`tbl-${key}`} className="my-2 overflow-x-auto rounded-md border border-black/15 dark:border-white/15">
+            <table className="w-full text-left border-collapse text-[11px]">
+              <thead>
+                <tr className="bg-black/5 dark:bg-white/10 border-b border-black/15 dark:border-white/15">
+                  {header.map((h, i) => (
+                    <th key={i} className="px-2 py-1.5 font-bold text-black dark:text-white whitespace-nowrap">
+                      {formatInline(h)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/10 dark:divide-white/10">
+                {body.map((r, rIdx) => (
+                  <tr key={rIdx} className="hover:bg-black/[0.02] dark:hover:bg-white/[0.02]">
+                    {r.map((cell, cIdx) => (
+                      <td key={cIdx} className="px-2 py-1.5 text-black/85 dark:text-white/85 align-top">
+                        {formatInline(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      tableBuffer = [];
+    }
+  };
 
   lines.forEach((line, idx) => {
     const trimmed = line.trim();
@@ -50,6 +100,7 @@ export function MarkdownRenderer({ content }) {
         inCodeBlock = false;
       } else {
         flushList(idx);
+        flushTable(idx);
         inCodeBlock = true;
       }
       return;
@@ -60,22 +111,42 @@ export function MarkdownRenderer({ content }) {
       return;
     }
 
+    if (trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.split('|').length > 2) {
+      flushList(idx);
+      tableBuffer.push(trimmed);
+      return;
+    } else {
+      flushTable(idx);
+    }
+
     if (trimmed.match(/^(\*|-|•)\s+/)) {
+      if (orderedBuffer.length > 0) flushList(`o-${idx}`);
       listBuffer.push(trimmed.replace(/^(\*|-|•)\s+/, ''));
+      return;
+    } else if (trimmed.match(/^\d+\.\s+/)) {
+      if (listBuffer.length > 0) flushList(`u-${idx}`);
+      orderedBuffer.push(trimmed.replace(/^\d+\.\s+/, ''));
       return;
     } else {
       flushList(idx);
     }
 
-    if (trimmed.startsWith('### ')) {
+    if (trimmed.startsWith('#### ')) {
       elements.push(
-        <h4 key={`h4-${idx}`} className="text-xs font-bold text-black dark:text-white mt-2.5 mb-1" >{formatInline(trimmed.slice(4))}</h4>
+        <h5 key={`h5-${idx}`} className="text-xs font-bold text-black dark:text-white mt-2 mb-0.5">{formatInline(trimmed.slice(5))}</h5>
       );
       return;
     }
-    if (trimmed.startsWith('## ')) {
+    if (trimmed.startsWith('### ')) {
       elements.push(
-        <h3 key={`h3-${idx}`} className="text-xs font-bold text-black dark:text-white mt-3 mb-1.5 border-b border-black/10 dark:border-white/10 pb-1 uppercase tracking-wider" >{formatInline(trimmed.slice(3))}</h3>
+        <h4 key={`h4-${idx}`} className="text-xs font-bold text-black dark:text-white mt-2.5 mb-1">{formatInline(trimmed.slice(4))}</h4>
+      );
+      return;
+    }
+    if (trimmed.startsWith('## ') || trimmed.startsWith('# ')) {
+      const sliceLen = trimmed.startsWith('## ') ? 3 : 2;
+      elements.push(
+        <h3 key={`h3-${idx}`} className="text-xs font-bold text-black dark:text-white mt-3 mb-1.5 border-b border-black/10 dark:border-white/10 pb-1 uppercase tracking-wider">{formatInline(trimmed.slice(sliceLen))}</h3>
       );
       return;
     }
@@ -86,12 +157,173 @@ export function MarkdownRenderer({ content }) {
     }
 
     elements.push(
-      <p key={`p-${idx}`} className="text-xs leading-relaxed my-0.5 text-black/85 dark:text-white/85" >{formatInline(line)}</p>
+      <p key={`p-${idx}`} className="text-xs leading-relaxed my-0.5 text-black/85 dark:text-white/85">{formatInline(line)}</p>
     );
   });
 
   flushList('final');
+  flushTable('final');
   return <div className="space-y-0.5">{elements}</div>;
+}
+
+/**
+ * Maskot Animasi 3D Interaktif FONA Asisten
+ * Mendukung pose: Lompat (jump), Melihat Kiri & Kanan (look), dan Sedang Berpikir (think)
+ */
+function FonaMascotAnimated({ variant = 'launcher', forceThinking = false }) {
+  const [pose, setPose] = useState('look'); // 'jump' | 'look' | 'think'
+
+  useEffect(() => {
+    if (forceThinking) {
+      setPose('think');
+      return;
+    }
+    const poses = ['look', 'jump', 'think', 'look'];
+    let idx = 0;
+    const timer = setInterval(() => {
+      idx = (idx + 1) % poses.length;
+      setPose(poses[idx]);
+    }, 3600);
+    return () => clearInterval(timer);
+  }, [forceThinking]);
+
+  const activePose = forceThinking ? 'think' : pose;
+  const isLauncher = variant === 'launcher';
+
+  return (
+    <div
+      className={`relative select-none pointer-events-none flex items-center justify-center ${
+        isLauncher ? 'w-16 h-16 sm:w-20 sm:h-20' : 'w-8 h-8 sm:w-9 sm:h-9'
+      }`}
+    >
+      <style>{`
+        @keyframes fonaJumpBody {
+          0%, 100% { transform: translateY(0) scale(1, 1); }
+          18% { transform: translateY(4%) scale(1.06, 0.93); }
+          42% { transform: translateY(-14%) scale(0.96, 1.05) rotate(-2deg); }
+          58% { transform: translateY(-16%) scale(0.97, 1.04) rotate(2deg); }
+          82% { transform: translateY(3%) scale(1.05, 0.94); }
+        }
+        @keyframes fonaJumpShadow {
+          0%, 100% { transform: scaleX(1); opacity: 0.35; }
+          18% { transform: scaleX(1.12); opacity: 0.45; }
+          50% { transform: scaleX(0.62); opacity: 0.16; }
+          82% { transform: scaleX(1.1); opacity: 0.42; }
+        }
+        @keyframes fonaLookHead {
+          0%, 100% { transform: translateX(0) rotate(0deg); }
+          22%, 35% { transform: translateX(-6%) rotate(-6deg); }
+          62%, 78% { transform: translateX(6%) rotate(6deg); }
+        }
+        @keyframes fonaLookEyes {
+          0%, 100% { transform: translate(0, 0) scaleY(1); }
+          20%, 35% { transform: translate(-9%, 0) scaleY(1); }
+          46% { transform: translate(0, 0) scaleY(0.1); }
+          50% { transform: translate(0, 0) scaleY(1); }
+          62%, 78% { transform: translate(9%, 0) scaleY(1); }
+          90% { transform: translate(0, 0) scaleY(0.1); }
+          94% { transform: translate(0, 0) scaleY(1); }
+        }
+        @keyframes fonaThinkHead {
+          0%, 100% { transform: rotate(-8deg) translate(-2%, 1%); }
+          50% { transform: rotate(-11deg) translate(-3%, 2%); }
+        }
+        @keyframes fonaThinkEyes {
+          0%, 100% { transform: translate(6%, -5%) scaleY(0.88); }
+          50% { transform: translate(8%, -7%) scaleY(0.82); }
+        }
+        @keyframes fonaIdleBreath {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-2.5%); }
+        }
+        @keyframes fonaThoughtBubble {
+          0%, 100% { transform: translateY(0) scale(1); opacity: 0.95; }
+          50% { transform: translateY(-4px) scale(1.08); opacity: 1; }
+        }
+      `}</style>
+
+      {/* Bayangan Bawah (khusus tombol utama) */}
+      {isLauncher && (
+        <span
+          className="absolute bottom-0.5 w-10 sm:w-12 h-2 rounded-full bg-black/40 dark:bg-black/70 blur-[2px]"
+          style={{
+            animation: activePose === 'jump' ? 'fonaJumpShadow 1.1s ease-in-out infinite' : 'none',
+          }}
+        />
+      )}
+
+      {/* Kontainer Karakter Berlapis (Body + Head + Glowing Visor Eyes) */}
+      <div
+        className="relative w-full h-full flex items-center justify-center"
+        style={{
+          animation:
+            activePose === 'jump'
+              ? 'fonaJumpBody 1.1s cubic-bezier(0.34, 1.56, 0.64, 1) infinite'
+              : 'fonaIdleBreath 2.6s ease-in-out infinite',
+        }}
+      >
+        {/* Layer 1: Badan Robot */}
+        <img
+          src="/images/fona-mascot-body.png"
+          alt=""
+          draggable={false}
+          className="absolute inset-0 w-full h-full object-contain drop-shadow-[0_6px_12px_rgba(0,0,0,0.35)]"
+        />
+
+        {/* Layer 2: Kepala & Helm Robot (Bisa menoleh kiri-kanan & miring berpikir) */}
+        <div
+          className="absolute inset-0 w-full h-full"
+          style={{
+            transformOrigin: '50% 38%',
+            animation:
+              activePose === 'look'
+                ? 'fonaLookHead 3.2s ease-in-out infinite'
+                : activePose === 'think'
+                  ? 'fonaThinkHead 2s ease-in-out infinite'
+                  : 'none',
+          }}
+        >
+          <img
+            src="/images/fona-mascot-head.png"
+            alt="FONA Asisten"
+            draggable={false}
+            className="absolute inset-0 w-full h-full object-contain"
+          />
+
+          {/* Layer 3: Mata LED Cyan di dalam Visor (Melirik kiri/kanan, berkedip, berpikir) */}
+          <img
+            src="/images/fona-mascot-eyes.png"
+            alt=""
+            draggable={false}
+            className="absolute inset-0 w-full h-full object-contain"
+            style={{
+              transformOrigin: '50% 27%',
+              animation:
+                activePose === 'look'
+                  ? 'fonaLookEyes 3.2s ease-in-out infinite'
+                  : activePose === 'think'
+                    ? 'fonaThinkEyes 2s ease-in-out infinite'
+                    : 'none',
+            }}
+          />
+        </div>
+
+        {/* Gelembung Berpikir (Muncul saat pose berpikir) */}
+        {activePose === 'think' && (
+          <div
+            className={`absolute ${
+              isLauncher
+                ? '-top-1.5 -right-1 px-1.5 py-0.5 text-[10px]'
+                : '-top-1 -right-1 px-1 py-0 text-[8px]'
+            } rounded-full bg-white dark:bg-zinc-900 text-sky-500 font-bold border border-sky-400/50 shadow-md flex items-center gap-0.5`}
+            style={{ animation: 'fonaThoughtBubble 1.4s ease-in-out infinite' }}
+          >
+            <span>?</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function AiAssistantWidget({ currentUser }) {
@@ -139,7 +371,7 @@ export default function AiAssistantWidget({ currentUser }) {
   const initialGreeting = useMemo(() => ({
     id: 'welcome-msg',
     role: 'assistant',
-    content: `Selamat datang ${currentUser?.name ? `**${currentUser.name}**` : 'Rekan'} di **FONA Copilot Enterprise** (NOC Network Intelligence).\n\nSistem AI terhubung langsung dengan telemetri OLT, status redaman ONT, dan data topologi GIS Fiber-UNMS. Anda dapat melakukan kueri operasional seperti:\n\n- **Telemetri Redaman Tersimpan:** *"Cek redaman optik pelanggan Budi"* atau *"Periksa SN ZTEGC12345"*\n- **Kapasitas Node & Port:** *"Berapa kapasitas dan sisa port di ODP-MTR-01?"*\n- **Deteksi Redaman Kritis:** *"Tampilkan pelanggan dengan Rx lemah (≤ -25 dBm) atau N/A"*\n- **Status Pemeliharaan:** *"Daftar node ODP yang sedang maintenance hari ini"*\n- **Ringkasan Jaringan:** *"Statistik ringkasan status jaringan fiber optik saat ini"*\n\nSilakan ajukan pertanyaan teknis atau gunakan tombol kueri cepat di bawah.`,
+    content: `Halo ${currentUser?.name ? `**${currentUser.name}**` : 'Rekan'}, selamat datang di **FONA Asisten**.\n\nSaya siap membantu Anda mengecek:\n- **Data & Redaman Pelanggan** *(nama, ID layanan, atau SN)*\n- **Kapasitas & Status ODP / ODC** *(sisa port & maintenance)*\n- **Ringkasan Jaringan & Tiket Gangguan**\n\nSilakan ketik pertanyaan Anda di bawah.`,
     timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
   }), [currentUser?.name]);
 
@@ -358,7 +590,7 @@ export default function AiAssistantWidget({ currentUser }) {
   };
 
   const handleClearChat = async () => {
-    if (loading || historyLoading || !window.confirm('Bersihkan seluruh riwayat percakapan Anda dengan FONA Copilot?')) return;
+    if (loading || historyLoading || !window.confirm('Bersihkan seluruh riwayat percakapan Anda dengan FONA Asisten?')) return;
     setLoading(true);
     try {
       const res = await fetch('/api/ai-assistant/history', {method:'DELETE', credentials:'same-origin', headers:{'Accept':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''}});
@@ -426,7 +658,7 @@ export default function AiAssistantWidget({ currentUser }) {
 
   const quickPrompts = [
     { label: 'Redaman Kritis', prompt: 'Tampilkan daftar pelanggan yang memiliki redaman optik lemah (≤ -25 dBm) atau N/A saat ini.' },
-    { label: 'Ringkasan Jaringan', prompt: 'Berikan ringkasan status operasional jaringan Fiber-UNMS saat ini.' },
+    { label: 'Ringkasan Jaringan', prompt: 'Berikan ringkasan status operasional jaringan sistem FONA saat ini.' },
     { label: 'ODP Maintenance', prompt: 'ODP mana saja yang sedang dalam status maintenance aktif hari ini?' },
     { label: 'Tiket Gangguan', prompt: 'Tampilkan tiket gangguan jaringan yang masih berstatus open atau in progress.' },
   ];
@@ -439,28 +671,26 @@ export default function AiAssistantWidget({ currentUser }) {
     <>
       {/* ─── FLOATING LAUNCHER BUTTON ─────────────────────────────────── */}
       {!isOpen && (
-        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex items-center group">
+        <div className="fixed bottom-3 right-3 sm:bottom-5 sm:right-5 z-50 flex items-center group">
           <button
             type="button"
             onClick={() => { setIsOpen(true); setIsMinimized(false); }}
-            className="relative flex items-center justify-center w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-black dark:bg-white text-white dark:text-black shadow-xl hover:scale-105 active:scale-95 transition-all duration-150 border border-black/20 dark:border-white/20 cursor-pointer"
-            aria-label="Buka FONA AI Copilot"
-            title="FONA Copilot (NOC Network Intelligence)"
+            className="relative flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-transparent hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer focus:outline-none"
+            aria-label="Buka FONA Asisten"
+            title="FONA Asisten"
           >
-            {/* Crisp AI Spark Icon */}
-            <svg className="w-5 h-5 text-white dark:text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
+            {/* Maskot Animasi 3D Interaktif */}
+            <FonaMascotAnimated variant="launcher" forceThinking={loading} />
             {/* Status Radar Dot */}
-            <span className="absolute top-0 right-0 flex h-3 w-3">
+            <span className="absolute top-1 right-2 flex h-3 w-3">
               <span className={`absolute inline-flex h-full w-full rounded-full ${engineDot} opacity-40`}></span>
               <span className={`relative inline-flex rounded-full h-3 w-3 ${engineDot} border border-white dark:border-black`}></span>
             </span>
           </button>
 
           {/* Minimal Tooltip */}
-          <div className="hidden sm:flex absolute right-15 px-2.5 py-1 rounded bg-black text-white dark:bg-white dark:text-black text-xs font-semibold tracking-tight shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap items-center gap-1.5 border border-black/10 dark:border-white/10">
-            <span>FONA Copilot</span>
+          <div className="hidden sm:flex absolute right-21 px-2.5 py-1 rounded bg-black text-white dark:bg-white dark:text-black text-xs font-semibold tracking-tight shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap items-center gap-1.5 border border-black/10 dark:border-white/10">
+            <span>FONA Asisten</span>
           </div>
         </div>
       )}
@@ -478,43 +708,18 @@ export default function AiAssistantWidget({ currentUser }) {
           style={{ boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.45)' }}
         >
           {/* ─── PINNED HEADER BAR ────────────────────────────────────── */}
-          <div className="px-4 py-2.5 bg-white dark:bg-black text-black dark:text-white flex items-center justify-between shrink-0 select-none border-b border-black/15 dark:border-white/15">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-md bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+          <div className="px-4 py-2 bg-white dark:bg-black text-black dark:text-white flex items-center justify-between shrink-0 select-none border-b border-black/15 dark:border-white/15">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center shrink-0">
+                <FonaMascotAnimated variant="header" forceThinking={loading} />
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <h3 className="font-bold text-xs tracking-tight truncate">FONA Copilot</h3>
-                  <span className="inline-block px-1 py-0.2 rounded text-[8px] font-mono font-bold border border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5 text-black/80 dark:text-white/80">
-                    NOC
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 text-[10px] text-black/60 dark:text-white/60">
-                  <span className={`w-1.5 h-1.5 rounded-full ${engineDot} shrink-0`}></span>
-                  <span className="font-mono truncate">
-                    {historyLoading ? 'Memuat riwayat…' : engineDisplay.label}
-                  </span>
-                </div>
+                <h3 className="font-bold text-xs sm:text-sm tracking-tight truncate">FONA Asisten</h3>
               </div>
             </div>
 
             {/* Header Action Buttons */}
             <div className="flex items-center gap-0.5 text-black/70 dark:text-white/70 shrink-0">
-              {/* GIS Map Shortcut */}
-              <button
-                type="button"
-                onClick={() => navigate('/gis-map')}
-                title="Buka Peta Topologi GIS"
-                className="p-1.5 rounded hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                </svg>
-              </button>
-
               {/* Expand / Normal Window Toggle (Desktop only) */}
               <button
                 type="button"
@@ -596,7 +801,7 @@ export default function AiAssistantWidget({ currentUser }) {
                           Pengaturan AI Provider
                         </h4>
                         <p className="text-[10px] text-black/60 dark:text-white/60">
-                          Konfigurasi engine LLM dan kredensial API FONA Copilot
+                          Konfigurasi engine LLM dan kredensial API FONA Asisten
                         </p>
                       </div>
                       <button
@@ -830,7 +1035,7 @@ export default function AiAssistantWidget({ currentUser }) {
                   >
                     {/* Header meta line */}
                     <div className="flex items-center gap-2 mb-1 px-1 text-[10px] font-mono text-black/50 dark:text-white/50">
-                      <span>{msg.role === 'user' ? (currentUser?.name || 'Teknisi') : 'FONA Copilot'}</span>
+                      <span>{msg.role === 'user' ? (currentUser?.name || 'Teknisi') : 'FONA Asisten'}</span>
                       <span>•</span>
                       <span>{msg.timestamp}</span>
 
@@ -857,23 +1062,6 @@ export default function AiAssistantWidget({ currentUser }) {
                       )}
                     </div>
 
-                    {/* Telemetry / Tool Execution Chips */}
-                    {msg.tools_used && msg.tools_used.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-1.5 max-w-[92%]">
-                        {msg.tools_used.map((t, tidx) => (
-                          <span
-                            key={tidx}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-black/15 dark:border-white/20 bg-black/5 dark:bg-white/5 text-[9px] font-mono font-semibold text-black/75 dark:text-white/75"
-                          >
-                            <svg className="w-2.5 h-2.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span>{t.tool.replace(/_/g, ' ')}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
                     {/* Message Bubble Card */}
                     <div
                       className={`max-w-[92%] sm:max-w-[85%] rounded-lg p-3 sm:p-3.5 leading-relaxed text-xs shadow-xs ${
@@ -895,9 +1083,9 @@ export default function AiAssistantWidget({ currentUser }) {
                 {loading && (
                   <div className="flex flex-col items-start">
                     <div className="flex items-center gap-1.5 mb-1 px-1 text-[10px] font-mono text-black/50 dark:text-white/50">
-                      <span>FONA Copilot</span>
+                      <span>FONA Asisten</span>
                       <span>•</span>
-                      <span>Memproses Kueri Telemetri</span>
+                      <span>Berpikir</span>
                     </div>
                     <div className="p-3 rounded-lg rounded-tl-none bg-black/[0.02] dark:bg-white/[0.04] border border-black/10 dark:border-white/15 shadow-xs flex items-center gap-2.5">
                       <span className="flex gap-1">
@@ -906,7 +1094,7 @@ export default function AiAssistantWidget({ currentUser }) {
                         <span className="w-1.5 h-1.5 rounded-full bg-black dark:bg-white animate-bounce" style={{ animationDelay: '300ms' }}></span>
                       </span>
                       <span className="text-xs text-black/60 dark:text-white/60 font-mono">
-                        Mengakses data telemetri jaringan...
+                        Berpikir...
                       </span>
                     </div>
                   </div>
@@ -915,35 +1103,12 @@ export default function AiAssistantWidget({ currentUser }) {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* ─── QUICK PROMPTS CHIPS ─────────────────────────────── */}
-              {messages.length <= 3 && !loading && (
-                <div className="px-3 sm:px-4 py-2 bg-black/[0.02] dark:bg-white/[0.02] border-t border-black/10 dark:border-white/10 shrink-0">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[9px] font-bold font-mono text-black/50 dark:text-white/50 uppercase tracking-wider">
-                      Kueri Operasional Cepat
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {quickPrompts.map((qp, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleSendMessage(qp.prompt)}
-                        className="px-2.5 py-1 rounded bg-white dark:bg-black border border-black/15 dark:border-white/20 text-[11px] font-medium text-black/80 dark:text-white/80 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white transition-colors cursor-pointer"
-                      >
-                        {qp.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* ─── INPUT COMPOSER BAR ──────────────────────────────── */}
-              <div className="p-3 sm:p-3.5 bg-white dark:bg-black border-t border-black/15 dark:border-white/15 shrink-0">
-                <div className="flex items-end gap-1.5 bg-black/[0.02] dark:bg-white/[0.04] rounded-lg border border-black/15 dark:border-white/20 p-1.5 focus-within:border-black dark:focus-within:border-white transition-colors">
+              {/* ─── INPUT COMPOSER BAR (MODERN AI STYLE) ────────────── */}
+              <div className="p-3 sm:p-3.5 bg-white dark:bg-black border-t border-black/10 dark:border-white/10 shrink-0">
+                <div className="rounded-2xl bg-zinc-100/90 dark:bg-[#171717] border border-black/10 dark:border-white/10 px-3.5 pt-3 pb-2.5 focus-within:border-black/25 dark:focus-within:border-white/25 transition-all shadow-xs">
                   <textarea
                     ref={textareaRef}
-                    rows={1}
+                    rows={2}
                     value={inputMessage}
                     onChange={e => setInputMessage(e.target.value)}
                     onKeyDown={e => {
@@ -952,44 +1117,47 @@ export default function AiAssistantWidget({ currentUser }) {
                         handleSendMessage();
                       }
                     }}
-                    placeholder={isListening ? 'Mendengarkan instruksi suara Anda...' : 'Tanyakan data pelanggan, redaman optik, atau ODP...'}
-                    className={`flex-1 max-h-24 bg-transparent border-0 resize-none text-xs text-black dark:text-white placeholder-black/40 dark:placeholder-white/40 focus:outline-none px-2 py-1 leading-relaxed ${
+                    placeholder={isListening ? 'Mendengarkan instruksi suara Anda...' : 'Bertanya pada FONA Asisten'}
+                    className={`w-full max-h-28 bg-transparent border-0 resize-none text-xs sm:text-[13px] text-black dark:text-white placeholder-black/45 dark:placeholder-white/45 focus:outline-none leading-relaxed ${
                       isListening ? 'italic font-medium text-amber-600 dark:text-amber-400' : ''
                     }`}
                   />
 
-                  {/* Microphone Voice Input Button */}
-                  <button
-                    type="button"
-                    onClick={toggleVoiceInput}
-                    title={isListening ? 'Hentikan rekaman suara' : 'Gunakan input suara'}
-                    className={`w-8 h-8 rounded flex items-center justify-center shrink-0 transition-all cursor-pointer ${
-                      isListening
-                        ? 'bg-rose-500 text-white animate-pulse'
-                        : 'text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
-                    }`}
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                    </svg>
-                  </button>
+                  {/* Bottom Toolbar inside Composer */}
+                  <div className="flex items-center justify-end pt-1.5 mt-0.5">
+                    <div className="flex items-center gap-1.5">
+                      {/* Microphone Voice Input Button */}
+                      <button
+                        type="button"
+                        onClick={toggleVoiceInput}
+                        title={isListening ? 'Hentikan rekaman suara' : 'Gunakan input suara'}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                          isListening
+                            ? 'bg-rose-500 text-white animate-pulse'
+                            : 'text-black/60 dark:text-white/70 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                      </button>
 
-                  {/* Send Button */}
-                  <button
-                    type="button"
-                    disabled={!inputMessage.trim() || loading}
-                    onClick={() => handleSendMessage()}
-                    className="w-8 h-8 rounded bg-black dark:bg-white hover:opacity-90 text-white dark:text-black flex items-center justify-center shrink-0 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs"
-                    title="Kirim (Enter)"
-                  >
-                    <svg className="w-4 h-4 transform rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="flex items-center justify-between mt-1 px-1 text-[9px] font-mono text-black/50 dark:text-white/50">
-                  <span>Enter kirim • Shift+Enter baris baru</span>
-                  <span>FONA Copilot Enterprise</span>
+                      {/* Send Button (muncul saat ada teks yang diketik) */}
+                      {inputMessage.trim() && (
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={() => handleSendMessage()}
+                          className="w-8 h-8 rounded-full bg-black dark:bg-white hover:opacity-90 text-white dark:text-black flex items-center justify-center shrink-0 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs"
+                          title="Kirim (Enter)"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 

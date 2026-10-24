@@ -476,35 +476,42 @@ class CustomerController extends Controller
 
     public function destroy($id)
     {
-        $customer = Customer::with('services.networkPort')->findOrFail($id);
-        $custName = $customer->name;
-        $custNum = $customer->customer_number;
+        $affectedNodeIds = DB::transaction(function () use ($id) {
+            $customer = Customer::with(['services' => fn ($query) => $query->withTrashed()])->lockForUpdate()->findOrFail($id);
+            $custName = $customer->name;
+            $custNum = $customer->customer_number;
 
-        $affectedNodeIds = [];
-        foreach ($customer->services as $service) {
-            $ports = NetworkPort::where('customer_service_id', $service->id)->get();
-            foreach ($ports as $p) {
-                if ($p->node_id) $affectedNodeIds[] = $p->node_id;
-                $p->update([
-                    'customer_service_id' => null,
-                    'customer_name_cache' => null,
-                    'status'              => 'available',
-                ]);
+            $affectedNodeIds = [];
+            foreach ($customer->services as $service) {
+                $ports = NetworkPort::where('customer_service_id', $service->id)->lockForUpdate()->get();
+                foreach ($ports as $p) {
+                    if ($p->node_id) $affectedNodeIds[] = $p->node_id;
+                    $p->update([
+                        'customer_service_id' => null,
+                        'customer_name_cache' => null,
+                        'destination_label'   => null,
+                        'status'              => 'available',
+                    ]);
+                }
             }
-        }
 
-        $customer->forceDelete();
+            $customer->forceDelete();
 
-        foreach (array_unique($affectedNodeIds) as $nodeId) {
-            NetworkPort::recalculateNodeUsedPorts($nodeId);
-        }
+            foreach (array_unique($affectedNodeIds) as $nodeId) {
+                NetworkPort::recalculateNodeUsedPorts($nodeId);
+            }
 
-        AuditLog::record(
-            'DELETE',
-            'Customer Management',
-            "Menghapus data pelanggan {$custName} ({$custNum})",
-            ['name' => $custName, 'customer_number' => $custNum]
-        );
+            AuditLog::record(
+                'DELETE',
+                'Customer Management',
+                "Menghapus data pelanggan {$custName} ({$custNum})",
+                ['name' => $custName, 'customer_number' => $custNum]
+            );
+
+            return array_unique($affectedNodeIds);
+        });
+        self::clearCustomerCache();
+        foreach ($affectedNodeIds as $nodeId) Cache::forget("odp_onus_topology_v2_{$nodeId}");
 
         return response()->json([
             'status'  => 'success',

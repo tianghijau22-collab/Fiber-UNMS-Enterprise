@@ -1,4 +1,6 @@
 import OltCustomerRegistrationModal from '../components/OltCustomerRegistrationModal.jsx';
+import OltMismatchCustomerActions from '../components/OltMismatchCustomerActions.jsx';
+import { duplicateCustomerTarget, deleteDuplicateCustomer } from '../lib/oltMismatchCustomers.js';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../components/AuthContext';
@@ -409,6 +411,7 @@ export default function OltManagement() {
   };
 
   const closeConfirm = () => {
+    if (deletingCustomerRef.current) return;
     setConfirmDialog(prev => ({ ...prev, isOpen: false, loading: false }));
   };
 
@@ -496,7 +499,7 @@ export default function OltManagement() {
   useStoredRefresh(async () => {
     const vk=activeOlt.vendor_key || activeOlt.vendor?.toLowerCase().replace(/\s+/g,'-') || 'zte-c300';
     await Promise.all([fetchOltHardware(vk,activeOlt.id,true,false),fetchOlts(true),fetchOltTopology(activeOlt.id)]);
-  },{enabled:!!activeOlt && !loading && !loadingPortOnus && !isPollingLive && !isAutoPollingPaused && !showProgressiveSyncModal && !showConfigModal && !showSnmpDiagModal && !showSyncExternalModal,
+  },{enabled:!!activeOlt && !loading && !loadingPortOnus && !isPollingLive && !isAutoPollingPaused && !showProgressiveSyncModal && !showConfigModal && !showSnmpDiagModal && !showSyncExternalModal && !confirmDialog.isOpen,
     target:activeOlt?.id,intervalMs:10000});
 
   // ─── Fetch OLT Hardware Telemetry dari Database Snapshot (Instan < 10ms) ───
@@ -1065,6 +1068,8 @@ export default function OltManagement() {
   const orphanedPerPage = 10;
   const [selectedOrphanedIds, setSelectedOrphanedIds] = useState([]);
   const [isDeletingOrphaned, setIsDeletingOrphaned] = useState(false);
+  const [deletingCustomerId, setDeletingCustomerId] = useState(null);
+  const deletingCustomerRef = useRef(false);
 
   useEffect(()=>{setSelectedOrphanedIds([]);},[selectedOltId]);
   const [unregisteredSearchQuery, setUnregisteredSearchQuery] = useState('');
@@ -1132,6 +1137,54 @@ export default function OltManagement() {
       orphanedPage * orphanedPerPage
     );
   }, [filteredOrphanedOnus, orphanedPage, orphanedPerPage]);
+
+  useEffect(() => {
+    setOrphanedPage(page => Math.min(page, totalOrphanedPages));
+  }, [totalOrphanedPages]);
+
+  const handleDeleteDuplicateCustomer = (onu) => {
+    const target = duplicateCustomerTarget(onu);
+    if (!isSuperAdmin || !target || deletingCustomerRef.current) return;
+    const deviceId = selectedOltId;
+    const vendorKey = activeOlt?.vendor_key || activeOlt?.vendor?.toLowerCase().replace(/\s+/g, '-') || 'zte-c300';
+    openConfirm({
+      title: 'Hapus Pelanggan dengan SN Ganda?',
+      message: <span>
+        Hapus permanen pelanggan <strong>{target.name}</strong> ({target.number})?<br />
+        <span className="block mt-2 font-mono">SN: {target.serial}</span>
+        <span className="block mt-2">Seluruh layanan dan data terkait pelanggan ini ikut dihapus, dan port ODP-nya dibebaskan. Pastikan pelanggan ini sudah tidak digunakan.</span>
+        <span className="block mt-2">Pelanggan lain dengan SN yang sama tetap tersimpan. Konfigurasi ONU pada perangkat OLT tidak dihapus.</span>
+      </span>,
+      confirmText: 'Ya, Hapus Pelanggan',
+      type: 'danger',
+      onConfirm: async () => {
+        if (deletingCustomerRef.current) return;
+        deletingCustomerRef.current = true;
+        setDeletingCustomerId(target.id);
+        try {
+          await deleteDuplicateCustomer(onu, document.querySelector('meta[name="csrf-token"]')?.content || '');
+          // Reconcile the remaining duplicate from stored inventory; never request a live OLT read.
+          if (String(deviceId) === String(selectedOltIdRef.current)) {
+            const removedIds = new Set((oltData?.orphaned_onus || []).filter(row => Number(row.customer_id) === target.id).map(row => row.id));
+            setOltData(prev => prev ? {
+              ...prev,
+              orphaned_onus: (prev.orphaned_onus || []).filter(row => Number(row.customer_id) !== target.id),
+              onu_list: (prev.onu_list || []).filter(row => Number(row.customer_id) !== target.id),
+            } : prev);
+            setSelectedOrphanedIds(ids => ids.filter(id => !removedIds.has(id)));
+            await Promise.all([fetchOltHardware(vendorKey, deviceId, true, false), fetchOltTopology(deviceId), fetchOlts(true)]);
+          }
+          showNotif(`Pelanggan ${target.name} (${target.number}) berhasil dihapus.`, 'success');
+        } catch (error) {
+          showNotif(error.message || 'Gagal menghapus pelanggan. Periksa koneksi dan muat ulang daftar.', 'error');
+        } finally {
+          deletingCustomerRef.current = false;
+          setDeletingCustomerId(null);
+          closeConfirm();
+        }
+      },
+    });
+  };
 
   const handleDeleteOrphaned = (onu) => {
     if (!isSuperAdmin) {
@@ -3803,14 +3856,7 @@ export default function OltManagement() {
                               {onu.registered_at}
                             </td>
                             <td className="px-5 py-3.5 text-right space-x-2">
-                              {onu.customer_id && (
-                                <a
-                                  href={`/customers?id=${onu.customer_id}`}
-                                  className="px-2.5 py-1 rounded-lg bg-black/5 dark:bg-white/10 text-black/80 dark:text-white/90 text-xs font-bold hover:bg-black/10 dark:hover:bg-white/20 transition-colors inline-block"
-                                >
-                                  Pelanggan
-                                </a>
-                              )}
+                              <OltMismatchCustomerActions onu={onu} canDelete={isSuperAdmin} busy={deletingCustomerId !== null} onDelete={handleDeleteDuplicateCustomer} />
                               {isSuperAdmin && onu.can_delete && (
                                 <button
                                   onClick={() => handleDeleteOrphaned(onu)}
@@ -3900,14 +3946,7 @@ export default function OltManagement() {
                           <div className="grid grid-cols-3 gap-2 px-4 py-3 items-center bg-rose-50/40 dark:bg-rose-950/20">
                             <span className="text-black/60 dark:text-white/70 font-semibold">Aksi</span>
                             <div className="col-span-2 flex items-center gap-2">
-                              {onu.customer_id && (
-                                <a
-                                  href={`/customers?id=${onu.customer_id}`}
-                                  className="px-2.5 py-1 rounded-lg bg-black/5 dark:bg-white/10 text-black/80 dark:text-white/90 font-bold text-xs"
-                                >
-                                  Pelanggan
-                                </a>
-                              )}
+                              <OltMismatchCustomerActions onu={onu} canDelete={isSuperAdmin} busy={deletingCustomerId !== null} onDelete={handleDeleteDuplicateCustomer} />
                               {isSuperAdmin && onu.can_delete && (
                                 <button
                                   onClick={() => handleDeleteOrphaned(onu)}
